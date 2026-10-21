@@ -1,0 +1,93 @@
+@namespace Blazor.AI.Bio
+@inherits BioComponentBase
+@using Biotech.Net.SyntheticBiology.Crispr
+@* CRISPR guide design: finds PAM sites on both strands, scores on-target activity and ranks guides. *@
+
+<AiCard Title="@Title" Subtitle="Biotech.Net.SyntheticBiology.Crispr" Icon="bi-crosshair" Class="@Class">
+    <div class="bai-stack">
+        <SequenceInput @bind-Value="Target" Label="Target region (exon)" Rows="4" Samples="@([("EGFP", BioSamples.Egfp)])" />
+        <div class="bai-row">
+            <select class="bai-select" style="width:auto" @bind="_nuclease" aria-label="Nuclease">
+                @foreach (var n in CasNuclease.All) { <option value="@n.Name">@n.Name (@n.Pam)</option> }
+            </select>
+            <label class="bai-small">Show top <input type="number" min="1" max="50" class="bai-input" style="width:4.5rem" @bind="_top" /></label>
+            <button type="button" class="bai-btn bai-btn-ai" @onclick="DesignAsync"><i class="bi bi-crosshair" aria-hidden="true"></i>Design guides</button>
+        </div>
+        <AiError Message="@Error" />
+        @if (_r is { } r)
+        {
+            <p class="bai-small bai-muted" style="margin:0">@r.Guides.Count candidate guides on @r.Length bp; showing the best @Math.Min(_top, r.Guides.Count). Click a row to see the cloning oligo.</p>
+            <svg viewBox="0 0 600 70" style="width:100%" role="img" aria-label="Guide positions">
+                <rect x="0" y="31" width="600" height="8" rx="4" fill="var(--bai-line-strong)" />
+                @foreach (var g in r.Guides.Take(_top))
+                {
+                    var x = g.Guide.Start * 600.0 / r.Length;
+                    var w = Math.Max(3, g.Guide.Spacer.Length * 600.0 / r.Length);
+                    var fwd = g.Guide.Strand == Strand.Forward;
+                    <rect x="@S(x)" y="@(fwd ? 14 : 44)" width="@S(w)" height="10" rx="3" fill="@(g == _selected ? "var(--bai-soga)" : "var(--bai-nila)")" opacity="@S(0.35 + g.CompositeScore * 0.65)" style="cursor:pointer" @onclick="() => _selected = g">
+                        <title>@g.Guide.Spacer @g.Guide.Pam · score @g.CompositeScore.ToString("0.00", CultureInfo.InvariantCulture)</title>
+                    </rect>
+                    <line x1="@S(g.Guide.CutSite * 600.0 / r.Length)" x2="@S(g.Guide.CutSite * 600.0 / r.Length)" y1="28" y2="42" stroke="var(--bai-soga)" stroke-width="1" />
+                }
+            </svg>
+            <div class="bai-table-wrap" style="max-height:18rem; overflow:auto">
+                <table class="bai-table">
+                    <thead><tr><th>#</th><th>Spacer</th><th>PAM</th><th>Strand</th><th>Cut</th><th>GC</th><th>On-target</th><th>Off-targets</th><th>Composite</th></tr></thead>
+                    <tbody>
+                        @foreach (var (g, i) in r.Guides.Take(_top).Select((g, i) => (g, i)))
+                        {
+                            <tr style="cursor:pointer; @(g == _selected ? "background:var(--bai-soga-soft)" : null)" @onclick="() => _selected = g">
+                                <td class="bai-num">@(i + 1)</td>
+                                <td><code>@g.Guide.Spacer</code>@if (g.Guide.HasPolyTTerminator) { <span class="bai-badge bai-badge-danger" title="TTTT terminates U6 transcription">TTTT</span> }</td>
+                                <td><code>@g.Guide.Pam</code></td><td>@(g.Guide.Strand == Strand.Forward ? "+" : "−")</td>
+                                <td class="bai-num">@g.Guide.CutSite</td><td class="bai-num">@g.Guide.GcContent.ToString("P0", CultureInfo.InvariantCulture)</td>
+                                <td style="min-width:7rem"><div class="bai-meter"><span style="width:@S(g.OnTargetScore * 100)%"></span></div></td>
+                                <td class="bai-num">@g.OffTargetCount</td>
+                                <td class="bai-num"><b>@g.CompositeScore.ToString("0.00", CultureInfo.InvariantCulture)</b></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (_selected is { } sel)
+            {
+                <AiCodeBlock Code="@($"Target site   {sel.Guide.FullSite}\nContext       {sel.Guide.Context}\nU6 oligo      {sel.Guide.U6CloningOligo}")" />
+            }
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Recommend guides with AI</button>
+            @if (Explanation is not null) { <AiOutput Text="@Explanation" IsBusy="@IsBusy" /> }
+        }
+    </div>
+</AiCard>
+
+@code {
+    private string _nuclease = CasNuclease.SpCas9.Name;
+    private int _top = 10;
+    private Result? _r;
+    private GuideDesign? _selected;
+
+    [Parameter] public string Title { get; set; } = "CRISPR guide designer";
+    [Parameter] public string? Target { get; set; } = BioSamples.Egfp;
+
+    private sealed record Result(int Length, IReadOnlyList<GuideDesign> Guides);
+
+    protected override Task OnInitializedAsync() => DesignAsync();
+
+    private async Task DesignAsync()
+    {
+        var (text, nucleaseName) = (Target, _nuclease);
+        _r = await AnalyseAsync(() =>
+        {
+            var dna = BioInput.ParseOne(text, SequenceType.Dna, "target") ?? throw new FormatException("Paste a DNA target first.");
+            var nuclease = CasNuclease.All.First(n => n.Name == nucleaseName);
+            var options = new GuideDesignOptions { Search = new GuideSearchOptions { Nuclease = nuclease }, MaxResults = 200 };
+            return new Result(dna.Length, GuideDesigner.Design(dna, options));
+        });
+        _selected = _r?.Guides.FirstOrDefault();
+        Explanation = null;
+    }
+
+    private Task Explain() => ExplainAsync("CRISPR guide RNA design", string.Create(CultureInfo.InvariantCulture,
+        $"Nuclease {_nuclease}, target {_r!.Length} bp, {_r.Guides.Count} candidates. Top guides: " +
+        $"{string.Join("; ", _r.Guides.Take(8).Select(g => $"{g.Guide.Spacer} {g.Guide.Pam} {g.Guide.Strand} cut {g.Guide.CutSite} GC {g.Guide.GcContent:P0} on-target {g.OnTargetScore:0.00} off-targets {g.OffTargetCount} composite {g.CompositeScore:0.00}{(g.Guide.HasPolyTTerminator ? " polyT" : "")}"))}. " +
+        $"Recommend 2–3 guides for a knockout and explain the trade-offs (position in the CDS, scores, off-target risk)."));
+}

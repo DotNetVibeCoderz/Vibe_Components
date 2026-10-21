@@ -1,0 +1,101 @@
+@namespace Blazor.AI.Analytics
+@inherits AnalyticsComponentBase
+@* Find segments: K-Means, Gaussian mixture, hierarchical or DBSCAN; elbow curve, 2-D map, profiles, and AI-named personas. *@
+
+<AiCard Title="@Title" Subtitle="@($"{Data.Name} · {Data.FeatureColumns.Count} features")" Icon="bi-bounding-box-circles" Class="@Class">
+    <Actions><DatasetPicker ShowTarget="false" /></Actions>
+    <ChildContent>
+        <div class="bai-stack">
+            <div class="bai-row">
+                <select class="bai-select" style="width:auto" @bind="_method" aria-label="Method">
+                    <option value="@ClusteringMethod.KMeans">K-Means</option>
+                    <option value="@ClusteringMethod.GaussianMixture">Gaussian mixture</option>
+                    <option value="@ClusteringMethod.Agglomerative">Hierarchical (average linkage)</option>
+                    <option value="@ClusteringMethod.Dbscan">DBSCAN (density)</option>
+                </select>
+                @if (_method == ClusteringMethod.Dbscan)
+                {
+                    <label class="bai-small">ε <input type="number" step="0.1" min="0.1" class="bai-input" style="width:5rem" @bind="_epsilon" /></label>
+                }
+                else
+                {
+                    <label class="bai-small">Clusters <input type="number" min="2" max="12" class="bai-input" style="width:5rem" @bind="_k" /></label>
+                }
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || Data.FeatureColumns.Count == 0)" @onclick="ClusterAsync">
+                    @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-play-fill" aria-hidden="true"></i> }
+                    Find clusters
+                </button>
+            </div>
+            <AiError Message="@Error" />
+            @if (_result is { } r)
+            {
+                <div class="bai-stats">
+                    <div class="bai-stat"><div class="bai-stat-label">Clusters</div><div class="bai-stat-value">@r.Clusters</div></div>
+                    <div class="bai-stat"><div class="bai-stat-label">Silhouette</div><div class="bai-stat-value">@r.Silhouette.ToString("0.00", CultureInfo.InvariantCulture)</div></div>
+                    <div class="bai-stat"><div class="bai-stat-label">Noise points</div><div class="bai-stat-value">@r.Noise</div></div>
+                </div>
+                <div class="bai-grid-2" style="align-items:start">
+                    <ScatterChart Title="Clusters on the first two principal components" Series="@ScatterSeries(r)" XLabel="PC1" YLabel="PC2" Height="320" PointRadius="3" />
+                    @if (r.Elbow.Count > 0)
+                    {
+                        <LineChart Title="Elbow curve (pick k where the drop flattens)" Series="@([new ChartSeries("Inertia", r.Elbow.Select(e => new ChartPoint(e.K, e.Inertia)).ToArray())])" XLabel="k" Height="320" ShowMarkers="true" MarkerX="@r.Clusters" />
+                    }
+                </div>
+                <div class="bai-table-wrap">
+                    <table class="bai-table">
+                        <thead><tr><th>Cluster</th><th>Persona</th>@foreach (var key in r.Profiles[0].Keys) { <th>@key</th> }</tr></thead>
+                        <tbody>
+                            @for (var c = 0; c < r.Profiles.Count; c++)
+                            {
+                                <tr>
+                                    <td><span class="bai-legend-swatch" style="display:inline-block; background:@SeriesColor(c)"></span> @c</td>
+                                    <td><strong>@_names.GetValueOrDefault(c.ToString(CultureInfo.InvariantCulture))</strong></td>
+                                    @foreach (var value in r.Profiles[c].Values) { <td class="bai-num">@Fmt(value)</td> }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="NameAsync"><i class="bi bi-stars" aria-hidden="true"></i>Name the segments with AI</button>
+            }
+        </div>
+    </ChildContent>
+</AiCard>
+
+@code {
+    private ClusteringMethod _method = ClusteringMethod.KMeans;
+    private int _k = 4;
+    private double _epsilon = 0.6;
+    private ClusteringResult? _result;
+    private Dictionary<string, string> _names = [];
+
+    [Parameter] public string Title { get; set; } = "Clustering workbench";
+    [Parameter] public EventCallback<ClusteringResult> OnClustered { get; set; }
+
+    protected override void OnDatasetChanged()
+    {
+        _result = null;
+        _names = [];
+    }
+
+    private Task ClusterAsync() => RunAsync(async ct =>
+    {
+        var data = Data;
+        _result = await Compute(() => UnsupervisedMl.Cluster(data, _method, _k, _epsilon), ct);
+        _names = [];
+        await OnClustered.InvokeAsync(_result);
+    });
+
+    private Task NameAsync() => RunAsync(async ct =>
+    {
+        var profiles = string.Join("\n", _result!.Profiles.Select((p, i) => $"cluster {i}: " + string.Join(", ", p.Select(kv => $"{kv.Key}={kv.Value:0.##}"))));
+        var system = "Give each cluster a short, memorable persona name (max 4 words) based on how its averages differ from the others. Reply with JSON only: {\"0\": name, \"1\": name, ...}.";
+        _names = LlmJson.ToStringMap(await Ai.GenerateJsonAsync(system, PromptTags.Wrap(PromptTags.Input, $"{Data.Name}: {Data.Description}\n{profiles}"), AiTasks.Insight, Provider, ct));
+    });
+
+    private static IReadOnlyList<ChartSeries> ScatterSeries(ClusteringResult r) =>
+        r.Labels.Distinct().Order().Select(label => new ChartSeries(label < 0 ? "Noise" : $"Cluster {label}",
+                Enumerable.Range(0, r.Labels.Length).Where(i => r.Labels[i] == label).Select(i => new ChartPoint(r.Projection2D[i, 0], r.Projection2D[i, 1])).ToArray())
+            { Color = label < 0 ? "var(--bai-ink-faint)" : SeriesColor(label) })
+        .ToArray();
+}

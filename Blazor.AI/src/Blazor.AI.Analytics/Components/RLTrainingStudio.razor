@@ -1,0 +1,112 @@
+@namespace Blazor.AI.Analytics
+@implements IDisposable
+@* Train RLNet agents (Q-learning, DQN, PPO, A2C, SAC, TD3) on classic, control and business environments, with a live reward curve. *@
+
+<AiCard Title="@Title" Subtitle="Gravicode.RLNet" Icon="bi-joystick" Class="@Class">
+    <div class="bai-stack">
+        <div class="bai-row">
+            <select class="bai-select" style="width:auto" value="@_env" @onchange="PickEnvironment" aria-label="Environment">
+                <option value="@DesignedName">Designed grid world (your layout)</option>
+                @foreach (var e in RlTrainer.Environments) { <option value="@e.Name">@e.Name · @e.Category</option> }
+            </select>
+            <select class="bai-select" style="width:auto" @bind="_algorithm" aria-label="Algorithm">
+                @foreach (var a in Algorithms) { <option value="@a">@a</option> }
+            </select>
+            <label class="bai-small">Episodes <input type="number" min="1" max="5000" class="bai-input" style="width:5.5rem" @bind="_episodes" /></label>
+            @if (_cts is null)
+            {
+                <button type="button" class="bai-btn bai-btn-ai" @onclick="TrainAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Train</button>
+            }
+            else
+            {
+                <button type="button" class="bai-btn" @onclick="() => _cts?.Cancel()"><i class="bi bi-stop-fill" aria-hidden="true"></i>Stop</button>
+            }
+        </div>
+        <p class="bai-small bai-muted" style="margin:0">@Entry?.Description</p>
+        @if (IsContinuous)
+        {
+            <div class="bai-alert is-info"><i class="bi bi-hourglass-split" aria-hidden="true"></i>Continuous control (SAC/TD3) is CPU-heavy: each episode can take several seconds. Start with 5–10 episodes.</div>
+        }
+        <AiError Message="@_error" />
+        @if (_stats.Count > 0)
+        {
+            <div class="bai-stats">
+                <div class="bai-stat"><div class="bai-stat-label">Episode</div><div class="bai-stat-value">@_stats[^1].Episode / @_episodes</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Last return</div><div class="bai-stat-value">@Fmt(_stats[^1].Return)</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Avg (20)</div><div class="bai-stat-value">@Fmt(_stats[^1].MovingAverage)</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Exploration</div><div class="bai-stat-value">@_stats[^1].Epsilon.ToString("0.00", CultureInfo.InvariantCulture)</div></div>
+            </div>
+            <div class="bai-meter" aria-hidden="true"><span style="width:@((_stats[^1].Episode * 100.0 / Math.Max(1, _episodes)).ToString("0", CultureInfo.InvariantCulture))%"></span></div>
+            <LineChart Series="@([new ChartSeries("Return", _stats.Select(s => new ChartPoint(s.Episode, s.Return)).ToArray()) { Color = "var(--bai-ink-faint)" }, new ChartSeries("Moving average", _stats.Select(s => new ChartPoint(s.Episode, s.MovingAverage)).ToArray())])"
+                       XLabel="Episode" YLabel="Return" Height="260" />
+        }
+    </div>
+</AiCard>
+
+@code {
+    private const string DesignedName = "designed-grid";
+    private readonly List<EpisodeStat> _stats = [];
+    private string _env = DesignedName;
+    private RLNet.Algorithm _algorithm = RLNet.Algorithm.QLearning;
+    private int _episodes = 300;
+    private CancellationTokenSource? _cts;
+    private string? _error;
+    private long _lastRender;
+
+    [Inject] private RlWorkspace Workspace { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "RL training studio";
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public EventCallback<TrainingSession> OnTrained { get; set; }
+
+    private RLNet.EnvironmentEntry? Entry => RlTrainer.Environments.FirstOrDefault(e => e.Name == _env);
+
+    private bool IsContinuous => Entry?.Kind == RLNet.EnvironmentKind.Continuous;
+
+    private IReadOnlyList<RLNet.Algorithm> Algorithms => Entry?.SupportedAlgorithms ?? [RLNet.Algorithm.QLearning, RLNet.Algorithm.Dqn, RLNet.Algorithm.Ppo, RLNet.Algorithm.A2C];
+
+    private void PickEnvironment(ChangeEventArgs e)
+    {
+        _env = e.Value?.ToString() ?? DesignedName;
+        _algorithm = Algorithms.Contains(RLNet.Algorithm.Dqn) && _env != DesignedName ? RLNet.Algorithm.Dqn : Algorithms[0];
+        _episodes = IsContinuous ? 8 : _env == DesignedName ? 300 : 150;
+    }
+
+    private async Task TrainAsync()
+    {
+        _stats.Clear();
+        _error = null;
+        _cts = new CancellationTokenSource();
+        var progress = new Progress<EpisodeStat>(s =>
+        {
+            _stats.Add(s);
+            var now = Environment.TickCount64;
+            if (now - _lastRender > 100 || s.Episode == _episodes)
+            {
+                _lastRender = now;
+                InvokeAsync(StateHasChanged);
+            }
+        });
+
+        try
+        {
+            var name = _env == DesignedName ? "Designed grid" : _env;
+            var session = await RlTrainer.TrainAsync(name, _algorithm, _episodes, progress, _env == DesignedName ? () => Workspace.CreateGrid() : null, cancellationToken: _cts.Token);
+            Workspace.Add(session);
+            await OnTrained.InvokeAsync(session);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _cts = null;
+        }
+    }
+
+    public void Dispose() => _cts?.Cancel();
+}

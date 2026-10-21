@@ -1,0 +1,24 @@
+@page "/"
+
+<PageTitle>BlazorAIApp</PageTitle>
+
+<h1 class="app-title">Your AI-powered Blazor app</h1>
+<p class="app-lead">Pick a model in the top bar. The offline simulated model works without keys; add your own provider in <code>appsettings.json</code> or user-secrets.</p>
+
+<div class="bai-grid-2" style="align-items:start">
+    <AiCard Title="Smart Paste" Subtitle="Copy an email signature, then press Smart Paste" Icon="bi-clipboard2-check">
+        <form data-smartpaste-scope class="bai-stack" @onsubmit:preventDefault="true">
+            <div><label class="bai-label" for="name">Name</label><input id="name" name="name" class="bai-input" @bind="_name" /></div>
+            <div><label class="bai-label" for="email">Email</label><input id="email" name="email" type="email" class="bai-input" @bind="_email" /></div>
+            <div><label class="bai-label" for="company">Company</label><input id="company" name="company" class="bai-input" @bind="_company" /></div>
+            <SmartPaste />
+        </form>
+    </AiCard>
+
+    <AiChat Title="Assistant" SystemPrompt="You are a concise, friendly assistant for this app." Suggestions="@Suggestions" />
+</div>
+
+@code {
+    private static readonly string[] Suggestions = ["What can Blazor.AI do?", "Write a haiku about Blazor"];
+    private string? _name, _email, _company;
+}

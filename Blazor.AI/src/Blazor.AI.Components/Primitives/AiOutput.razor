@@ -1,0 +1,76 @@
+@namespace Blazor.AI.Components
+@* Generated content, marked by the soga rule. Shows the kawung pulse while streaming and copy/download actions when done. *@
+
+<div class="@($"bai-output {Class}".Trim())" aria-live="polite" aria-busy="@IsBusy">
+    @if (string.IsNullOrEmpty(Text))
+    {
+        @if (IsBusy)
+        {
+            <AiThinking Label="@BusyLabel" />
+        }
+        else
+        {
+            <span class="bai-output-empty">@Placeholder</span>
+        }
+    }
+    else
+    {
+        @if (Markdown)
+        {
+            <AiMarkdown Text="@Text" />
+        }
+        else
+        {
+            <div style="white-space: pre-wrap">@Text</div>
+        }
+        <div class="bai-row" style="margin-top:.6rem">
+            @if (IsBusy)
+            {
+                <AiThinking Label="Writing…" />
+            }
+            <span class="bai-spacer"></span>
+            @if (!IsBusy)
+            {
+                <button type="button" class="bai-icon-btn" title="Copy" aria-label="Copy" @onclick="CopyAsync">
+                    <i class="bi @(_copied ? "bi-check2" : "bi-clipboard")"></i>
+                </button>
+                @if (DownloadName is not null)
+                {
+                    <button type="button" class="bai-icon-btn" title="Download" aria-label="Download" @onclick="DownloadAsync">
+                        <i class="bi bi-download"></i>
+                    </button>
+                }
+                @Actions
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private bool _copied;
+
+    [Inject] private BlazorAIJs Js { get; set; } = default!;
+
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public bool IsBusy { get; set; }
+    [Parameter] public bool Markdown { get; set; } = true;
+    [Parameter] public string Placeholder { get; set; } = "The result will appear here.";
+    [Parameter] public string BusyLabel { get; set; } = "Thinking…";
+
+    /// <summary>When set, shows a download button that saves the text with this file name.</summary>
+    [Parameter] public string? DownloadName { get; set; }
+
+    [Parameter] public RenderFragment? Actions { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private async Task CopyAsync()
+    {
+        _copied = await Js.CopyTextAsync(Text ?? string.Empty);
+        StateHasChanged();
+        await Task.Delay(1500);
+        _copied = false;
+    }
+
+    private Task DownloadAsync() =>
+        Js.DownloadTextAsync(DownloadName!, Text ?? string.Empty, DownloadName!.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ? "text/markdown" : "text/plain").AsTask();
+}

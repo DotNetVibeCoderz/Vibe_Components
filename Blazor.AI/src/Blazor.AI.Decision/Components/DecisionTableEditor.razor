@@ -1,0 +1,154 @@
+@namespace Blazor.AI.Decision
+@* DMN-style decision table: edit inputs, outputs and rows, choose a hit policy, and test with facts. *@
+
+<AiCard Title="@Table.Name" Subtitle="@($"Decision table · hit policy {Table.HitPolicy}")" Icon="bi-table" Class="@Class">
+    <Actions>
+        <select class="bai-select" style="width:auto; padding:.3rem .6rem" @bind="Table.HitPolicy" aria-label="Hit policy">
+            @foreach (var policy in Enum.GetValues<HitPolicy>()) { <option value="@policy">@policy</option> }
+        </select>
+    </Actions>
+    <ChildContent>
+        <div class="bai-stack">
+            <div class="bai-table-wrap">
+                <table class="bai-table">
+                    <thead>
+                        <tr>
+                            <th style="width:2.2rem">#</th>
+                            @for (var i = 0; i < Table.Inputs.Count; i++)
+                            {
+                                var index = i;
+                                <th style="background:var(--bai-nila-soft)">
+                                    <input class="bai-input" style="padding:.2rem .4rem; font-size:.75rem; text-transform:none" value="@Table.Inputs[index].Label" @onchange="e => RenameInput(index, e)" aria-label="Input label" />
+                                    <input class="bai-input" style="padding:.2rem .4rem; font-size:.72rem; font-family:var(--bai-font-mono); text-transform:none; margin-top:.2rem" value="@Table.Inputs[index].Expression" @onchange="e => SetInputExpression(index, e)" aria-label="Input expression" />
+                                </th>
+                            }
+                            @for (var o = 0; o < Table.OutputNames.Count; o++)
+                            {
+                                var index = o;
+                                <th style="background:var(--bai-soga-soft)">
+                                    <input class="bai-input" style="padding:.2rem .4rem; font-size:.75rem; text-transform:none" value="@Table.OutputNames[index]" @onchange="e => Table.OutputNames[index] = e.Value?.ToString() ?? string.Empty" aria-label="Output name" />
+                                </th>
+                            }
+                            <th>Note</th>
+                            <th><span class="bai-visually-hidden">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (var r = 0; r < Table.Rows.Count; r++)
+                        {
+                            var row = Table.Rows[r];
+                            var rowIndex = r;
+                            var hit = _result?.MatchedRows.Contains(r) == true;
+                            <tr style="@(hit ? "background:var(--bai-nila-soft)" : null)">
+                                <td class="bai-num">@(r + 1)</td>
+                                @for (var c = 0; c < Table.Inputs.Count; c++)
+                                {
+                                    var col = c;
+                                    <td><input class="bai-input" style="padding:.25rem .4rem; font-family:var(--bai-font-mono); font-size:.8rem" value="@Cell(row.Conditions, col)" @onchange="e => SetCell(row.Conditions, col, e)" aria-label="Condition" /></td>
+                                }
+                                @for (var o = 0; o < Table.OutputNames.Count; o++)
+                                {
+                                    var col = o;
+                                    <td><input class="bai-input" style="padding:.25rem .4rem; font-size:.82rem; font-weight:600" value="@Cell(row.Outputs, col)" @onchange="e => SetCell(row.Outputs, col, e)" aria-label="Output" /></td>
+                                }
+                                <td><input class="bai-input" style="padding:.25rem .4rem; font-size:.78rem" @bind="row.Annotation" aria-label="Annotation" /></td>
+                                <td style="white-space:nowrap">
+                                    <button type="button" class="bai-icon-btn" aria-label="Move up" disabled="@(rowIndex == 0)" @onclick="() => Move(rowIndex, -1)"><i class="bi bi-arrow-up"></i></button>
+                                    <button type="button" class="bai-icon-btn" aria-label="Delete row" @onclick="() => Table.Rows.RemoveAt(rowIndex)"><i class="bi bi-x"></i></button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="AddRow"><i class="bi bi-plus" aria-hidden="true"></i>Row</button>
+                <button type="button" class="bai-btn-ghost" @onclick="AddInput"><i class="bi bi-plus" aria-hidden="true"></i>Input</button>
+                <button type="button" class="bai-btn-ghost" @onclick="AddOutput"><i class="bi bi-plus" aria-hidden="true"></i>Output</button>
+                <span class="bai-spacer"></span>
+                <span class="bai-small bai-muted">Cells: <code>-</code> any · <code>&gt;= 18</code> · <code>[10..20]</code> · <code>"a","b"</code> · <code>not("x")</code></span>
+            </div>
+            <div class="bai-grid-2" style="align-items:start">
+                <FactsEditor Facts="@Facts" Label="Test facts" />
+                <div class="bai-stack">
+                    <button type="button" class="bai-btn" @onclick="Evaluate"><i class="bi bi-play-fill" aria-hidden="true"></i>Evaluate</button>
+                    @if (_result is not null)
+                    {
+                        <div class="bai-output">
+                            @if (_result.Error is not null) { <AiError Message="@_result.Error" /> }
+                            @if (_result.Outputs.Count == 0) { <span class="bai-muted">No row matched.</span> }
+                            @foreach (var output in _result.Outputs)
+                            {
+                                <dl class="bai-kv">@foreach (var (k, v) in output) { <dt>@k</dt><dd><strong>@Expression.AsString(v)</strong></dd> }</dl>
+                            }
+                            <span class="bai-small bai-muted">Matched row(s): @string.Join(", ", _result.MatchedRows.Select(m => m + 1))</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </ChildContent>
+</AiCard>
+
+@code {
+    private DecisionTableResult? _result;
+
+    [Parameter] public DecisionTable Table { get; set; } = DecisionTable.LoanSample();
+
+    [Parameter] public IDictionary<string, object?> Facts { get; set; } = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["creditScore"] = 700d,
+        ["dti"] = 32d,
+        ["employment"] = "contract",
+    };
+
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public EventCallback<DecisionTableResult> OnEvaluated { get; set; }
+
+    private void Evaluate()
+    {
+        try
+        {
+            _result = Table.Evaluate(new Dictionary<string, object?>(Facts, StringComparer.OrdinalIgnoreCase));
+        }
+        catch (FormatException ex)
+        {
+            _result = new DecisionTableResult([], [], ex.Message);
+        }
+
+        _ = OnEvaluated.InvokeAsync(_result);
+    }
+
+    private static string Cell(List<string> cells, int index) => index < cells.Count ? cells[index] : "-";
+
+    private static void SetCell(List<string> cells, int index, ChangeEventArgs e)
+    {
+        while (cells.Count <= index)
+        {
+            cells.Add("-");
+        }
+
+        cells[index] = e.Value?.ToString() ?? "-";
+    }
+
+    private void RenameInput(int index, ChangeEventArgs e) => Table.Inputs[index] = Table.Inputs[index] with { Label = e.Value?.ToString() ?? string.Empty };
+
+    private void SetInputExpression(int index, ChangeEventArgs e) => Table.Inputs[index] = Table.Inputs[index] with { Expression = e.Value?.ToString() ?? "x" };
+
+    private void AddRow() => Table.Rows.Add(new DecisionRow { Conditions = Table.Inputs.Select(_ => "-").ToList(), Outputs = Table.OutputNames.Select(_ => "-").ToList() });
+
+    private void AddInput() => Table.Inputs.Add(new DecisionInput($"Input {Table.Inputs.Count + 1}", $"input{Table.Inputs.Count + 1}"));
+
+    private void AddOutput() => Table.OutputNames.Add($"output{Table.OutputNames.Count + 1}");
+
+    private void Move(int index, int delta)
+    {
+        var target = index + delta;
+        if (target < 0 || target >= Table.Rows.Count)
+        {
+            return;
+        }
+
+        (Table.Rows[index], Table.Rows[target]) = (Table.Rows[target], Table.Rows[index]);
+    }
+}

@@ -1,0 +1,173 @@
+@namespace Blazor.AI.Agents
+@implements IDisposable
+@* Create and edit agents (instructions, model, tools, memory) and test them side by side. *@
+
+<div class="@($"bai-stack {Class}".Trim())">
+    <div style="display:grid; grid-template-columns:minmax(14rem, 1fr) 2fr 2fr; gap:1rem; align-items:start" class="bai-studio">
+        <AiCard Title="Agents" Icon="bi-people">
+            <Actions>
+                <button type="button" class="bai-icon-btn" title="New agent" aria-label="New agent" @onclick="New"><i class="bi bi-plus-lg"></i></button>
+            </Actions>
+            <ChildContent>
+                @foreach (var agent in Catalog.Agents)
+                {
+                    <button type="button" class="bai-result" style="width:100%; text-align:left; cursor:pointer; @(agent.Id == _editing?.Id ? "border-color:var(--bai-soga)" : null)" @onclick="() => Edit(agent)">
+                        <span class="bai-row" style="flex-wrap:nowrap"><i class="bi @agent.Icon" aria-hidden="true"></i><strong>@agent.Name</strong></span>
+                        <span class="bai-small bai-muted">@agent.Role</span>
+                    </button>
+                }
+            </ChildContent>
+        </AiCard>
+
+        @if (_editing is not null)
+        {
+            <AiCard Title="@(_editing.Name.Length == 0 ? "New agent" : _editing.Name)" Icon="@_editing.Icon" Subtitle="Changes apply on save">
+                <Actions>
+                    <button type="button" class="bai-icon-btn" title="Duplicate" aria-label="Duplicate agent" @onclick="Duplicate"><i class="bi bi-copy"></i></button>
+                    <button type="button" class="bai-icon-btn" title="Delete" aria-label="Delete agent" @onclick="Delete"><i class="bi bi-trash3"></i></button>
+                </Actions>
+                <ChildContent>
+                    <div class="bai-stack">
+                        <div class="bai-grid-2">
+                            <div><label class="bai-label" for="as-name">Name</label><input id="as-name" class="bai-input" @bind="_editing.Name" /></div>
+                            <div>
+                                <label class="bai-label" for="as-icon">Icon</label>
+                                <select id="as-icon" class="bai-select" @bind="_editing.Icon">
+                                    @foreach (var icon in Icons) { <option value="@icon">@icon.Replace("bi-", string.Empty)</option> }
+                                </select>
+                            </div>
+                        </div>
+                        <div><label class="bai-label" for="as-role">Role (used for routing)</label><input id="as-role" class="bai-input" @bind="_editing.Role" /></div>
+                        <div><label class="bai-label" for="as-ins">Instructions</label><textarea id="as-ins" class="bai-textarea" rows="6" @bind="_editing.Instructions"></textarea></div>
+                        <div class="bai-grid-2">
+                            <div>
+                                <span class="bai-label">Model</span>
+                                <AiProviderPicker Value="@_editing.Provider" ValueChanged="v => _editing.Provider = v" />
+                            </div>
+                            <div>
+                                <label class="bai-label" for="as-temp">Creativity: @((_editing.Temperature ?? 0.4f).ToString("0.0", CultureInfo.InvariantCulture))</label>
+                                <input id="as-temp" type="range" class="form-range" min="0" max="1" step="0.1" value="@((_editing.Temperature ?? 0.4f).ToString(CultureInfo.InvariantCulture))"
+                                       @oninput="SetTemperature" />
+                            </div>
+                        </div>
+                        <div class="bai-grid-2">
+                            <div><label class="bai-label" for="as-iter">Max tool rounds</label><input id="as-iter" type="number" min="1" max="20" class="bai-input" @bind="_editing.MaxIterations" /></div>
+                            <div class="form-check form-switch" style="margin-top:1.6rem">
+                                <input class="form-check-input" type="checkbox" id="as-mem" @bind="_editing.UseMemory" />
+                                <label class="form-check-label" for="as-mem">Long-term memory</label>
+                            </div>
+                        </div>
+                        <div>
+                            <span class="bai-label">Tools</span>
+                            @foreach (var group in Runtime.Tools.Tools.GroupBy(t => t.Category))
+                            {
+                                <div class="bai-small bai-muted" style="margin:.4rem 0 .25rem">@group.Key</div>
+                                <div class="bai-chips">
+                                    @foreach (var tool in group)
+                                    {
+                                        var on = _editing.Tools.Contains(tool.Name);
+                                        <button type="button" class="bai-chip @(on ? "is-active" : null)" aria-pressed="@on" title="@tool.Description" @onclick="() => ToggleTool(tool.Name)">
+                                            <i class="bi @(on ? "bi-check2" : "bi-plus")" aria-hidden="true"></i>@tool.Name
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <div class="bai-row">
+                            <button type="button" class="bai-btn bai-btn-ai" disabled="@string.IsNullOrWhiteSpace(_editing.Name)" @onclick="Save"><i class="bi bi-save" aria-hidden="true"></i>Save agent</button>
+                            @if (_saved) { <span class="bai-small bai-muted" role="status">Saved.</span> }
+                        </div>
+                    </div>
+                </ChildContent>
+            </AiCard>
+
+            <AiAgentChat @key="_testKey" Agent="@_test" AllowAgentSwitch="false" Height="640px" />
+        }
+    </div>
+</div>
+
+@code {
+    private static readonly string[] Icons = ["bi-robot", "bi-search", "bi-calculator", "bi-pen", "bi-check2-square", "bi-headset", "bi-briefcase", "bi-heart-pulse", "bi-tree", "bi-cpu", "bi-graph-up", "bi-shield-check"];
+    private AgentDefinition? _editing;
+    private AgentDefinition? _test;
+    private string _testKey = "x";
+    private bool _saved;
+
+    [Inject] private AgentCatalog Catalog { get; set; } = default!;
+    [Inject] private AgentRuntime Runtime { get; set; } = default!;
+
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Catalog.Changed += Refresh;
+        Runtime.Tools.Changed += Refresh;
+        if (Catalog.Agents.FirstOrDefault() is { } first)
+        {
+            Edit(first);
+        }
+    }
+
+    // Edit a copy so unsaved changes never leak into running agents.
+    private void Edit(AgentDefinition agent)
+    {
+        _editing = agent.Copy();
+        _test = agent;
+        _testKey = agent.Id;
+        _saved = false;
+    }
+
+    private void New()
+    {
+        _editing = new AgentDefinition { Name = "New agent", Role = "describe what this agent is good at" };
+        _test = _editing;
+        _testKey = _editing.Id;
+    }
+
+    private void Save()
+    {
+        var saved = _editing!.Copy();
+        Catalog.Save(saved);
+        _test = saved;
+        _testKey = saved.Id + DateTime.Now.Ticks;
+        _saved = true;
+    }
+
+    private void Duplicate()
+    {
+        var copy = _editing!.Clone();
+        Catalog.Save(copy);
+        Edit(copy);
+    }
+
+    private void Delete()
+    {
+        Catalog.Remove(_editing!.Id);
+        _editing = null;
+        if (Catalog.Agents.FirstOrDefault() is { } first)
+        {
+            Edit(first);
+        }
+    }
+
+    private void SetTemperature(ChangeEventArgs e) =>
+        _editing!.Temperature = float.TryParse(e.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var t) ? t : 0.4f;
+
+    private void ToggleTool(string name)
+    {
+        if (!_editing!.Tools.Remove(name))
+        {
+            _editing.Tools.Add(name);
+        }
+
+        _saved = false;
+    }
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Catalog.Changed -= Refresh;
+        Runtime.Tools.Changed -= Refresh;
+    }
+}

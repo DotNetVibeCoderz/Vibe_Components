@@ -1,0 +1,12 @@
+@inherits LayoutComponentBase
+
+<header class="wasm-top">
+    <span class="wasm-brand"><i class="bi bi-stars" aria-hidden="true"></i>Blazor.AI <span class="bai-badge bai-badge-local">WebAssembly</span></span>
+    <span class="bai-spacer"></span>
+    <AiProviderPicker />
+    <AiThemeToggle />
+</header>
+
+<main class="wasm-main">@Body</main>
+
+<footer class="wasm-foot"><AiCredit /></footer>

@@ -1,0 +1,63 @@
+@page "/ml"
+<PageTitle>Machine learning · Blazor.AI</PageTitle>
+
+<PageHeader Title="Machine learning" Package="Blazor.AI.Analytics" Icon="bi-cpu"
+            Lead="Classic ML in the browser UI, powered by Gravicode.Science (GraviLearn, GraviFrame). Pick a sample dataset or upload a CSV; all components share it." />
+
+<DemoSection Title="DatasetExplorer" Component="DatasetExplorer" Description="Profile columns, distributions and rows, and get an AI briefing." Code="@ExplorerCode">
+    <DatasetExplorer />
+</DemoSection>
+
+<DemoSection Title="FeatureEngineeringDesigner" Component="FeatureEngineeringDesigner" Description="Build features step by step with undo; AI suggests features from the profile." Code="@FeatureCode">
+    <FeatureEngineeringDesigner />
+</DemoSection>
+
+<DemoSection Title="AutoMLStudio" Component="AutoMLStudio" Description="Cross-validate every algorithm and rank them." Code="@AutoMlCode">
+    <AutoMLStudio />
+</DemoSection>
+
+<DemoSection Title="ModelTrainer" Component="ModelTrainer" Description="Algorithm, hyperparameters, features; metrics, importance and live predictions." Code="@TrainerCode">
+    <ModelTrainer />
+</DemoSection>
+
+<DemoSection Title="ClassificationWorkbench" Component="ClassificationWorkbench" Description="Confusion matrix, ROC curve and the classification report." Code="@ClassCode">
+    <ClassificationWorkbench Dataset="@SampleDatasets.CustomerChurn()" />
+</DemoSection>
+
+<DemoSection Title="RegressionWorkbench" Component="RegressionWorkbench" Description="Actual vs predicted and residuals on held-out data." Code="@RegCode">
+    <RegressionWorkbench Dataset="@SampleDatasets.CropYield()" />
+</DemoSection>
+
+<DemoSection Title="ClusteringWorkbench" Component="ClusteringWorkbench" Description="K-Means, GMM, hierarchical or DBSCAN; AI names the segments." Code="@ClusterCode">
+    <ClusteringWorkbench Dataset="@SampleDatasets.Segments()" />
+</DemoSection>
+
+<DemoSection Title="ForecastingWorkbench" Component="ForecastingWorkbench" Description="Holt-Winters and friends with confidence bands and method comparison." Code="@ForecastCode">
+    <ForecastingWorkbench Dataset="@SampleDatasets.MonthlySales()" />
+</DemoSection>
+
+<DemoSection Title="AnomalyDetectionWorkbench" Component="AnomalyDetectionWorkbench" Description="Robust z-scores, IQR fences or a one-class SVM." Code="@AnomalyCode">
+    <AnomalyDetectionWorkbench Dataset="@SampleDatasets.MachineSensor()" />
+</DemoSection>
+
+<DemoSection Title="RecommendationWorkbench" Component="RecommendationWorkbench" Description="Item-based collaborative filtering you can edit live." Code="@RecCode">
+    <RecommendationWorkbench />
+</DemoSection>
+
+@code {
+    private const string ExplorerCode = """
+        builder.Services.AddBlazorAIAnalytics();
+
+        <DatasetExplorer />   @* shares AnalyticsWorkspace.Dataset with the other components *@
+        """;
+
+    private const string FeatureCode = """<FeatureEngineeringDesigner />""";
+    private const string AutoMlCode = """<AutoMLStudio Folds="5" OnBestModel="Train" />""";
+    private const string TrainerCode = """<ModelTrainer Task="MlTask.Classification" Algorithm="Random forest" OnTrained="Save" />""";
+    private const string ClassCode = """<ClassificationWorkbench Dataset="@new AnalyticsDataset("Churn", frame, "churn")" />""";
+    private const string RegCode = """<RegressionWorkbench Dataset="@dataset" />""";
+    private const string ClusterCode = """<ClusteringWorkbench Dataset="@segments" OnClustered="Tag" />""";
+    private const string ForecastCode = """<ForecastingWorkbench Dataset="@sales" />""";
+    private const string AnomalyCode = """<AnomalyDetectionWorkbench Dataset="@telemetry" OnDetected="Alert" />""";
+    private const string RecCode = """<RecommendationWorkbench Users="@users" Items="@items" Ratings="@ratings" />""";
+}

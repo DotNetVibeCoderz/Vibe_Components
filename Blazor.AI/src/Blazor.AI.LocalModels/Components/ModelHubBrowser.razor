@@ -1,0 +1,89 @@
+@namespace Blazor.AI.LocalModels
+@inherits AiComponentBase
+@* Search the Hugging Face Hub by keyword and task; see downloads, likes, tags, files and whether weights are safetensors. *@
+
+<AiCard Title="@Title" Subtitle="Search 1M+ models on the Hugging Face Hub" Icon="bi-search-heart" Class="@Class">
+    <div class="bai-stack">
+        <form class="bai-row" @onsubmit="SearchAsync" @onsubmit:preventDefault="true" role="search">
+            <input class="bai-input bai-spacer" @bind="_query" placeholder="e.g. indonesian sentiment, bert ner, whisper" aria-label="Search models" />
+            <select class="bai-select" style="width:auto" @bind="_task" aria-label="Task">
+                <option value="">Any task</option>
+                @foreach (var t in Tasks) { <option>@t</option> }
+            </select>
+            <button type="submit" class="bai-btn bai-btn-ai" disabled="@IsBusy"><i class="bi bi-search" aria-hidden="true"></i>Search</button>
+        </form>
+        <AiError Message="@Error" />
+        <div class="bai-grid-2" style="align-items:start">
+            <div>
+                @foreach (var repo in _results)
+                {
+                    <button type="button" class="bai-result" style="width:100%; text-align:left; cursor:pointer; @(repo.Id == _selected?.Id ? "border-color:var(--bai-soga)" : null)" @onclick="() => SelectAsync(repo.Id)">
+                        <span class="bai-result-head"><code style="font-size:.85rem">@repo.Id</code>@if (repo.Gated) { <span class="bai-badge bai-badge-ai">gated</span> }</span>
+                        <span class="bai-row bai-small bai-muted">
+                            @if (repo.PipelineTag is not null) { <span class="bai-badge">@repo.PipelineTag</span> }
+                            <span><i class="bi bi-download" aria-hidden="true"></i> @Fmt(repo.Downloads)</span>
+                            <span><i class="bi bi-heart" aria-hidden="true"></i> @Fmt(repo.Likes)</span>
+                        </span>
+                    </button>
+                }
+                @if (_searched && _results.Count == 0 && !IsBusy) { <div class="bai-empty">No models found.</div> }
+            </div>
+            @if (_selected is { } info)
+            {
+                <div class="bai-stack">
+                    <div class="bai-row"><h3 class="bai-card-title" style="font-size:1.05rem">@info.Id</h3></div>
+                    <dl class="bai-kv">
+                        <dt>Task</dt><dd>@(info.PipelineTag ?? "–")</dd>
+                        <dt>Downloads</dt><dd class="bai-num">@info.Downloads.ToString("N0")</dd>
+                        <dt>Likes</dt><dd class="bai-num">@info.Likes.ToString("N0")</dd>
+                        <dt>Updated</dt><dd>@info.LastModified?.ToString("dd MMM yyyy")</dd>
+                        <dt>Weights</dt><dd>@(info.HasSafeTensors ? "safetensors ✓" : "PyTorch .bin (slower to load)")</dd>
+                        <dt>Size</dt><dd class="bai-num">@Size(info.Files.Sum(f => f.Size ?? 0))</dd>
+                    </dl>
+                    <div class="bai-chips">@foreach (var tag in info.Tags.Take(14)) { <span class="bai-badge">@tag</span> }</div>
+                    <div class="bai-row">
+                        <a class="bai-btn-ghost" href="@($"https://huggingface.co/{info.Id}")" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>Model card</a>
+                        <button type="button" class="bai-btn" @onclick="() => OnModelSelected.InvokeAsync(info.Id)"><i class="bi bi-check2" aria-hidden="true"></i>Use this model</button>
+                    </div>
+                    <details>
+                        <summary class="bai-small" style="cursor:pointer">@info.Files.Count files</summary>
+                        <ul class="bai-small" style="margin:.4rem 0 0; padding-left:1.1rem; max-height:12rem; overflow:auto">
+                            @foreach (var f in info.Files.OrderByDescending(f => f.Size)) { <li><code>@f.Path</code> <span class="bai-muted">@Size(f.Size ?? 0)</span></li> }
+                        </ul>
+                    </details>
+                </div>
+            }
+        </div>
+    </div>
+</AiCard>
+
+@code {
+    private static readonly string[] Tasks = ["text-classification", "token-classification", "feature-extraction", "sentence-similarity", "text-generation", "question-answering", "fill-mask", "image-classification", "image-to-text", "automatic-speech-recognition", "text-to-speech", "zero-shot-image-classification"];
+    private IReadOnlyList<Gravicode.HFNet.GraviHub.RepoInfo> _results = [];
+    private Gravicode.HFNet.GraviHub.RepoInfo? _selected;
+    private string? _query = "sentiment indonesian";
+    private string? _task;
+    private bool _searched;
+
+    [Inject] private HuggingFaceHubService Hub { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Model hub browser";
+    [Parameter] public EventCallback<string> OnModelSelected { get; set; }
+
+    private Task SearchAsync() => RunAsync(async ct =>
+    {
+        _results = await Hub.SearchAsync(_query ?? string.Empty, string.IsNullOrEmpty(_task) ? null : _task, 20, ct);
+        _searched = true;
+        _selected = null;
+    });
+
+    private Task SelectAsync(string id) => RunAsync(async ct => _selected = await Hub.InfoAsync(id, ct));
+
+    internal static string Size(long bytes) => bytes switch
+    {
+        <= 0 => "–",
+        < 1024 * 1024 => $"{bytes / 1024.0:0} KB",
+        < 1024L * 1024 * 1024 => $"{bytes / 1024.0 / 1024:0.#} MB",
+        _ => $"{bytes / 1024.0 / 1024 / 1024:0.##} GB",
+    };
+}

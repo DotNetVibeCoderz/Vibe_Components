@@ -1,0 +1,94 @@
+@namespace Blazor.AI.RAG
+@* Search hits as a sortable table, with metadata columns and CSV export. *@
+
+@if (Hits.Count > 0)
+{
+    <div class="@($"bai-stack {Class}".Trim())">
+        <div class="bai-row">
+            <span class="bai-small bai-muted">@Hits.Count results</span>
+            <span class="bai-spacer"></span>
+            <button type="button" class="bai-btn-ghost" @onclick="ExportAsync"><i class="bi bi-filetype-csv" aria-hidden="true"></i>Export CSV</button>
+        </div>
+        <div class="bai-table-wrap">
+            <table class="bai-table">
+                <thead>
+                    <tr>
+                        <th><button type="button" class="bai-tab" @onclick="() => SortBy(Column.Rank)">#</button></th>
+                        <th><button type="button" class="bai-tab" @onclick="() => SortBy(Column.Score)">Score @Arrow(Column.Score)</button></th>
+                        <th><button type="button" class="bai-tab" @onclick="() => SortBy(Column.Source)">Source @Arrow(Column.Source)</button></th>
+                        <th>Passage</th>
+                        @foreach (var key in MetadataColumns) { <th>@key</th> }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (hit, rank) in Sorted)
+                    {
+                        <tr>
+                            <td class="bai-num">@rank</td>
+                            <td style="min-width:7rem">
+                                <div class="bai-row" style="flex-wrap:nowrap"><span class="bai-num bai-small">@((hit.Score * 100).ToString("0"))%</span>
+                                <div class="bai-meter bai-spacer"><span style="width:@(Math.Clamp(hit.Score * 100, 0, 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div></div>
+                            </td>
+                            <td style="white-space:nowrap">@hit.SourceLabel</td>
+                            <td class="bai-small">@(hit.Text.Length > 260 ? hit.Text[..260] + "…" : hit.Text)</td>
+                            @foreach (var key in MetadataColumns) { <td class="bai-small">@hit.Chunk.GetMetadata(key)</td> }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private Column _sort = Column.Rank;
+    private bool _descending;
+
+    [Inject] private BlazorAIJs Js { get; set; } = default!;
+
+    [Parameter, EditorRequired] public IReadOnlyList<KnowledgeHit> Hits { get; set; } = [];
+
+    /// <summary>Metadata keys to show as extra columns (e.g. tags you added on ingestion).</summary>
+    [Parameter] public IReadOnlyList<string> MetadataColumns { get; set; } = [];
+
+    [Parameter] public string? Class { get; set; }
+
+    private enum Column { Rank, Score, Source }
+
+    private IEnumerable<(KnowledgeHit Hit, int Rank)> Sorted
+    {
+        get
+        {
+            var ranked = Hits.Select((h, i) => (Hit: h, Rank: i + 1));
+            ranked = _sort switch
+            {
+                Column.Score => _descending ? ranked.OrderByDescending(r => r.Hit.Score) : ranked.OrderBy(r => r.Hit.Score),
+                Column.Source => _descending ? ranked.OrderByDescending(r => r.Hit.SourceLabel) : ranked.OrderBy(r => r.Hit.SourceLabel),
+                _ => _descending ? ranked.OrderByDescending(r => r.Rank) : ranked,
+            };
+            return ranked;
+        }
+    }
+
+    private void SortBy(Column column)
+    {
+        _descending = _sort == column && !_descending;
+        _sort = column;
+    }
+
+    private string? Arrow(Column column) => _sort != column ? null : _descending ? "↓" : "↑";
+
+    private async Task ExportAsync()
+    {
+        var csv = new StringBuilder("rank,score,source,page,text\n");
+        foreach (var (hit, rank) in Sorted)
+        {
+            csv.Append(rank).Append(',').Append(hit.Score.ToString("0.####", CultureInfo.InvariantCulture)).Append(',')
+               .Append(Quote(hit.DocumentName)).Append(',').Append(hit.Page).Append(',').Append(Quote(hit.Text)).Append('\n');
+        }
+
+        await Js.DownloadTextAsync("search-results.csv", csv.ToString(), "text/csv");
+    }
+
+    private static string Quote(string value) => "\"" + value.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
+}

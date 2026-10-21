@@ -1,0 +1,42 @@
+@namespace Blazor.AI.Visualization
+@* A knowledge graph: typed entities and labelled relations, with search, entity details and relation list. *@
+
+<div class="bai-stack @Class">
+    <div class="bai-row">
+        <input class="bai-input bai-spacer" type="search" placeholder="Find an entity…" @bind="_search" @bind:event="oninput" aria-label="Find entity" />
+        <span class="bai-badge">@Nodes.Count entities</span>
+        <span class="bai-badge">@Edges.Count relations</span>
+    </div>
+    <NetworkGraph Nodes="@Nodes" Edges="@Edges" ShowEdgeLabels="true" Directed="true" Width="@Width" Height="@Height"
+                  SelectedNodeId="@Match?.Id" OnNodeSelected="n => _selected = n" />
+    @if ((_selected ?? Match) is { } node)
+    {
+        <div class="bai-output">
+            <div class="bai-row"><strong>@node.Label</strong>@if (node.Group is not null) { <span class="bai-badge">@node.Group</span> }</div>
+            @if (node.Description is not null) { <p class="bai-small bai-muted" style="margin:.3rem 0">@node.Description</p> }
+            <ul class="bai-small" style="margin:.4rem 0 0; padding-left:1.1rem">
+                @foreach (var e in Edges.Where(e => e.Source == node.Id || e.Target == node.Id))
+                {
+                    <li>@Name(e.Source) <span class="bai-muted">— @(e.Label ?? "related to") →</span> @Name(e.Target)</li>
+                }
+            </ul>
+        </div>
+    }
+</div>
+
+@code {
+    private string? _search;
+    private GraphNode? _selected;
+
+    [Parameter, EditorRequired] public IReadOnlyList<GraphNode> Nodes { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<GraphEdge> Edges { get; set; } = [];
+    [Parameter] public int Width { get; set; } = 760;
+    [Parameter] public int Height { get; set; } = 460;
+    [Parameter] public string? Class { get; set; }
+
+    private GraphNode? Match => string.IsNullOrWhiteSpace(_search)
+        ? null
+        : Nodes.FirstOrDefault(n => n.Label.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    private string Name(string id) => Nodes.FirstOrDefault(n => n.Id == id)?.Label ?? id;
+}

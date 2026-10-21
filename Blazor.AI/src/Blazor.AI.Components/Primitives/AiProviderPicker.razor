@@ -1,0 +1,56 @@
+@namespace Blazor.AI.Components
+@implements IDisposable
+@* Lists the registered providers with a local/cloud badge. Two-way bind with @bind-Value, or leave unbound to change the app default. *@
+
+<div class="bai-row @Class">
+    @if (ShowLabel)
+    {
+        <label class="bai-label" for="@_id" style="margin:0">Model</label>
+    }
+    <select id="@_id" class="bai-select" style="width:auto; min-width:12rem; max-width:20rem" value="@Current" @onchange="ChangeAsync" aria-label="AI provider">
+        @foreach (var provider in Factory.Providers)
+        {
+            <option value="@provider.Name">@provider.Label</option>
+        }
+    </select>
+    @if (Selected is { } selected)
+    {
+        <span class="bai-badge @(selected.Deployment == AiDeploymentMode.Local ? "bai-badge-local" : "bai-badge-cloud")">
+            @(selected.Deployment == AiDeploymentMode.Local ? "local" : selected.Deployment == AiDeploymentMode.Hybrid ? "hybrid" : "cloud")
+        </span>
+    }
+</div>
+
+@code {
+    private readonly string _id = "bai-provider-" + Guid.NewGuid().ToString("N")[..6];
+
+    [Inject] private IAiClientFactory Factory { get; set; } = default!;
+
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public bool ShowLabel { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private string Current => Value ?? Factory.DefaultProvider.Name;
+
+    private AiProviderOptions? Selected => Factory.Providers.FirstOrDefault(p => p.Name == Current);
+
+    protected override void OnInitialized() => Factory.ProvidersChanged += Refresh;
+
+    private async Task ChangeAsync(ChangeEventArgs e)
+    {
+        var name = e.Value?.ToString();
+        if (ValueChanged.HasDelegate)
+        {
+            await ValueChanged.InvokeAsync(name);
+        }
+        else if (name is not null)
+        {
+            Factory.SetDefault(name);
+        }
+    }
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Factory.ProvidersChanged -= Refresh;
+}

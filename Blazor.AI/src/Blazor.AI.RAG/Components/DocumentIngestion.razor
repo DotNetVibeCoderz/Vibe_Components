@@ -1,0 +1,144 @@
+@namespace Blazor.AI.RAG
+@implements IDisposable
+@* Upload or paste documents into the knowledge base, with per-file progress. *@
+
+<AiCard Title="@Title" Subtitle="@($"{Kb.Documents.Count} documents · {Kb.ChunkCount} chunks indexed")" Icon="bi-cloud-arrow-up" Class="@Class">
+    <div class="bai-stack">
+        <label class="bai-empty" style="cursor:pointer" for="@_inputId">
+            <i class="bi bi-file-earmark-arrow-up" aria-hidden="true"></i>
+            <span><strong>Choose files</strong> or drop them here</span>
+            <span class="bai-small bai-faint">PDF, Word-exported text, Markdown, CSV, Excel, HTML, JSON · up to @(MaxFileSizeMb) MB each</span>
+            <InputFile id="@_inputId" OnChange="UploadAsync" multiple accept="@Accept" style="position:absolute; inset:0; opacity:0; cursor:pointer" />
+        </label>
+
+        @if (AllowPaste)
+        {
+            <details>
+                <summary class="bai-small" style="cursor:pointer">Or paste text</summary>
+                <div class="bai-stack" style="margin-top:.5rem">
+                    <input class="bai-input" @bind="_pasteName" placeholder="Name, e.g. Refund policy" aria-label="Document name" />
+                    <textarea class="bai-textarea" rows="5" @bind="_pasteText" aria-label="Document text"></textarea>
+                    <button type="button" class="bai-btn" disabled="@(string.IsNullOrWhiteSpace(_pasteText))" @onclick="AddPastedAsync">Add to knowledge base</button>
+                </div>
+            </details>
+        }
+
+        @foreach (var job in _jobs.Values.Where(j => j.Fraction < 1 || j.Error is not null))
+        {
+            <div>
+                <div class="bai-row bai-small"><span>@job.Name</span><span class="bai-spacer"></span><span class="bai-muted">@(job.Error ?? job.Stage)</span></div>
+                <div class="bai-meter" aria-hidden="true"><span style="width:@((job.Fraction * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div>
+            </div>
+        }
+
+        @if (Kb.Documents.Count > 0)
+        {
+            <div class="bai-table-wrap">
+                <table class="bai-table">
+                    <thead><tr><th>Document</th><th>Type</th><th>Pages</th><th>Chunks</th><th>Size</th><th><span class="bai-visually-hidden">Actions</span></th></tr></thead>
+                    <tbody>
+                        @foreach (var doc in Kb.Documents)
+                        {
+                            <tr>
+                                <td><i class="bi bi-file-earmark-text" aria-hidden="true"></i> @doc.Name</td>
+                                <td><span class="bai-badge">@doc.Kind</span></td>
+                                <td class="bai-num">@doc.Pages</td>
+                                <td class="bai-num">@doc.Chunks</td>
+                                <td class="bai-num">@Size(doc.Bytes)</td>
+                                <td><button type="button" class="bai-icon-btn" title="Remove" aria-label="@($"Remove {doc.Name}")" @onclick="() => Kb.RemoveAsync(doc.Id)"><i class="bi bi-trash3"></i></button></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</AiCard>
+
+@code {
+    private readonly string _inputId = "bai-ingest-" + Guid.NewGuid().ToString("N")[..6];
+    private readonly Dictionary<string, Job> _jobs = [];
+    private string? _pasteName, _pasteText;
+
+    [Inject] private KnowledgeBase Kb { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Documents";
+    [Parameter] public int MaxFileSizeMb { get; set; } = 25;
+    [Parameter] public int MaxFiles { get; set; } = 10;
+    [Parameter] public bool AllowPaste { get; set; } = true;
+    [Parameter] public string Accept { get; set; } = string.Join(',', DocumentLoader.SupportedExtensions);
+    [Parameter] public EventCallback<KnowledgeDocument> OnIngested { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized() => Kb.Changed += Refresh;
+
+    private async Task UploadAsync(InputFileChangeEventArgs e)
+    {
+        foreach (var file in e.GetMultipleFiles(MaxFiles))
+        {
+            var job = _jobs[file.Name] = new Job(file.Name);
+            if (!DocumentLoader.IsSupported(file.Name))
+            {
+                job.Error = "Unsupported file type";
+                continue;
+            }
+
+            try
+            {
+                job.Stage = "Reading";
+                StateHasChanged();
+                await using var stream = file.OpenReadStream(MaxFileSizeMb * 1024L * 1024L);
+                var loaded = await DocumentLoader.LoadAsync(file.Name, stream);
+                if (loaded.Pages.Count == 0)
+                {
+                    job.Error = "No text found (scanned PDFs need OCR first)";
+                    continue;
+                }
+
+                var progress = new Progress<IngestionProgress>(p =>
+                {
+                    job.Stage = p.Stage;
+                    job.Fraction = p.Fraction;
+                    InvokeAsync(StateHasChanged);
+                });
+                var doc = await Kb.IngestAsync(loaded, progress);
+                job.Fraction = 1;
+                await OnIngested.InvokeAsync(doc);
+            }
+            catch (IOException ex) when (ex.Message.Contains("exceeds", StringComparison.OrdinalIgnoreCase))
+            {
+                job.Error = $"Larger than {MaxFileSizeMb} MB";
+            }
+            catch (Exception ex)
+            {
+                job.Error = AiComponentBase.Describe(ex);
+            }
+        }
+    }
+
+    private async Task AddPastedAsync()
+    {
+        var doc = await Kb.IngestTextAsync(string.IsNullOrWhiteSpace(_pasteName) ? $"Pasted text {Kb.Documents.Count + 1}" : _pasteName!, _pasteText!);
+        _pasteText = _pasteName = null;
+        await OnIngested.InvokeAsync(doc);
+    }
+
+    private static string Size(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
+        _ => $"{bytes / 1024.0 / 1024.0:0.#} MB",
+    };
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Kb.Changed -= Refresh;
+
+    private sealed class Job(string name)
+    {
+        public string Name { get; } = name;
+        public string Stage { get; set; } = "Queued";
+        public double Fraction { get; set; }
+        public string? Error { get; set; }
+    }
+}

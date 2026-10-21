@@ -1,0 +1,38 @@
+@namespace Blazor.AI.Components
+@* A floating assistant bubble. Drop it in MainLayout to give every page a helper. *@
+
+@if (_open)
+{
+    <div class="bai-glass bai-assistant-window" role="dialog" aria-label="@Title">
+        <AiChat Title="@Title" Subtitle="@Subtitle" Provider="@Provider" SystemPrompt="@SystemPrompt" Suggestions="@Suggestions"
+                Tools="@Tools" ContextProvider="@ContextProvider" Height="100%" ShowHint="false"
+                EmptyTitle="@EmptyTitle" EmptyText="@EmptyText" Class="bai-chat-flat">
+            <HeaderActions>
+                <button type="button" class="bai-icon-btn" aria-label="Close assistant" @onclick="Toggle"><i class="bi bi-x-lg"></i></button>
+            </HeaderActions>
+        </AiChat>
+    </div>
+}
+
+<button type="button" class="bai-fab" aria-expanded="@_open" aria-label="@(_open ? "Close assistant" : "Open assistant")" @onclick="Toggle">
+    <i class="bi @(_open ? "bi-chevron-down" : "bi-stars")" aria-hidden="true"></i>
+</button>
+
+@code {
+    private bool _open;
+
+    [Parameter] public string Title { get; set; } = "Assistant";
+    [Parameter] public string? Subtitle { get; set; } = "Ask about this page";
+    [Parameter] public string? Provider { get; set; }
+    [Parameter] public string? SystemPrompt { get; set; } = "You are a concise, helpful assistant embedded in a web application.";
+    [Parameter] public IReadOnlyList<string>? Suggestions { get; set; }
+    [Parameter] public IList<AITool>? Tools { get; set; }
+    [Parameter] public Func<Task<string?>>? ContextProvider { get; set; }
+    [Parameter] public string EmptyTitle { get; set; } = "Hi! What do you need?";
+    [Parameter] public string EmptyText { get; set; } = "I can explain, summarise or draft things for you.";
+    [Parameter] public bool StartOpen { get; set; }
+
+    protected override void OnInitialized() => _open = StartOpen;
+
+    private void Toggle() => _open = !_open;
+}

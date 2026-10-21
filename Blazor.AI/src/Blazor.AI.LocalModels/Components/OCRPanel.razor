@@ -1,0 +1,104 @@
+@namespace Blazor.AI.LocalModels
+@inherits HfComponentBase
+@*
+    Read text from images. Local TrOCR (HF.Net) handles single lines (receipts lines, labels, plates);
+    a vision-capable chat model (GPT, Claude, Gemini) reads full documents and can return structured fields.
+*@
+
+<AiCard Title="@Title" Subtitle="@(_mode == Modes[0] ? "TrOCR on this server (single text lines)" : "Vision LLM (full pages, tables, handwriting)")" Icon="bi-file-text" Class="@Class">
+    <div class="bai-stack">
+        <AiTabs Tabs="@Modes" @bind-Selected="_mode" />
+        @if (_mode == Modes[0])
+        {
+            <EngineSelector @bind-Engine="Engine" @bind-Model="_ocrModel" Suggestions="@OcrModels" />
+        }
+        else
+        {
+            <div class="bai-row">
+                <AiProviderPicker Value="@Provider" ValueChanged="v => Provider = v" />
+                <select class="bai-select" style="width:auto" @bind="_output" aria-label="Output">
+                    <option value="text">Plain text</option>
+                    <option value="markdown">Markdown (keep tables)</option>
+                    <option value="json">Key fields as JSON</option>
+                </select>
+            </div>
+        }
+        <div class="bai-grid-2" style="align-items:start">
+            <div class="bai-stack">
+                <label class="bai-empty" style="cursor:pointer; position:relative">
+                    @if (_preview is not null) { <img src="@_preview" alt="Image to read" style="max-width:100%; max-height:280px; border-radius:10px" /> }
+                    else { <i class="bi bi-file-earmark-image" aria-hidden="true"></i><span><strong>Choose an image</strong> of text</span> }
+                    <InputFile OnChange="LoadAsync" accept="image/*" style="position:absolute; inset:0; opacity:0; cursor:pointer" />
+                </label>
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || _image is null)" @onclick="ReadAsync">
+                    @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-eye" aria-hidden="true"></i> }
+                    Read text
+                </button>
+                @if (LoadStatus is not null) { <span class="bai-small bai-muted">@LoadStatus</span> }
+                <AiError Message="@Error" />
+            </div>
+            <AiOutput Text="@_text" IsBusy="@IsBusy" Markdown="@(_output == "markdown")" Placeholder="Recognised text appears here." DownloadName="ocr.txt" />
+        </div>
+    </div>
+</AiCard>
+
+@code {
+    private static readonly string[] Modes = ["Local TrOCR", "Vision LLM"];
+    private static readonly string[] OcrModels = ["microsoft/trocr-small-printed", "microsoft/trocr-base-printed", "microsoft/trocr-small-handwritten"];
+    private string _mode = Modes[1];
+    private string _output = "markdown";
+    private string? _ocrModel, _preview, _contentType, _text;
+    private byte[]? _image;
+
+    [Parameter] public string Title { get; set; } = "OCR";
+    [Parameter] public int MaxImageMb { get; set; } = 10;
+    [Parameter] public EventCallback<string> OnRecognized { get; set; }
+
+    protected override void OnParametersSet() => _ocrModel ??= Model ?? ModelOptions.OcrModel;
+
+    private async Task LoadAsync(InputFileChangeEventArgs e)
+    {
+        using var memory = new MemoryStream();
+        await e.File.OpenReadStream(MaxImageMb * 1024L * 1024L).CopyToAsync(memory);
+        _image = memory.ToArray();
+        _contentType = string.IsNullOrEmpty(e.File.ContentType) ? "image/png" : e.File.ContentType;
+        _preview = $"data:{_contentType};base64,{Convert.ToBase64String(_image)}";
+        _text = null;
+    }
+
+    private Task ReadAsync() => RunAsync(async ct =>
+    {
+        if (_mode == Modes[0])
+        {
+            if (Engine == InferenceEngine.HostedApi)
+            {
+                _text = await HostedApi.ImageToTextAsync(_ocrModel!, _image!, _contentType!, ct);
+            }
+            else
+            {
+                var model = await EnsureLocalAsync(_ocrModel!, "ocr", Registry.OcrModelAsync);
+                _text = await Registry.RunAsync(_ocrModel!, "ocr", () => model.Recognize(new MemoryStream(_image!)), ct);
+            }
+        }
+        else
+        {
+            var instruction = _output switch
+            {
+                "json" => "Extract the key fields from this document (e.g. vendor, date, totals, line items) as one JSON object. Reply with JSON only.",
+                "markdown" => "Transcribe all text in this image faithfully as markdown. Keep tables as markdown tables and keep reading order. Do not add commentary.",
+                _ => "Transcribe all text in this image exactly, preserving line breaks. Do not add commentary.",
+            };
+            var message = new ChatMessage(ChatRole.User, [new TextContent(instruction), new DataContent(_image!, _contentType!)]);
+            var builder = new StringBuilder();
+            _text = string.Empty;
+            await foreach (var update in ClientFactory.GetChatClient(Provider).GetStreamingResponseAsync([message], AiChatOptions.ForTask(AiTasks.Extract), ct))
+            {
+                builder.Append(update.Text);
+                _text = builder.ToString();
+                RenderThrottled();
+            }
+        }
+
+        await OnRecognized.InvokeAsync(_text ?? string.Empty);
+    });
+}

@@ -1,0 +1,112 @@
+@namespace Blazor.AI.Analytics
+@inherits AnalyticsComponentBase
+@* Detect anomalies with robust rolling z-scores, IQR fences or a multivariate one-class SVM; review flagged points and get an explanation. *@
+
+<AiCard Title="@Title" Subtitle="@Data.Name" Icon="bi-exclamation-diamond" Class="@Class">
+    <Actions><DatasetPicker ShowTarget="false" /></Actions>
+    <ChildContent>
+        <div class="bai-stack">
+            <div class="bai-row">
+                <select class="bai-select" style="width:auto" @bind="_column" aria-label="Series">
+                    @foreach (var c in Data.NumericColumns) { <option>@c</option> }
+                </select>
+                <select class="bai-select" style="width:auto" @bind="_method" aria-label="Method">
+                    <option value="z">Rolling robust z-score</option>
+                    <option value="iqr">IQR fences</option>
+                    <option value="svm">One-class SVM (all features)</option>
+                </select>
+                @if (_method == "z") { <label class="bai-small">Threshold <input type="number" step="0.5" min="1" class="bai-input" style="width:4.5rem" @bind="_threshold" /></label> }
+                @if (_method == "svm") { <label class="bai-small">Expected share <input type="number" step="0.01" min="0.005" max="0.3" class="bai-input" style="width:5rem" @bind="_nu" /></label> }
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || _column is null)" @onclick="DetectAsync"><i class="bi bi-search" aria-hidden="true"></i>Detect</button>
+            </div>
+            <AiError Message="@Error" />
+            @if (_flags is not null)
+            {
+                var values = Values;
+                var anomalies = Enumerable.Range(0, values.Count).Where(i => _flags[i]).ToList();
+                <div class="bai-stats">
+                    <div class="bai-stat"><div class="bai-stat-label">Points</div><div class="bai-stat-value">@values.Count</div></div>
+                    <div class="bai-stat"><div class="bai-stat-label">Anomalies</div><div class="bai-stat-value bai-delta-down">@anomalies.Count</div></div>
+                    <div class="bai-stat"><div class="bai-stat-label">Share</div><div class="bai-stat-value">@((anomalies.Count / (double)Math.Max(1, values.Count)).ToString("P1", CultureInfo.InvariantCulture))</div></div>
+                </div>
+                <LineChart Series="@([ChartSeries.FromValues(_column!, values)])" Highlights="@anomalies.Select(i => new ChartPoint(i, values[i], $"Row {i + 1}")).ToArray()" ShowLegend="false" Height="260" />
+                @if (anomalies.Count > 0)
+                {
+                    <div class="bai-table-wrap" style="max-height:14rem; overflow:auto">
+                        <table class="bai-table">
+                            <thead><tr><th>Row</th>@foreach (var c in Data.NumericColumns) { <th>@c</th> }<th>Score</th></tr></thead>
+                            <tbody>
+                                @foreach (var i in anomalies.OrderByDescending(i => Math.Abs(_scores![i])).Take(25))
+                                {
+                                    <tr><td class="bai-num">@(i + 1)</td>@foreach (var c in Data.NumericColumns) { <td class="bai-num">@Fmt(Data.Frame.Numeric(c).Values[i])</td> }<td class="bai-num">@_scores![i].ToString("0.00", CultureInfo.InvariantCulture)</td></tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="ExplainAsync"><i class="bi bi-stars" aria-hidden="true"></i>What might cause these?</button>
+                    @if (_explanation is not null) { <AiOutput Text="@_explanation" IsBusy="@IsBusy" /> }
+                }
+            }
+        </div>
+    </ChildContent>
+</AiCard>
+
+@code {
+    private string? _column, _explanation;
+    private string _method = "z";
+    private double _threshold = 3.5, _nu = 0.03;
+    private bool[]? _flags;
+    private double[]? _scores;
+
+    [Parameter] public string Title { get; set; } = "Anomaly detection";
+    [Parameter] public EventCallback<IReadOnlyList<int>> OnDetected { get; set; }
+
+    private IReadOnlyList<double> Values => _column is not null && Data.Frame.HasColumn(_column) && Data.Frame[_column] is NumericSeries n ? n.FillMissingWithMean().Values : [];
+
+    protected override void OnDatasetChanged()
+    {
+        _column = Data.Target is { } t && Data.NumericColumns.Contains(t) ? t : Data.NumericColumns.Skip(1).FirstOrDefault() ?? Data.NumericColumns.FirstOrDefault();
+        _flags = null;
+        _explanation = null;
+    }
+
+    private Task DetectAsync() => RunAsync(async ct =>
+    {
+        var values = Values;
+        var data = Data;
+        switch (_method)
+        {
+            case "iqr":
+                var (flags, low, high) = TimeSeriesTools.IqrOutliers(values);
+                _flags = flags;
+                _scores = values.Select(v => v < low ? (v - low) : v > high ? v - high : 0).ToArray();
+                break;
+            case "svm":
+                (_flags, _scores) = await Compute(() => UnsupervisedMl.OneClassAnomalies(data, data.NumericColumns.Where(c => c != "t" && c != "month").ToArray(), _nu), ct);
+                break;
+            default:
+                _scores = TimeSeriesTools.RollingZScores(values);
+                _flags = _scores.Select(z => Math.Abs(z) >= _threshold).ToArray();
+                break;
+        }
+
+        _explanation = null;
+        await OnDetected.InvokeAsync(Enumerable.Range(0, _flags.Length).Where(i => _flags[i]).ToArray());
+    });
+
+    private Task ExplainAsync() => RunAsync(async ct =>
+    {
+        var rows = Enumerable.Range(0, _flags!.Length).Where(i => _flags[i]).Take(12)
+            .Select(i => $"row {i + 1}: " + string.Join(", ", Data.NumericColumns.Select(c => $"{c}={Data.Frame.Numeric(c).Values[i]:0.###}")));
+        var typical = string.Join(", ", Data.Frame.NumericColumns.Select(c => $"{c} median {c.Median():0.###}"));
+        var builder = new StringBuilder();
+        _explanation = string.Empty;
+        await foreach (var token in Ai.StreamAsync("You are a reliability engineer. Given typical values and the flagged rows, describe the anomaly pattern and 2-3 plausible causes and checks. Be concise; do not invent data.",
+                           PromptTags.Wrap(PromptTags.Input, $"{Data.Name}: {Data.Description}\nTypical: {typical}\nFlagged:\n{string.Join("\n", rows)}"), AiTasks.Insight, Provider, null, ct))
+        {
+            builder.Append(token);
+            _explanation = builder.ToString();
+            RenderThrottled();
+        }
+    });
+}

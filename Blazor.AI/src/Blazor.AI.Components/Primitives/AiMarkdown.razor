@@ -1,0 +1,21 @@
+@namespace Blazor.AI.Components
+@* Renders model markdown safely (raw HTML disabled). Re-parses only when the text changes. *@
+
+<div class="@($"bai-markdown {Class}".Trim())">@_html</div>
+
+@code {
+    private string? _rendered;
+    private MarkupString _html;
+
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (!string.Equals(_rendered, Text, StringComparison.Ordinal))
+        {
+            _rendered = Text;
+            _html = MarkdownRenderer.Render(Text);
+        }
+    }
+}

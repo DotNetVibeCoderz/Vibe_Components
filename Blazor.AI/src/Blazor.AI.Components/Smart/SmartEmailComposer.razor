@@ -1,0 +1,115 @@
+@namespace Blazor.AI.Components
+@inherits AiComponentBase
+@* Drafts new emails or replies from key points, then refines them with one-click rewrites. *@
+
+<AiCard Title="@Title" Subtitle="@Subtitle" Icon="bi-envelope-paper" Class="@Class">
+    <div class="bai-stack">
+        <AiTabs Tabs="@Modes" @bind-Selected="_mode" />
+        @if (_mode == "Reply")
+        {
+            <div>
+                <label class="bai-label" for="@($"{_id}-orig")">Email you are replying to</label>
+                <textarea id="@($"{_id}-orig")" class="bai-textarea" rows="4" @bind="_original" placeholder="Paste the original email…"></textarea>
+            </div>
+        }
+        <div class="bai-grid-2">
+            <div>
+                <label class="bai-label" for="@($"{_id}-to")">Recipient</label>
+                <input id="@($"{_id}-to")" class="bai-input" @bind="_recipient" placeholder="e.g. Ms. Sari, procurement lead" />
+            </div>
+            <div>
+                <label class="bai-label" for="@($"{_id}-tone")">Tone</label>
+                <select id="@($"{_id}-tone")" class="bai-select" @bind="_tone">
+                    <option>Professional</option>
+                    <option>Friendly</option>
+                    <option>Formal</option>
+                    <option>Concise</option>
+                    <option>Apologetic</option>
+                    <option>Persuasive</option>
+                </select>
+            </div>
+        </div>
+        <div>
+            <label class="bai-label" for="@($"{_id}-pts")">What should the email say?</label>
+            <textarea id="@($"{_id}-pts")" class="bai-textarea" rows="4" @bind="_points" placeholder="Key points, one per line: confirm the meeting on Friday, ask for the updated quote…"></textarea>
+        </div>
+        <div class="bai-grid-2">
+            <div>
+                <label class="bai-label" for="@($"{_id}-lang")">Language</label>
+                <select id="@($"{_id}-lang")" class="bai-select" @bind="_language">
+                    <option>English</option>
+                    <option>Bahasa Indonesia</option>
+                </select>
+            </div>
+            <div>
+                <label class="bai-label" for="@($"{_id}-sig")">Sign as</label>
+                <input id="@($"{_id}-sig")" class="bai-input" @bind="_signature" placeholder="Your name" />
+            </div>
+        </div>
+        <div class="bai-row">
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(_points))" @onclick="DraftAsync">
+                <i class="bi bi-pencil-square" aria-hidden="true"></i>Write draft
+            </button>
+            @if (!string.IsNullOrEmpty(_draft) && !IsBusy)
+            {
+                @foreach (var refine in Refinements)
+                {
+                    <button type="button" class="bai-chip" @onclick="() => RefineAsync(refine)">@refine</button>
+                }
+            }
+        </div>
+        <AiError Message="@Error" OnRetry="DraftAsync" />
+        <AiOutput Text="@_draft" IsBusy="@IsBusy" Markdown="false" Placeholder="Your draft appears here." DownloadName="email.txt" />
+    </div>
+</AiCard>
+
+@code {
+    private static readonly string[] Modes = ["New email", "Reply"];
+    private static readonly string[] Refinements = ["Shorter", "More formal", "Friendlier", "Add a clear call to action"];
+    private readonly string _id = "bai-mail-" + Guid.NewGuid().ToString("N")[..6];
+    private string _mode = "New email";
+    private string? _original;
+    private string? _recipient;
+    private string _tone = "Professional";
+    private string? _points;
+    private string _language = "English";
+    private string? _signature;
+    private string? _draft;
+
+    [Parameter] public string Title { get; set; } = "Email composer";
+    [Parameter] public string? Subtitle { get; set; } = "From bullet points to a ready-to-send email";
+    [Parameter] public EventCallback<string> OnDrafted { get; set; }
+
+    private Task DraftAsync()
+    {
+        var system = $"You write emails. Tone: {_tone}. Language: {_language}. Start with a 'Subject:' line, then a blank line, then the body. " +
+                     "Be specific, keep paragraphs short, no placeholders like [Name] unless information is missing.";
+        var user = new StringBuilder();
+        if (_mode == "Reply" && !string.IsNullOrWhiteSpace(_original))
+        {
+            user.AppendLine("Write a reply to this email:").AppendLine(PromptTags.Wrap(PromptTags.Context, _original));
+        }
+
+        if (!string.IsNullOrWhiteSpace(_recipient)) user.Append("Recipient: ").AppendLine(_recipient);
+        if (!string.IsNullOrWhiteSpace(_signature)) user.Append("Sign as: ").AppendLine(_signature);
+        user.AppendLine("Points to cover:").AppendLine(PromptTags.Wrap(PromptTags.Input, _points));
+        return StreamAsync("Write an email. " + system, user.ToString(), AiTasks.Generate);
+    }
+
+    private Task RefineAsync(string refinement) =>
+        StreamAsync($"Rewrite the email. Instruction: make it {refinement.ToLowerInvariant()}. Keep the Subject line. Reply with the email only.", PromptTags.Wrap(PromptTags.Input, _draft), AiTasks.Rewrite);
+
+    private Task StreamAsync(string system, string user, string task) => RunAsync(async ct =>
+    {
+        var builder = new StringBuilder();
+        _draft = string.Empty;
+        await foreach (var token in Ai.StreamAsync(system, user, task, Provider, null, ct))
+        {
+            builder.Append(token);
+            _draft = builder.ToString();
+            RenderThrottled();
+        }
+
+        await OnDrafted.InvokeAsync(_draft);
+    });
+}

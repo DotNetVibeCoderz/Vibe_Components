@@ -1,0 +1,137 @@
+@namespace Blazor.AI.Bio
+@inherits BioComponentBase
+@using Biotech.Net.Alignments
+@using Biotech.Net.Alignments.Phylogenetics
+@* Progressive multiple alignment with residue colouring, conservation track, consensus and a neighbour-joining tree. *@
+
+<AiCard Title="@Title" Subtitle="Progressive MSA · neighbour-joining tree" Icon="bi-diagram-3" Class="@Class">
+    <div class="bai-stack">
+        <SequenceInput @bind-Value="Fasta" Label="FASTA (2+ sequences)" Rows="5" Samples="@([("Cytochrome c", BioSamples.CytochromeC)])" />
+        <div class="bai-row">
+            <select class="bai-select" style="width:auto" @bind="_type" aria-label="Sequence type">
+                <option value="@SequenceType.Protein">Protein</option>
+                <option value="@SequenceType.Dna">DNA</option>
+            </select>
+            <select class="bai-select" style="width:auto" @bind="_model" aria-label="Distance model">
+                @foreach (var m in Enum.GetValues<DistanceModel>().Where(m => _type == SequenceType.Dna || m != DistanceModel.Kimura2P)) { <option value="@m">@m</option> }
+            </select>
+            <button type="button" class="bai-btn bai-btn-ai" @onclick="AlignAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Align &amp; build tree</button>
+        </div>
+        <AiError Message="@Error" />
+        @if (_r is { } r)
+        {
+            <div class="bai-bio-msa" role="figure" aria-label="Multiple sequence alignment">
+                <div class="bai-bio-msa-names">
+                    @foreach (var id in r.Msa.Ids) { <div title="@id">@id</div> }
+                    <div class="bai-faint">consensus</div>
+                </div>
+                <div class="bai-bio-msa-cols">
+                    <svg viewBox="0 0 @(r.Msa.Length * 9) 22" width="@(r.Msa.Length * 9)" height="22" aria-label="Conservation">
+                        @for (var c = 0; c < r.Msa.Length; c++)
+                        {
+                            var h = 2 + r.Conservation[c] * 18;
+                            <rect x="@(c * 9 + 1)" y="@S(22 - h)" width="7" height="@S(h)" fill="var(--bai-nila)" opacity="@S(0.35 + r.Conservation[c] * 0.65)" />
+                        }
+                    </svg>
+                    @foreach (var row in r.Msa.Rows)
+                    {
+                        <div class="bai-bio-msa-row">@for (var c = 0; c < row.Length; c++) { var ch = row[c]; <span style="@ResidueStyle(ch, r.Conservation[c])">@ch</span> }</div>
+                    }
+                    <div class="bai-bio-msa-row" style="font-weight:700">@foreach (var ch in r.Consensus) { <span>@ch</span> }</div>
+                </div>
+            </div>
+            <div class="bai-grid-2" style="align-items:start">
+                <div>
+                    <span class="bai-label">Neighbour-joining tree (@_model, midpoint-rooted)</span>
+                    <PhyloTree Tree="@r.Tree" />
+                </div>
+                <div>
+                    <span class="bai-label">Percent identity</span>
+                    <Heatmap RowLabels="@r.Msa.Ids" ColumnLabels="@r.Msa.Ids" Values="@r.Identity" Min="0" Max="1" Width="420" LabelWidth="90" TopLabelHeight="80" />
+                </div>
+            </div>
+            <details><summary class="bai-small">Newick and Clustal</summary><AiCodeBlock Code="@(r.Tree.ToNewick(true, 4) + "\n\n" + r.Msa.ToClustal(60))" /></details>
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Interpret the phylogeny with AI</button>
+            @if (Explanation is not null) { <AiOutput Text="@Explanation" IsBusy="@IsBusy" /> }
+        }
+    </div>
+</AiCard>
+
+@code {
+    private SequenceType _type = SequenceType.Protein;
+    private DistanceModel _model = DistanceModel.JukesCantor;
+    private Result? _r;
+
+    [Parameter] public string Title { get; set; } = "Multiple alignment & phylogeny";
+    [Parameter] public string? Fasta { get; set; } = BioSamples.CytochromeC;
+
+    private sealed record Result(MultipleSequenceAlignment Msa, double[] Conservation, string Consensus, PhylogeneticTree Tree, double[,] Identity);
+
+    protected override Task OnInitializedAsync() => AlignAsync();
+
+    private async Task AlignAsync()
+    {
+        var (fasta, type, model) = (Fasta, _type, _type == SequenceType.Protein && _model == DistanceModel.Kimura2P ? DistanceModel.JukesCantor : _model);
+        _r = await AnalyseAsync(() =>
+        {
+            var seqs = BioInput.ParseMany(fasta, type);
+            if (seqs.Count < 2)
+            {
+                throw new FormatException("Paste at least two FASTA records (each starting with '>').");
+            }
+
+            if (seqs.Count > 40 || seqs.Max(s => s.Length) > 3000)
+            {
+                throw new ArgumentException("Interactive limit: 40 sequences of up to 3,000 residues.");
+            }
+
+            var msa = new ProgressiveAligner().Align(seqs);
+            var tree = TreeBuilder.NeighborJoining(DistanceMatrix.FromAlignment(msa, model), clampNegative: true).RootAtMidpoint();
+            var identity = new double[msa.Count, msa.Count];
+            for (var i = 0; i < msa.Count; i++)
+            {
+                for (var j = 0; j < msa.Count; j++)
+                {
+                    identity[i, j] = i == j ? 1 : msa.PercentIdentity(i, j) / 100;
+                }
+            }
+
+            return new Result(msa, msa.ColumnConservation(), msa.Consensus(), tree, identity);
+        });
+        Explanation = null;
+    }
+
+    // Clustal-like colouring by physico-chemical class, faded where the column is variable.
+    private static string ResidueStyle(char c, double conservation)
+    {
+        var colour = char.ToUpperInvariant(c) switch
+        {
+            'A' or 'V' or 'L' or 'I' or 'M' or 'F' or 'W' => "#5b8def",
+            'K' or 'R' => "#e5534b",
+            'D' or 'E' => "#c45ad6",
+            'S' or 'T' or 'N' or 'Q' => "#3fb27f",
+            'C' => "#f0a33a",
+            'G' => "#e8913a",
+            'P' => "#d4b106",
+            'H' or 'Y' => "#16a3b5",
+            _ => null,
+        };
+        return colour is null ? "" : $"background:color-mix(in srgb, {colour} {(int)(25 + conservation * 60)}%, transparent)";
+    }
+
+    private Task Explain()
+    {
+        var r = _r!;
+        var pairs = new List<string>();
+        for (var i = 0; i < r.Msa.Count; i++)
+        {
+            for (var j = i + 1; j < r.Msa.Count; j++)
+            {
+                pairs.Add(string.Create(CultureInfo.InvariantCulture, $"{r.Msa.Ids[i]}–{r.Msa.Ids[j]} {r.Identity[i, j]:P0}"));
+            }
+        }
+
+        return ExplainAsync("multiple sequence alignment and phylogenetic tree", string.Create(CultureInfo.InvariantCulture,
+            $"{r.Msa.Count} sequences, alignment length {r.Msa.Length}, mean column conservation {r.Conservation.Average():P0}. Tree (Newick, {_model}): {r.Tree.ToNewick(true, 3)}. Pairwise identity: {string.Join("; ", pairs.Take(30))}."));
+    }
+}

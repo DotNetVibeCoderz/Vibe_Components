@@ -1,0 +1,123 @@
+@namespace Blazor.AI.Visualization
+@* Scatter plot coloured by group, with optional identity line (y = x) or fitted trend line. *@
+
+<figure class="bai-chart @Class" style="margin:0">
+    @if (Title is not null)
+    {
+        <figcaption class="bai-chart-title">@Title</figcaption>
+    }
+    <svg viewBox="0 0 @Width @Height" role="img" aria-label="@(Title ?? "Scatter chart")">
+        @if (_x is { } x && _y is { } y)
+        {
+            @foreach (var tick in y.Ticks)
+            {
+                <line class="bai-grid-line" x1="@S(x.PixelStart)" x2="@S(x.PixelEnd)" y1="@S(y.Map(tick))" y2="@S(y.Map(tick))" />
+                <!text class="bai-axis-text" x="@S(x.PixelStart - 8)" y="@S(y.Map(tick) + 4)" text-anchor="end">@Fmt(tick)</!text>
+            }
+            @foreach (var tick in x.Ticks)
+            {
+                <!text class="bai-axis-text" x="@S(x.Map(tick))" y="@S(Height - PadBottom + 18)" text-anchor="middle">@Fmt(tick)</!text>
+            }
+            <line class="bai-axis-line" x1="@S(x.PixelStart)" x2="@S(x.PixelEnd)" y1="@S(y.PixelStart)" y2="@S(y.PixelStart)" />
+
+            @if (IdentityLine)
+            {
+                var lo = Math.Max(x.Min, y.Min);
+                var hi = Math.Min(x.Max, y.Max);
+                <line x1="@S(x.Map(lo))" y1="@S(y.Map(lo))" x2="@S(x.Map(hi))" y2="@S(y.Map(hi))" class="bai-marker-line" />
+            }
+            @if (TrendLine && _trend is { } t)
+            {
+                <line x1="@S(x.Map(x.Min))" y1="@S(y.Map(t.Intercept + t.Slope * x.Min))" x2="@S(x.Map(x.Max))" y2="@S(y.Map(t.Intercept + t.Slope * x.Max))"
+                      stroke="var(--bai-soga)" stroke-width="2" stroke-dasharray="6 4"><title>Trend: y = @Fmt(t.Slope)x + @Fmt(t.Intercept)</title></line>
+            }
+
+            @for (var s = 0; s < Series.Count; s++)
+            {
+                var color = Series[s].Color ?? SeriesColor(s);
+                @foreach (var p in Series[s].Points)
+                {
+                    <circle cx="@S(x.Map(p.X))" cy="@S(y.Map(p.Y))" r="@S(PointRadius)" fill="@color" fill-opacity="0.75" class="bai-point">
+                        <title>@(p.Label ?? Series[s].Name): (@Fmt(p.X), @Fmt(p.Y))</title>
+                    </circle>
+                }
+            }
+
+            @if (XLabel is not null)
+            {
+                <!text class="bai-axis-label" x="@S((x.PixelStart + x.PixelEnd) / 2)" y="@S(Height - 4)" text-anchor="middle">@XLabel</!text>
+            }
+            @if (YLabel is not null)
+            {
+                <!text class="bai-axis-label" transform="@($"translate(12,{S((y.PixelStart + y.PixelEnd) / 2)}) rotate(-90)")" text-anchor="middle">@YLabel</!text>
+            }
+        }
+    </svg>
+    @if (Series.Count > 1)
+    {
+        <ChartLegend Items="@Series.Select((s, i) => (s.Name, s.Color ?? SeriesColor(i))).ToArray()" />
+    }
+</figure>
+
+@code {
+    private LinearAxis? _x, _y;
+    private (double Slope, double Intercept)? _trend;
+
+    [Parameter, EditorRequired] public IReadOnlyList<ChartSeries> Series { get; set; } = [];
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? XLabel { get; set; }
+    [Parameter] public string? YLabel { get; set; }
+    [Parameter] public bool IdentityLine { get; set; }
+    [Parameter] public bool TrendLine { get; set; }
+    [Parameter] public double PointRadius { get; set; } = 3.5;
+    [Parameter] public int Width { get; set; } = 640;
+    [Parameter] public int Height { get; set; } = 300;
+    [Parameter] public string? Class { get; set; }
+
+    private int PadLeft => YLabel is null ? 48 : 60;
+    private int PadBottom => XLabel is null ? 28 : 40;
+
+    protected override void OnParametersSet()
+    {
+        var points = Series.SelectMany(s => s.Points).Where(p => double.IsFinite(p.X) && double.IsFinite(p.Y)).ToList();
+        if (points.Count == 0)
+        {
+            _x = _y = null;
+            return;
+        }
+
+        double xMin = points.Min(p => p.X), xMax = points.Max(p => p.X), yMin = points.Min(p => p.Y), yMax = points.Max(p => p.Y);
+        if (IdentityLine)
+        {
+            xMin = yMin = Math.Min(xMin, yMin);
+            xMax = yMax = Math.Max(xMax, yMax);
+        }
+
+        _x = new LinearAxis(xMin, xMax, PadLeft, Width - 16, 6);
+        _y = new LinearAxis(yMin, yMax, Height - PadBottom, 12, 5);
+        _trend = TrendLine ? Ols(points) : null;
+    }
+
+    private static (double Slope, double Intercept)? Ols(List<ChartPoint> points)
+    {
+        if (points.Count < 2)
+        {
+            return null;
+        }
+
+        double mx = points.Average(p => p.X), my = points.Average(p => p.Y), sxy = 0, sxx = 0;
+        foreach (var p in points)
+        {
+            sxy += (p.X - mx) * (p.Y - my);
+            sxx += (p.X - mx) * (p.X - mx);
+        }
+
+        if (sxx < 1e-12)
+        {
+            return null;
+        }
+
+        var slope = sxy / sxx;
+        return (slope, my - slope * mx);
+    }
+}

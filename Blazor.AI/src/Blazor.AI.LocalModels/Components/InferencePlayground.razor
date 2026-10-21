@@ -1,0 +1,131 @@
+@namespace Blazor.AI.LocalModels
+@inherits HfComponentBase
+@* Try any local transformer task in one place: classification, NER, fill-mask, question answering, similarity, embeddings, text generation. *@
+
+<AiCard Title="@Title" Subtitle="HF.Net pipelines on this server" Icon="bi-joystick" Class="@Class">
+    <div class="bai-stack">
+        <div class="bai-row">
+            <select class="bai-select" style="width:auto" value="@_task" @onchange="PickTask" aria-label="Task">
+                @foreach (var t in Tasks.Keys) { <option>@t</option> }
+            </select>
+            <input class="bai-input bai-spacer" style="font-family:var(--bai-font-mono); font-size:.8rem" @bind="_model" aria-label="Model id" />
+        </div>
+        <textarea class="bai-textarea" rows="4" @bind="_input" aria-label="Input"></textarea>
+        @if (_task is "Question answering" or "Similarity")
+        {
+            <textarea class="bai-textarea" rows="3" @bind="_second" aria-label="@(_task == "Similarity" ? "Second text" : "Context")" placeholder="@(_task == "Similarity" ? "Second text" : "Context passage")"></textarea>
+        }
+        <div class="bai-row">
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="RunTaskAsync">
+                @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-play-fill" aria-hidden="true"></i> }
+                Run
+            </button>
+            @if (LoadStatus is not null) { <span class="bai-small bai-muted">@LoadStatus</span> }
+            @if (_elapsed is { } e) { <span class="bai-small bai-muted">@e.TotalMilliseconds.ToString("0") ms</span> }
+        </div>
+        <AiError Message="@Error" />
+        @if (_scores.Count > 0) { <div class="bai-output"><AiScoreBars Values="@_scores" Sort="false" AsPercent="@_percent" /></div> }
+        @if (_text is not null) { <AiOutput Text="@_text" Markdown="false" /> }
+    </div>
+</AiCard>
+
+@code {
+    private static readonly Dictionary<string, (string Model, string Input)> Tasks = new()
+    {
+        ["Text classification"] = ("distilbert/distilbert-base-uncased-finetuned-sst-2-english", "This library makes AI in Blazor delightful."),
+        ["Named entities"] = ("dslim/distilbert-NER", "Sundar Pichai met Joko Widodo in Jakarta to discuss Google's investment."),
+        ["Fill mask"] = ("google-bert/bert-base-uncased", "The capital of Indonesia is [MASK]."),
+        ["Question answering"] = ("distilbert/distilbert-base-cased-distilled-squad", "Who leads Gravicode Studios?"),
+        ["Similarity"] = ("sentence-transformers/all-MiniLM-L6-v2", "A man is playing a guitar."),
+        ["Embedding"] = ("sentence-transformers/all-MiniLM-L6-v2", "Embeddings turn text into vectors."),
+        ["Text generation"] = ("HuggingFaceTB/SmolLM2-360M-Instruct", "Write a haiku about Bandung in the rain."),
+    };
+
+    private string _task = "Text classification";
+    private string? _model, _input, _second, _text;
+    private List<KeyValuePair<string, double>> _scores = [];
+    private bool _percent = true;
+    private TimeSpan? _elapsed;
+
+    [Parameter] public string Title { get; set; } = "Inference playground";
+
+    protected override void OnInitialized() => Pick(_task);
+
+    private void PickTask(ChangeEventArgs e) => Pick(e.Value!.ToString()!);
+
+    private void Pick(string task)
+    {
+        _task = task;
+        (_model, _input) = Tasks[task];
+        _second = task switch
+        {
+            "Question answering" => "Blazor.AI is a component library made by Gravicode Studios, which is led by Kang Fadhil.",
+            "Similarity" => "Someone is performing music on a stringed instrument.",
+            _ => null,
+        };
+        _scores = [];
+        _text = null;
+    }
+
+    private Task RunTaskAsync() => RunAsync(async ct =>
+    {
+        _scores = [];
+        _text = null;
+        _percent = true;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        if (_task == "Text generation")
+        {
+            var client = new LocalChatClient(Registry, _model);
+            if (!Registry.IsLoaded(_model!, "causal-lm"))
+            {
+                LoadStatus = $"Loading {_model}…";
+                StateHasChanged();
+            }
+
+            var builder = new StringBuilder();
+            _text = string.Empty;
+            await foreach (var update in client.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, _input!)], new ChatOptions { MaxOutputTokens = 160 }, ct))
+            {
+                LoadStatus = null;
+                builder.Append(update.Text);
+                _text = builder.ToString();
+                RenderThrottled();
+            }
+        }
+        else
+        {
+            var model = await EnsureLocalAsync(_model!, "text", Registry.TextModelAsync);
+            var input = _input!;
+            var second = _second ?? string.Empty;
+            switch (_task)
+            {
+                case "Text classification":
+                    _scores = (await Registry.RunAsync(_model!, "text", () => model.Predict(input, 5), ct)).Select(p => KeyValuePair.Create(p.Label, p.Score)).ToList();
+                    break;
+                case "Named entities":
+                    _scores = (await Registry.RunAsync(_model!, "text", () => model.FindEntities(input), ct)).Select(e => KeyValuePair.Create($"{e.Text} ({e.Label})", e.Score)).ToList();
+                    break;
+                case "Fill mask":
+                    _scores = (await Registry.RunAsync(_model!, "text", () => model.FillMask(input, 5), ct)).Select(m => KeyValuePair.Create(m.ToString(), 1.0)).ToList();
+                    _text = string.Join("\n", (await Registry.RunAsync(_model!, "text", () => model.FillMask(input, 5), ct)).Select(m => m.ToString()));
+                    _scores = [];
+                    break;
+                case "Question answering":
+                    var answers = await Registry.RunAsync(_model!, "text", () => model.Answer(input, second, 3), ct);
+                    _scores = answers.Select(a => KeyValuePair.Create(a.ToString(), 1.0)).ToList();
+                    _text = string.Join("\n", answers.Select(a => a.ToString()));
+                    _scores = [];
+                    break;
+                case "Similarity":
+                    _scores = [KeyValuePair.Create("cosine similarity", await Registry.RunAsync(_model!, "text", () => model.Similarity(input, second), ct))];
+                    break;
+                default:
+                    var vector = await Registry.RunAsync(_model!, "text", () => model.Embed(input).ToArray(), ct);
+                    _text = $"{vector.Length} dimensions\n[{string.Join(", ", vector.Take(12).Select(v => v.ToString("0.0000", CultureInfo.InvariantCulture)))}, …]";
+                    break;
+            }
+        }
+
+        _elapsed = stopwatch.Elapsed;
+    });
+}

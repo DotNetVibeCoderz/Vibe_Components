@@ -1,0 +1,29 @@
+@namespace Blazor.AI.Components
+@implements IDisposable
+@* Switches Bootstrap's data-bs-theme between light and dark and remembers the choice. *@
+
+<button type="button" class="bai-icon-btn @Class" @onclick="Theme.ToggleAsync"
+        aria-label="@(Theme.IsDark ? "Switch to light mode" : "Switch to dark mode")"
+        title="@(Theme.IsDark ? "Light mode" : "Dark mode")">
+    <i class="bi @(Theme.IsDark ? "bi-sun" : "bi-moon-stars")" aria-hidden="true"></i>
+</button>
+
+@code {
+    [Inject] private AiThemeState Theme { get; set; } = default!;
+
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized() => Theme.Changed += Refresh;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Theme.InitializeAsync();
+        }
+    }
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Theme.Changed -= Refresh;
+}

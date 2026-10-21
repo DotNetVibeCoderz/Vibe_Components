@@ -1,0 +1,198 @@
+@page "/bio"
+<PageTitle>Biology · Blazor.AI</PageTitle>
+
+<PageHeader Title="Biology analysis" Package="Blazor.AI.Bio" Icon="bi-virus"
+            Lead="Sequence, protein, chemistry and transcriptomics workbenches on Biotech.Net. Every number is computed locally; AI only explains the results it is handed, so nothing is guessed." />
+
+<div class="bai-alert is-info" style="margin-bottom:1.5rem"><i class="bi bi-info-circle" aria-hidden="true"></i>Register once: <code>builder.Services.AddBlazorAIAgents().AddBlazorAIBio();</code> Analyses run offline. “Explain with AI” uses the provider picked in the top bar.</div>
+
+<DemoSection Title="DNA sequence analysis" Component="DnaSequenceAnalyzer" Description="Composition, molecular weight, Tm, GC profile, ORF map, six-frame translation and IUPAC motif search. Use it to check a construct before ordering." Code="@DnaCode">
+    <DnaSequenceAnalyzer />
+</DemoSection>
+
+<DemoSection Title="Restriction mapping and virtual gel" Component="RestrictionMapper" Description="Single cutters, a cut-site map and the expected bands on a 1% agarose gel, for planning a cloning digest." Code="@RestrictionCode">
+    <RestrictionMapper />
+</DemoSection>
+
+<DemoSection Title="Pairwise alignment" Component="SequenceAligner" Description="Global, local or semi-global alignment with BLOSUM/PAM scoring. Here: human haemoglobin β against α." Code="@AlignCode">
+    <SequenceAligner />
+</DemoSection>
+
+<DemoSection Title="Multiple alignment and phylogeny" Component="MultipleAlignmentViewer" Description="Progressive MSA with a conservation track, identity heatmap and a neighbour-joining tree. Here: cytochrome c across six species." Code="@MsaCode">
+    <MultipleAlignmentViewer />
+</DemoSection>
+
+<DemoSection Title="Protein characterisation" Component="ProteinAnalyzer" Description="ProtParam-style properties, hydropathy and charge curves, signal peptide and transmembrane hints, tryptic peptides for MS." Code="@ProteinCode">
+    <ProteinAnalyzer />
+</DemoSection>
+
+<DemoSection Title="Small-molecule triage" Component="MoleculeExplorer" Description="From SMILES to a 2-D structure, descriptors, Lipinski/Veber/Ghose/Egan rules, QED, ADMET estimates and PAINS/Brenk alerts." Code="@MoleculeCode">
+    <MoleculeExplorer />
+</DemoSection>
+
+<DemoSection Title="CRISPR guide design" Component="CrisprGuideDesigner" Description="PAM search on both strands for SpCas9 and variants, on-target scoring, poly-T checks and U6 cloning oligos." Code="@CrisprCode">
+    <CrisprGuideDesigner />
+</DemoSection>
+
+<DemoSection Title="PCR primer design" Component="PrimerDesigner" Description="Primer pairs ranked by Tm match, GC clamp, hairpins and dimers, constrained to your product size." Code="@PrimerCode">
+    <PrimerDesigner />
+</DemoSection>
+
+<DemoSection Title="Codon optimisation" Component="CodonOptimizer" Description="Back-translate a protein or recode a CDS for E. coli, yeast, CHO, Pichia or human cells, tracking CAI and GC." Code="@CodonCode">
+    <CodonOptimizer />
+</DemoSection>
+
+<DemoSection Title="RNA-seq differential expression" Component="DifferentialExpressionExplorer" Description="DESeq2-style negative-binomial testing with volcano and MA plots. Upload a count CSV or use the synthetic stress-response experiment." Code="@DeCode">
+    <DifferentialExpressionExplorer />
+</DemoSection>
+
+<DemoSection Title="Bio copilot" Component="BioCopilot" Description="Chat that calls Biotech.Net tools (DNA stats, ProtParam, ADMET, CRISPR, primers, restriction sites) and cites which tool produced each number." Code="@CopilotCode">
+    <BioCopilot />
+</DemoSection>
+
+@code {
+    private const string DnaCode = """
+        // Program.cs
+        builder.Services.AddBlazorAI(builder.Configuration).AddOpenAI(key, "gpt-5-mini");
+        builder.Services.AddBlazorAIComponents();
+        builder.Services.AddBlazorAIAgents();
+        builder.Services.AddBlazorAIBio();
+
+        // _Imports.razor
+        @using Blazor.AI.Bio
+
+        <DnaSequenceAnalyzer Sequence="@construct"
+                             Audience="an undergraduate lab class"
+                             Language="Bahasa Indonesia"
+                             OnAnalysed="seq => lastLength = seq.Length" />
+
+        @code {
+            string construct = BioSamples.Egfp;   // raw residues or FASTA
+            int lastLength;
+        }
+        """;
+
+    private const string RestrictionCode = """
+        <RestrictionMapper Sequence="@plasmid" Title="pUC19 digest" />
+
+        @code {
+            // Load from a .fasta file with the built-in FASTA button, or bind a string.
+            string plasmid = await File.ReadAllTextAsync("pUC19.fasta");
+        }
+
+        // Same engine in C#:
+        var dna = BioInput.ParseOne(plasmid, SequenceType.Dna)!;
+        var digest = RestrictionDigest.Digest(dna, [RestrictionEnzymes.Get("EcoRI"), RestrictionEnzymes.Get("BamHI")], circular: true);
+        Console.WriteLine(string.Join(", ", digest.FragmentSizes));
+        """;
+
+    private const string AlignCode = """
+        <SequenceAligner Target="@reference" Query="@variant" />
+
+        // Programmatic alignment with Biotech.Net:
+        var aligner = new PairwiseAligner
+        {
+            Mode = AlignmentMode.Local,
+            SubstitutionMatrix = SubstitutionMatrix.Blosum62,
+            OpenGapScore = -10,
+            ExtendGapScore = -1,
+        };
+        var aln = aligner.Align(reference, variant);
+        Console.WriteLine($"{aln.Score} {aln.Identity:P1}\n{aln.Format(60)}");
+        """;
+
+    private const string MsaCode = """
+        <MultipleAlignmentViewer Fasta="@orthologues" />
+
+        @code {
+            string orthologues = BioSamples.CytochromeC; // multi-record FASTA
+        }
+
+        // Reuse the tree renderer for any Newick tree:
+        <PhyloTree Tree="@PhylogeneticTree.ParseNewick(\"((A:0.1,B:0.2):0.05,C:0.3);\")" />
+        """;
+
+    private const string ProteinCode = """
+        <ProteinAnalyzer Sequence="@BioSamples.Insulin" Audience="a protein purification scientist" />
+
+        // The same numbers in C#:
+        var p = new ProteinAnalysis(sequence);
+        var pI = p.IsoelectricPoint();
+        var unstable = !p.IsStable;               // instability index ≥ 40
+        var hydropathy = p.Profile(AminoAcidScale.KyteDoolittle, window: 9);
+        """;
+
+    private const string MoleculeCode = """
+        <MoleculeExplorer Smiles="CC(=O)Oc1ccccc1C(=O)O" Title="Aspirin" />
+
+        // Batch triage without UI:
+        foreach (var smiles in library)
+        {
+            var mol = Molecule.FromSmiles(smiles);
+            var admet = Admet.Profile(mol);
+            if (admet.FailedRules.Any() || StructuralAlerts.Match(mol).Count > 0) continue;
+            keep.Add((smiles, admet.Qed));
+        }
+
+        // Render any molecule as SVG data:
+        var drawing = MoleculeDepiction.Create(mol); // ViewBox, Bonds, Labels
+        """;
+
+    private const string CrisprCode = """
+        <CrisprGuideDesigner Target="@exon2" Audience="a gene-editing core facility" />
+
+        // Top guides in code:
+        var guides = GuideDesigner.Design(Sequence.Dna(exon2));
+        foreach (var g in guides.Take(3))
+            Console.WriteLine($"{g.Guide.Spacer} {g.Guide.Pam} on-target {g.OnTargetScore:0.00}");
+        """;
+
+    private const string PrimerCode = """
+        <PrimerDesigner Template="@amplicon" />
+
+        // Custom constraints:
+        var options = new PrimerDesignOptions { ProductSizeMin = 400, ProductSizeMax = 600, OptTm = 62 };
+        var best = PrimerDesigner.DesignPairs(amplicon, options).FirstOrDefault();
+        """;
+
+    private const string CodonCode = """
+        <CodonOptimizer Input="@protein" />
+
+        // Recode for CHO cells:
+        var result = CodonOptimizer.Optimize(protein, new CodonOptimizationOptions
+        {
+            Target = CodonUsageTable.CricetulusGriseus,
+            Method = CodonOptimizationMethod.MostFrequent,
+        });
+        Console.WriteLine($"CAI {result.Cai:0.00}, GC {result.GcContent:P0}");
+        """;
+
+    private const string DeCode = """
+        <DifferentialExpressionExplorer Counts="@counts" Reference="control" Treatment="treated" />
+
+        @code {
+            // genes × samples, annotated with a "condition" per sample
+            Dataset counts = BioCounts.Parse(await File.ReadAllTextAsync("counts.csv"));
+        }
+
+        // Or run DESeq directly:
+        var de = DESeq.Run(counts, "condition", "control", "treated");
+        var hits = de.Significant(alpha: 0.05, minAbsLog2FoldChange: 1);
+        """;
+
+    private const string CopilotCode = """
+        // Program.cs: AddBlazorAIAgents() + AddBlazorAIBio() register the tools.
+        <BioCopilot Height="480px" Provider="anthropic" />
+
+        // Give your own agents the biology tools:
+        var agent = new AgentDefinition
+        {
+            Name = "Lab assistant",
+            Tools = BioTools.All.Select(t => t.Name).ToList(),
+        };
+        <AiAgentChat Agent="@agent" />
+
+        // Or call them from any IChatClient:
+        var options = new ChatOptions { Tools = [.. BioTools.All] };
+        """;
+}

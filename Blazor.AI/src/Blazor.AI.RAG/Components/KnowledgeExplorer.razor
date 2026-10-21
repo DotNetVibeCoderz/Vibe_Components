@@ -1,0 +1,105 @@
+@namespace Blazor.AI.RAG
+@implements IDisposable
+@* Browse the knowledge base: documents, their chunks (what the model actually sees) and quick stats. *@
+
+<AiCard Title="@Title" Subtitle="See exactly what was indexed" Icon="bi-folder2-open" Class="@Class">
+    @if (Kb.Documents.Count == 0)
+    {
+        <div class="bai-empty"><i class="bi bi-inbox" aria-hidden="true"></i>No documents yet. Add some with Document ingestion.</div>
+    }
+    else
+    {
+        <div class="bai-stats" style="margin-bottom:1rem">
+            <div class="bai-stat"><div class="bai-stat-label">Documents</div><div class="bai-stat-value">@Kb.Documents.Count</div></div>
+            <div class="bai-stat"><div class="bai-stat-label">Chunks</div><div class="bai-stat-value">@Kb.ChunkCount</div></div>
+            <div class="bai-stat"><div class="bai-stat-label">Words</div><div class="bai-stat-value">@Fmt(Kb.Documents.Sum(d => (double)WordCount(d.Text)))</div></div>
+            <div class="bai-stat"><div class="bai-stat-label">Pages</div><div class="bai-stat-value">@Kb.Documents.Sum(d => d.Pages)</div></div>
+        </div>
+        <div style="display:grid; grid-template-columns:minmax(12rem,1fr) 2.5fr; gap:1rem">
+            <div>
+                @foreach (var doc in Kb.Documents)
+                {
+                    <button type="button" class="bai-result" style="width:100%; text-align:left; cursor:pointer; @(doc.Id == _selected?.Id ? "border-color:var(--bai-soga)" : null)" @onclick="() => SelectAsync(doc)">
+                        <span class="bai-result-title">@doc.Name</span>
+                        <span class="bai-small bai-muted">@doc.Kind · @doc.Pages pages · @doc.Chunks chunks</span>
+                    </button>
+                }
+            </div>
+            <div>
+                @if (_selected is not null)
+                {
+                    <div class="bai-row" style="margin-bottom:.5rem">
+                        <strong>@_selected.Name</strong>
+                        <span class="bai-spacer"></span>
+                        <AiTabs Tabs="@Views" @bind-Selected="_view" />
+                    </div>
+                    @if (_view == "Chunks")
+                    {
+                        <div style="max-height:30rem; overflow:auto">
+                            @foreach (var chunk in _chunks)
+                            {
+                                <div class="bai-result">
+                                    <span class="bai-small bai-muted">Chunk @chunk.GetMetadata(KnowledgeBase.ChunkKey) · page @chunk.GetMetadata(KnowledgeBase.PageKey) · @chunk.Text.Length chars · @chunk.Vector.Length-d vector</span>
+                                    <span class="bai-small" style="white-space:pre-wrap">@chunk.Text</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="bai-output" style="max-height:30rem; overflow:auto; white-space:pre-wrap; font-size:.85rem">@_selected.Text</div>
+                    }
+                }
+            </div>
+        </div>
+    }
+</AiCard>
+
+@code {
+    private static readonly string[] Views = ["Chunks", "Full text"];
+    private string _view = Views[0];
+    private KnowledgeDocument? _selected;
+    private List<VectorRecord> _chunks = [];
+
+    [Inject] private KnowledgeBase Kb { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Knowledge explorer";
+    [Parameter] public string? Class { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Kb.Changed += Refresh;
+        if (Kb.Documents.FirstOrDefault() is { } first)
+        {
+            await SelectAsync(first);
+        }
+    }
+
+    private async Task SelectAsync(KnowledgeDocument doc)
+    {
+        _selected = doc;
+        _chunks = [];
+        await foreach (var chunk in Kb.ChunksOfAsync(doc.Id))
+        {
+            _chunks.Add(chunk);
+        }
+    }
+
+    private static int WordCount(string text) => text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+
+    private void Refresh() => InvokeAsync(async () =>
+    {
+        if (_selected is null || Kb.Documents.All(d => d.Id != _selected.Id))
+        {
+            _selected = null;
+            if (Kb.Documents.FirstOrDefault() is { } first)
+            {
+                await SelectAsync(first);
+            }
+        }
+
+        StateHasChanged();
+    });
+
+    public void Dispose() => Kb.Changed -= Refresh;
+}

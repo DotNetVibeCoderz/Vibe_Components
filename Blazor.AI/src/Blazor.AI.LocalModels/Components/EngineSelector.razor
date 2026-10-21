@@ -1,0 +1,29 @@
+@namespace Blazor.AI.LocalModels
+@* Engine + model id picker shared by the Hugging Face components. *@
+
+<div class="bai-row">
+    <select class="bai-select" style="width:auto" value="@Engine" @onchange="ChangeEngine" aria-label="Inference engine">
+        <option value="@InferenceEngine.Local">Local (HF.Net, CPU)</option>
+        <option value="@InferenceEngine.HostedApi">Hugging Face Inference API</option>
+    </select>
+    <input class="bai-input" style="min-width:18rem; flex:1 1 18rem; font-family:var(--bai-font-mono); font-size:.8rem" value="@Model" @onchange="ChangeModel" aria-label="Model id" list="@_listId" />
+    @if (Suggestions is { Count: > 0 })
+    {
+        <datalist id="@_listId">@foreach (var s in Suggestions) { <option value="@s"></option> }</datalist>
+    }
+    <span class="bai-badge @(Engine == InferenceEngine.Local ? "bai-badge-local" : "bai-badge-cloud")">@(Engine == InferenceEngine.Local ? "private · offline after download" : "hosted")</span>
+</div>
+
+@code {
+    private readonly string _listId = "bai-models-" + Guid.NewGuid().ToString("N")[..6];
+
+    [Parameter] public InferenceEngine Engine { get; set; }
+    [Parameter] public EventCallback<InferenceEngine> EngineChanged { get; set; }
+    [Parameter] public string? Model { get; set; }
+    [Parameter] public EventCallback<string?> ModelChanged { get; set; }
+    [Parameter] public IReadOnlyList<string>? Suggestions { get; set; }
+
+    private Task ChangeEngine(ChangeEventArgs e) => EngineChanged.InvokeAsync(Enum.Parse<InferenceEngine>(e.Value!.ToString()!));
+
+    private Task ChangeModel(ChangeEventArgs e) => ModelChanged.InvokeAsync(e.Value?.ToString()?.Trim());
+}

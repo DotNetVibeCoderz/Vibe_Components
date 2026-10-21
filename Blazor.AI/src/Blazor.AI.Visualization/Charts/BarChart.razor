@@ -1,0 +1,114 @@
+@namespace Blazor.AI.Visualization
+@* Vertical or horizontal bar chart; grouped when values carry a Group. *@
+
+<figure class="bai-chart @Class" style="margin:0">
+    @if (Title is not null)
+    {
+        <figcaption class="bai-chart-title">@Title</figcaption>
+    }
+    <svg viewBox="0 0 @Width @ComputedHeight" role="img" aria-label="@(Title ?? "Bar chart")">
+        @if (_values.Count > 0)
+        {
+            @if (Horizontal)
+            {
+                var axis = new LinearAxis(Math.Min(0, _min), Math.Max(0, _max), LabelWidth, Width - 40, 5);
+                var row = (ComputedHeight - 30.0) / _categories.Count;
+                @foreach (var tick in axis.Ticks)
+                {
+                    <line class="bai-grid-line" x1="@S(axis.Map(tick))" x2="@S(axis.Map(tick))" y1="4" y2="@S(ComputedHeight - 24)" />
+                    <!text class="bai-axis-text" x="@S(axis.Map(tick))" y="@S(ComputedHeight - 8)" text-anchor="middle">@Fmt(tick)</!text>
+                }
+                @for (var c = 0; c < _categories.Count; c++)
+                {
+                    var category = _categories[c];
+                    var top = 4 + c * row;
+                    <!text class="bai-axis-text" x="@S(LabelWidth - 8)" y="@S(top + row / 2 + 4)" text-anchor="end">@Truncate(category, 22)</!text>
+                    @for (var g = 0; g < _groups.Count; g++)
+                    {
+                        var v = Value(category, _groups[g]);
+                        var h = row * 0.72 / _groups.Count;
+                        var x0 = axis.Map(Math.Min(0, v));
+                        var x1 = axis.Map(Math.Max(0, v));
+                        <rect x="@S(x0)" y="@S(top + row * 0.14 + g * h)" width="@S(Math.Max(1, x1 - x0))" height="@S(h)" rx="3" fill="@Color(g, v)" class="bai-bar">
+                            <title>@category@(_groups.Count > 1 ? $" · {_groups[g]}" : null): @Fmt(v)</title>
+                        </rect>
+                        @if (ShowValues)
+                        {
+                            <!text class="bai-axis-text" x="@S(x1 + 4)" y="@S(top + row * 0.14 + g * h + h / 2 + 4)">@Fmt(v)</!text>
+                        }
+                    }
+                }
+            }
+            else
+            {
+                var axis = new LinearAxis(Math.Min(0, _min), Math.Max(0, _max), ComputedHeight - 36, 10, 5);
+                var col = (Width - 56.0) / _categories.Count;
+                @foreach (var tick in axis.Ticks)
+                {
+                    <line class="bai-grid-line" x1="48" x2="@S(Width - 8)" y1="@S(axis.Map(tick))" y2="@S(axis.Map(tick))" />
+                    <!text class="bai-axis-text" x="42" y="@S(axis.Map(tick) + 4)" text-anchor="end">@Fmt(tick)</!text>
+                }
+                @for (var c = 0; c < _categories.Count; c++)
+                {
+                    var category = _categories[c];
+                    var left = 48 + c * col;
+                    <!text class="bai-axis-text" x="@S(left + col / 2)" y="@S(ComputedHeight - 18)" text-anchor="middle">@Truncate(category, Math.Max(4, (int)(col / 7)))</!text>
+                    @for (var g = 0; g < _groups.Count; g++)
+                    {
+                        var v = Value(category, _groups[g]);
+                        var w = col * 0.7 / _groups.Count;
+                        var y0 = axis.Map(Math.Max(0, v));
+                        var y1 = axis.Map(Math.Min(0, v));
+                        <rect x="@S(left + col * 0.15 + g * w)" y="@S(y0)" width="@S(w)" height="@S(Math.Max(1, y1 - y0))" rx="3" fill="@Color(g, v)" class="bai-bar">
+                            <title>@category@(_groups.Count > 1 ? $" · {_groups[g]}" : null): @Fmt(v)</title>
+                        </rect>
+                    }
+                }
+            }
+        }
+    </svg>
+    @if (_groups.Count > 1)
+    {
+        <ChartLegend Items="@_groups.Select((g, i) => (g, SeriesColor(i))).ToArray()" />
+    }
+</figure>
+
+@code {
+    private List<BarValue> _values = [];
+    private List<string> _categories = [];
+    private List<string> _groups = [];
+    private double _min, _max;
+
+    [Parameter, EditorRequired] public IEnumerable<BarValue> Values { get; set; } = [];
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public bool Horizontal { get; set; }
+    [Parameter] public bool ShowValues { get; set; } = true;
+    [Parameter] public int Width { get; set; } = 640;
+    [Parameter] public int Height { get; set; } = 260;
+
+    /// <summary>Colour bars by sign (positive soga, negative danger) — useful for coefficients and deltas.</summary>
+    [Parameter] public bool ColorBySign { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    private int LabelWidth => Horizontal ? 150 : 48;
+
+    private int ComputedHeight => Horizontal ? Math.Max(Height, 30 + _categories.Count * 26) : Height;
+
+    protected override void OnParametersSet()
+    {
+        _values = Values.ToList();
+        _categories = _values.Select(v => v.Category).Distinct().ToList();
+        _groups = _values.Select(v => v.Group ?? string.Empty).Distinct().ToList();
+        _min = _values.Count == 0 ? 0 : _values.Min(v => v.Value);
+        _max = _values.Count == 0 ? 1 : _values.Max(v => v.Value);
+    }
+
+    private double Value(string category, string group) =>
+        _values.FirstOrDefault(v => v.Category == category && (v.Group ?? string.Empty) == group).Value;
+
+    private string Color(int group, double value) =>
+        ColorBySign ? (value >= 0 ? SeriesColor(0) : "var(--bai-danger)") : SeriesColor(group);
+
+    private static string Truncate(string text, int max) => text.Length <= max ? text : text[..Math.Max(1, max - 1)] + "…";
+}

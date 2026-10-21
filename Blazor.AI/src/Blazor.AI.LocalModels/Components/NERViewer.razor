@@ -1,0 +1,94 @@
+@namespace Blazor.AI.LocalModels
+@inherits HfComponentBase
+@* Named-entity recognition: entities highlighted inline by type (person, organisation, location, misc) plus a table. *@
+
+<AiCard Title="@Title" Subtitle="Token classification" Icon="bi-person-vcard" Class="@Class">
+    <div class="bai-stack">
+        <EngineSelector @bind-Engine="Engine" @bind-Model="_model" Suggestions="@Suggestions" />
+        <textarea class="bai-textarea" rows="4" @bind="Text" aria-label="Text"></textarea>
+        <div class="bai-row">
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(Text))" @onclick="ExtractAsync">
+                @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-play-fill" aria-hidden="true"></i> }
+                Find entities
+            </button>
+            @if (LoadStatus is not null) { <span class="bai-small bai-muted">@LoadStatus</span> }
+        </div>
+        <AiError Message="@Error" />
+        @if (_entities is not null)
+        {
+            <div class="bai-output" style="line-height:2">
+                @foreach (var (segment, entity) in Segments())
+                {
+                    if (entity is { } e)
+                    {
+                        <mark style="background:color-mix(in srgb, @Color(e.Label) 22%, transparent); color:inherit; padding:.1em .3em; border-radius:5px; border-bottom:2px solid @Color(e.Label)" title="@($"{e.Label} · {e.Score:P0}")">@segment <sup class="bai-small" style="color:@Color(e.Label); font-weight:600">@e.Label</sup></mark>
+                    }
+                    else
+                    {
+                        @segment
+                    }
+                }
+            </div>
+            <ChartLegend Items="@_entities.Select(e => e.Label).Distinct().Select(l => (l, Color(l))).ToArray()" />
+        }
+    </div>
+</AiCard>
+
+@code {
+    private static readonly string[] Suggestions = ["dslim/distilbert-NER", "dslim/bert-base-NER", "cahya/bert-base-indonesian-NER", "Davlan/bert-base-multilingual-cased-ner-hrl"];
+    private List<EntitySpan>? _entities;
+    private string? _model;
+
+    [Parameter] public string Title { get; set; } = "Named entity recognition";
+    [Parameter] public string? Text { get; set; } = "Kang Fadhil founded Gravicode Studios in Bandung, and the team presented Blazor.AI at a Microsoft event in Jakarta.";
+    [Parameter] public EventCallback<IReadOnlyList<EntitySpan>> OnExtracted { get; set; }
+
+    protected override void OnParametersSet() => _model ??= Model ?? ModelOptions.NerModel;
+
+    private Task ExtractAsync() => RunAsync(async ct =>
+    {
+        var text = Text!;
+        if (Engine == InferenceEngine.Local)
+        {
+            var model = await EnsureLocalAsync(_model!, "text", Registry.TextModelAsync);
+            _entities = (await Registry.RunAsync(_model!, "text", () => model.FindEntities(text), ct))
+                .Select(e => new EntitySpan(e.Text, Clean(e.Label), e.Score, e.Start, e.End)).ToList();
+            _entities = EntityMerger.Merge(text, _entities);
+        }
+        else
+        {
+            _entities = EntityMerger.Merge(text, (await HostedApi.EntitiesAsync(_model!, text, ct)).Select(e => e with { Label = Clean(e.Label) }));
+        }
+
+        await OnExtracted.InvokeAsync(_entities);
+    });
+
+    private IEnumerable<(string Text, EntitySpan? Entity)> Segments()
+    {
+        var text = Text ?? string.Empty;
+        var position = 0;
+        foreach (var e in _entities!.Where(e => e.Start >= 0 && e.End <= text.Length && e.End > e.Start).OrderBy(e => e.Start))
+        {
+            if (e.Start < position)
+            {
+                continue;
+            }
+
+            yield return (text[position..e.Start], null);
+            yield return (text[e.Start..e.End], e);
+            position = e.End;
+        }
+
+        yield return (text[position..], null);
+    }
+
+    private static string Clean(string label) => label.Replace("B-", string.Empty, StringComparison.Ordinal).Replace("I-", string.Empty, StringComparison.Ordinal);
+
+    private static string Color(string label) => label.ToUpperInvariant() switch
+    {
+        "PER" or "PERSON" => "#c9853f",
+        "ORG" or "ORGANIZATION" => "#3a4aa8",
+        "LOC" or "LOCATION" or "GPE" => "#2ead9c",
+        _ => "#8a6fd1",
+    };
+}

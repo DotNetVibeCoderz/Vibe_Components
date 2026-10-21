@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <Description>Blazor.AI biology analysis components powered by Biotech.Net: DNA sequence analysis, restriction maps, pairwise and multiple alignment with phylogenetic trees, protein analysis, molecule and ADMET explorer, CRISPR guide design, primer design, codon optimisation, differential expression and an AI bio copilot.</Description>
+    <PackageTags>$(PackageTags);bioinformatics;biotech;genomics;proteomics;crispr;drug-discovery</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+    <PackageReference Include="Gravicode.Biotech.Net.Sequences" />
+    <PackageReference Include="Gravicode.Biotech.Net.Alignments" />
+    <PackageReference Include="Gravicode.Biotech.Net.Proteomics" />
+    <PackageReference Include="Gravicode.Biotech.Net.Chemistry" />
+    <PackageReference Include="Gravicode.Biotech.Net.DrugDiscovery" />
+    <PackageReference Include="Gravicode.Biotech.Net.SyntheticBiology" />
+    <PackageReference Include="Gravicode.Biotech.Net.Transcriptomics" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Blazor.AI.Visualization\Blazor.AI.Visualization.csproj" />
+    <ProjectReference Include="..\Blazor.AI.Agents\Blazor.AI.Agents.csproj" />
+  </ItemGroup>
+</Project>

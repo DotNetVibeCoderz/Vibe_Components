@@ -1,0 +1,86 @@
+@namespace Blazor.AI.Decision
+@* Edit a set of facts (name → value). Numbers and true/false are typed automatically. *@
+
+<div class="@Class">
+    <div class="bai-row" style="margin-bottom:.35rem">
+        <span class="bai-label" style="margin:0">@Label</span>
+        <span class="bai-spacer"></span>
+        <button type="button" class="bai-btn-ghost" style="padding:.2rem .6rem" @onclick="Add"><i class="bi bi-plus" aria-hidden="true"></i>Fact</button>
+    </div>
+    @foreach (var row in _rows)
+    {
+        <div class="bai-row" style="flex-wrap:nowrap; margin-bottom:.35rem">
+            <input class="bai-input" style="flex:1 1 40%; font-family:var(--bai-font-mono); font-size:.82rem" value="@row.Name" @onchange="e => Rename(row, e)" aria-label="Fact name" />
+            <input class="bai-input" style="flex:1 1 60%" value="@row.Value" @onchange="e => SetValue(row, e)" aria-label="@($"Value of {row.Name}")" />
+            <button type="button" class="bai-icon-btn" aria-label="Remove fact" @onclick="() => Remove(row)"><i class="bi bi-x"></i></button>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly List<Row> _rows = [];
+    private IDictionary<string, object?>? _bound;
+
+    [Parameter, EditorRequired] public IDictionary<string, object?> Facts { get; set; } = new Dictionary<string, object?>();
+    [Parameter] public EventCallback<IDictionary<string, object?>> FactsChanged { get; set; }
+    [Parameter] public string Label { get; set; } = "Facts";
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_bound, Facts))
+        {
+            _bound = Facts;
+            _rows.Clear();
+            _rows.AddRange(Facts.Select(kv => new Row { Name = kv.Key, Value = Expression.AsString(kv.Value) }));
+        }
+    }
+
+    private Task Rename(Row row, ChangeEventArgs e)
+    {
+        Facts.Remove(row.Name);
+        row.Name = e.Value?.ToString()?.Trim() ?? row.Name;
+        return Sync();
+    }
+
+    private Task SetValue(Row row, ChangeEventArgs e)
+    {
+        row.Value = e.Value?.ToString() ?? string.Empty;
+        return Sync();
+    }
+
+    private Task Add()
+    {
+        _rows.Add(new Row { Name = $"fact{_rows.Count + 1}", Value = "0" });
+        return Sync();
+    }
+
+    private Task Remove(Row row)
+    {
+        _rows.Remove(row);
+        Facts.Remove(row.Name);
+        return Sync();
+    }
+
+    private Task Sync()
+    {
+        foreach (var row in _rows.Where(r => r.Name.Length > 0))
+        {
+            Facts[row.Name] = Typed(row.Value);
+        }
+
+        return FactsChanged.InvokeAsync(Facts);
+    }
+
+    public static object? Typed(string value) =>
+        double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d
+        : bool.TryParse(value, out var b) ? b
+        : value.Length == 0 ? null
+        : value;
+
+    private sealed class Row
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
+    }
+}

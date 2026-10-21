@@ -1,0 +1,131 @@
+@namespace Blazor.AI.Analytics
+@implements IDisposable
+@* Replay a trained agent step by step: play, pause, scrub, with the environment drawn live. *@
+
+<AiCard Title="@Title" Subtitle="@(Session?.Name ?? "No trained agent yet")" Icon="bi-film" Class="@Class">
+    <Actions>
+        @if (Workspace.Sessions.Count > 0)
+        {
+            <select class="bai-select" style="width:auto" value="@_index" @onchange="Pick" aria-label="Training session">
+                @for (var i = 0; i < Workspace.Sessions.Count; i++) { <option value="@i">@Workspace.Sessions[i].Name (#@(i + 1))</option> }
+            </select>
+        }
+    </Actions>
+    <ChildContent>
+        @if (_frames.Count == 0)
+        {
+            <div class="bai-empty"><i class="bi bi-film" aria-hidden="true"></i>Train an agent in the RL training studio, then replay it here.</div>
+        }
+        else
+        {
+            var frame = _frames[_position];
+            <RlScene State="@frame.State" Environment="@(Session!.Environment)" Tiles="@(Session.EnvironmentInstance is DesignedGridWorld g ? g.At : null)"
+                     Trail="@(frame.State.ContainsKey("w") ? _frames.Take(_position + 1).Select(f => ((int)f.State["x"], (int)f.State["y"])).ToList() : null)" />
+            <div class="bai-row" style="margin-top:.6rem">
+                <button type="button" class="bai-icon-btn" aria-label="Restart" @onclick="() => _position = 0"><i class="bi bi-skip-start-fill"></i></button>
+                <button type="button" class="bai-btn" aria-label="@(_playing ? "Pause" : "Play")" @onclick="TogglePlay"><i class="bi @(_playing ? "bi-pause-fill" : "bi-play-fill")"></i></button>
+                <button type="button" class="bai-icon-btn" aria-label="Step forward" @onclick="StepForward"><i class="bi bi-skip-end-fill"></i></button>
+                <input type="range" class="form-range bai-spacer" min="0" max="@(_frames.Count - 1)" value="@_position" @oninput="e => _position = int.Parse(e.Value!.ToString()!, CultureInfo.InvariantCulture)" aria-label="Frame" />
+                <select class="bai-select" style="width:auto" @bind="_speed" aria-label="Speed">
+                    <option value="200">0.5×</option>
+                    <option value="100">1×</option>
+                    <option value="40">2.5×</option>
+                </select>
+                <button type="button" class="bai-btn-ghost" @onclick="Reseed"><i class="bi bi-shuffle" aria-hidden="true"></i>New episode</button>
+            </div>
+            <div class="bai-row bai-small bai-muted">
+                <span>Step @frame.Step / @(_frames.Count - 1)</span>
+                <span>Reward @Fmt(frame.Reward)</span>
+                <span>Return @Fmt(frame.Return)</span>
+                @if (frame.Action >= 0 && Session.EnvironmentInstance is RLNet.Environments.IDiscreteEnvironment env) { <span>Action: @env.ActionSpace.LabelOf(frame.Action)</span> }
+                @if (frame.Done) { <span class="bai-badge bai-badge-local">episode finished</span> }
+            </div>
+        }
+    </ChildContent>
+</AiCard>
+
+@code {
+    private IReadOnlyList<SimulationFrame> _frames = [];
+    private int _index = -1, _position, _speed = 100, _seed = 123;
+    private bool _playing;
+    private CancellationTokenSource? _cts;
+
+    [Inject] private RlWorkspace Workspace { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Simulation runner";
+    [Parameter] public string? Class { get; set; }
+
+    private TrainingSession? Session => Workspace.Sessions.Count == 0 ? null : Workspace.Sessions[_index < 0 || _index >= Workspace.Sessions.Count ? ^1 : _index];
+
+    protected override void OnInitialized()
+    {
+        Workspace.Changed += OnChanged;
+        Load();
+    }
+
+    private void Load()
+    {
+        _frames = Session is null ? [] : RlTrainer.Simulate(Session, _seed);
+        _position = 0;
+    }
+
+    private void Pick(ChangeEventArgs e)
+    {
+        _index = int.Parse(e.Value!.ToString()!, CultureInfo.InvariantCulture);
+        Load();
+    }
+
+    private void Reseed()
+    {
+        _seed++;
+        Load();
+    }
+
+    private void StepForward() => _position = Math.Min(_frames.Count - 1, _position + 1);
+
+    private async Task TogglePlay()
+    {
+        if (_playing)
+        {
+            _cts?.Cancel();
+            _playing = false;
+            return;
+        }
+
+        _playing = true;
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+        if (_position >= _frames.Count - 1)
+        {
+            _position = 0;
+        }
+
+        try
+        {
+            while (_position < _frames.Count - 1 && !token.IsCancellationRequested)
+            {
+                await Task.Delay(_speed, token);
+                _position++;
+                StateHasChanged();
+            }
+        }
+        catch (TaskCanceledException)
+        {
+        }
+
+        _playing = false;
+    }
+
+    private void OnChanged() => InvokeAsync(() =>
+    {
+        _index = -1;
+        Load();
+        StateHasChanged();
+    });
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        Workspace.Changed -= OnChanged;
+    }
+}

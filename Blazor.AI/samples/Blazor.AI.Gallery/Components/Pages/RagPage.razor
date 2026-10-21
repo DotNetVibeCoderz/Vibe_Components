@@ -1,0 +1,81 @@
+@page "/rag"
+@inject DemoData Data
+@inject KnowledgeBase Kb
+<PageTitle>RAG & knowledge · Blazor.AI</PageTitle>
+
+<PageHeader Title="RAG & knowledge" Package="Blazor.AI.RAG" Icon="bi-journal-text"
+            Lead="Retrieval-augmented generation end to end: ingest documents, search by meaning, and answer with citations to the exact passages. Uses any IVectorIndex, including Microsoft.Extensions.VectorData stores." />
+
+<DemoSection Title="DocumentIngestion" Component="DocumentIngestion" Description="Upload PDFs, Markdown, CSV, Excel, HTML or paste text. A sample handbook is preloaded." Code="@IngestCode">
+    <DocumentIngestion />
+</DemoSection>
+
+<DemoSection Title="SmartDocumentChat" Component="SmartDocumentChat" Description="Every answer cites its sources; click a number to see the passage." Code="@ChatCode">
+    <SmartDocumentChat Suggestions="@(["How many days of annual leave do I get?", "How long do customer refunds take?", "What is the meal allowance on business trips?"])" />
+</DemoSection>
+
+<DemoSection Title="VectorSearchBox" Component="VectorSearchBox" Description="Semantic passage search with highlighted terms." Code="@SearchCode">
+    <VectorSearchBox Query="Can I work from home?" />
+</DemoSection>
+
+<DemoSection Title="SemanticResultGrid" Component="SemanticResultGrid" Description="The same hits as a sortable table with CSV export." Code="@GridCode">
+    <VectorSearchBox Query="laptop security rules" ShowGrid="true" />
+</DemoSection>
+
+<DemoSection Title="CitationViewer" Component="CitationViewer" Description="Render any grounded answer: [n] markers become numbered, expandable citations." Code="@CitationCode">
+    @if (_citations.Count > 0)
+    {
+        <AiCard Title="Grounded answer" Icon="bi-quote">
+            <CitationViewer Answer="@($"Permanent employees get 14 days of annual leave [1]. Up to five unused days carry over [1], and requests need five working days' notice [1].")" Citations="@_citations" />
+        </AiCard>
+    }
+</DemoSection>
+
+<DemoSection Title="KnowledgeExplorer" Component="KnowledgeExplorer" Description="See exactly what was indexed: documents, chunks and vectors." Code="@ExplorerCode">
+    <KnowledgeExplorer />
+</DemoSection>
+
+<DemoSection Title="PdfChat" Component="PdfChat" Description="Drop a PDF and chat with it; answers cite page numbers." Code="@PdfCode">
+    <PdfChat Height="520px" />
+</DemoSection>
+
+<DemoSection Title="SpreadsheetChat" Component="SpreadsheetChat" Description="Questions about CSV or Excel are planned by the model and computed exactly with GraviFrame." Code="@SheetCode">
+    <SpreadsheetChat SampleCsv="@Data.SalesCsv" />
+</DemoSection>
+
+<DemoSection Title="KnowledgeGraphViewer" Component="KnowledgeGraphViewer" Description="Extract entities and relations from a document and explore them." Code="@GraphCode">
+    <KnowledgeGraphViewer Text="@GraphText" />
+</DemoSection>
+
+@code {
+    private IReadOnlyList<KnowledgeHit> _citations = [];
+
+    private const string GraphText = "Gravicode Studios is a software studio in Bandung led by Kang Fadhil. The studio builds HF.Net, Gravicode.Science and Blazor.AI. " +
+        "Blazor.AI uses Microsoft.Extensions.AI and runs models from OpenAI, Anthropic and Hugging Face. Kopi Nusantara, a coffee company in Bandung, uses Blazor.AI for customer support. " +
+        "HF.Net loads models from the Hugging Face Hub. TypeSafe System One powers the decision components.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Kb.Documents.Count == 0)
+        {
+            await Kb.IngestTextAsync("Employee handbook.md", Data.CompanyHandbook);
+        }
+
+        _citations = await Kb.SearchAsync("annual leave days carry over", 3);
+    }
+
+    private const string IngestCode = """
+        builder.Services.AddBlazorAIRag();   // KnowledgeBase over the registered IVectorIndex
+
+        <DocumentIngestion MaxFileSizeMb="25" OnIngested="Notify" />
+        """;
+
+    private const string ChatCode = """<SmartDocumentChat Suggestions="@questions" TopK="5" />""";
+    private const string SearchCode = """<VectorSearchBox Query="@query" OnResults="Show" />""";
+    private const string GridCode = """<SemanticResultGrid Hits="@hits" MetadataColumns="@(["department"])" />""";
+    private const string CitationCode = """<CitationViewer Answer="@answer.Answer" Citations="@answer.Citations" />""";
+    private const string ExplorerCode = """<KnowledgeExplorer />""";
+    private const string PdfCode = """<PdfChat Provider="azure" />""";
+    private const string SheetCode = """<SpreadsheetChat Frame="@dataFrame" />""";
+    private const string GraphCode = """<KnowledgeGraphViewer Text="@article" MaxEntities="30" />""";
+}

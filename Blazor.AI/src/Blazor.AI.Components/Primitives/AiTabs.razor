@@ -1,0 +1,23 @@
+@namespace Blazor.AI.Components
+@* Segmented tabs. Bind the selected tab with @bind-Selected. *@
+
+<div class="bai-tabs @Class" role="tablist">
+    @foreach (var tab in Tabs)
+    {
+        <button type="button" role="tab" class="bai-tab @(tab == Selected ? "is-active" : null)"
+                aria-selected="@(tab == Selected)" @onclick="() => SelectAsync(tab)">@tab</button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<string> Tabs { get; set; } = [];
+    [Parameter] public string? Selected { get; set; }
+    [Parameter] public EventCallback<string> SelectedChanged { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private Task SelectAsync(string tab)
+    {
+        Selected = tab;
+        return SelectedChanged.InvokeAsync(tab);
+    }
+}

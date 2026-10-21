@@ -1,0 +1,53 @@
+@namespace Blazor.AI.Components
+@* A frosted-glass card with an optional icon tile, title, actions and footer. *@
+
+<section class="@($"bai-glass bai-card {Class}".Trim())" @attributes="AdditionalAttributes">
+    @if (Title is not null || Actions is not null || Header is not null)
+    {
+        <header class="bai-card-header">
+            @if (Icon is not null)
+            {
+                <span class="bai-icon-tile" aria-hidden="true"><i class="bi @Icon"></i></span>
+            }
+            @if (Header is not null)
+            {
+                @Header
+            }
+            else
+            {
+                <div class="min-w-0">
+                    <h2 class="bai-card-title">@Title</h2>
+                    @if (Subtitle is not null)
+                    {
+                        <p class="bai-card-subtitle">@Subtitle</p>
+                    }
+                </div>
+            }
+            @if (Actions is not null)
+            {
+                <div class="bai-card-actions">@Actions</div>
+            }
+        </header>
+    }
+    <div class="@($"bai-card-body {BodyClass}".Trim())">@ChildContent</div>
+    @if (Footer is not null)
+    {
+        <footer class="bai-card-footer">@Footer</footer>
+    }
+</section>
+
+@code {
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Subtitle { get; set; }
+
+    /// <summary>A Bootstrap Icons class, e.g. <c>bi-stars</c>.</summary>
+    [Parameter] public string? Icon { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? BodyClass { get; set; }
+    [Parameter] public RenderFragment? Header { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Footer { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+}

@@ -1,0 +1,107 @@
+@page "/"
+<PageTitle>Blazor.AI · AI components for Blazor</PageTitle>
+
+<section class="g-hero">
+    <div>
+        <span class="g-eyebrow"><i class="bi bi-stars" aria-hidden="true"></i>Blazor.AI 1.0 · .NET 10</span>
+        <h1>Paste an email.<br />Get a <em>filled form</em>.</h1>
+        <p class="g-hero-lead">
+            Blazor.AI is a library of ready-to-use AI components for Blazor: smart forms, copilots, cited document chat,
+            agents, decision engines, machine learning and local Hugging Face models. Every component works with
+            OpenAI, Azure, Anthropic, Gemini, Ollama and more, and runs offline when no key is set.
+        </p>
+        <div class="g-numbers">
+            <div><strong>@GalleryNavigation.TotalComponents</strong><span>components</span></div>
+            <div><strong>11</strong><span>NuGet packages</span></div>
+            <div><strong>14</strong><span>model providers</span></div>
+        </div>
+    </div>
+
+    <AiCard Title="Try SmartPaste" Subtitle="Copy the text below (or your own), then press Smart Paste" Icon="bi-clipboard2-check">
+        <form data-smartpaste-scope class="bai-stack" @onsubmit:preventDefault="true">
+            <div class="g-clipboard">@SampleText</div>
+            <div class="bai-grid-2">
+                <div><label class="bai-label" for="h-first">First name</label><input id="h-first" name="firstName" class="bai-input" @bind="_contact.FirstName" /></div>
+                <div><label class="bai-label" for="h-last">Last name</label><input id="h-last" name="lastName" class="bai-input" @bind="_contact.LastName" /></div>
+                <div><label class="bai-label" for="h-email">Email</label><input id="h-email" name="email" type="email" class="bai-input" @bind="_contact.Email" /></div>
+                <div><label class="bai-label" for="h-phone">Phone</label><input id="h-phone" name="phone" type="tel" class="bai-input" @bind="_contact.Phone" /></div>
+                <div><label class="bai-label" for="h-company">Company</label><input id="h-company" name="company" class="bai-input" @bind="_contact.Company" /></div>
+                <div>
+                    <label class="bai-label" for="h-plan">Plan</label>
+                    <select id="h-plan" name="plan" class="bai-select" @bind="_contact.Plan">
+                        <option value=""></option><option>Starter</option><option>Business</option><option>Enterprise</option>
+                    </select>
+                </div>
+            </div>
+            <div class="bai-row">
+                <SmartPaste @ref="_paste" />
+                <button type="button" class="bai-btn-ghost" @onclick="() => _paste!.PasteTextAsync(SampleText)">Use the sample text</button>
+                <button type="button" class="bai-btn-ghost" @onclick="() => _contact = new()">Clear</button>
+            </div>
+        </form>
+    </AiCard>
+</section>
+
+<h2 class="g-section-title">Three steps to your first AI component</h2>
+<ol class="g-steps">
+    <li class="bai-glass">
+        <strong>Install</strong>
+        <AiCodeBlock Code="dotnet add package Blazor.AI.Components" />
+    </li>
+    <li class="bai-glass">
+        <strong>Register a provider</strong>
+        <AiCodeBlock Code="@SetupCode" />
+    </li>
+    <li class="bai-glass">
+        <strong>Drop in a component</strong>
+        <AiCodeBlock Code="@UseCode" />
+    </li>
+</ol>
+
+<h2 class="g-section-title">Explore the library</h2>
+<div class="g-packages">
+    @foreach (var s in GalleryNavigation.Sections)
+    {
+        <a class="bai-glass g-package" href="@s.Href">
+            <span class="bai-row"><span class="bai-icon-tile"><i class="bi @s.Icon" aria-hidden="true"></i></span><span class="bai-spacer"></span>@if (s.Components > 0) { <span class="bai-badge">@s.Components components</span> }</span>
+            <h3>@s.Title</h3>
+            <p>@s.Summary</p>
+            <code class="bai-small bai-faint">@s.Package</code>
+        </a>
+    }
+</div>
+
+@code {
+    private SmartPaste? _paste;
+    private Contact _contact = new();
+
+    private const string SampleText = """
+        Hi team, this is Sari Wulandari from PT Nusantara Logistik.
+        We'd like to upgrade to the Business plan for our 40 drivers.
+        You can reach me at sari.w@nusantaralogistik.co.id or +62 812-9988-1122.
+        Thanks!
+        """;
+
+    private const string SetupCode = """
+        builder.Services.AddBlazorAI(builder.Configuration)
+            .AddAzureOpenAI(endpoint, key, "gpt-5-mini");
+        builder.Services.AddBlazorAIComponents();
+        """;
+
+    private const string UseCode = """
+        <form>
+            <input name="email" />
+            <SmartPaste />
+        </form>
+        """;
+
+    private sealed class Contact
+    {
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? Email { get; set; }
+        public string? Phone { get; set; }
+        public string? Company { get; set; }
+        public string? Plan { get; set; }
+    }
+}

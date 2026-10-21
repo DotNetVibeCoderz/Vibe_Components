@@ -1,0 +1,40 @@
+@namespace Blazor.AI.Components
+@* Horizontal score bars for label probabilities, similarity scores and feature importances. *@
+
+<div class="@Class" role="list">
+    @foreach (var (label, value) in Ordered)
+    {
+        <div class="bai-score-row" role="listitem">
+            <span title="@label" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; @(label == Highlight ? "font-weight:600" : null)">@label</span>
+            <div class="bai-meter @(label == Highlight ? null : "is-nila")" aria-hidden="true">
+                <span style="width:@(Width(value))%"></span>
+            </div>
+            <span class="bai-num bai-small">@Format(value)</span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IEnumerable<KeyValuePair<string, double>> Values { get; set; } = [];
+    [Parameter] public string? Highlight { get; set; }
+    [Parameter] public bool Sort { get; set; } = true;
+    [Parameter] public bool AsPercent { get; set; } = true;
+    [Parameter] public int Max { get; set; } = 20;
+    [Parameter] public string? Class { get; set; }
+
+    private IEnumerable<KeyValuePair<string, double>> Ordered =>
+        (Sort ? Values.OrderByDescending(v => v.Value) : Values).Take(Max);
+
+    private double Top => Values.Select(v => Math.Abs(v.Value)).DefaultIfEmpty(1).Max();
+
+    private string Width(double value)
+    {
+        var top = AsPercent ? 1 : Top;
+        var pct = top <= 0 ? 0 : Math.Clamp(Math.Abs(value) / top * 100, 0, 100);
+        return pct.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private string Format(double value) => AsPercent
+        ? (value * 100).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "%"
+        : value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+}

@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios",
+  "classifications": [ "Web", "Blazor", "AI" ],
+  "identity": "Blazor.AI.App.CSharp",
+  "groupIdentity": "Blazor.AI.App",
+  "name": "Blazor.AI Web App",
+  "description": "A Blazor Web App with Blazor.AI: provider configuration, AI chat, SmartPaste form and the kawung theme. Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil.",
+  "shortName": "blazorai",
+  "sourceName": "BlazorAIApp",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" },
+  "symbols": {
+    "provider": {
+      "type": "parameter",
+      "datatype": "choice",
+      "defaultValue": "simulated",
+      "description": "The AI provider configured as default.",
+      "choices": [
+        { "choice": "simulated", "description": "Offline simulated model (no key needed)" },
+        { "choice": "openai", "description": "OpenAI (set BlazorAI:Providers:1:ApiKey)" },
+        { "choice": "azure", "description": "Azure OpenAI" },
+        { "choice": "anthropic", "description": "Anthropic Claude" },
+        { "choice": "ollama", "description": "Local Ollama" }
+      ]
+    },
+    "agents": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "Add Blazor.AI.Agents with a tool-calling agent page."
+    },
+    "useOpenAI": { "type": "computed", "value": "(provider == \"openai\")" },
+    "useAzure": { "type": "computed", "value": "(provider == \"azure\")" },
+    "useAnthropic": { "type": "computed", "value": "(provider == \"anthropic\")" },
+    "useOllama": { "type": "computed", "value": "(provider == \"ollama\")" }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        { "condition": "(!agents)", "exclude": [ "Components/Pages/Agent.razor" ] }
+      ]
+    }
+  ],
+  "postActions": [
+    {
+      "description": "Restore NuGet packages.",
+      "manualInstructions": [ { "text": "Run 'dotnet restore'" } ],
+      "actionId": "210D431B-A78B-4D2F-B762-4ED3E3EA9025",
+      "continueOnError": true
+    }
+  ]
+}

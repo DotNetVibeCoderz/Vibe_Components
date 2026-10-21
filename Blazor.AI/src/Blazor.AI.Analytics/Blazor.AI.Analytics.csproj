@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <Description>Blazor.AI machine learning, data science and reinforcement learning workbenches powered by Gravicode.Science (GraviLearn, GraviFrame, GraviProb) and Gravicode.RLNet.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+    <PackageReference Include="Gravicode.Science.GraviLearn" />
+    <PackageReference Include="Gravicode.Science.GraviProb" />
+    <PackageReference Include="Gravicode.Science.GraviFrame" />
+    <PackageReference Include="Gravicode.RLNet" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Blazor.AI.Visualization\Blazor.AI.Visualization.csproj" />
+  </ItemGroup>
+</Project>

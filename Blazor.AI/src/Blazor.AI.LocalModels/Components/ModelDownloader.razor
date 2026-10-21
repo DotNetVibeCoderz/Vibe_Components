@@ -1,0 +1,94 @@
+@namespace Blazor.AI.LocalModels
+@inherits AiComponentBase
+@implements IDisposable
+@* Download models into the local Hugging Face cache with per-file progress, and manage models loaded in memory. *@
+
+<AiCard Title="@Title" Subtitle="@($"Cache: {Hub.CacheRoot}")" Icon="bi-cloud-download" Class="@Class">
+    <div class="bai-stack">
+        <div class="bai-row">
+            <input class="bai-input bai-spacer" style="font-family:var(--bai-font-mono); font-size:.82rem" @bind="RepoId" placeholder="owner/model, e.g. sentence-transformers/all-MiniLM-L6-v2" aria-label="Model id" />
+            <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_weightsOnly" /> runtime files only</label>
+            @if (IsBusy)
+            {
+                <button type="button" class="bai-btn" @onclick="CancelCurrent"><i class="bi bi-x-lg" aria-hidden="true"></i>Cancel</button>
+            }
+            else
+            {
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@string.IsNullOrWhiteSpace(RepoId)" @onclick="DownloadAsync"><i class="bi bi-download" aria-hidden="true"></i>Download</button>
+            }
+        </div>
+        <AiError Message="@Error" />
+        @if (_files.Count > 0)
+        {
+            <div>
+                <div class="bai-row bai-small"><span>@_files.Count(f => f.Value.Fraction >= 1) of @_files.Count files</span><span class="bai-spacer"></span><span class="bai-num">@ModelHubBrowser.Size(_files.Values.Sum(f => f.BytesTransferred))</span></div>
+                <div class="bai-meter" aria-hidden="true"><span style="width:@(Overall.ToString("0", CultureInfo.InvariantCulture))%"></span></div>
+                <ul class="bai-small" style="list-style:none; margin:.5rem 0 0; padding:0; max-height:12rem; overflow:auto">
+                    @foreach (var (path, p) in _files)
+                    {
+                        <li class="bai-row" style="flex-wrap:nowrap"><code class="bai-spacer" style="overflow:hidden; text-overflow:ellipsis">@path</code><span class="bai-num bai-muted">@((p.Fraction ?? 0).ToString("P0", CultureInfo.InvariantCulture))</span></li>
+                    }
+                </ul>
+            </div>
+        }
+        @if (_path is not null) { <div class="bai-alert is-info" role="status"><i class="bi bi-check2-circle" aria-hidden="true"></i>Saved to <code>@_path</code></div> }
+
+        <div>
+            <span class="bai-label">Models loaded in memory</span>
+            @if (Registry.Loaded.Count == 0) { <span class="bai-small bai-muted">None yet. Components load models on first use.</span> }
+            @foreach (var m in Registry.Loaded)
+            {
+                <div class="bai-row bai-small">
+                    <code>@m.RepoId</code><span class="bai-badge">@m.Kind</span>
+                    <span class="bai-muted">loaded in @m.LoadTime.TotalSeconds.ToString("0.0")s · last used @m.LastUsed.ToLocalTime().ToString("HH:mm")</span>
+                    <span class="bai-spacer"></span>
+                    <button type="button" class="bai-btn-ghost" @onclick="() => Registry.Unload(m.RepoId, m.Kind)">Unload</button>
+                </div>
+            }
+        </div>
+    </div>
+</AiCard>
+
+@code {
+    private readonly SortedDictionary<string, Gravicode.HFNet.GraviHub.TransferProgress> _files = new(StringComparer.Ordinal);
+    private bool _weightsOnly = true;
+    private string? _path;
+    private long _lastRender;
+
+    [Inject] private HuggingFaceHubService Hub { get; set; } = default!;
+    [Inject] private LocalModelRegistry Registry { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Model downloader";
+    [Parameter] public string? RepoId { get; set; } = "sentence-transformers/all-MiniLM-L6-v2";
+    [Parameter] public EventCallback<string> OnDownloaded { get; set; }
+
+    private double Overall => _files.Count == 0 ? 0 : _files.Values.Average(f => f.Fraction ?? 0) * 100;
+
+    protected override void OnInitialized() => Registry.Changed += Refresh;
+
+    private Task DownloadAsync() => RunAsync(async ct =>
+    {
+        _files.Clear();
+        _path = null;
+        var progress = new Progress<Gravicode.HFNet.GraviHub.TransferProgress>(p =>
+        {
+            lock (_files)
+            {
+                _files[p.Path] = p;
+            }
+
+            var now = Environment.TickCount64;
+            if (now - _lastRender > 150)
+            {
+                _lastRender = now;
+                InvokeAsync(StateHasChanged);
+            }
+        });
+        _path = await Hub.DownloadAsync(RepoId!.Trim(), progress, _weightsOnly, ct);
+        await OnDownloaded.InvokeAsync(_path);
+    });
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Registry.Changed -= Refresh;
+}

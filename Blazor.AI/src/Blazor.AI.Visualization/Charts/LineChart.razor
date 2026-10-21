@@ -1,0 +1,134 @@
+@namespace Blazor.AI.Visualization
+@* Multi-series SVG line/area chart with optional confidence bands, highlighted points and a vertical marker. *@
+
+<figure class="bai-chart @Class" style="margin:0">
+    @if (Title is not null)
+    {
+        <figcaption class="bai-chart-title">@Title</figcaption>
+    }
+    <svg viewBox="0 0 @Width @Height" role="img" aria-label="@(Title ?? "Line chart")" preserveAspectRatio="xMidYMid meet">
+        @if (_x is { } x && _y is { } y)
+        {
+            @foreach (var tick in y.Ticks)
+            {
+                <line class="bai-grid-line" x1="@S(x.PixelStart)" x2="@S(x.PixelEnd)" y1="@S(y.Map(tick))" y2="@S(y.Map(tick))" />
+                <!text class="bai-axis-text" x="@S(x.PixelStart - 8)" y="@S(y.Map(tick) + 4)" text-anchor="end">@(YFormatter?.Invoke(tick) ?? Fmt(tick))</!text>
+            }
+            @foreach (var tick in x.Ticks)
+            {
+                <!text class="bai-axis-text" x="@S(x.Map(tick))" y="@S(Height - PadBottom + 18)" text-anchor="middle">@(XFormatter?.Invoke(tick) ?? Fmt(tick))</!text>
+            }
+            <line class="bai-axis-line" x1="@S(x.PixelStart)" x2="@S(x.PixelEnd)" y1="@S(y.PixelStart)" y2="@S(y.PixelStart)" />
+
+            @if (Bands is not null)
+            {
+                @foreach (var band in Bands)
+                {
+                    var upper = band.X.Select((v, i) => (x.Map(v), y.Map(band.Upper[i])));
+                    var lower = band.X.Select((v, i) => (x.Map(v), y.Map(band.Lower[i]))).Reverse();
+                    <path d="@(Path(upper.Concat(lower)) + "Z")" fill="@(band.Color ?? SeriesColor(1))" fill-opacity="0.16" stroke="none"><title>@band.Name</title></path>
+                }
+            }
+
+            @if (MarkerX is { } mx && mx >= x.Min && mx <= x.Max)
+            {
+                <line x1="@S(x.Map(mx))" x2="@S(x.Map(mx))" y1="@S(y.PixelEnd)" y2="@S(y.PixelStart)" class="bai-marker-line" />
+                @if (MarkerLabel is not null)
+                {
+                    <!text class="bai-axis-text" x="@S(x.Map(mx) + 4)" y="@S(y.PixelEnd + 10)">@MarkerLabel</!text>
+                }
+            }
+
+            @for (var s = 0; s < Series.Count; s++)
+            {
+                var series = Series[s];
+                var color = series.Color ?? SeriesColor(s);
+                var points = series.Points.Select(p => (x.Map(p.X), y.Map(p.Y))).ToArray();
+                @if (series.Area && points.Length > 1)
+                {
+                    <path d="@($"{Path(points)}L{S(points[^1].Item1)},{S(y.PixelStart)} L{S(points[0].Item1)},{S(y.PixelStart)} Z")" fill="@color" fill-opacity="0.12" stroke="none" />
+                }
+                <path d="@Path(points)" fill="none" stroke="@color" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="@(series.Dashed ? "5 4" : null)" />
+                @if (ShowMarkers || series.Points.Count <= 40)
+                {
+                    @foreach (var p in series.Points)
+                    {
+                        <circle cx="@S(x.Map(p.X))" cy="@S(y.Map(p.Y))" r="@(ShowMarkers ? 3 : 2)" fill="@color" class="bai-point">
+                            <title>@series.Name: @(p.Label ?? (XFormatter?.Invoke(p.X) ?? Fmt(p.X))) → @Fmt(p.Y)</title>
+                        </circle>
+                    }
+                }
+            }
+
+            @if (Highlights is not null)
+            {
+                @foreach (var p in Highlights)
+                {
+                    <circle cx="@S(x.Map(p.X))" cy="@S(y.Map(p.Y))" r="6" fill="none" stroke="var(--bai-danger)" stroke-width="2">
+                        <title>@(p.Label ?? "Highlight"): @Fmt(p.Y)</title>
+                    </circle>
+                }
+            }
+
+            @if (XLabel is not null)
+            {
+                <!text class="bai-axis-label" x="@S((x.PixelStart + x.PixelEnd) / 2)" y="@S(Height - 4)" text-anchor="middle">@XLabel</!text>
+            }
+            @if (YLabel is not null)
+            {
+                <!text class="bai-axis-label" transform="@($"translate(12,{S((y.PixelStart + y.PixelEnd) / 2)}) rotate(-90)")" text-anchor="middle">@YLabel</!text>
+            }
+        }
+    </svg>
+    @if (ShowLegend && Series.Count > 1)
+    {
+        <ChartLegend Items="@Series.Select((s, i) => (s.Name, s.Color ?? SeriesColor(i))).ToArray()" />
+    }
+</figure>
+
+@code {
+    private LinearAxis? _x, _y;
+
+    [Parameter, EditorRequired] public IReadOnlyList<ChartSeries> Series { get; set; } = [];
+    [Parameter] public IReadOnlyList<ChartBand>? Bands { get; set; }
+    [Parameter] public IReadOnlyList<ChartPoint>? Highlights { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? XLabel { get; set; }
+    [Parameter] public string? YLabel { get; set; }
+    [Parameter] public int Width { get; set; } = 640;
+    [Parameter] public int Height { get; set; } = 280;
+    [Parameter] public bool ShowLegend { get; set; } = true;
+    [Parameter] public bool ShowMarkers { get; set; }
+    [Parameter] public bool ZeroBased { get; set; }
+    [Parameter] public double? YMin { get; set; }
+    [Parameter] public double? YMax { get; set; }
+    [Parameter] public double? MarkerX { get; set; }
+    [Parameter] public string? MarkerLabel { get; set; }
+    [Parameter] public Func<double, string>? XFormatter { get; set; }
+    [Parameter] public Func<double, string>? YFormatter { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private int PadLeft => YLabel is null ? 48 : 60;
+    private const int PadRight = 16;
+    private const int PadTop = 12;
+    private int PadBottom => XLabel is null ? 28 : 40;
+
+    protected override void OnParametersSet()
+    {
+        var xs = Series.SelectMany(s => s.Points.Select(p => p.X)).Concat(Bands?.SelectMany(b => b.X) ?? []).Where(double.IsFinite).ToList();
+        var ys = Series.SelectMany(s => s.Points.Select(p => p.Y))
+            .Concat(Bands?.SelectMany(b => b.Lower.Concat(b.Upper)) ?? [])
+            .Concat(Highlights?.Select(h => h.Y) ?? [])
+            .Where(double.IsFinite).ToList();
+        if (xs.Count == 0 || ys.Count == 0)
+        {
+            _x = _y = null;
+            return;
+        }
+
+        var yMin = YMin ?? (ZeroBased ? Math.Min(0, ys.Min()) : ys.Min());
+        var yMax = YMax ?? ys.Max();
+        _x = new LinearAxis(xs.Min(), xs.Max(), PadLeft, Width - PadRight, 7, nice: false);
+        _y = new LinearAxis(yMin, yMax, Height - PadBottom, PadTop, 5);
+    }
+}

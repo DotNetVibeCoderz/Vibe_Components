@@ -1,0 +1,181 @@
+@namespace Blazor.AI.Components
+@inherits AiComponentBase
+@*
+    SmartTextArea: a textarea that suggests how the sentence continues. The suggestion appears as ghost text
+    at the caret (when it is at the end) or as a hint below; Tab accepts, Esc dismisses.
+*@
+
+<div class="@CssClass("bai-smart-textarea")" @attributes="AdditionalAttributes">
+    <div class="bai-smart-textarea-bg" aria-hidden="true"></div>
+    @if (_suggestion is not null && _caretAtEnd)
+    {
+        <div class="bai-ghost" aria-hidden="true" @ref="_ghost">@Value<span>@_suggestion</span></div>
+    }
+    <textarea @ref="_textarea" id="@Id" class="bai-textarea" rows="@Rows" placeholder="@Placeholder"
+              value="@Value" @oninput="OnInputAsync" @onclick="RefreshCaretAsync" @onscroll="SyncAsync"
+              data-suggestion="@(_suggestion is null ? "0" : "1")" aria-describedby="@(_suggestion is null ? null : _hintId)"></textarea>
+</div>
+@if (_suggestion is not null)
+{
+    <div id="@_hintId" class="bai-small bai-muted" style="margin-top:.35rem">
+        @if (!_caretAtEnd)
+        {
+            <span>Suggestion: <em>@_suggestion.Trim()</em> · </span>
+        }
+        <span class="bai-kbd">Tab</span> to accept · <span class="bai-kbd">Esc</span> to dismiss
+    </div>
+}
+
+@code {
+    private readonly string _hintId = "bai-sta-" + Guid.NewGuid().ToString("N")[..6];
+    private ElementReference _textarea;
+    private ElementReference _ghost;
+    private DotNetObjectReference<SmartTextArea>? _self;
+    private string? _suggestion;
+    private bool _caretAtEnd = true;
+    private int _caret;
+    private CancellationTokenSource? _debounce;
+
+    [Inject] private ISmartTextAreaService Suggestions { get; set; } = default!;
+
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string? Id { get; set; }
+    [Parameter] public int Rows { get; set; } = 6;
+    [Parameter] public string? Placeholder { get; set; }
+
+    /// <summary>Who is typing, e.g. "Support agent for an e-commerce store". Improves suggestions a lot.</summary>
+    [Parameter] public string? UserRole { get; set; }
+
+    /// <summary>Phrases this user often writes; preferred when relevant.</summary>
+    [Parameter] public IReadOnlyList<string>? UserPhrases { get; set; }
+
+    [Parameter] public string? Tone { get; set; }
+
+    /// <summary>Pause after typing before asking for a suggestion.</summary>
+    [Parameter] public int DebounceMs { get; set; } = 450;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _self = DotNetObjectReference.Create(this);
+            await Js.AttachSmartTextAreaAsync(_textarea, _self);
+        }
+    }
+
+    private async Task OnInputAsync(ChangeEventArgs e)
+    {
+        Value = e.Value?.ToString();
+        _suggestion = null;
+        await ValueChanged.InvokeAsync(Value);
+
+        _debounce?.Cancel();
+        _debounce = new CancellationTokenSource();
+        var token = _debounce.Token;
+        try
+        {
+            await Task.Delay(DebounceMs, token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        await RequestSuggestionAsync(token);
+    }
+
+    private async Task RequestSuggestionAsync(CancellationToken debounce)
+    {
+        var caret = await Js.GetCaretAsync(_textarea);
+        if (debounce.IsCancellationRequested || caret.Start != caret.End)
+        {
+            return;
+        }
+
+        _caret = caret.Start;
+        _caretAtEnd = caret.Start >= caret.Length;
+        var text = Value ?? string.Empty;
+        var before = text[..Math.Min(_caret, text.Length)];
+        var after = text[Math.Min(_caret, text.Length)..];
+
+        // Only suggest mid-word or after a space/punctuation, never right after a newline.
+        if (before.Length < 3 || before.EndsWith('\n'))
+        {
+            return;
+        }
+
+        await RunAsync(async ct =>
+        {
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, debounce);
+            var suggestion = await Suggestions.SuggestAsync(before, after, new SmartTextAreaContext(UserRole, UserPhrases, Tone), Provider, linked.Token);
+            if (!linked.IsCancellationRequested && (Value ?? string.Empty) == text)
+            {
+                _suggestion = string.IsNullOrWhiteSpace(suggestion) ? null : suggestion;
+            }
+        });
+    }
+
+    [JSInvokable]
+    public Task AcceptSuggestion() => InvokeAsync(async () =>
+    {
+        if (_suggestion is null)
+        {
+            return;
+        }
+
+        var text = Value ?? string.Empty;
+        var position = Math.Min(_caret, text.Length);
+        Value = text[..position] + _suggestion + text[position..];
+        var caret = position + _suggestion.Length;
+        _suggestion = null;
+        await Js.SetValueAndCaretAsync(_textarea, Value, caret);
+        await ValueChanged.InvokeAsync(Value);
+        StateHasChanged();
+    });
+
+    [JSInvokable]
+    public Task DismissSuggestion() => InvokeAsync(() =>
+    {
+        _suggestion = null;
+        StateHasChanged();
+    });
+
+    private async Task RefreshCaretAsync()
+    {
+        if (_suggestion is not null)
+        {
+            _suggestion = null;
+        }
+
+        var caret = await Js.GetCaretAsync(_textarea);
+        _caret = caret.Start;
+        _caretAtEnd = caret.Start >= caret.Length;
+    }
+
+    private async Task SyncAsync()
+    {
+        if (_suggestion is not null && _caretAtEnd)
+        {
+            await Js.SyncScrollAsync(_textarea, _ghost);
+        }
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        _debounce?.Cancel();
+        await base.DisposeAsync();
+        try
+        {
+            await Js.DetachSmartTextAreaAsync(_textarea);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+
+        _self?.Dispose();
+    }
+}

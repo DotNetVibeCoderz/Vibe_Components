@@ -1,0 +1,61 @@
+@namespace Blazor.AI.Analytics
+@implements IDisposable
+@* Compare training runs: learning curves overlaid, plus best/final averages, stability and training time. *@
+
+<AiCard Title="@Title" Subtitle="@($"{Workspace.Sessions.Count} training runs this session")" Icon="bi-speedometer" Class="@Class">
+    @if (Workspace.Sessions.Count == 0)
+    {
+        <div class="bai-empty"><i class="bi bi-speedometer" aria-hidden="true"></i>Train agents to compare them here.</div>
+    }
+    else
+    {
+        <div class="bai-stack">
+            <LineChart Series="@Workspace.Sessions.Select((s, i) => new ChartSeries($"#{i + 1} {s.Name}", s.Episodes.Select(e => new ChartPoint(e.Episode, e.MovingAverage)).ToArray())).ToArray()"
+                       XLabel="Episode" YLabel="Moving-average return" Height="280" />
+            <div class="bai-table-wrap">
+                <table class="bai-table">
+                    <thead><tr><th>#</th><th>Run</th><th>Episodes</th><th>Best avg</th><th>Final avg</th><th>Stability (sd, last 20)</th><th>Avg steps</th><th>Time</th></tr></thead>
+                    <tbody>
+                        @for (var i = 0; i < Workspace.Sessions.Count; i++)
+                        {
+                            var s = Workspace.Sessions[i];
+                            var tail = s.Episodes.TakeLast(20).Select(e => e.Return).ToArray();
+                            var sd = tail.Length < 2 ? 0 : Math.Sqrt(tail.Sum(r => (r - tail.Average()) * (r - tail.Average())) / (tail.Length - 1));
+                            var best = Workspace.Sessions.MaxBy(x => x.FinalAverage) == s;
+                            <tr style="@(best ? "background:var(--bai-soga-soft)" : null)">
+                                <td class="bai-num">@(i + 1)</td>
+                                <td>@s.Name @if (best) { <span class="bai-badge bai-badge-ai">best</span> }</td>
+                                <td class="bai-num">@s.Episodes.Count</td>
+                                <td class="bai-num">@Fmt(s.BestAverage)</td>
+                                <td class="bai-num">@Fmt(s.FinalAverage)</td>
+                                <td class="bai-num">@Fmt(sd)</td>
+                                <td class="bai-num">@(s.Episodes.Count == 0 ? "–" : Fmt(s.Episodes.TakeLast(20).Average(e => e.Steps)))</td>
+                                <td class="bai-num">@s.Duration.TotalSeconds.ToString("0.0")s</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" @onclick="Clear">Clear runs</button>
+        </div>
+    }
+</AiCard>
+
+@code {
+    [Inject] private RlWorkspace Workspace { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Agent performance tracker";
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized() => Workspace.Changed += Refresh;
+
+    private void Clear()
+    {
+        Workspace.Sessions.Clear();
+        Workspace.Notify();
+    }
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Workspace.Changed -= Refresh;
+}

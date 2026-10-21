@@ -1,0 +1,93 @@
+@namespace Blazor.AI.Analytics
+@implements IDisposable
+@* Shape the reward signal of the designed grid world and see, immediately, how it changes what the agent learns. *@
+
+<AiCard Title="@Title" Subtitle="Rewards decide what 'good' means to the agent" Icon="bi-award" Class="@Class">
+    <div class="bai-grid-2" style="align-items:start">
+        <div class="bai-stack">
+            @foreach (var (label, help, get, set, min, max, step) in Controls)
+            {
+                <div>
+                    <label class="bai-label">@label: <span class="bai-num">@get().ToString("0.###", CultureInfo.InvariantCulture)</span></label>
+                    <input type="range" class="form-range" min="@min.ToString(CultureInfo.InvariantCulture)" max="@max.ToString(CultureInfo.InvariantCulture)" step="@step.ToString(CultureInfo.InvariantCulture)"
+                           value="@get().ToString(CultureInfo.InvariantCulture)" @oninput="e => set(double.Parse(e.Value!.ToString()!, CultureInfo.InvariantCulture))" aria-label="@label" />
+                    <span class="bai-small bai-muted">@help</span>
+                </div>
+            }
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@_running" @onclick="CompareAsync">
+                @if (_running) { <AiThinking Label="@null" /> } else { <i class="bi bi-play-fill" aria-hidden="true"></i> }
+                Train with these rewards
+            </button>
+        </div>
+        <div class="bai-stack">
+            @if (_session is { } s)
+            {
+                var frames = RlTrainer.Simulate(s);
+                <div class="bai-stats">
+                    <div class="bai-stat"><div class="bai-stat-label">Final avg return</div><div class="bai-stat-value">@Fmt(s.FinalAverage)</div></div>
+                    <div class="bai-stat"><div class="bai-stat-label">Path length</div><div class="bai-stat-value">@(frames.Count - 1)</div></div>
+                    <div class="bai-stat"><div class="bai-stat-label">Reached</div><div class="bai-stat-value">@Outcome(frames)</div></div>
+                </div>
+                <RlScene State="@frames[^1].State" Environment="grid" Tiles="Workspace.Grid.At" Trail="@frames.Select(f => ((int)f.State["x"], (int)f.State["y"])).ToList()" />
+                <span class="bai-small bai-muted">Try a bigger step penalty: the agent takes shorter, riskier paths. Raise slip: it learns to keep its distance from traps.</span>
+            }
+            else
+            {
+                <div class="bai-empty"><i class="bi bi-award" aria-hidden="true"></i>Adjust rewards, then train to see the learned path.</div>
+            }
+        </div>
+    </div>
+</AiCard>
+
+@code {
+    private TrainingSession? _session;
+    private bool _running;
+
+    [Inject] private RlWorkspace Workspace { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Reward designer";
+    [Parameter] public int Episodes { get; set; } = 400;
+    [Parameter] public string? Class { get; set; }
+
+    private GridRewards R => Workspace.Rewards;
+
+    private IEnumerable<(string, string, Func<double>, Action<double>, double, double, double)> Controls =>
+    [
+        ("Step penalty", "Cost of every move: encourages short paths.", () => R.Step, v => R.Step = (float)v, -0.5, 0, 0.01),
+        ("Goal reward", "Payoff for reaching the goal.", () => R.Goal, v => R.Goal = (float)v, 0.1, 5, 0.1),
+        ("Trap penalty", "Reward for falling into a trap (ends the episode).", () => R.Trap, v => R.Trap = (float)v, -5, 0, 0.1),
+        ("Wall bump", "Extra penalty for walking into walls.", () => R.WallBump, v => R.WallBump = (float)v, -1, 0, 0.05),
+        ("Slip probability", "Chance a move goes sideways (stochastic world).", () => R.Slip, v => R.Slip = v, 0, 0.4, 0.05),
+    ];
+
+    protected override void OnInitialized() => Workspace.Changed += Refresh;
+
+    private async Task CompareAsync()
+    {
+        _running = true;
+        try
+        {
+            _session = await RlTrainer.TrainAsync("Designed grid", RLNet.Algorithm.QLearning, Episodes, environmentFactory: () => Workspace.CreateGrid());
+            Workspace.Add(_session);
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    private string Outcome(IReadOnlyList<SimulationFrame> frames)
+    {
+        var last = frames[^1].State;
+        return Workspace.Grid.At((int)last["x"], (int)last["y"]) switch
+        {
+            GridTile.Goal => "goal ✓",
+            GridTile.Trap => "trap ✗",
+            _ => "timeout",
+        };
+    }
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Workspace.Changed -= Refresh;
+}

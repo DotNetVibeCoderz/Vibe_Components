@@ -1,0 +1,224 @@
+@namespace Blazor.AI.Agents
+@implements IDisposable
+@* Chat with an agent. Tool calls appear inline as they happen, with arguments and results. *@
+
+<div class="@($"bai-glass bai-chat {Class}".Trim())" style="height:@Height">
+    @if (ShowHeader)
+    {
+        <header class="bai-card-header">
+            <span class="bai-icon-tile" aria-hidden="true"><i class="bi @(Current?.Icon ?? "bi-robot")"></i></span>
+            <div>
+                <h2 class="bai-card-title">@(Current?.Name ?? "Agent")</h2>
+                <p class="bai-card-subtitle">@Current?.Role</p>
+            </div>
+            <div class="bai-card-actions">
+                @if (AllowAgentSwitch)
+                {
+                    <select class="bai-select" style="width:auto; padding:.3rem .6rem" value="@Current?.Id" @onchange="e => SwitchAgent(e.Value?.ToString())" aria-label="Agent">
+                        @foreach (var a in Catalog.Agents) { <option value="@a.Id">@a.Name</option> }
+                    </select>
+                }
+                @if (_turns.Count > 0)
+                {
+                    <button type="button" class="bai-icon-btn" title="New conversation" aria-label="Start a new conversation" @onclick="Clear"><i class="bi bi-plus-square"></i></button>
+                }
+            </div>
+        </header>
+    }
+    <div class="bai-chat-log" @ref="_log" role="log" aria-live="polite">
+        @if (_turns.Count == 0)
+        {
+            <div class="bai-chat-empty">
+                <h3>Give @(Current?.Name ?? "the agent") a task</h3>
+                <p class="bai-muted bai-small">Tools: @(Current is null || Current.Tools.Count == 0 ? "none" : string.Join(", ", Current.Tools))@(Current?.UseMemory == true ? " · long-term memory on" : null)</p>
+                @if (Suggestions is { Count: > 0 })
+                {
+                    <div class="bai-chips">@foreach (var s in Suggestions) { <button type="button" class="bai-chip" @onclick="() => SendAsync(s)">@s</button> }</div>
+                }
+            </div>
+        }
+        @foreach (var turn in _turns)
+        {
+            <article class="bai-msg @(turn.IsUser ? "is-user" : "is-assistant")">
+                <span class="bai-msg-avatar" aria-hidden="true"><i class="bi @(turn.IsUser ? "bi-person" : Current?.Icon ?? "bi-robot")"></i></span>
+                <div class="bai-msg-body">
+                    @if (turn.Run is { } run)
+                    {
+                        @foreach (var step in run.Steps.Where(s => s.Kind == AgentStepKind.ToolResult))
+                        {
+                            <span class="bai-tool-call" style="@(step.IsError ? "background:var(--bai-danger-soft); color:var(--bai-danger)" : null)" title="@step.Detail">
+                                <i class="bi bi-tools" aria-hidden="true"></i>@step.Title → @Shorten(step.Detail)
+                                @if (step.Duration is { } d) { <span class="bai-faint">· @d.TotalMilliseconds.ToString("0") ms</span> }
+                            </span>
+                        }
+                    }
+                    <div class="bai-msg-content">
+                        @if (turn.IsUser) { @turn.Text }
+                        else if (turn.Error is not null) { <AiError Message="@turn.Error" /> }
+                        else if (string.IsNullOrEmpty(turn.Text)) { <AiThinking Label="@(turn.Run?.ToolCalls > 0 ? "Using tools…" : "Thinking…")" /> }
+                        else { <AiMarkdown Text="@turn.Text" /> }
+                    </div>
+                </div>
+            </article>
+        }
+    </div>
+    <form class="bai-chat-composer" @onsubmit="SubmitAsync" @onsubmit:preventDefault="true">
+        <div class="bai-composer-box">
+            <input class="bai-spacer" style="border:0; background:transparent; color:inherit; outline:none; padding:.4rem 0" @bind="_input" @bind:event="oninput" placeholder="Ask or assign a task…" aria-label="Message" />
+            @if (_busy)
+            {
+                <button type="button" class="bai-btn" aria-label="Stop" @onclick="Stop"><i class="bi bi-stop-fill"></i></button>
+            }
+            else
+            {
+                <button type="submit" class="bai-btn bai-btn-ai" aria-label="Send" disabled="@string.IsNullOrWhiteSpace(_input)"><i class="bi bi-arrow-up"></i></button>
+            }
+        </div>
+    </form>
+</div>
+
+@code {
+    private readonly List<Turn> _turns = [];
+    private ElementReference _log;
+    private CancellationTokenSource? _cts;
+    private string? _input;
+    private bool _busy;
+    private bool _scroll;
+    private long _lastRender;
+
+    [Inject] private AgentRuntime Runtime { get; set; } = default!;
+    [Inject] private AgentCatalog Catalog { get; set; } = default!;
+    [Inject] private BlazorAIJs Js { get; set; } = default!;
+
+    /// <summary>The agent to chat with. Defaults to the first agent in the catalog.</summary>
+    [Parameter] public AgentDefinition? Agent { get; set; }
+
+    [Parameter] public bool AllowAgentSwitch { get; set; } = true;
+    [Parameter] public bool ShowHeader { get; set; } = true;
+    [Parameter] public string Height { get; set; } = "560px";
+    [Parameter] public IReadOnlyList<string>? Suggestions { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public EventCallback<AgentRun> OnRunCompleted { get; set; }
+
+    private AgentDefinition? _selected;
+
+    private AgentDefinition? Current => _selected ?? Agent ?? Catalog.Agents.FirstOrDefault();
+
+    protected override void OnInitialized() => Catalog.Changed += Refresh;
+
+    protected override void OnParametersSet()
+    {
+        if (Agent is not null)
+        {
+            _selected = null;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_scroll)
+        {
+            _scroll = false;
+            await Js.ScrollToBottomAsync(_log);
+        }
+    }
+
+    private void SwitchAgent(string? id)
+    {
+        _selected = Catalog.Get(id ?? string.Empty);
+        Clear();
+    }
+
+    private Task SubmitAsync()
+    {
+        var text = _input;
+        _input = null;
+        return SendAsync(text);
+    }
+
+    public async Task SendAsync(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text) || _busy || Current is null)
+        {
+            return;
+        }
+
+        var history = _turns.Where(t => t.Error is null && t.Text.Length > 0).Select(t => new ChatMessage(t.IsUser ? ChatRole.User : ChatRole.Assistant, t.Text)).ToList();
+        _turns.Add(new Turn(true) { Text = text.Trim() });
+        var reply = new Turn(false);
+        _turns.Add(reply);
+        _busy = true;
+        _scroll = true;
+        _cts = new CancellationTokenSource();
+        var builder = new StringBuilder();
+        try
+        {
+            await foreach (var token in Runtime.StreamAsync(Current, text.Trim(), history, run =>
+                           {
+                               reply.Run = run;
+                               run.StepAdded += _ => Throttle();
+                           }, _cts.Token))
+            {
+                builder.Append(token);
+                reply.Text = builder.ToString();
+                _scroll = true;
+                Throttle();
+            }
+
+            if (reply.Run is not null)
+            {
+                await OnRunCompleted.InvokeAsync(reply.Run);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            reply.Text = builder.Length == 0 ? "_Stopped._" : builder.Append("\n\n_Stopped._").ToString();
+        }
+        catch (Exception ex)
+        {
+            reply.Error = AiComponentBase.Describe(ex);
+        }
+        finally
+        {
+            _busy = false;
+            _scroll = true;
+            StateHasChanged();
+        }
+    }
+
+    private void Throttle()
+    {
+        var now = Environment.TickCount64;
+        if (now - _lastRender > 50)
+        {
+            _lastRender = now;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void Stop() => _cts?.Cancel();
+
+    private void Clear()
+    {
+        _cts?.Cancel();
+        _turns.Clear();
+    }
+
+    private static string Shorten(string? text) => text is null ? string.Empty : text.Length <= 60 ? text : text[..57] + "…";
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        Catalog.Changed -= Refresh;
+    }
+
+    private sealed class Turn(bool isUser)
+    {
+        public bool IsUser { get; } = isUser;
+        public string Text { get; set; } = string.Empty;
+        public AgentRun? Run { get; set; }
+        public string? Error { get; set; }
+    }
+}

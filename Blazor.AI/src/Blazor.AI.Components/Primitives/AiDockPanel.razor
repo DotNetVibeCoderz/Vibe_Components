@@ -1,0 +1,57 @@
+@namespace Blazor.AI.Components
+@* A dockable panel: docked left/right as a full-height sidebar, or floating. Users can switch modes and collapse it. *@
+
+<aside class="bai-glass bai-dock @ModeClass @(Collapsed ? "is-collapsed" : null) @Class"
+       style="--bai-dock-width:@(Width)px" aria-label="@Title" aria-hidden="@Collapsed">
+    <header class="bai-card-header">
+        @if (Icon is not null)
+        {
+            <span class="bai-icon-tile" aria-hidden="true"><i class="bi @Icon"></i></span>
+        }
+        <h2 class="bai-card-title">@Title</h2>
+        <div class="bai-card-actions">
+            @HeaderActions
+            @if (AllowModeChange)
+            {
+                <button type="button" class="bai-icon-btn" title="Dock left" aria-label="Dock left" @onclick="() => SetModeAsync(DockMode.Left)"><i class="bi bi-layout-sidebar"></i></button>
+                <button type="button" class="bai-icon-btn" title="Float" aria-label="Float panel" @onclick="() => SetModeAsync(DockMode.Floating)"><i class="bi bi-window-stack"></i></button>
+                <button type="button" class="bai-icon-btn" title="Dock right" aria-label="Dock right" @onclick="() => SetModeAsync(DockMode.Right)"><i class="bi bi-layout-sidebar-reverse"></i></button>
+            }
+            <button type="button" class="bai-icon-btn" title="Close" aria-label="Close panel" @onclick="CloseAsync"><i class="bi bi-x-lg"></i></button>
+        </div>
+    </header>
+    <div class="bai-dock-body">@ChildContent</div>
+</aside>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Copilot";
+    [Parameter] public string? Icon { get; set; } = "bi-stars";
+    [Parameter] public DockMode Mode { get; set; } = DockMode.Right;
+    [Parameter] public EventCallback<DockMode> ModeChanged { get; set; }
+    [Parameter] public bool Collapsed { get; set; }
+    [Parameter] public EventCallback<bool> CollapsedChanged { get; set; }
+    [Parameter] public int Width { get; set; } = 400;
+    [Parameter] public bool AllowModeChange { get; set; } = true;
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private string ModeClass => Mode switch
+    {
+        DockMode.Left => "is-left",
+        DockMode.Floating => "is-floating",
+        _ => "is-right",
+    };
+
+    private Task SetModeAsync(DockMode mode)
+    {
+        Mode = mode;
+        return ModeChanged.InvokeAsync(mode);
+    }
+
+    private Task CloseAsync()
+    {
+        Collapsed = true;
+        return CollapsedChanged.InvokeAsync(true);
+    }
+}

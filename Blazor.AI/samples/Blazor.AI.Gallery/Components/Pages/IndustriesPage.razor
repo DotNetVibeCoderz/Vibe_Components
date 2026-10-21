@@ -1,0 +1,117 @@
+@page "/industries"
+@inject DemoData Data
+<PageTitle>Industry showcases · Blazor.AI</PageTitle>
+
+<PageHeader Title="Industry showcases" Package="All packages" Icon="bi-buildings"
+            Lead="How the components combine into real workflows. Each showcase is a handful of components and a page of data; nothing here is specially built." />
+
+<AiTabs Tabs="@Industries" @bind-Selected="_industry" Class="g-demo" />
+<div style="margin-top:1.4rem">
+@switch (_industry)
+{
+    case "Healthcare":
+        <p class="bai-muted">Clinic intake: paste a referral letter to fill the form, triage the complaint, and summarise long notes for the doctor.</p>
+        <div class="bai-grid-2" style="align-items:start">
+            <AiCard Title="Patient intake" Icon="bi-hospital">
+                <form data-smartpaste-scope class="bai-stack">
+                    <div class="bai-grid-2">
+                        <div><label class="bai-label" for="hc-name">Patient name</label><input id="hc-name" name="patientName" class="bai-input" /></div>
+                        <div><label class="bai-label" for="hc-dob">Date of birth</label><input id="hc-dob" name="dateOfBirth" type="date" class="bai-input" /></div>
+                        <div><label class="bai-label" for="hc-phone">Phone</label><input id="hc-phone" name="phone" type="tel" class="bai-input" /></div>
+                        <div><label class="bai-label" for="hc-bpjs">BPJS member</label><select id="hc-bpjs" name="bpjsMember" class="bai-select"><option></option><option>Yes</option><option>No</option></select></div>
+                        <div style="grid-column:1/-1"><label class="bai-label" for="hc-complaint">Chief complaint</label><textarea id="hc-complaint" name="chiefComplaint" class="bai-textarea" rows="2"></textarea></div>
+                    </div>
+                    <div class="bai-row"><SmartPaste @ref="_hcPaste" /><button type="button" class="bai-btn-ghost" @onclick="() => _hcPaste!.PasteTextAsync(Referral)">Use sample referral</button></div>
+                </form>
+            </AiCard>
+            <SmartClassifier Title="Triage" Text="Fever 39.5°C for three days, stiff neck and sensitivity to light since this morning."
+                             Labels="@(["Emergency", "Urgent (same day)", "Routine", "Self-care advice"])" EditableLabels="false"
+                             Instructions="You support triage nurses. Classify urgency conservatively; this is decision support, not diagnosis." />
+        </div>
+        <SmartSummarizer Title="Notes for the doctor" Style="SummaryStyle.Bullets" Text="@ClinicalNotes" />
+        break;
+
+    case "Agritech":
+        <p class="bai-muted">Rice yield: train on agronomy data, then forecast monthly output for the cooperative.</p>
+        <RegressionWorkbench Dataset="@SampleDatasets.CropYield()" Title="Predict yield (ton/ha)" />
+        <ForecastCharts History="@_harvest" Forecast="@_harvestForecast.Forecast" Lower="@_harvestForecast.Lower" Upper="@_harvestForecast.Upper" Title="Cooperative harvest forecast" YLabel="tons" />
+        break;
+
+    case "Biotech":
+        <p class="bai-muted">Literature mining: find entities in abstracts and map how they relate.</p>
+        <NERViewer Text="Researchers at Institut Teknologi Bandung and Eijkman Institute tested curcumin from Curcuma longa against Plasmodium falciparum in Jakarta." />
+        <KnowledgeGraphViewer Title="Abstract to knowledge graph" Text="@Abstract" />
+        break;
+
+    case "Finance":
+        <p class="bai-muted">SME lending: transparent risk scoring, then an evidence-based decision on a pricing experiment.</p>
+        <RiskAssessmentPanel />
+        <BayesianAnalysisPanel Title="Did the lower interest-rate offer convert better?" SuccessA="84" TotalA="1200" SuccessB="117" TotalB="1180" />
+        break;
+
+    case "Education":
+        <p class="bai-muted">A Socratic tutor that never gives the answer away, plus study notes from a chapter.</p>
+        <AiChat Title="Math tutor" Icon="bi-mortarboard" Height="460px"
+                SystemPrompt="You are a patient Socratic math tutor for Indonesian high-school students. Never give the final answer directly; ask one guiding question at a time and praise progress. Reply in the student's language."
+                Suggestions="@(["Bagaimana cara menyelesaikan 2x + 5 = 17?", "Why is the area of a circle πr²?"])" />
+        <SmartSummarizer Title="Study notes" Style="SummaryStyle.Bullets" Text="@Chapter" />
+        break;
+
+    case "Manufacturing":
+        <p class="bai-muted">Predictive maintenance: live telemetry with anomaly flags, and root-cause hints for past faults.</p>
+        <RealtimeCharts Source="@DemoData.SensorStream()" Title="Motor M-07 temperature (°C)" />
+        <AnomalyDetectionWorkbench Dataset="@SampleDatasets.MachineSensor()" />
+        break;
+
+    case "Government":
+        <p class="bai-muted">Citizen services: eligibility for a micro-business loan with a plain-language explanation, and an approval flow with audit.</p>
+        <EligibilityEngineUI Language="Bahasa Indonesia" />
+        <IntelligentApprovalWorkflow Title="Grant disbursement approval" />
+        break;
+
+    case "Smart City":
+        <p class="bai-muted">Operations centre: where demand is, how flows move, and what to fix first.</p>
+        <AiCard Title="Service requests by city" Icon="bi-map"><GeoAnalyticsMap Points="@Data.Cities" /></AiCard>
+        <AiCard Title="Commuter flows (thousands per day)" Icon="bi-signpost-split"><SankeyDiagram Links="@Commute" /></AiCard>
+        break;
+
+    case "Gaming":
+        <p class="bai-muted">Game AI and live ops: train a bot on a level you design, and pick the best in-game offer with bandits.</p>
+        <EnvironmentDesigner Title="Level editor" />
+        <RLTrainingStudio Title="Train the bot" />
+        <StrategyOptimizer Title="Which store offer converts best?" />
+        break;
+}
+</div>
+
+@code {
+    private static readonly string[] Industries = ["Healthcare", "Agritech", "Biotech", "Finance", "Education", "Manufacturing", "Government", "Smart City", "Gaming"];
+    private string _industry = "Healthcare";
+    private SmartPaste? _hcPaste;
+    private double[] _harvest = [];
+    private ForecastResult _harvestForecast = default!;
+
+    private const string Referral = """
+        Rujukan: Ibu Ratna Kusuma, lahir 14 Maret 1978, HP 0813-2244-6688, peserta BPJS: Ya.
+        Keluhan utama: nyeri dada kiri menjalar ke lengan sejak 2 jam, disertai keringat dingin.
+        """;
+
+    private const string ClinicalNotes = "Patient is a 52-year-old male with type 2 diabetes for 10 years, on metformin 1000 mg twice daily. HbA1c last month 8.9%, up from 7.6% six months ago. Reports more thirst and two episodes of blurred vision. Blood pressure 148/92. Feet: reduced sensation on monofilament test on the left. Diet: frequent sweet tea. Works night shifts. Plan discussed: add second agent, refer to ophthalmology and podiatry, diet counselling, recheck HbA1c in 3 months.";
+
+    private const string Abstract = "Curcumin, derived from Curcuma longa, inhibited Plasmodium falciparum growth in vitro. The study, led by Institut Teknologi Bandung with the Eijkman Institute, found that curcumin combined with artemisinin reduced parasite load in mice. Funding came from the Indonesian Ministry of Health.";
+
+    private const string Chapter = "Photosynthesis converts light energy into chemical energy. In the light-dependent reactions, which happen in the thylakoid membranes, chlorophyll absorbs light and water is split, releasing oxygen and producing ATP and NADPH. In the Calvin cycle, which happens in the stroma, the enzyme RuBisCO fixes carbon dioxide, and ATP and NADPH are used to build glucose. Factors that limit the rate include light intensity, carbon dioxide concentration and temperature.";
+
+    private static readonly IReadOnlyList<SankeyLink> Commute =
+    [
+        new("Bekasi", "KRL", 180), new("Bekasi", "Car", 140), new("Depok", "KRL", 210), new("Depok", "Motorbike", 120), new("Tangerang", "Busway", 90), new("Tangerang", "Car", 160),
+        new("KRL", "Sudirman", 260), new("KRL", "Kota", 130), new("Car", "Sudirman", 170), new("Car", "Kuningan", 130), new("Motorbike", "Kuningan", 120), new("Busway", "Sudirman", 90),
+    ];
+
+    protected override void OnInitialized()
+    {
+        var rng = new Random(2);
+        _harvest = Enumerable.Range(0, 48).Select(i => Math.Round(120 + 1.1 * i + 35 * Math.Sin(2 * Math.PI * (i % 12) / 12 - 1) + rng.NextDouble() * 10, 1)).ToArray();
+        _harvestForecast = TimeSeriesTools.Forecast(_harvest, 12, ForecastMethod.HoltWinters);
+    }
+}

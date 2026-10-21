@@ -1,0 +1,51 @@
+@namespace Blazor.AI.Bio
+@* Paste raw residues or FASTA, load a file, or pick a sample. *@
+
+<div class="bai-stack">
+    <div class="bai-row">
+        <label class="bai-label" for="@_id" style="margin:0">@Label</label>
+        <span class="bai-spacer"></span>
+        @foreach (var (name, value) in Samples)
+        {
+            <button type="button" class="bai-chip" @onclick="() => SetAsync(value)">@name</button>
+        }
+        <label class="bai-chip" style="position:relative; cursor:pointer"><i class="bi bi-upload" aria-hidden="true"></i>FASTA<InputFile OnChange="LoadAsync" accept=".fa,.fasta,.fna,.faa,.txt" style="position:absolute; inset:0; opacity:0; cursor:pointer" aria-label="Load FASTA file" /></label>
+    </div>
+    <textarea id="@_id" class="bai-textarea" rows="@Rows" spellcheck="false" style="font-family:var(--bai-font-mono); font-size:.8rem; line-height:1.5"
+              value="@Value" @onchange="e => SetAsync(e.Value?.ToString())" placeholder="@Placeholder"></textarea>
+    <span class="bai-small bai-faint">@Count</span>
+</div>
+
+@code {
+    private readonly string _id = "bai-seq-" + Guid.NewGuid().ToString("N")[..6];
+
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string Label { get; set; } = "Sequence";
+    [Parameter] public int Rows { get; set; } = 6;
+    [Parameter] public string Placeholder { get; set; } = "Paste residues or FASTA (>id on the first line)";
+    [Parameter] public IReadOnlyList<(string Name, string Value)> Samples { get; set; } = [];
+
+    private string Count
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Value)) return "Empty";
+            var records = Value.Count(c => c == '>');
+            var residues = Value.Split('\n').Where(l => !l.TrimStart().StartsWith('>')).Sum(l => l.Count(char.IsLetter));
+            return records > 1 ? $"{records} records · {residues:N0} residues" : $"{residues:N0} residues";
+        }
+    }
+
+    private async Task LoadAsync(InputFileChangeEventArgs e)
+    {
+        using var reader = new StreamReader(e.File.OpenReadStream(20 * 1024 * 1024));
+        await SetAsync(await reader.ReadToEndAsync());
+    }
+
+    private Task SetAsync(string? value)
+    {
+        Value = value;
+        return ValueChanged.InvokeAsync(value);
+    }
+}

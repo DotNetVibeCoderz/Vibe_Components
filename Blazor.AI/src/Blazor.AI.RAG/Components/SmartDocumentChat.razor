@@ -1,0 +1,172 @@
+@namespace Blazor.AI.RAG
+@inherits AiComponentBase
+@* Chat with your documents: every answer is grounded in retrieved passages and cites them. *@
+
+<div class="@CssClass("bai-glass bai-chat")" style="height:@Height" @attributes="AdditionalAttributes">
+    <header class="bai-card-header">
+        <span class="bai-icon-tile" aria-hidden="true"><i class="bi @Icon"></i></span>
+        <div>
+            <h2 class="bai-card-title">@Title</h2>
+            <p class="bai-card-subtitle">@Scope</p>
+        </div>
+        <div class="bai-card-actions">
+            @HeaderActions
+            @if (_turns.Count > 0)
+            {
+                <button type="button" class="bai-icon-btn" title="New conversation" aria-label="Start a new conversation" @onclick="Clear"><i class="bi bi-plus-square"></i></button>
+            }
+        </div>
+    </header>
+    <div class="bai-chat-log" @ref="_log" role="log" aria-live="polite">
+        @if (_turns.Count == 0)
+        {
+            <div class="bai-chat-empty">
+                <h3>@EmptyTitle</h3>
+                <p class="bai-muted bai-small">@(Kb.ChunkCount == 0 ? "Add documents first, then ask questions about them." : "Answers cite the exact passages they come from.")</p>
+                @if (Suggestions is { Count: > 0 } && Kb.ChunkCount > 0)
+                {
+                    <div class="bai-chips">
+                        @foreach (var s in Suggestions) { <button type="button" class="bai-chip" @onclick="() => AskAsync(s)">@s</button> }
+                    </div>
+                }
+            </div>
+        }
+        @foreach (var turn in _turns)
+        {
+            <article class="bai-msg @(turn.IsUser ? "is-user" : "is-assistant")">
+                <span class="bai-msg-avatar" aria-hidden="true"><i class="bi @(turn.IsUser ? "bi-person" : "bi-journal-text")"></i></span>
+                <div class="bai-msg-body">
+                    <div class="bai-msg-content">
+                        @if (turn.IsUser)
+                        {
+                            @turn.Text
+                        }
+                        else if (turn.Error is not null)
+                        {
+                            <AiError Message="@turn.Error" />
+                        }
+                        else if (string.IsNullOrEmpty(turn.Text))
+                        {
+                            <AiThinking Label="@(turn.Citations.Count > 0 ? $"Reading {turn.Citations.Count} passages…" : "Searching documents…")" />
+                        }
+                        else
+                        {
+                            <CitationViewer Answer="@turn.Text" Citations="@turn.Citations" />
+                        }
+                    </div>
+                </div>
+            </article>
+        }
+    </div>
+    <form class="bai-chat-composer" @onsubmit="SubmitAsync" @onsubmit:preventDefault="true">
+        <div class="bai-composer-box">
+            <input class="bai-spacer" style="border:0; background:transparent; color:inherit; outline:none; padding:.4rem 0" @bind="_input" @bind:event="oninput"
+                   placeholder="@Placeholder" aria-label="Question" disabled="@(Kb.ChunkCount == 0)" />
+            @if (IsBusy)
+            {
+                <button type="button" class="bai-btn" aria-label="Stop" @onclick="CancelCurrent"><i class="bi bi-stop-fill"></i></button>
+            }
+            else
+            {
+                <button type="submit" class="bai-btn bai-btn-ai" aria-label="Ask" disabled="@(string.IsNullOrWhiteSpace(_input) || Kb.ChunkCount == 0)"><i class="bi bi-arrow-up"></i></button>
+            }
+        </div>
+    </form>
+</div>
+
+@code {
+    private readonly List<Turn> _turns = [];
+    private ElementReference _log;
+    private string? _input;
+    private bool _scroll;
+
+    [Inject] private KnowledgeBase Kb { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Ask your documents";
+    [Parameter] public string Icon { get; set; } = "bi-journal-text";
+    [Parameter] public string EmptyTitle { get; set; } = "Ask anything about your documents";
+    [Parameter] public string Placeholder { get; set; } = "Ask a question…";
+    [Parameter] public string Height { get; set; } = "560px";
+    [Parameter] public IReadOnlyList<string>? Suggestions { get; set; }
+
+    /// <summary>Restrict answers to one document (PdfChat uses this).</summary>
+    [Parameter] public string? DocumentId { get; set; }
+
+    [Parameter] public int TopK { get; set; } = 5;
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
+    [Parameter] public EventCallback<RagAnswer> OnAnswer { get; set; }
+
+    private string Scope => DocumentId is not null && Kb.Documents.FirstOrDefault(d => d.Id == DocumentId) is { } doc
+        ? $"Answering from {doc.Name}"
+        : $"{Kb.Documents.Count} documents · {Kb.ChunkCount} passages";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_scroll)
+        {
+            _scroll = false;
+            await Js.ScrollToBottomAsync(_log);
+        }
+    }
+
+    private Task SubmitAsync()
+    {
+        var question = _input;
+        _input = null;
+        return AskAsync(question);
+    }
+
+    public Task AskAsync(string? question)
+    {
+        if (string.IsNullOrWhiteSpace(question) || IsBusy)
+        {
+            return Task.CompletedTask;
+        }
+
+        var history = _turns.Where(t => t.Error is null).Select(t => new ChatMessage(t.IsUser ? ChatRole.User : ChatRole.Assistant, t.Text)).ToList();
+        _turns.Add(new Turn(true) { Text = question.Trim() });
+        var answer = new Turn(false);
+        _turns.Add(answer);
+        _scroll = true;
+
+        return RunAsync(async ct =>
+        {
+            try
+            {
+                var (citations, tokens) = await Kb.AskStreamingAsync(question, history, TopK, DocumentId, Provider, ct);
+                answer.Citations = citations;
+                StateHasChanged();
+                var builder = new StringBuilder();
+                await foreach (var token in tokens.WithCancellation(ct))
+                {
+                    builder.Append(token);
+                    answer.Text = builder.ToString();
+                    _scroll = true;
+                    RenderThrottled();
+                }
+
+                await OnAnswer.InvokeAsync(new RagAnswer(answer.Text, citations));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                answer.Error = Describe(ex);
+            }
+
+            _scroll = true;
+        });
+    }
+
+    private void Clear()
+    {
+        CancelCurrent();
+        _turns.Clear();
+    }
+
+    private sealed class Turn(bool isUser)
+    {
+        public bool IsUser { get; } = isUser;
+        public string Text { get; set; } = string.Empty;
+        public IReadOnlyList<KnowledgeHit> Citations { get; set; } = [];
+        public string? Error { get; set; }
+    }
+}

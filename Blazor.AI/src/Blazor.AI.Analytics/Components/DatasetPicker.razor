@@ -1,0 +1,71 @@
+@namespace Blazor.AI.Analytics
+@implements IDisposable
+@* Chooses the workspace dataset: a built-in sample or an uploaded CSV. Shared by all analytics components. *@
+
+<div class="bai-row @Class">
+    <select class="bai-select" style="width:auto; min-width:13rem" value="@Workspace.Dataset.Name" @onchange="Pick" aria-label="Dataset">
+        @foreach (var (name, _) in SampleDatasets.All) { <option value="@name">@name</option> }
+        @if (SampleDatasets.All.All(s => s.Name != Workspace.Dataset.Name)) { <option value="@Workspace.Dataset.Name">@Workspace.Dataset.Name</option> }
+    </select>
+    <label class="bai-btn-ghost" style="position:relative; cursor:pointer">
+        <i class="bi bi-upload" aria-hidden="true"></i>CSV
+        <InputFile OnChange="UploadAsync" accept=".csv" style="position:absolute; inset:0; opacity:0; cursor:pointer" aria-label="Upload CSV" />
+    </label>
+    @if (ShowTarget)
+    {
+        <select class="bai-select" style="width:auto" value="@Workspace.Dataset.Target" @onchange="SetTarget" aria-label="Target column">
+            <option value="">No target</option>
+            @foreach (var c in Workspace.Dataset.Frame.ColumnNames) { <option value="@c">@c</option> }
+        </select>
+        <select class="bai-select" style="width:auto" value="@Workspace.Dataset.Task" @onchange="SetTask" aria-label="Task">
+            @foreach (var t in Enum.GetValues<MlTask>()) { <option value="@t">@t</option> }
+        </select>
+    }
+    @if (_error is not null) { <span class="bai-small" style="color:var(--bai-danger)">@_error</span> }
+</div>
+
+@code {
+    private string? _error;
+
+    [Inject] private AnalyticsWorkspace Workspace { get; set; } = default!;
+
+    [Parameter] public bool ShowTarget { get; set; } = true;
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized() => Workspace.Changed += Refresh;
+
+    private void Pick(ChangeEventArgs e)
+    {
+        var match = SampleDatasets.All.FirstOrDefault(s => s.Name == e.Value?.ToString());
+        if (match.Create is not null)
+        {
+            Workspace.Dataset = match.Create();
+        }
+    }
+
+    private async Task UploadAsync(InputFileChangeEventArgs e)
+    {
+        _error = null;
+        try
+        {
+            using var reader = new StreamReader(e.File.OpenReadStream(20 * 1024 * 1024));
+            var frame = SampleDatasets.ParseCsv(await reader.ReadToEndAsync());
+            var target = frame.NumericColumns.LastOrDefault()?.Name;
+            Workspace.Dataset = new AnalyticsDataset(System.IO.Path.GetFileNameWithoutExtension(e.File.Name), frame, target, MlTask.Regression, $"Uploaded from {e.File.Name}");
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not read the CSV: {ex.Message}";
+        }
+    }
+
+    private void SetTarget(ChangeEventArgs e) =>
+        Workspace.Dataset = Workspace.Dataset with { Target = string.IsNullOrEmpty(e.Value?.ToString()) ? null : e.Value!.ToString() };
+
+    private void SetTask(ChangeEventArgs e) =>
+        Workspace.Dataset = Workspace.Dataset with { Task = Enum.Parse<MlTask>(e.Value!.ToString()!) };
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Workspace.Changed -= Refresh;
+}

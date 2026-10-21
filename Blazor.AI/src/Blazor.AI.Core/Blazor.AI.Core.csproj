@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Blazor.AI core runtime: multi-provider IChatClient factory (OpenAI, Azure OpenAI, Anthropic, Gemini, Mistral, Cohere, DeepSeek, Grok, Ollama, LocalGen, llama.cpp, Hugging Face), offline simulated provider, SIMD in-memory vector index, Microsoft.Extensions.VectorData adapter, smart-component services and guardrails.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Blazor.AI.Abstractions\Blazor.AI.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+    <PackageReference Include="Microsoft.Extensions.VectorData.Abstractions" />
+    <PackageReference Include="Anthropic" />
+    <PackageReference Include="System.Numerics.Tensors" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Blazor.AI.Tests" />
+  </ItemGroup>
+</Project>

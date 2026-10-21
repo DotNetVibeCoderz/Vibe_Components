@@ -1,0 +1,88 @@
+@namespace Blazor.AI.Analytics
+@* Which variant should we show? Simulate bandit strategies (ε-greedy, UCB1, Thompson sampling) on your options and compare regret. *@
+
+<AiCard Title="@Title" Subtitle="Multi-armed bandits: learn while you earn" Icon="bi-bullseye" Class="@Class">
+    <div class="bai-grid-2" style="align-items:start">
+        <div class="bai-stack">
+            <span class="bai-label">Options and their (unknown in reality) success rates</span>
+            @foreach (var arm in _arms)
+            {
+                <div class="bai-row" style="flex-wrap:nowrap">
+                    <input class="bai-input" @bind="arm.Name" aria-label="Option name" />
+                    <input type="number" step="0.005" min="0" max="1" class="bai-input" style="width:6rem" @bind="arm.Rate" aria-label="@($"Rate of {arm.Name}")" />
+                    <button type="button" class="bai-icon-btn" aria-label="Remove option" disabled="@(_arms.Count <= 2)" @onclick="() => _arms.Remove(arm)"><i class="bi bi-x"></i></button>
+                </div>
+            }
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="AddArm"><i class="bi bi-plus" aria-hidden="true"></i>Option</button>
+                <label class="bai-small">Visitors <input type="number" min="100" max="100000" step="100" class="bai-input" style="width:6.5rem" @bind="_rounds" /></label>
+                <label class="bai-small">ε <input type="number" min="0" max="1" step="0.05" class="bai-input" style="width:4.5rem" @bind="_epsilon" /></label>
+            </div>
+            <button type="button" class="bai-btn bai-btn-ai" style="width:fit-content" @onclick="Simulate"><i class="bi bi-play-fill" aria-hidden="true"></i>Simulate</button>
+        </div>
+        <div class="bai-stack">
+            @if (_runs.Count > 0)
+            {
+                var best = _runs.MinBy(r => r.CumulativeRegret[^1])!;
+                <LineChart Title="Cumulative regret (lower is better)" Series="@_runs.Select(r => new ChartSeries(Label(r.Strategy), Downsample(r.CumulativeRegret))).ToArray()" XLabel="Visitors" Height="240" />
+                <div class="bai-table-wrap">
+                    <table class="bai-table">
+                        <thead><tr><th>Strategy</th><th>Conversions</th><th>Regret</th>@foreach (var a in _arms) { <th>@a.Name</th> }</tr></thead>
+                        <tbody>
+                            @foreach (var r in _runs)
+                            {
+                                <tr style="@(r == best ? "background:var(--bai-soga-soft)" : null)">
+                                    <td>@Label(r.Strategy)</td>
+                                    <td class="bai-num">@r.CumulativeReward[^1].ToString("N0")</td>
+                                    <td class="bai-num">@r.CumulativeRegret[^1].ToString("0.0", CultureInfo.InvariantCulture)</td>
+                                    @foreach (var pulls in r.Pulls) { <td class="bai-num">@((pulls / (double)_rounds).ToString("P0", CultureInfo.InvariantCulture))</td> }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="bai-small bai-muted" style="margin:0">Columns per option show the share of traffic each strategy sent there. Regret = conversions lost versus always showing the best option.</p>
+            }
+        </div>
+    </div>
+</AiCard>
+
+@code {
+    private readonly List<Arm> _arms = [new() { Name = "Banner A", Rate = 0.04 }, new() { Name = "Banner B", Rate = 0.052 }, new() { Name = "Banner C", Rate = 0.047 }];
+    private List<BanditRun> _runs = [];
+    private int _rounds = 5_000;
+    private double _epsilon = 0.1;
+
+    [Parameter] public string Title { get; set; } = "Strategy optimizer";
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized() => Simulate();
+
+    private void Simulate()
+    {
+        var rates = _arms.Select(a => Math.Clamp(a.Rate, 0, 1)).ToArray();
+        _runs = Enum.GetValues<BanditStrategy>().Select(s => Bandits.Run(s, rates, Math.Clamp(_rounds, 100, 100_000), _epsilon)).ToList();
+    }
+
+    private void AddArm() => _arms.Add(new Arm { Name = "Variant " + (char)('A' + _arms.Count), Rate = 0.05 });
+
+    private static string Label(BanditStrategy s) => s switch
+    {
+        BanditStrategy.EpsilonGreedy => "ε-greedy",
+        BanditStrategy.Ucb1 => "UCB1",
+        BanditStrategy.ThompsonSampling => "Thompson sampling",
+        _ => "Even split (A/B/n test)",
+    };
+
+    private static ChartPoint[] Downsample(double[] values)
+    {
+        var step = Math.Max(1, values.Length / 200);
+        return Enumerable.Range(0, values.Length / step).Select(i => new ChartPoint(i * step + 1, values[i * step])).ToArray();
+    }
+
+    private sealed class Arm
+    {
+        public string Name { get; set; } = string.Empty;
+        public double Rate { get; set; }
+    }
+}

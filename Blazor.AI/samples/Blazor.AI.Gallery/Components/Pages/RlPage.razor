@@ -1,0 +1,48 @@
+@page "/rl"
+<PageTitle>Reinforcement learning · Blazor.AI</PageTitle>
+
+<PageHeader Title="Reinforcement learning" Package="Blazor.AI.Analytics" Icon="bi-joystick"
+            Lead="Design an environment, shape its rewards, train RLNet agents (Q-learning, DQN, PPO, A2C, SAC, TD3) and watch what they learned. All components share one workspace." />
+
+<DemoSection Title="EnvironmentDesigner" Component="EnvironmentDesigner" Description="Paint walls, traps, the start and the goal." Code="@EnvCode">
+    <EnvironmentDesigner />
+</DemoSection>
+
+<DemoSection Title="RewardDesigner" Component="RewardDesigner" Description="Change rewards and slip, retrain, and see how the learned path changes." Code="@RewardCode">
+    <RewardDesigner />
+</DemoSection>
+
+<DemoSection Title="RLTrainingStudio" Component="RLTrainingStudio" Description="Your grid world or classic environments: CartPole, MountainCar, LunarLander, Pendulum, trading, supply chain." Code="@TrainCode">
+    <RLTrainingStudio />
+</DemoSection>
+
+<DemoSection Title="PolicyVisualizer" Component="PolicyVisualizer" Description="Best action and value per cell for Q-learning agents." Code="@PolicyCode">
+    <PolicyVisualizer />
+</DemoSection>
+
+<DemoSection Title="SimulationRunner" Component="SimulationRunner" Description="Replay any trained agent step by step." Code="@SimCode">
+    <SimulationRunner />
+</DemoSection>
+
+<DemoSection Title="AgentPerformanceTracker" Component="AgentPerformanceTracker" Description="Compare learning curves, stability and training time across runs." Code="@PerfCode">
+    <AgentPerformanceTracker />
+</DemoSection>
+
+<DemoSection Title="StrategyOptimizer" Component="StrategyOptimizer" Description="Bandits for live strategy choice: ε-greedy, UCB1 and Thompson sampling vs a plain A/B split." Code="@BanditCode">
+    <StrategyOptimizer />
+</DemoSection>
+
+@code {
+    private const string EnvCode = """
+        builder.Services.AddBlazorAIAnalytics();   // registers RlWorkspace
+
+        <EnvironmentDesigner />
+        """;
+
+    private const string RewardCode = """<RewardDesigner Episodes="400" />""";
+    private const string TrainCode = """<RLTrainingStudio OnTrained="Save" />""";
+    private const string PolicyCode = """<PolicyVisualizer />""";
+    private const string SimCode = """<SimulationRunner />""";
+    private const string PerfCode = """<AgentPerformanceTracker />""";
+    private const string BanditCode = """<StrategyOptimizer />""";
+}

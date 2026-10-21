@@ -1,0 +1,346 @@
+@namespace Blazor.AI.Agents
+@implements IDisposable
+@*
+    Visual workflow designer: drag nodes, connect an output port (right) to an input port (left),
+    configure nodes in the inspector, then run the workflow and watch each node light up.
+*@
+
+<div class="@($"bai-stack {Class}".Trim())">
+    <div class="bai-row">
+        <span class="bai-label" style="margin:0">Add</span>
+        @foreach (var kind in new[] { WorkflowNodeKind.Agent, WorkflowNodeKind.Tool, WorkflowNodeKind.Condition, WorkflowNodeKind.Transform, WorkflowNodeKind.End })
+        {
+            <button type="button" class="bai-chip" @onclick="() => AddNode(kind)"><i class="bi @KindIcon(kind)" aria-hidden="true"></i>@kind</button>
+        }
+        <span class="bai-spacer"></span>
+        <button type="button" class="bai-btn-ghost" @onclick="LoadSample">Load sample</button>
+        <button type="button" class="bai-btn-ghost" @onclick="ExportAsync"><i class="bi bi-download" aria-hidden="true"></i>Export JSON</button>
+    </div>
+
+    <div style="display:grid; grid-template-columns:minmax(0, 3fr) minmax(16rem, 1fr); gap:1rem; align-items:start">
+        <div class="bai-glass" style="overflow:auto; padding:0">
+            <svg @ref="_svg" viewBox="0 0 @Width @Height" style="display:block; width:100%; min-width:720px; touch-action:none; background-image:radial-gradient(var(--bai-line-strong) 1px, transparent 1px); background-size:22px 22px"
+                 @onpointermove="OnPointerMove" @onpointerup="EndDrag" @onpointerleave="EndDrag" @onclick="() => { _selected = null; _connectFrom = null; }" role="application" aria-label="Workflow canvas">
+                <defs>
+                    <marker id="wf-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--bai-ink-faint)" /></marker>
+                </defs>
+                @foreach (var edge in Workflow.Edges)
+                {
+                    var from = Workflow.Nodes.FirstOrDefault(n => n.Id == edge.From);
+                    var to = Workflow.Nodes.FirstOrDefault(n => n.Id == edge.To);
+                    if (from is null || to is null) { continue; }
+                    var x1 = from.X + NodeW; var y1 = from.Y + NodeH / 2;
+                    var x2 = to.X; var y2 = to.Y + NodeH / 2;
+                    var mid = (x1 + x2) / 2;
+                    var active = from.Status == WorkflowNodeStatus.Done && to.Status != WorkflowNodeStatus.Skipped && to.Status != WorkflowNodeStatus.Idle;
+                    <g @onclick="() => RemoveEdge(edge)" @onclick:stopPropagation="true" style="cursor:pointer">
+                        <path d="@($"M{S(x1)},{S(y1)} C{S(mid)},{S(y1)} {S(mid)},{S(y2)} {S(x2 - 2)},{S(y2)}")" fill="none" stroke="transparent" stroke-width="12" />
+                        <path d="@($"M{S(x1)},{S(y1)} C{S(mid)},{S(y1)} {S(mid)},{S(y2)} {S(x2 - 2)},{S(y2)}")" fill="none"
+                              stroke="@(active ? "var(--bai-soga)" : "var(--bai-ink-faint)")" stroke-width="@(active ? 2.5 : 1.5)" marker-end="url(#wf-arrow)"><title>Click to remove this connection</title></path>
+                        @if (edge.Label is not null)
+                        {
+                            <!text x="@S(mid)" y="@S((y1 + y2) / 2 - 5)" text-anchor="middle" class="bai-edge-label" style="font-weight:600">@edge.Label</!text>
+                        }
+                    </g>
+                }
+                @foreach (var node in Workflow.Nodes)
+                {
+                    var selected = node == _selected;
+                    <g transform="@($"translate({S(node.X)},{S(node.Y)})")" @onclick="() => Select(node)" @onclick:stopPropagation="true">
+                        <rect width="@NodeW" height="@NodeH" rx="12" fill="var(--bai-glass-strong)" stroke="@StatusColor(node)" stroke-width="@(selected ? 2.5 : 1.5)"
+                              style="cursor:grab" @onpointerdown="e => StartDrag(e, node)" @onpointerdown:stopPropagation="true" />
+                        <rect width="6" height="@NodeH" rx="3" fill="@KindColor(node.Kind)" pointer-events="none" />
+                        <!text x="16" y="22" class="bai-node-label" style="font-weight:600">@Truncate(node.Title, 18)</!text>
+                        <!text x="16" y="40" class="bai-axis-text">@Subtitle(node)</!text>
+                        @if (node.Status == WorkflowNodeStatus.Running)
+                        {
+                            <circle cx="@(NodeW - 14)" cy="14" r="5" fill="var(--bai-soga)"><animate attributeName="opacity" values="1;.2;1" dur="1s" repeatCount="indefinite" /></circle>
+                        }
+                        @if (node.Kind != WorkflowNodeKind.Start)
+                        {
+                            <circle cx="0" cy="@(NodeH / 2)" r="6" fill="@(_connectFrom is null ? "var(--bai-bg)" : "var(--bai-soga)")" stroke="var(--bai-ink-faint)" style="cursor:crosshair"
+                                    @onclick="() => CompleteConnection(node)" @onclick:stopPropagation="true"><title>Input: click after choosing an output</title></circle>
+                        }
+                        @if (node.Kind != WorkflowNodeKind.End)
+                        {
+                            <circle cx="@NodeW" cy="@(NodeH / 2)" r="6" fill="@(_connectFrom == node ? "var(--bai-soga)" : "var(--bai-bg)")" stroke="var(--bai-ink-faint)" style="cursor:crosshair"
+                                    @onclick="() => _connectFrom = node" @onclick:stopPropagation="true"><title>Output: click, then click another node's input</title></circle>
+                        }
+                    </g>
+                }
+            </svg>
+        </div>
+
+        <div class="bai-stack">
+            <AiCard Title="@(_selected is null ? "Run" : "Node")" Icon="@(_selected is null ? "bi-play-circle" : KindIcon(_selected.Kind))">
+                @if (_selected is null)
+                {
+                    <div class="bai-stack">
+                        <p class="bai-small bai-muted" style="margin:0">Click an output port, then another node's input port to connect. Click a connection to remove it.</p>
+                        <label class="bai-label" for="wf-input">Input for the Start node</label>
+                        <textarea id="wf-input" class="bai-textarea" rows="3" @bind="_input"></textarea>
+                        @if (_cts is null)
+                        {
+                            <button type="button" class="bai-btn bai-btn-ai" disabled="@string.IsNullOrWhiteSpace(_input)" @onclick="RunAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Run workflow</button>
+                        }
+                        else
+                        {
+                            <button type="button" class="bai-btn" @onclick="() => _cts?.Cancel()"><i class="bi bi-stop-fill" aria-hidden="true"></i>Stop</button>
+                        }
+                        <AiError Message="@_error" />
+                        @if (!string.IsNullOrEmpty(_result)) { <div class="bai-output" style="max-height:20rem; overflow:auto"><AiMarkdown Text="@_result" /></div> }
+                    </div>
+                }
+                else
+                {
+                    <div class="bai-stack">
+                        <div><label class="bai-label" for="wf-title">Title</label><input id="wf-title" class="bai-input" @bind="_selected.Title" /></div>
+                        @if (_selected.Kind == WorkflowNodeKind.Agent)
+                        {
+                            <div>
+                                <label class="bai-label" for="wf-agent">Agent</label>
+                                <select id="wf-agent" class="bai-select" @bind="_selected.Target">
+                                    <option value="">Choose…</option>
+                                    @foreach (var a in Catalog.Agents) { <option value="@a.Id">@a.Name</option> }
+                                </select>
+                            </div>
+                            <div><label class="bai-label" for="wf-cfg">Extra instruction</label><textarea id="wf-cfg" class="bai-textarea" rows="3" @bind="_selected.Config"></textarea></div>
+                        }
+                        else if (_selected.Kind == WorkflowNodeKind.Tool)
+                        {
+                            <div>
+                                <label class="bai-label" for="wf-tool">Tool</label>
+                                <select id="wf-tool" class="bai-select" @bind="_selected.Target">
+                                    <option value="">Choose…</option>
+                                    @foreach (var t in Runtime.Tools.Tools) { <option value="@t.Name">@t.Name</option> }
+                                </select>
+                            </div>
+                            <div><label class="bai-label" for="wf-cfg2">Arguments (JSON, {{input}} = incoming text)</label><textarea id="wf-cfg2" class="bai-textarea" rows="3" style="font-family:var(--bai-font-mono)" @bind="_selected.Config"></textarea></div>
+                        }
+                        else if (_selected.Kind == WorkflowNodeKind.Condition)
+                        {
+                            <div><label class="bai-label" for="wf-cond">Take "yes" when the input contains</label><input id="wf-cond" class="bai-input" @bind="_selected.Config" /></div>
+                        }
+                        else if (_selected.Kind == WorkflowNodeKind.Transform)
+                        {
+                            <div><label class="bai-label" for="wf-tr">Template ({{input}} = incoming text)</label><textarea id="wf-tr" class="bai-textarea" rows="3" @bind="_selected.Config"></textarea></div>
+                        }
+                        @if (!string.IsNullOrEmpty(_selected.Output))
+                        {
+                            <div><span class="bai-label">Last output</span><div class="bai-output" style="max-height:14rem; overflow:auto"><AiMarkdown Text="@_selected.Output" /></div></div>
+                        }
+                        @if (_selected.Kind != WorkflowNodeKind.Start)
+                        {
+                            <button type="button" class="bai-btn-ghost" @onclick="DeleteSelected"><i class="bi bi-trash3" aria-hidden="true"></i>Delete node</button>
+                        }
+                    </div>
+                }
+            </AiCard>
+        </div>
+    </div>
+</div>
+
+@code {
+    private const double NodeW = 150;
+    private const double NodeH = 54;
+    private ElementReference _svg;
+    private WorkflowNode? _selected, _dragging, _connectFrom;
+    private (double X, double Y) _grab;
+    private BlazorAIJs.Rect _rect;
+    private CancellationTokenSource? _cts;
+    private string? _input = "The impact of electric motorbikes on air quality in Jakarta, including 2024 adoption at 35% growth";
+    private string? _result, _error;
+    private long _lastRender;
+
+    [Inject] private AgentCatalog Catalog { get; set; } = default!;
+    [Inject] private AgentRuntime Runtime { get; set; } = default!;
+    [Inject] private WorkflowExecutor Executor { get; set; } = default!;
+    [Inject] private BlazorAIJs Js { get; set; } = default!;
+
+    [Parameter] public AgentWorkflow Workflow { get; set; } = AgentWorkflow.Sample();
+    [Parameter] public int Width { get; set; } = 1080;
+    [Parameter] public int Height { get; set; } = 380;
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public EventCallback<string> OnCompleted { get; set; }
+
+    private static string S(double v) => v.ToString("0.#", CultureInfo.InvariantCulture);
+
+    private void AddNode(WorkflowNodeKind kind)
+    {
+        var node = new WorkflowNode
+        {
+            Kind = kind,
+            Title = kind.ToString(),
+            X = 40 + Workflow.Nodes.Count * 30 % 400,
+            Y = 30 + Workflow.Nodes.Count * 24 % 260,
+            Target = kind == WorkflowNodeKind.Agent ? Catalog.Agents.FirstOrDefault()?.Id : kind == WorkflowNodeKind.Tool ? "calculate" : null,
+            Config = kind == WorkflowNodeKind.Tool ? "{\"expression\": \"{{input}}\"}" : kind == WorkflowNodeKind.Transform ? "Summary request:\n{{input}}" : null,
+        };
+        Workflow.Nodes.Add(node);
+        _selected = node;
+    }
+
+    private void LoadSample()
+    {
+        Workflow = AgentWorkflow.Sample();
+        _selected = null;
+        _result = null;
+    }
+
+    private void Select(WorkflowNode node)
+    {
+        if (_connectFrom is not null && _connectFrom != node)
+        {
+            CompleteConnection(node);
+            return;
+        }
+
+        _selected = node;
+    }
+
+    private void CompleteConnection(WorkflowNode target)
+    {
+        if (_connectFrom is null || _connectFrom == target || target.Kind == WorkflowNodeKind.Start)
+        {
+            return;
+        }
+
+        if (!Workflow.Edges.Any(e => e.From == _connectFrom.Id && e.To == target.Id))
+        {
+            string? label = null;
+            if (_connectFrom.Kind == WorkflowNodeKind.Condition)
+            {
+                // First branch is "yes", second is "no".
+                label = Workflow.Edges.Any(e => e.From == _connectFrom.Id && e.Label == "yes") ? "no" : "yes";
+            }
+
+            Workflow.Edges.Add(new WorkflowEdge(_connectFrom.Id, target.Id, label));
+        }
+
+        _connectFrom = null;
+    }
+
+    private void RemoveEdge(WorkflowEdge edge) => Workflow.Edges.Remove(edge);
+
+    private void DeleteSelected()
+    {
+        Workflow.Edges.RemoveAll(e => e.From == _selected!.Id || e.To == _selected.Id);
+        Workflow.Nodes.Remove(_selected!);
+        _selected = null;
+    }
+
+    private async Task StartDrag(PointerEventArgs e, WorkflowNode node)
+    {
+        _dragging = node;
+        _rect = await Js.BoundingRectAsync(_svg);
+        var scale = Width / Math.Max(1, _rect.Width);
+        _grab = ((e.ClientX - _rect.X) * scale - node.X, (e.ClientY - _rect.Y) * scale - node.Y);
+    }
+
+    private void OnPointerMove(PointerEventArgs e)
+    {
+        if (_dragging is null || _rect.Width <= 0)
+        {
+            return;
+        }
+
+        var scale = Width / _rect.Width;
+        _dragging.X = Math.Clamp((e.ClientX - _rect.X) * scale - _grab.X, 4, Width - NodeW - 8);
+        _dragging.Y = Math.Clamp((e.ClientY - _rect.Y) * scale - _grab.Y, 4, Height - NodeH - 4);
+    }
+
+    private void EndDrag() => _dragging = null;
+
+    private async Task RunAsync()
+    {
+        _cts = new CancellationTokenSource();
+        _error = null;
+        _result = null;
+        try
+        {
+            _result = await Executor.RunAsync(Workflow, _input!, Throttle, _cts.Token);
+            await OnCompleted.InvokeAsync(_result);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _error = AiComponentBase.Describe(ex);
+        }
+        finally
+        {
+            _cts = null;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExportAsync()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            Workflow.Name,
+            Nodes = Workflow.Nodes.Select(n => new { n.Id, Kind = n.Kind.ToString(), n.Title, n.X, n.Y, n.Target, n.Config }),
+            Workflow.Edges,
+        }, new JsonSerializerOptions { WriteIndented = true });
+        await Js.DownloadTextAsync("workflow.json", json, "application/json");
+    }
+
+    private void Throttle()
+    {
+        var now = Environment.TickCount64;
+        if (now - _lastRender > 80)
+        {
+            _lastRender = now;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private string Subtitle(WorkflowNode node) => node.Status switch
+    {
+        WorkflowNodeStatus.Running => "running…",
+        WorkflowNodeStatus.Done => node.Kind == WorkflowNodeKind.Condition ? node.Output ?? "done" : "done",
+        WorkflowNodeStatus.Skipped => "skipped",
+        WorkflowNodeStatus.Failed => "failed",
+        _ => node.Kind switch
+        {
+            WorkflowNodeKind.Agent => Catalog.Get(node.Target ?? string.Empty)?.Name ?? "no agent",
+            WorkflowNodeKind.Tool => node.Target ?? "no tool",
+            WorkflowNodeKind.Condition => $"contains \"{node.Config}\"",
+            _ => node.Kind.ToString().ToLowerInvariant(),
+        },
+    };
+
+    private static string StatusColor(WorkflowNode node) => node.Status switch
+    {
+        WorkflowNodeStatus.Running => "var(--bai-soga)",
+        WorkflowNodeStatus.Done => "var(--bai-nila)",
+        WorkflowNodeStatus.Failed => "var(--bai-danger)",
+        WorkflowNodeStatus.Skipped => "var(--bai-line)",
+        _ => "var(--bai-line-strong)",
+    };
+
+    private static string KindColor(WorkflowNodeKind kind) => kind switch
+    {
+        WorkflowNodeKind.Start => "#2ead9c",
+        WorkflowNodeKind.Agent => "#c9853f",
+        WorkflowNodeKind.Tool => "#3a4aa8",
+        WorkflowNodeKind.Condition => "#8a6fd1",
+        WorkflowNodeKind.Transform => "#d4b13a",
+        _ => "#c2414b",
+    };
+
+    private static string KindIcon(WorkflowNodeKind kind) => kind switch
+    {
+        WorkflowNodeKind.Start => "bi-play-circle",
+        WorkflowNodeKind.Agent => "bi-robot",
+        WorkflowNodeKind.Tool => "bi-tools",
+        WorkflowNodeKind.Condition => "bi-signpost-split",
+        WorkflowNodeKind.Transform => "bi-shuffle",
+        _ => "bi-flag",
+    };
+
+    private static string Truncate(string text, int max) => text.Length <= max ? text : text[..(max - 1)] + "…";
+
+    public void Dispose() => _cts?.Cancel();
+}

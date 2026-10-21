@@ -1,0 +1,90 @@
+@namespace Blazor.AI.Agents
+@implements IDisposable
+@* See, search and edit what agents remember long-term. *@
+
+<AiCard Title="@Title" Subtitle="@($"{Memory.Items.Count} memories")" Icon="bi-memory" Class="@Class">
+    <div class="bai-stack">
+        <div class="bai-row">
+            <select class="bai-select" style="width:auto" @bind="_agent" aria-label="Agent">
+                <option value="">All agents</option>
+                @foreach (var a in Catalog.Agents) { <option value="@a.Name">@a.Name</option> }
+            </select>
+            <input class="bai-input bai-spacer" @bind="_query" @bind:event="oninput" placeholder="Search memory by meaning…" aria-label="Search memory" />
+            <button type="button" class="bai-btn" disabled="@(string.IsNullOrWhiteSpace(_query) || string.IsNullOrEmpty(_agent))" @onclick="RecallAsync" title="Pick an agent to search its memory">Recall</button>
+        </div>
+        <div class="bai-row">
+            <input class="bai-input bai-spacer" @bind="_newFact" placeholder="Add a fact, e.g. The client prefers reports in Bahasa Indonesia" aria-label="New memory" />
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@(string.IsNullOrWhiteSpace(_newFact) || string.IsNullOrEmpty(_agent))" @onclick="AddAsync" title="Pick an agent first"><i class="bi bi-plus-lg" aria-hidden="true"></i>Remember</button>
+        </div>
+
+        @if (_recall is not null)
+        {
+            <div class="bai-output">
+                <span class="bai-label">Recalled for "@_lastQuery"</span>
+                @if (_recall.Count == 0) { <span class="bai-small bai-muted">Nothing relevant.</span> }
+                <AiScoreBars Values="@_recall.Select(r => KeyValuePair.Create(r.Item.Text, r.Score))" />
+            </div>
+        }
+
+        @if (Visible.Count == 0)
+        {
+            <div class="bai-empty"><i class="bi bi-memory" aria-hidden="true"></i>No memories yet. Agents with memory enabled save facts as you chat.</div>
+        }
+        else
+        {
+            <div class="bai-table-wrap">
+                <table class="bai-table">
+                    <thead><tr><th>Memory</th><th>Agent</th><th>Source</th><th>When</th><th><span class="bai-visually-hidden">Actions</span></th></tr></thead>
+                    <tbody>
+                        @foreach (var item in Visible)
+                        {
+                            <tr>
+                                <td>@item.Text</td>
+                                <td><span class="bai-badge">@item.Agent</span></td>
+                                <td class="bai-small bai-muted">@item.Source</td>
+                                <td class="bai-small bai-muted">@item.CreatedAt.ToString("dd MMM HH:mm")</td>
+                                <td><button type="button" class="bai-icon-btn" aria-label="Forget" title="Forget" @onclick="() => Memory.ForgetAsync(item.Id)"><i class="bi bi-trash3"></i></button></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <button type="button" class="bai-btn-ghost" @onclick="() => Memory.ClearAsync(string.IsNullOrEmpty(_agent) ? null : _agent)">Forget all@(string.IsNullOrEmpty(_agent) ? null : $" for {_agent}")</button>
+        }
+    </div>
+</AiCard>
+
+@code {
+    private string? _agent, _query, _newFact, _lastQuery;
+    private IReadOnlyList<(MemoryItem Item, double Score)>? _recall;
+
+    [Inject] private AgentMemory Memory { get; set; } = default!;
+    [Inject] private AgentCatalog Catalog { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Agent memory";
+    [Parameter] public string? Class { get; set; }
+
+    private List<MemoryItem> Visible => Memory.Items.Where(i => string.IsNullOrEmpty(_agent) || i.Agent == _agent).ToList();
+
+    protected override void OnInitialized()
+    {
+        Memory.Changed += Refresh;
+        _agent = Catalog.Agents.FirstOrDefault(a => a.UseMemory)?.Name;
+    }
+
+    private async Task AddAsync()
+    {
+        await Memory.RememberAsync(_agent!, _newFact!, "user");
+        _newFact = null;
+    }
+
+    private async Task RecallAsync()
+    {
+        _lastQuery = _query;
+        _recall = await Memory.RecallAsync(_agent!, _query!, 5);
+    }
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Memory.Changed -= Refresh;
+}

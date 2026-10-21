@@ -1,0 +1,141 @@
+@namespace Blazor.AI.Agents
+@implements IDisposable
+@* Run any registered tool by hand: arguments form generated from its JSON schema, result and timing. *@
+
+<AiCard Title="@Title" Subtitle="@($"{Runtime.Tools.Tools.Count} tools available to agents")" Icon="bi-tools" Class="@Class">
+    <div class="bai-grid-2" style="align-items:start">
+        <div>
+            @foreach (var group in Runtime.Tools.Tools.GroupBy(t => t.Category))
+            {
+                <div class="bai-small bai-muted" style="margin:.5rem 0 .3rem">@group.Key</div>
+                @foreach (var tool in group)
+                {
+                    <button type="button" class="bai-result" style="width:100%; text-align:left; cursor:pointer; @(tool.Name == _tool?.Name ? "border-color:var(--bai-soga)" : null)" @onclick="() => Select(tool)">
+                        <code>@tool.Name</code>
+                        <span class="bai-small bai-muted">@tool.Description</span>
+                    </button>
+                }
+            }
+        </div>
+        @if (_tool is not null)
+        {
+            <div class="bai-stack">
+                <div class="bai-row"><code style="font-size:1rem">@_tool.Name</code><span class="bai-badge">@_tool.Source</span></div>
+                <p class="bai-small bai-muted" style="margin:0">@_tool.Description</p>
+                @foreach (var p in _parameters)
+                {
+                    <div>
+                        <label class="bai-label" for="@($"tp-{p.Name}")">@p.Name <span class="bai-faint">(@p.Type@(p.Required ? ", required" : null))</span></label>
+                        @if (p.Type == "boolean")
+                        {
+                            <input id="@($"tp-{p.Name}")" type="checkbox" class="form-check-input" checked="@(_values.GetValueOrDefault(p.Name) == "true")" @onchange="e => _values[p.Name] = (e.Value is true).ToString().ToLowerInvariant()" />
+                        }
+                        else
+                        {
+                            <input id="@($"tp-{p.Name}")" class="bai-input" type="@(p.Type is "number" or "integer" ? "number" : "text")" placeholder="@p.Description" value="@_values.GetValueOrDefault(p.Name)" @onchange="e => _values[p.Name] = e.Value?.ToString()" />
+                        }
+                    </div>
+                }
+                <div class="bai-row">
+                    <button type="button" class="bai-btn bai-btn-ai" disabled="@_running" @onclick="RunAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Run tool</button>
+                </div>
+                @if (_history.Count > 0)
+                {
+                    @foreach (var entry in _history.AsEnumerable().Reverse().Take(6))
+                    {
+                        <div class="bai-output">
+                            <div class="bai-row bai-small bai-muted"><code>@entry.Tool</code><span>@entry.Args</span><span class="bai-spacer"></span><span class="bai-num">@entry.Ms.ToString("0.0") ms</span></div>
+                            <div style="white-space:pre-wrap; margin-top:.3rem; @(entry.Error ? "color:var(--bai-danger)" : null)">@entry.Result</div>
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </div>
+</AiCard>
+
+@code {
+    private ToolInfo? _tool;
+    private List<Param> _parameters = [];
+    private readonly Dictionary<string, string?> _values = [];
+    private readonly List<Entry> _history = [];
+    private bool _running;
+
+    [Inject] private AgentRuntime Runtime { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Tool execution";
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Runtime.Tools.Changed += Refresh;
+        if (Runtime.Tools.Tools.FirstOrDefault() is { } first)
+        {
+            Select(first);
+        }
+    }
+
+    private void Select(ToolInfo tool)
+    {
+        _tool = tool;
+        _values.Clear();
+        _parameters = [];
+        var schema = tool.Function.JsonSchema;
+        var required = schema.TryGetProperty("required", out var req) && req.ValueKind == JsonValueKind.Array ? req.EnumerateArray().Select(r => r.GetString()).ToHashSet() : [];
+        if (schema.TryGetProperty("properties", out var props) && props.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var p in props.EnumerateObject())
+            {
+                var type = p.Value.TryGetProperty("type", out var t) ? t.ValueKind == JsonValueKind.Array ? t.EnumerateArray().First().GetString() : t.GetString() : "string";
+                var description = p.Value.TryGetProperty("description", out var d) ? d.GetString() : null;
+                _parameters.Add(new Param(p.Name, type ?? "string", description, required.Contains(p.Name)));
+            }
+        }
+    }
+
+    private async Task RunAsync()
+    {
+        _running = true;
+        var args = new AIFunctionArguments();
+        foreach (var p in _parameters)
+        {
+            var raw = _values.GetValueOrDefault(p.Name);
+            if (string.IsNullOrEmpty(raw))
+            {
+                continue;
+            }
+
+            args[p.Name] = p.Type switch
+            {
+                "number" => double.Parse(raw, CultureInfo.InvariantCulture),
+                "integer" => long.Parse(raw, CultureInfo.InvariantCulture),
+                "boolean" => raw == "true",
+                _ => raw,
+            };
+        }
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var argsText = JsonSerializer.Serialize(args.ToDictionary(a => a.Key, a => a.Value));
+        try
+        {
+            var result = await _tool!.Function.InvokeAsync(args);
+            _history.Add(new Entry(_tool.Name, argsText, result?.ToString() ?? "(no result)", stopwatch.Elapsed.TotalMilliseconds, false));
+        }
+        catch (Exception ex)
+        {
+            _history.Add(new Entry(_tool!.Name, argsText, ex.Message, stopwatch.Elapsed.TotalMilliseconds, true));
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Runtime.Tools.Changed -= Refresh;
+
+    private sealed record Param(string Name, string Type, string? Description, bool Required);
+
+    private sealed record Entry(string Tool, string Args, string Result, double Ms, bool Error);
+}

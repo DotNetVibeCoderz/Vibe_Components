@@ -1,0 +1,45 @@
+@page "/coding"
+<PageTitle>Coding · Blazor.AI</PageTitle>
+
+<PageHeader Title="Coding" Package="Blazor.AI.Components" Icon="bi-code-slash"
+            Lead="Assistants for developers inside your own tools: pair programming, structured code review, architecture advice and documentation." />
+
+<DemoSection Title="CodeAssistant" Component="CodeAssistant" Description="Language- and framework-aware pair programmer." Code="@AssistantCode">
+    <CodeAssistant Height="520px" />
+</DemoSection>
+
+<DemoSection Title="CodeReviewPanel" Component="CodeReviewPanel" Description="A score plus severity-ranked findings with line numbers and fixes." Code="@ReviewCode">
+    <CodeReviewPanel Code="@SampleCode" />
+</DemoSection>
+
+<DemoSection Title="ArchitectureAdvisor" Component="ArchitectureAdvisor" Description="Recommendations with trade-offs, risks, milestones and a mermaid diagram." Code="@ArchCode">
+    <ArchitectureAdvisor Values="@(new Dictionary<string, string> { ["system"] = "Telemedicine platform for rural puskesmas clinics", ["scale"] = "30k patients, 400 clinics, poor connectivity", ["stack"] = ".NET 10, Blazor, PostgreSQL, Azure" })" />
+</DemoSection>
+
+<DemoSection Title="DocumentationGenerator" Component="DocumentationGenerator" Description="README sections, API references or XML doc comments from code." Code="@DocsCode">
+    <DocumentationGenerator Values="@(new Dictionary<string, string> { ["code"] = SampleCode })" />
+</DemoSection>
+
+@code {
+    private const string SampleCode = """
+        public class OrderService
+        {
+            private readonly string password = "admin123";
+
+            public decimal GetTotal(SqlConnection db, string customer)
+            {
+                var cmd = new SqlCommand("SELECT SUM(total) FROM orders WHERE customer = '" + customer + "'", db);
+                try
+                {
+                    return (decimal)cmd.ExecuteScalarAsync().Result;
+                }
+                catch (Exception) { return 0; }
+            }
+        }
+        """;
+
+    private const string AssistantCode = """<CodeAssistant Languages="@(["C#", "TypeScript"])" />""";
+    private const string ReviewCode = """<CodeReviewPanel Code="@diff" OnReviewed="PostToPullRequest" />""";
+    private const string ArchCode = """<ArchitectureAdvisor />""";
+    private const string DocsCode = """<DocumentationGenerator Values="@(new Dictionary<string, string> { ["code"] = source })" />""";
+}

@@ -1,0 +1,163 @@
+@namespace Blazor.AI.Analytics
+@inherits AnalyticsComponentBase
+@* Pick a test (t-tests, ANOVA, chi-square) on dataset columns; get the statistic, exact p-value, effect size and a plain-language reading. *@
+
+<AiCard Title="@Title" Subtitle="@Data.Name" Icon="bi-clipboard-data" Class="@Class">
+    <Actions><DatasetPicker ShowTarget="false" /></Actions>
+    <ChildContent>
+        <div class="bai-stack">
+            <div class="bai-grid-2">
+                <div>
+                    <label class="bai-label" for="ht-test">Test</label>
+                    <select id="ht-test" class="bai-select" @bind="_test">
+                        <option value="welch">Compare a measure between two groups (Welch t-test)</option>
+                        <option value="anova">Compare a measure across groups (one-way ANOVA)</option>
+                        <option value="chi">Are two categories related? (chi-square)</option>
+                        <option value="one">Is the mean equal to a value? (one-sample t-test)</option>
+                        <option value="paired">Before vs after on the same rows (paired t-test)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="bai-label" for="ht-alpha">Significance level α</label>
+                    <select id="ht-alpha" class="bai-select" @bind="_alpha">
+                        <option value="0.01">0.01</option>
+                        <option value="0.05">0.05</option>
+                        <option value="0.1">0.10</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="bai-label" for="ht-m">@(_test is "chi" ? "First category" : _test is "paired" ? "Before" : "Measure")</label>
+                    <select id="ht-m" class="bai-select" @bind="_measure">@foreach (var c in Data.Frame.ColumnNames) { <option>@c</option> }</select>
+                </div>
+                <div>
+                    @if (_test == "one")
+                    {
+                        <label class="bai-label" for="ht-mu">Hypothesised mean</label>
+                        <input id="ht-mu" type="number" class="bai-input" @bind="_mu" />
+                    }
+                    else
+                    {
+                        <label class="bai-label" for="ht-g">@(_test is "chi" ? "Second category" : _test is "paired" ? "After" : "Group by")</label>
+                        <select id="ht-g" class="bai-select" @bind="_group">@foreach (var c in Data.Frame.ColumnNames) { <option>@c</option> }</select>
+                    }
+                </div>
+            </div>
+            <button type="button" class="bai-btn bai-btn-ai" style="width:fit-content" @onclick="Run"><i class="bi bi-play-fill" aria-hidden="true"></i>Run test</button>
+            <AiError Message="@_error" />
+            @if (_result is { } r)
+            {
+                <div class="bai-output">
+                    <div class="bai-row" style="margin-bottom:.5rem">
+                        <strong>@r.Test</strong>
+                        <span class="bai-badge @(r.Significant ? "bai-badge-local" : null)">@(r.Significant ? "significant" : "not significant") at α = @r.Alpha</span>
+                    </div>
+                    <div class="bai-stats">
+                        <div class="bai-stat"><div class="bai-stat-label">@r.StatisticName</div><div class="bai-stat-value">@r.Statistic.ToString("0.###", CultureInfo.InvariantCulture)</div></div>
+                        <div class="bai-stat"><div class="bai-stat-label">p-value</div><div class="bai-stat-value">@(r.PValue < 0.0001 ? "< 0.0001" : r.PValue.ToString("0.0000", CultureInfo.InvariantCulture))</div></div>
+                        @if (r.DegreesOfFreedom is { } df) { <div class="bai-stat"><div class="bai-stat-label">df</div><div class="bai-stat-value">@df.ToString("0.#", CultureInfo.InvariantCulture)</div></div> }
+                        @if (r.EffectSize is { } es) { <div class="bai-stat"><div class="bai-stat-label">@r.EffectName</div><div class="bai-stat-value">@es.ToString("0.###", CultureInfo.InvariantCulture)</div></div> }
+                    </div>
+                    @if (r.ConfidenceInterval is { } ci)
+                    {
+                        <p class="bai-small bai-muted" style="margin:.5rem 0 0">@((1 - r.Alpha).ToString("P0", CultureInfo.InvariantCulture)) confidence interval of the difference: @Fmt(ci.Low) to @Fmt(ci.High)</p>
+                    }
+                    <p style="margin:.6rem 0 0">@r.Interpretation</p>
+                </div>
+                @if (_groups.Count > 0)
+                {
+                    <BarChart Title="Group means" Values="@_groups.Select(g => new BarValue(g.Key, g.Value.Average()))" />
+                }
+            }
+        </div>
+    </ChildContent>
+</AiCard>
+
+@code {
+    private string _test = "welch";
+    private double _alpha = 0.05;
+    private string? _measure, _group, _error;
+    private double _mu;
+    private TestResult? _result;
+    private Dictionary<string, List<double>> _groups = [];
+
+    [Parameter] public string Title { get; set; } = "Hypothesis testing";
+
+    protected override void OnDatasetChanged()
+    {
+        _measure = Data.FeatureColumns.FirstOrDefault() ?? Data.NumericColumns.FirstOrDefault();
+        _group = Data.Target ?? Data.Frame.ColumnNames.LastOrDefault();
+        _result = null;
+        _groups = [];
+    }
+
+    private void Run()
+    {
+        _error = null;
+        _result = null;
+        _groups = [];
+        try
+        {
+            var frame = Data.Frame;
+            switch (_test)
+            {
+                case "one":
+                    _result = HypothesisTests.OneSampleTTest(Numeric(_measure), _mu, _alpha);
+                    break;
+                case "paired":
+                    _result = HypothesisTests.PairedTTest(Numeric(_measure), Numeric(_group), _alpha);
+                    break;
+                case "chi":
+                    var a = frame[_measure!].ToStringArray();
+                    var b = frame[_group!].ToStringArray();
+                    var rows = a.Distinct().Take(15).ToList();
+                    var cols = b.Distinct().Take(15).ToList();
+                    if (rows.Count < 2 || cols.Count < 2)
+                    {
+                        _error = "Both columns need at least two categories.";
+                        return;
+                    }
+
+                    var table = new double[rows.Count, cols.Count];
+                    for (var i = 0; i < a.Length; i++)
+                    {
+                        var r = rows.IndexOf(a[i]);
+                        var c = cols.IndexOf(b[i]);
+                        if (r >= 0 && c >= 0) table[r, c]++;
+                    }
+
+                    _result = HypothesisTests.ChiSquareIndependence(table, _alpha);
+                    break;
+                default:
+                    var keys = frame[_group!].ToStringArray();
+                    var values = Numeric(_measure);
+                    _groups = Enumerable.Range(0, values.Length).GroupBy(i => keys[i]).ToDictionary(g => g.Key, g => g.Select(i => values[i]).ToList());
+                    if (_groups.Count < 2 || _groups.Count > 30)
+                    {
+                        _error = $"\"{_group}\" has {_groups.Count} distinct values; pick a column with 2–30 groups.";
+                        _groups = [];
+                        return;
+                    }
+
+                    if (_test == "welch")
+                    {
+                        var two = _groups.OrderByDescending(g => g.Value.Count).Take(2).ToList();
+                        _groups = two.ToDictionary(g => g.Key, g => g.Value);
+                        _result = HypothesisTests.WelchTTest(two[0].Value, two[1].Value, _alpha, $"{_group}={two[0].Key}", $"{_group}={two[1].Key}");
+                    }
+                    else
+                    {
+                        _result = HypothesisTests.OneWayAnova(_groups.Values.Select(g => (IReadOnlyList<double>)g).ToList(), _alpha);
+                    }
+
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private double[] Numeric(string? column) =>
+        column is not null && Data.Frame[column] is NumericSeries n ? n.FillMissingWithMean().Values : throw new InvalidOperationException($"\"{column}\" must be numeric for this test.");
+}

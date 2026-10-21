@@ -1,0 +1,89 @@
+@namespace Blazor.AI.Analytics
+@inherits AnalyticsComponentBase
+@* Forecast a time series with Holt-Winters, Holt, seasonal naive or a linear trend; compare methods by in-sample error. *@
+
+<AiCard Title="@Title" Subtitle="@Data.Name" Icon="bi-graph-up-arrow" Class="@Class">
+    <Actions><DatasetPicker ShowTarget="false" /></Actions>
+    <ChildContent>
+        <div class="bai-stack">
+            <div class="bai-row">
+                <select class="bai-select" style="width:auto" @bind="_column" aria-label="Series">
+                    @foreach (var c in Data.NumericColumns) { <option>@c</option> }
+                </select>
+                <select class="bai-select" style="width:auto" @bind="_method" aria-label="Method">
+                    <option value="@ForecastMethod.HoltWinters">Holt-Winters (trend + season)</option>
+                    <option value="@ForecastMethod.Holt">Holt (trend)</option>
+                    <option value="@ForecastMethod.SeasonalNaive">Seasonal naive</option>
+                    <option value="@ForecastMethod.LinearTrend">Linear trend</option>
+                </select>
+                <label class="bai-small">Season <input type="number" min="2" max="52" class="bai-input" style="width:4.5rem" @bind="_period" /></label>
+                <label class="bai-small">Horizon <input type="number" min="1" max="60" class="bai-input" style="width:4.5rem" @bind="_horizon" /></label>
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@(Series.Count < 4)" @onclick="Run"><i class="bi bi-play-fill" aria-hidden="true"></i>Forecast</button>
+            </div>
+            @if (_result is { } r)
+            {
+                <ForecastCharts History="@Series" Forecast="@r.Forecast" Lower="@r.Lower" Upper="@r.Upper" Title="@($"{_column}: next {_horizon} periods")" Subtitle="@($"{r.Method} · in-sample MAPE {r.Mape:0.0}%")" />
+                <div>
+                    <span class="bai-label">Method comparison (in-sample MAPE, lower is better)</span>
+                    <AiScoreBars Values="@_comparison" AsPercent="false" Sort="false" Highlight="@r.Method.ToString()" />
+                </div>
+                <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="ExplainAsync"><i class="bi bi-stars" aria-hidden="true"></i>Explain the forecast</button>
+                @if (_explanation is not null) { <AiOutput Text="@_explanation" IsBusy="@IsBusy" /> }
+                <AiError Message="@Error" />
+            }
+        </div>
+    </ChildContent>
+</AiCard>
+
+@code {
+    private string? _column, _explanation;
+    private ForecastMethod _method = ForecastMethod.HoltWinters;
+    private int _period = 12, _horizon = 12;
+    private ForecastResult? _result;
+    private List<KeyValuePair<string, double>> _comparison = [];
+
+    [Parameter] public string Title { get; set; } = "Forecasting workbench";
+
+    private IReadOnlyList<double> Series => _column is not null && Data.Frame.HasColumn(_column) && Data.Frame[_column] is NumericSeries n ? n.FillMissingWithMean().Values : [];
+
+    protected override void OnDatasetChanged()
+    {
+        _column = Data.Target is { } t && Data.NumericColumns.Contains(t) ? t : Data.NumericColumns.LastOrDefault();
+        _result = null;
+        _explanation = null;
+        if (Data.Task == MlTask.TimeSeries)
+        {
+            Run();
+        }
+    }
+
+    private void Run()
+    {
+        var series = Series;
+        if (series.Count < 4)
+        {
+            return;
+        }
+
+        _result = TimeSeriesTools.Forecast(series, _horizon, _method, _period);
+        _comparison = Enum.GetValues<ForecastMethod>().Select(m => KeyValuePair.Create(m.ToString(), TimeSeriesTools.Forecast(series, _horizon, m, _period).Mape)).ToList();
+        _explanation = null;
+    }
+
+    private Task ExplainAsync() => RunAsync(async ct =>
+    {
+        var r = _result!;
+        var facts = $"Series '{_column}' with {Series.Count} points; last 6: {string.Join(", ", Series.TakeLast(6).Select(v => v.ToString("0.#", CultureInfo.InvariantCulture)))}.\n" +
+                    $"Method {r.Method}, in-sample MAPE {r.Mape:0.0}%. Forecast next {_horizon}: {string.Join(", ", r.Forecast.Select(v => v.ToString("0.#", CultureInfo.InvariantCulture)))}.\n" +
+                    $"95% interval at horizon: {r.Lower[^1]:0.#} – {r.Upper[^1]:0.#}.";
+        var builder = new StringBuilder();
+        _explanation = string.Empty;
+        await foreach (var token in Ai.StreamAsync("Explain this forecast to a planner in 3-4 sentences: direction, seasonality, uncertainty, and one action. Use only the numbers given.",
+                           PromptTags.Wrap(PromptTags.Input, facts), AiTasks.Insight, Provider, null, ct))
+        {
+            builder.Append(token);
+            _explanation = builder.ToString();
+            RenderThrottled();
+        }
+    });
+}

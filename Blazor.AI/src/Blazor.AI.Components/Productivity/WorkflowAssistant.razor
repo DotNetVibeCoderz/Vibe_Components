@@ -1,0 +1,140 @@
+@namespace Blazor.AI.Components
+@inherits AiComponentBase
+@*
+    Turns a goal into an editable step-by-step plan, then executes the steps one by one.
+    Each step sees the outputs of the steps before it, so the plan builds on itself.
+*@
+
+<AiCard Title="@Title" Subtitle="@Subtitle" Icon="bi-signpost-split" Class="@Class">
+    <div class="bai-stack">
+        <div class="bai-row">
+            <input class="bai-input bai-spacer" @bind="_goal" placeholder="Goal, e.g. Launch a customer newsletter for our coffee shop next month" aria-label="Goal" />
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(_goal))" @onclick="PlanAsync">
+                <i class="bi bi-diagram-2" aria-hidden="true"></i>Plan it
+            </button>
+        </div>
+        <AiError Message="@Error" />
+
+        @if (_steps.Count > 0)
+        {
+            <div class="bai-row">
+                <span class="bai-muted bai-small">@_steps.Count(s => s.Status == StepStatus.Done) of @_steps.Count steps done</span>
+                <span class="bai-spacer"></span>
+                <button type="button" class="bai-btn" disabled="@IsBusy" @onclick="RunAllAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Run remaining steps</button>
+                @if (IsBusy) { <button type="button" class="bai-btn-ghost" @onclick="CancelCurrent">Stop</button> }
+            </div>
+            <ol style="list-style:none; padding:0; margin:0">
+                @for (var i = 0; i < _steps.Count; i++)
+                {
+                    var step = _steps[i];
+                    var index = i;
+                    <li class="bai-result" style="margin-top:.5rem">
+                        <div class="bai-result-head">
+                            <span class="bai-row" style="flex-wrap:nowrap">
+                                <span class="bai-badge @StatusClass(step.Status)">@(index + 1)</span>
+                                <input class="bai-input" style="padding:.3rem .5rem; font-weight:600" @bind="step.Title" aria-label="@($"Step {index + 1} title")" />
+                            </span>
+                            <span class="bai-row" style="flex-wrap:nowrap">
+                                @if (step.Status == StepStatus.Running) { <AiThinking Label="@null" /> }
+                                <button type="button" class="bai-icon-btn" title="Run this step" aria-label="Run step" disabled="@IsBusy" @onclick="() => RunStepAsync(index)"><i class="bi bi-play"></i></button>
+                                <button type="button" class="bai-icon-btn" title="Remove step" aria-label="Remove step" disabled="@IsBusy" @onclick="() => _steps.RemoveAt(index)"><i class="bi bi-x"></i></button>
+                            </span>
+                        </div>
+                        <span class="bai-small bai-muted">@step.Description</span>
+                        @if (!string.IsNullOrEmpty(step.Output))
+                        {
+                            <details open="@(step.Status == StepStatus.Running)">
+                                <summary class="bai-small" style="cursor:pointer">Result</summary>
+                                <div class="bai-output" style="margin-top:.4rem"><AiMarkdown Text="@step.Output" /></div>
+                            </details>
+                        }
+                    </li>
+                }
+            </ol>
+            <button type="button" class="bai-btn-ghost" disabled="@IsBusy" @onclick="AddStep"><i class="bi bi-plus" aria-hidden="true"></i>Add step</button>
+        }
+    </div>
+</AiCard>
+
+@code {
+    private readonly List<WorkflowStep> _steps = [];
+    private string? _goal;
+
+    [Parameter] public string Title { get; set; } = "Workflow assistant";
+    [Parameter] public string? Subtitle { get; set; } = "Plan, edit, then execute step by step";
+    [Parameter] public int MaxSteps { get; set; } = 6;
+    [Parameter] public EventCallback<IReadOnlyList<WorkflowStep>> OnCompleted { get; set; }
+
+    public IReadOnlyList<WorkflowStep> Steps => _steps;
+
+    private Task PlanAsync() => RunAsync(async ct =>
+    {
+        var system = $"You plan work. Break the goal into 3-{MaxSteps} concrete, ordered steps. Reply with JSON only: " +
+                     "{\"tasks\": [{\"title\": short imperative, \"description\": one sentence}]}.";
+        var node = await Ai.GenerateJsonAsync(system, PromptTags.Wrap(PromptTags.Input, _goal), AiTasks.Plan, Provider, ct);
+        _steps.Clear();
+        foreach (var task in (node?["tasks"] as JsonArray ?? []).OfType<JsonObject>().Take(MaxSteps))
+        {
+            _steps.Add(new WorkflowStep { Title = task["title"]?.ToString() ?? "Step", Description = task["description"]?.ToString() });
+        }
+
+        if (_steps.Count == 0)
+        {
+            Error = "The model did not return a plan. Rephrase the goal and try again.";
+        }
+    });
+
+    private Task RunStepAsync(int index) => RunAsync(ct => ExecuteAsync(index, ct));
+
+    private Task RunAllAsync() => RunAsync(async ct =>
+    {
+        for (var i = 0; i < _steps.Count; i++)
+        {
+            if (_steps[i].Status != StepStatus.Done)
+            {
+                await ExecuteAsync(i, ct);
+            }
+        }
+
+        await OnCompleted.InvokeAsync(_steps);
+    });
+
+    private async Task ExecuteAsync(int index, CancellationToken ct)
+    {
+        var step = _steps[index];
+        step.Status = StepStatus.Running;
+        step.Output = string.Empty;
+        var previous = string.Join("\n\n", _steps.Take(index).Where(s => !string.IsNullOrEmpty(s.Output)).Select(s => $"### {s.Title}\n{s.Output}"));
+        var system = "You are executing one step of a plan. Produce the actual deliverable for this step (not advice about it), in concise markdown. " +
+                     "Build on the results of earlier steps.";
+        var user = $"Overall goal: {_goal}\n\nCurrent step: {step.Title}\n{step.Description}\n\n" +
+                   (previous.Length > 0 ? PromptTags.Wrap(PromptTags.Context, previous) : string.Empty);
+        var builder = new StringBuilder();
+        try
+        {
+            await foreach (var token in Ai.StreamAsync(system, user, AiTasks.Generate, Provider, null, ct))
+            {
+                builder.Append(token);
+                step.Output = builder.ToString();
+                RenderThrottled();
+            }
+
+            step.Status = StepStatus.Done;
+        }
+        catch
+        {
+            step.Status = StepStatus.Failed;
+            throw;
+        }
+    }
+
+    private void AddStep() => _steps.Add(new WorkflowStep { Title = "New step", Description = "Describe what this step should produce." });
+
+    private static string StatusClass(StepStatus status) => status switch
+    {
+        StepStatus.Done => "bai-badge-local",
+        StepStatus.Running => "bai-badge-ai",
+        StepStatus.Failed => "bai-badge-danger",
+        _ => string.Empty,
+    };
+}

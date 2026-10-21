@@ -1,0 +1,72 @@
+@namespace Blazor.AI.Components
+@inherits AiComponentBase
+@* Side-by-side translator with language swap. Streams the translation. *@
+
+<AiCard Title="@Title" Subtitle="@Subtitle" Icon="bi-translate" Class="@Class">
+    <div class="bai-row" style="margin-bottom:.75rem">
+        <select class="bai-select" style="width:auto" @bind="Source" aria-label="Source language">
+            <option value="">Detect language</option>
+            @foreach (var lang in Languages) { <option>@lang</option> }
+        </select>
+        <button type="button" class="bai-icon-btn" title="Swap languages" aria-label="Swap languages" disabled="@string.IsNullOrEmpty(Source)" @onclick="Swap">
+            <i class="bi bi-arrow-left-right"></i>
+        </button>
+        <select class="bai-select" style="width:auto" @bind="Target" aria-label="Target language">
+            @foreach (var lang in Languages) { <option>@lang</option> }
+        </select>
+        <span class="bai-spacer"></span>
+        <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(Text))" @onclick="TranslateAsync">
+            <i class="bi bi-stars" aria-hidden="true"></i>Translate
+        </button>
+    </div>
+    <div class="bai-grid-2">
+        <textarea class="bai-textarea" rows="8" @bind="Text" placeholder="Type or paste text…" aria-label="Text to translate"></textarea>
+        <AiOutput Text="@_result" IsBusy="@IsBusy" Markdown="false" Placeholder="@($"Translation ({Target})")" />
+    </div>
+    <AiError Message="@Error" OnRetry="TranslateAsync" />
+</AiCard>
+
+@code {
+    private string? _result;
+
+    [Parameter] public string Title { get; set; } = "Translator";
+    [Parameter] public string? Subtitle { get; set; } = "Keeps tone and formatting";
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public string? Source { get; set; }
+    [Parameter] public string Target { get; set; } = "Bahasa Indonesia";
+
+    [Parameter] public IReadOnlyList<string> Languages { get; set; } =
+        ["English", "Bahasa Indonesia", "Javanese", "Sundanese", "Malay", "Japanese", "Korean", "Mandarin Chinese", "Arabic", "Spanish", "French", "German", "Dutch", "Portuguese", "Hindi", "Thai", "Vietnamese"];
+
+    [Parameter] public EventCallback<string> OnTranslated { get; set; }
+
+    private void Swap()
+    {
+        if (string.IsNullOrEmpty(Source))
+        {
+            return;
+        }
+
+        (Source, Target) = (Target, Source);
+        if (!string.IsNullOrEmpty(_result))
+        {
+            (Text, _result) = (_result, null);
+        }
+    }
+
+    public Task TranslateAsync() => RunAsync(async ct =>
+    {
+        _result = string.Empty;
+        var system = AiTextService.TranslationSystemPrompt(Target, Source);
+        var user = PromptTags.Wrap(PromptTags.Target, Target) + "\n" + PromptTags.Wrap(PromptTags.Input, Text);
+        var builder = new StringBuilder();
+        await foreach (var token in Ai.StreamAsync(system, user, AiTasks.Translate, Provider, new ChatOptions { Temperature = 0.1f }, ct))
+        {
+            builder.Append(token);
+            _result = builder.ToString();
+            RenderThrottled();
+        }
+
+        await OnTranslated.InvokeAsync(_result);
+    });
+}

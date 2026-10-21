@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <Description>Blazor.AI Razor components: Smart Components (SmartPaste, SmartTextArea, SmartComboBox, SmartSemanticSearch, SmartSummarizer, SmartTranslator, SmartClassifier, SmartEmailComposer, SmartRecommendations), Copilot-style chat, prompt tooling, content and coding assistants with a Bootstrap 5 glassmorphism theme.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+    <PackageReference Include="Markdig" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Blazor.AI.Core\Blazor.AI.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,157 @@
+@namespace Blazor.AI.Decision
+@inherits AiComponentBase
+@*
+    Author business rules in a readable expression language, validate them as you type, test them against
+    sample facts, and turn plain-language policies into rules with AI.
+*@
+
+<AiCard Title="@Title" Subtitle="@($"{Rules.Count} rules · {Mode}")" Icon="bi-list-check" Class="@Class">
+    <Actions>
+        <select class="bai-select" style="width:auto; padding:.3rem .6rem" @bind="Mode" aria-label="Evaluation mode">
+            <option value="@RuleMode.AllMatches">All matching rules</option>
+            <option value="@RuleMode.FirstMatch">First match only</option>
+        </select>
+    </Actions>
+    <ChildContent>
+        <div class="bai-stack">
+            <div class="bai-row">
+                <input class="bai-input bai-spacer" @bind="_nl" placeholder="Describe a rule, e.g. Customers who spent over 10 million this year get 15% off and gold tier" aria-label="Describe a rule in plain language" />
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(_nl))" @onclick="GenerateAsync">
+                    @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-stars" aria-hidden="true"></i> }
+                    Write rule
+                </button>
+            </div>
+            <AiError Message="@Error" />
+
+            @foreach (var rule in Rules.OrderByDescending(r => r.Priority))
+            {
+                var trace = _result?.Trace.FirstOrDefault(t => t.Rule == rule);
+                var conditionError = RuleEngine.Validate(rule.Condition);
+                var actionError = RuleEngine.Validate(rule.Actions, isActions: true);
+                <div class="bai-result" style="@(trace?.Matched == true ? "border-color:var(--bai-nila)" : null)">
+                    <div class="bai-result-head">
+                        <span class="bai-row" style="flex-wrap:nowrap">
+                            <input type="checkbox" class="form-check-input" @bind="rule.Enabled" aria-label="Enabled" />
+                            <input class="bai-input" style="padding:.25rem .45rem; font-weight:600" @bind="rule.Name" aria-label="Rule name" />
+                        </span>
+                        <span class="bai-row" style="flex-wrap:nowrap">
+                            @if (trace is not null)
+                            {
+                                <span class="bai-badge @(trace.Matched ? "bai-badge-local" : trace.Error is not null ? "bai-badge-danger" : null)">@(trace.Matched ? "fired" : trace.Error is not null ? "error" : "skipped")</span>
+                            }
+                            <label class="bai-small bai-muted" style="white-space:nowrap">Priority <input type="number" class="bai-input" style="width:4.5rem; padding:.2rem .4rem" @bind="rule.Priority" /></label>
+                            <button type="button" class="bai-icon-btn" aria-label="Delete rule" @onclick="() => Rules.Remove(rule)"><i class="bi bi-trash3"></i></button>
+                        </span>
+                    </div>
+                    <div class="bai-grid-2">
+                        <div>
+                            <label class="bai-label">When</label>
+                            <input class="bai-input" style="font-family:var(--bai-font-mono); font-size:.82rem; @(conditionError is null ? null : "border-color:var(--bai-danger)")" @bind="rule.Condition" @bind:event="oninput" aria-label="Condition" />
+                            @if (conditionError is not null) { <span class="bai-small" style="color:var(--bai-danger)">@conditionError</span> }
+                        </div>
+                        <div>
+                            <label class="bai-label">Then</label>
+                            <input class="bai-input" style="font-family:var(--bai-font-mono); font-size:.82rem; @(actionError is null ? null : "border-color:var(--bai-danger)")" @bind="rule.Actions" @bind:event="oninput" aria-label="Actions" />
+                            @if (actionError is not null) { <span class="bai-small" style="color:var(--bai-danger)">@actionError</span> }
+                        </div>
+                    </div>
+                    @if (trace is { Matched: true, Assigned.Count: > 0 })
+                    {
+                        <span class="bai-small bai-muted">Set @string.Join(", ", trace.Assigned.Select(a => $"{a.Key} = {Expression.AsString(a.Value)}"))</span>
+                    }
+                </div>
+            }
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" @onclick="AddRule"><i class="bi bi-plus-lg" aria-hidden="true"></i>Add rule</button>
+
+            <div class="bai-grid-2" style="align-items:start">
+                <FactsEditor Facts="@Facts" Label="Test facts" />
+                <div class="bai-stack">
+                    <button type="button" class="bai-btn" @onclick="Test"><i class="bi bi-play-fill" aria-hidden="true"></i>Evaluate rules</button>
+                    @if (_result is not null)
+                    {
+                        <div class="bai-output">
+                            <span class="bai-label">Result</span>
+                            <dl class="bai-kv">
+                                @foreach (var (key, value) in _result.Facts.Where(f => !Facts.ContainsKey(f.Key) || !Expression.ValuesEqual(Facts[f.Key], f.Value)))
+                                {
+                                    <dt>@key</dt><dd class="bai-num">@Expression.AsString(value)</dd>
+                                }
+                            </dl>
+                            <span class="bai-small bai-muted">@_result.Fired.Count() of @Rules.Count(r => r.Enabled) rules fired.</span>
+                        </div>
+                    }
+                </div>
+            </div>
+            <details>
+                <summary class="bai-small" style="cursor:pointer">Expression syntax</summary>
+                <p class="bai-small bai-muted" style="margin:.4rem 0 0">
+                    Comparisons <code>= != &lt; &lt;= &gt; &gt;=</code>, logic <code>and or not</code>, lists <code>country in ('ID','MY')</code>,
+                    text <code>email contains '@@'</code>, maths <code>+ - * / %</code>, functions <code>min max abs round floor ceil len lower upper if coalesce between</code>.
+                    Actions: <code>name = expression; other = 'text'</code>.
+                </p>
+            </details>
+        </div>
+    </ChildContent>
+</AiCard>
+
+@code {
+    private RuleEvaluation? _result;
+    private string? _nl;
+
+    [Inject] private RuleEngine Engine { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Rule editor";
+    [Parameter] public List<BusinessRule> Rules { get; set; } = SampleRules();
+    [Parameter] public IDictionary<string, object?> Facts { get; set; } = SampleFacts();
+    [Parameter] public RuleMode Mode { get; set; } = RuleMode.AllMatches;
+    [Parameter] public EventCallback<RuleEvaluation> OnEvaluated { get; set; }
+
+    private void AddRule() => Rules.Add(new BusinessRule { Name = $"Rule {Rules.Count + 1}" });
+
+    private void Test()
+    {
+        _result = Engine.Evaluate(Rules, new Dictionary<string, object?>(Facts), Mode);
+        _ = OnEvaluated.InvokeAsync(_result);
+    }
+
+    private Task GenerateAsync() => RunAsync(async ct =>
+    {
+        var variables = string.Join(", ", Facts.Keys);
+        var system = "Convert the policy into one business rule. Reply with JSON only: {\"name\": string, \"condition\": expression, \"actions\": \"var = expr; var2 = expr\", \"priority\": number}. " +
+                     "Expression syntax: comparisons = != < <= > >=, and/or/not, x in ('a','b'), text contains 'x', + - * /, strings in single quotes. " +
+                     $"Prefer these existing variable names: {variables}.";
+        var node = await Ai.GenerateJsonAsync(system, PromptTags.Wrap(PromptTags.Input, _nl), AiTasks.Decision, Provider, ct) as JsonObject;
+        var condition = node?["condition"]?.ToString();
+        if (condition is null || RuleEngine.Validate(condition) is not null)
+        {
+            Error = "The model's rule was not valid. Rephrase the policy, or write the rule manually.";
+            return;
+        }
+
+        Rules.Add(new BusinessRule
+        {
+            Name = node!["name"]?.ToString() ?? "Generated rule",
+            Condition = condition,
+            Actions = node["actions"]?.ToString() ?? string.Empty,
+            Priority = node["priority"] is JsonValue p && p.TryGetValue<int>(out var priority) ? priority : 0,
+            Description = _nl,
+        });
+        _nl = null;
+    });
+
+    public static List<BusinessRule> SampleRules() =>
+    [
+        new() { Name = "VIP customer", Condition = "annualSpend >= 10000000 and yearsAsCustomer >= 2", Actions = "tier = 'gold'; discount = 0.15", Priority = 30 },
+        new() { Name = "New customer welcome", Condition = "yearsAsCustomer < 1", Actions = "tier = 'new'; discount = 0.05", Priority = 20 },
+        new() { Name = "Free shipping", Condition = "orderTotal >= 500000 or tier = 'gold'", Actions = "freeShipping = true", Priority = 10 },
+        new() { Name = "Fraud hold", Condition = "country not in ('ID', 'SG', 'MY') and orderTotal > 20000000", Actions = "hold = true; reason = 'manual fraud check'", Priority = 100, StopOnMatch = true },
+    ];
+
+    public static Dictionary<string, object?> SampleFacts() => new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["annualSpend"] = 12_500_000d,
+        ["yearsAsCustomer"] = 3d,
+        ["orderTotal"] = 420_000d,
+        ["country"] = "ID",
+    };
+}

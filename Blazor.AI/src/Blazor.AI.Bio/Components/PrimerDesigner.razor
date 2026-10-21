@@ -1,0 +1,113 @@
+@namespace Blazor.AI.Bio
+@inherits BioComponentBase
+@using Biotech.Net.SyntheticBiology.Primers
+@* Primer3-style PCR primer design: nearest-neighbour Tm, GC clamp, hairpin and dimer checks. *@
+
+<AiCard Title="@Title" Subtitle="Nearest-neighbour thermodynamics" Icon="bi-arrow-left-right" Class="@Class">
+    <div class="bai-stack">
+        <SequenceInput @bind-Value="Template" Label="Template" Rows="4" Samples="@([("EGFP", BioSamples.Egfp)])" />
+        <div class="bai-row">
+            <label class="bai-small">Product <input type="number" class="bai-input" style="width:5rem" @bind="_min" /> – <input type="number" class="bai-input" style="width:5rem" @bind="_max" /> bp</label>
+            <label class="bai-small">Opt Tm <input type="number" class="bai-input" style="width:4.5rem" @bind="_tm" /> °C</label>
+            <button type="button" class="bai-btn bai-btn-ai" @onclick="DesignAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Design primers</button>
+        </div>
+        <AiError Message="@Error" />
+        @if (_r is { } r)
+        {
+            @if (r.Pairs.Count == 0)
+            {
+                <p class="bai-small bai-muted">No pair meets the constraints. Widen the product range or Tm.</p>
+            }
+            else
+            {
+                <svg viewBox="0 0 600 @(20 + r.Pairs.Count * 16)" style="width:100%" role="img" aria-label="Primer positions">
+                    <rect x="0" y="4" width="600" height="6" rx="3" fill="var(--bai-line-strong)" />
+                    @foreach (var (p, i) in r.Pairs.Select((p, i) => (p, i)))
+                    {
+                        var y = 18 + i * 16;
+                        var f = p.Forward.Start * 600.0 / r.Length;
+                        var e = (p.Reverse.Start + 1) * 600.0 / r.Length;
+                        <g style="cursor:pointer" @onclick="() => _selected = p" opacity="@(p == _selected ? 1 : 0.55)">
+                            <line x1="@S(f)" x2="@S(e)" y1="@(y + 4)" y2="@(y + 4)" stroke="var(--bai-nila)" stroke-width="2" />
+                            <path d="@($"M{S(f)},{y} h{S(Math.Max(6, p.Forward.Length * 600.0 / r.Length))} l6,4 l-6,4 h-{S(Math.Max(6, p.Forward.Length * 600.0 / r.Length))} z")" fill="var(--bai-soga)" />
+                            <path d="@($"M{S(e)},{y} h-{S(Math.Max(6, p.Reverse.Length * 600.0 / r.Length))} l-6,4 l6,4 h{S(Math.Max(6, p.Reverse.Length * 600.0 / r.Length))} z")" fill="var(--bai-soga)" />
+                            <title>@p.ProductSize bp</title>
+                        </g>
+                    }
+                </svg>
+                <div class="bai-table-wrap">
+                    <table class="bai-table">
+                        <thead><tr><th>#</th><th>Forward 5′→3′</th><th>Reverse 5′→3′</th><th>Tm F/R</th><th>ΔTm</th><th>Product</th><th>Penalty</th></tr></thead>
+                        <tbody>
+                            @foreach (var (p, i) in r.Pairs.Select((p, i) => (p, i)))
+                            {
+                                <tr style="cursor:pointer; @(p == _selected ? "background:var(--bai-soga-soft)" : null)" @onclick="() => _selected = p">
+                                    <td class="bai-num">@(i + 1)</td><td><code>@p.Forward.Sequence</code></td><td><code>@p.Reverse.Sequence</code></td>
+                                    <td class="bai-num">@p.Forward.Tm.ToString("0.0", CultureInfo.InvariantCulture) / @p.Reverse.Tm.ToString("0.0", CultureInfo.InvariantCulture)</td>
+                                    <td class="bai-num">@p.TmDifference.ToString("0.0", CultureInfo.InvariantCulture)</td><td class="bai-num">@p.ProductSize bp</td>
+                                    <td class="bai-num">@p.Penalty.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (_selected is { } s)
+                {
+                    <div class="bai-grid-2">
+                        @foreach (var (label, pr) in new[] { ("Forward", s.Forward), ("Reverse", s.Reverse) })
+                        {
+                            <div class="bai-card" style="padding:.8rem">
+                                <span class="bai-label">@label · @pr.Length nt</span>
+                                <code style="font-size:.95rem">@pr.Sequence</code>
+                                <div class="bai-row bai-small bai-muted" style="margin-top:.4rem">
+                                    <span>Tm <b>@pr.Tm.ToString("0.0", CultureInfo.InvariantCulture) °C</b></span><span>GC <b>@pr.GcFraction.ToString("P0", CultureInfo.InvariantCulture)</b></span>
+                                    <span>GC clamp <b>@pr.GcClamp</b></span><span>Hairpin ΔG <b>@pr.HairpinDeltaG.ToString("0.0", CultureInfo.InvariantCulture)</b></span>
+                                    <span>Self-dimer ΔG <b>@pr.SelfDimerDeltaG.ToString("0.0", CultureInfo.InvariantCulture)</b></span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Suggest PCR conditions with AI</button>
+            @if (Explanation is not null) { <AiOutput Text="@Explanation" IsBusy="@IsBusy" /> }
+        }
+    </div>
+</AiCard>
+
+@code {
+    private int _min = 150, _max = 500;
+    private double _tm = 60;
+    private Result? _r;
+    private PrimerPair? _selected;
+
+    [Parameter] public string Title { get; set; } = "PCR primer designer";
+    [Parameter] public string? Template { get; set; } = BioSamples.Egfp;
+
+    private sealed record Result(int Length, IReadOnlyList<PrimerPair> Pairs);
+
+    protected override Task OnInitializedAsync() => DesignAsync();
+
+    private async Task DesignAsync()
+    {
+        var (text, min, max, tm) = (Template, Math.Max(40, _min), Math.Max(_min + 10, _max), _tm);
+        _r = await AnalyseAsync(() =>
+        {
+            var dna = BioInput.ParseOne(text, SequenceType.Dna, "template") ?? throw new FormatException("Paste a DNA template first.");
+            var options = new PrimerDesignOptions { ProductSizeMin = min, ProductSizeMax = max, OptTm = tm, MinTm = tm - 3, MaxTm = tm + 3, MaxPairsReturned = 6 };
+            return new Result(dna.Length, Biotech.Net.SyntheticBiology.Primers.PrimerDesigner.DesignPairs(dna.ToString(), options));
+        });
+        _selected = _r?.Pairs.FirstOrDefault();
+        Explanation = null;
+    }
+
+    private Task Explain()
+    {
+        var p = _selected ?? _r!.Pairs.FirstOrDefault();
+        return ExplainAsync("PCR primer design", p is null
+            ? $"No primer pair found for a {_r!.Length} bp template with product {_min}-{_max} bp and Tm {_tm} °C. Suggest how to relax the constraints."
+            : string.Create(CultureInfo.InvariantCulture,
+                $"Template {_r!.Length} bp. Forward {p.Forward.Sequence} (Tm {p.Forward.Tm:0.0}, GC {p.Forward.GcFraction:P0}, hairpin ΔG {p.Forward.HairpinDeltaG:0.0}), reverse {p.Reverse.Sequence} (Tm {p.Reverse.Tm:0.0}, GC {p.Reverse.GcFraction:P0}), " +
+                $"product {p.ProductSize} bp, ΔTm {p.TmDifference:0.0}, heterodimer ΔG {p.HeteroDimerDeltaG:0.0}. Suggest annealing temperature, extension time and a hot-start polymerase setup."));
+    }
+}

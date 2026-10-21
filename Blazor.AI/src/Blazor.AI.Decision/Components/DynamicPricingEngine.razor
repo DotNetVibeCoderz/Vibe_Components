@@ -1,0 +1,79 @@
+@namespace Blazor.AI.Decision
+@inherits AiComponentBase
+@*
+    Profit-optimal pricing under a constant-elasticity demand curve, then business guardrails (rules) on top:
+    floor margin, competitor band, inventory pressure. The profit curve shows why the price was chosen.
+*@
+
+<AiCard Title="@Title" Subtitle="Optimise price, then apply guardrails" Icon="bi-tags" Class="@Class">
+    <div class="bai-grid-2" style="align-items:start">
+        <div class="bai-stack">
+            <div class="bai-grid-2">
+                <div><label class="bai-label" for="dp-cost">Unit cost</label><input id="dp-cost" type="number" class="bai-input" @bind="Inputs.UnitCost" /></div>
+                <div><label class="bai-label" for="dp-ref">Reference price</label><input id="dp-ref" type="number" class="bai-input" @bind="Inputs.ReferencePrice" /></div>
+                <div><label class="bai-label" for="dp-dem">Demand at reference (units/week)</label><input id="dp-dem" type="number" class="bai-input" @bind="Inputs.ReferenceDemand" /></div>
+                <div><label class="bai-label" for="dp-comp">Competitor price</label><input id="dp-comp" type="number" class="bai-input" @bind="Inputs.CompetitorPrice" /></div>
+            </div>
+            <div>
+                <label class="bai-label" for="dp-el">Price elasticity: @Inputs.Elasticity.ToString("0.0", CultureInfo.InvariantCulture) (more negative = more price-sensitive)</label>
+                <input id="dp-el" type="range" class="form-range" min="-4" max="-1.1" step="0.1" @bind="Inputs.Elasticity" @bind:event="oninput" />
+            </div>
+            <div>
+                <label class="bai-label" for="dp-inv">Inventory pressure: @Inputs.InventoryWeeks weeks of stock</label>
+                <input id="dp-inv" type="range" class="form-range" min="1" max="20" step="1" @bind="Inputs.InventoryWeeks" @bind:event="oninput" />
+            </div>
+            <div class="bai-grid-2">
+                <div><label class="bai-label" for="dp-margin">Minimum margin</label><input id="dp-margin" type="number" step="0.05" class="bai-input" @bind="Inputs.MinMargin" /></div>
+                <div><label class="bai-label" for="dp-band">Max above competitor</label><input id="dp-band" type="number" step="0.05" class="bai-input" @bind="Inputs.MaxAboveCompetitor" /></div>
+            </div>
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="ExplainAsync"><i class="bi bi-stars" aria-hidden="true"></i>Explain recommendation</button>
+            <AiError Message="@Error" />
+        </div>
+        <div class="bai-stack">
+            <div class="bai-stats">
+                <div class="bai-stat"><div class="bai-stat-label">Recommended</div><div class="bai-stat-value">@Fmt(Result.FinalPrice)</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Unconstrained optimum</div><div class="bai-stat-value" style="font-size:1.15rem">@Fmt(Result.OptimalPrice)</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Profit / week</div><div class="bai-stat-value" style="font-size:1.15rem">@Fmt(Result.Profit)</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Units / week</div><div class="bai-stat-value" style="font-size:1.15rem">@Fmt(Result.Units)</div></div>
+            </div>
+            <LineChart Series="@Result.Curve" MarkerX="@Result.FinalPrice" MarkerLabel="recommended" XLabel="Price" YLabel="Weekly profit" Height="220" ShowLegend="false" />
+            @if (Result.Adjustments.Count > 0)
+            {
+                <div class="bai-output">
+                    <span class="bai-label">Guardrails applied</span>
+                    <ul class="bai-small" style="margin:0; padding-left:1.1rem">@foreach (var a in Result.Adjustments) { <li>@a</li> }</ul>
+                </div>
+            }
+            @if (_explanation is not null) { <AiOutput Text="@_explanation" IsBusy="@IsBusy" /> }
+        </div>
+    </div>
+</AiCard>
+
+@code {
+    private string? _explanation;
+
+    [Parameter] public string Title { get; set; } = "Dynamic pricing";
+    [Parameter] public PricingInputs Inputs { get; set; } = new();
+    [Parameter] public EventCallback<PricingResult> OnPriced { get; set; }
+
+    private PricingResult Result => PricingModel.Optimise(Inputs);
+
+    private Task ExplainAsync() => RunAsync(async ct =>
+    {
+        var r = Result;
+        var facts = $"Unit cost {Inputs.UnitCost}, reference price {Inputs.ReferencePrice} selling {Inputs.ReferenceDemand} units/week, elasticity {Inputs.Elasticity:0.0}, " +
+                    $"competitor {Inputs.CompetitorPrice}, {Inputs.InventoryWeeks} weeks of stock.\nUnconstrained optimum {r.OptimalPrice:0}; recommended {r.FinalPrice:0} " +
+                    $"(profit {r.Profit:0}/week, {r.Units:0} units). Guardrails: {string.Join("; ", r.Adjustments.DefaultIfEmpty("none"))}.";
+        var builder = new StringBuilder();
+        _explanation = string.Empty;
+        await foreach (var token in Ai.StreamAsync("You are a pricing analyst. Explain the price recommendation to a store manager in 3-4 sentences, then one risk to watch. Use only the numbers given.",
+                           PromptTags.Wrap(PromptTags.Input, facts), AiTasks.Insight, Provider, null, ct))
+        {
+            builder.Append(token);
+            _explanation = builder.ToString();
+            RenderThrottled();
+        }
+
+        await OnPriced.InvokeAsync(r);
+    });
+}

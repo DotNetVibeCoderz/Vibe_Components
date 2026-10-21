@@ -1,0 +1,86 @@
+@namespace Blazor.AI.RAG
+@implements IDisposable
+@* Drop a PDF and chat with it. Answers cite page numbers; the summary gives a quick overview first. *@
+
+<div class="@($"bai-stack {Class}".Trim())">
+    @if (_document is null)
+    {
+        <AiCard Title="@Title" Subtitle="Upload a PDF to start" Icon="bi-file-earmark-pdf">
+            <label class="bai-empty" style="cursor:pointer; position:relative" for="@_inputId">
+                <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>
+                <span><strong>Choose a PDF</strong> (up to @MaxFileSizeMb MB)</span>
+                <span class="bai-small bai-faint">Text-based PDFs work best. Scanned PDFs need OCR first.</span>
+                <InputFile id="@_inputId" OnChange="UploadAsync" accept=".pdf" style="position:absolute; inset:0; opacity:0; cursor:pointer" />
+            </label>
+            @if (_status is not null)
+            {
+                <div class="bai-row" style="margin-top:.75rem"><AiThinking Label="@_status" /></div>
+            }
+            <AiError Message="@_error" />
+        </AiCard>
+    }
+    else
+    {
+        <SmartDocumentChat DocumentId="@_document.Id" Title="@_document.Name" Icon="bi-file-earmark-pdf" Provider="@Provider" Height="@Height"
+                           EmptyTitle="@($"Ask about {_document.Name}")" Suggestions="@Suggestions">
+            <HeaderActions>
+                <span class="bai-badge">@_document.Pages pages</span>
+                <button type="button" class="bai-icon-btn" title="Open another PDF" aria-label="Open another PDF" @onclick="Reset"><i class="bi bi-folder2-open"></i></button>
+            </HeaderActions>
+        </SmartDocumentChat>
+    }
+</div>
+
+@code {
+    private readonly string _inputId = "bai-pdf-" + Guid.NewGuid().ToString("N")[..6];
+    private KnowledgeDocument? _document;
+    private string? _status;
+    private string? _error;
+
+    [Inject] private KnowledgeBase Kb { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "PDF chat";
+    [Parameter] public string? Provider { get; set; }
+    [Parameter] public string Height { get; set; } = "600px";
+    [Parameter] public int MaxFileSizeMb { get; set; } = 40;
+    [Parameter] public string? Class { get; set; }
+
+    [Parameter] public IReadOnlyList<string> Suggestions { get; set; } =
+        ["Summarise this document", "What are the key numbers?", "List the main risks mentioned", "What should I do next according to this?"];
+
+    protected override void OnInitialized() => Kb.Changed += Refresh;
+
+    private async Task UploadAsync(InputFileChangeEventArgs e)
+    {
+        _error = null;
+        try
+        {
+            _status = "Reading PDF…";
+            await using var stream = e.File.OpenReadStream(MaxFileSizeMb * 1024L * 1024L);
+            var loaded = await DocumentLoader.LoadAsync(e.File.Name, stream);
+            if (loaded.Pages.Count == 0)
+            {
+                _error = "This PDF has no extractable text. It is probably scanned; run OCR first.";
+                return;
+            }
+
+            _status = $"Indexing {loaded.Pages.Count} pages…";
+            StateHasChanged();
+            _document = await Kb.IngestAsync(loaded);
+        }
+        catch (Exception ex)
+        {
+            _error = AiComponentBase.Describe(ex);
+        }
+        finally
+        {
+            _status = null;
+        }
+    }
+
+    private void Reset() => _document = null;
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Kb.Changed -= Refresh;
+}

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <Description>Blazor.AI Hugging Face and local models: model hub browser, downloader, inference playground, embeddings, classification, sentiment, NER, image classification, OCR, speech; local inference via HF.Net GraviTransformers and ONNX Runtime.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Accepted risk for ImageSharp 3.1.12 (decoding of untrusted images); uploads are size-limited. -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-gwg2-r3hj-4w44" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-wmxv-xphr-5c9g" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-j3p4-wp97-rph4" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-j9gm-c75j-xc9q" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-jjfr-hcj7-qf5w" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+    <PackageReference Include="Gravicode.HFNet.GraviHub" />
+    <PackageReference Include="Gravicode.HFNet.GraviTransformers" />
+    <PackageReference Include="Gravicode.HFNet.GraviTransformers.Vision" />
+    <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Blazor.AI.Components\Blazor.AI.Components.csproj" />
+    <ProjectReference Include="..\Blazor.AI.Visualization\Blazor.AI.Visualization.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,71 @@
+.wasm-top {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: .8rem 1.5rem;
+    border-bottom: 1px solid var(--bai-line);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    backdrop-filter: blur(12px);
+    background: color-mix(in srgb, var(--bai-bg) 80%, transparent);
+}
+
+.wasm-brand {
+    display: inline-flex;
+    gap: .5rem;
+    align-items: center;
+    font-family: var(--bai-font-display);
+    font-weight: 700;
+}
+
+.wasm-brand > i { color: var(--bai-soga); }
+
+.wasm-main { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem 3rem; }
+.wasm-title { font-family: var(--bai-font-display); font-weight: 700; letter-spacing: -.02em; }
+.wasm-lead { color: var(--bai-ink-muted); max-width: 70ch; margin-bottom: 1.5rem; }
+.wasm-foot { padding: 1.5rem; text-align: center; }
+
+.g-clip {
+    font-family: var(--bai-font-mono);
+    font-size: .8rem;
+    white-space: pre-line;
+    padding: .7rem .9rem;
+    border: 1px dashed var(--bai-line-strong);
+    border-radius: var(--bai-radius-sm);
+    color: var(--bai-ink-muted);
+}
+
+.wasm-loading {
+    min-height: 100vh;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: .8rem;
+    font-family: system-ui, sans-serif;
+    color: #565c80;
+}
+
+.wasm-loading svg { animation: wasm-spin 2.4s linear infinite; }
+
+@keyframes wasm-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+    .wasm-loading svg { animation: none; }
+}
+
+#blazor-error-ui {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: .7rem 1.25rem;
+    background: var(--bai-danger-soft, #fde8ea);
+    color: var(--bai-danger, #c2414b);
+    z-index: 1000;
+}
+
+@media (max-width: 640px) {
+    .wasm-top { flex-wrap: wrap; padding: .7rem 1rem; }
+    .wasm-main { padding: 1.25rem 1rem 2rem; }
+}

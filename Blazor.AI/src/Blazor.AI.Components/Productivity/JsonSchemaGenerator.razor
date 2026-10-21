@@ -1,0 +1,116 @@
+@namespace Blazor.AI.Components
+@inherits AiComponentBase
+@*
+    JSON Schema from a sample document (instant, local) or from a plain-language description (AI),
+    plus matching C# records and TypeScript interfaces.
+*@
+
+<AiCard Title="@Title" Subtitle="@Subtitle" Icon="bi-braces" Class="@Class">
+    <div class="bai-stack">
+        <AiTabs Tabs="@Modes" @bind-Selected="_mode" />
+        <div class="bai-grid-2">
+            <div>
+                <label class="bai-label" for="@($"{_id}-name")">Root type name</label>
+                <input id="@($"{_id}-name")" class="bai-input" @bind="_rootName" />
+            </div>
+            <div>
+                <label class="bai-label" for="@($"{_id}-ns")">C# namespace</label>
+                <input id="@($"{_id}-ns")" class="bai-input" @bind="_namespace" />
+            </div>
+        </div>
+        @if (_mode == Modes[0])
+        {
+            <div>
+                <label class="bai-label" for="@($"{_id}-sample")">Sample JSON</label>
+                <textarea id="@($"{_id}-sample")" class="bai-textarea" rows="8" style="font-family:var(--bai-font-mono); font-size:.82rem" @bind="_sample"></textarea>
+            </div>
+            <div class="bai-row">
+                <button type="button" class="bai-btn" @onclick="InferLocal"><i class="bi bi-lightning" aria-hidden="true"></i>Infer schema</button>
+                <span class="bai-small bai-muted">Runs locally, nothing is sent to a model.</span>
+            </div>
+        }
+        else
+        {
+            <div>
+                <label class="bai-label" for="@($"{_id}-desc")">Describe the data</label>
+                <textarea id="@($"{_id}-desc")" class="bai-textarea" rows="5" @bind="_description" placeholder="An invoice with number, issue date, customer (name, email, NPWP tax id), line items (sku, description, qty, unit price) and totals with 11% VAT."></textarea>
+            </div>
+            <div class="bai-row">
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(_description))" @onclick="GenerateWithAiAsync">
+                    @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-stars" aria-hidden="true"></i> }
+                    Generate schema
+                </button>
+            </div>
+        }
+        <AiError Message="@Error" />
+        @if (_schema is not null)
+        {
+            <AiTabs Tabs="@Outputs" @bind-Selected="_output" />
+            <AiCodeBlock Code="@(_output switch { "C#" => SchemaTools.ToCSharp(_schema, _rootName, _namespace), "TypeScript" => SchemaTools.ToTypeScript(_schema, _rootName), _ => _schema.ToJsonString(SchemaTools.Lenient) })" />
+        }
+    </div>
+</AiCard>
+
+@code {
+    private static readonly string[] Modes = ["From sample JSON", "From description (AI)"];
+    private static readonly string[] Outputs = ["JSON Schema", "C#", "TypeScript"];
+    private readonly string _id = "bai-js-" + Guid.NewGuid().ToString("N")[..6];
+    private string _mode = Modes[0];
+    private string _output = Outputs[0];
+    private string _rootName = "Order";
+    private string _namespace = "MyApp.Models";
+    private string? _description;
+    private JsonObject? _schema;
+
+    private string _sample = """
+        {
+          "orderId": 1024,
+          "placedAt": "2026-10-21T09:30:00Z",
+          "customer": { "name": "Sari Wulandari", "email": "sari@example.id" },
+          "items": [ { "sku": "KOPI-250", "qty": 2, "price": 85000.5 } ],
+          "paid": true
+        }
+        """;
+
+    [Parameter] public string Title { get; set; } = "JSON Schema generator";
+    [Parameter] public string? Subtitle { get; set; } = "Schema, C# records and TypeScript types";
+    [Parameter] public EventCallback<JsonObject> OnGenerated { get; set; }
+
+    private void InferLocal()
+    {
+        Error = null;
+        try
+        {
+            _schema = SchemaTools.InferSchema(JsonNode.Parse(_sample, documentOptions: new JsonDocumentOptions { AllowTrailingCommas = true }), _rootName);
+            _ = OnGenerated.InvokeAsync(_schema);
+        }
+        catch (JsonException ex)
+        {
+            Error = $"The sample is not valid JSON: {ex.Message}";
+        }
+    }
+
+    private Task GenerateWithAiAsync() => RunAsync(async ct =>
+    {
+        var system = "You design JSON Schemas (draft 2020-12). Produce one schema with $schema, title, type, properties " +
+                     "(each with type, description and format where useful), required and additionalProperties:false. " +
+                     "Use camelCase property names.";
+        var node = await Ai.GenerateJsonAsync(system, $"Title: {_rootName}\n" + PromptTags.Wrap(PromptTags.Input, _description), AiTasks.Json, Provider, ct);
+        if (node is JsonObject obj && obj["properties"] is JsonObject)
+        {
+            _schema = obj;
+        }
+        else if (node is not null)
+        {
+            // The model (or offline mode) returned an example instance: infer its schema.
+            _schema = SchemaTools.InferSchema(node, _rootName);
+        }
+        else
+        {
+            Error = "The model did not return JSON. Try rephrasing the description.";
+            return;
+        }
+
+        await OnGenerated.InvokeAsync(_schema);
+    });
+}

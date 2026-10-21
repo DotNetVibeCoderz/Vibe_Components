@@ -1,0 +1,122 @@
+@namespace Blazor.AI.Bio
+@inherits BioComponentBase
+@using Biotech.Net.Chemistry
+@using Biotech.Net.DrugDiscovery
+@* Small-molecule triage from SMILES: 2-D depiction, descriptors, drug-likeness rules, QED, ADMET estimates and PAINS/Brenk alerts. *@
+
+<AiCard Title="@Title" Subtitle="Biotech.Net.Chemistry · DrugDiscovery" Icon="bi-hexagon-half" Class="@Class">
+    <div class="bai-stack">
+        <div class="bai-row">
+            <input class="bai-input bai-spacer" style="font-family:var(--bai-font-mono)" @bind="Smiles" placeholder="SMILES, e.g. CC(=O)Oc1ccccc1C(=O)O" aria-label="SMILES" />
+            <button type="button" class="bai-btn bai-btn-ai" @onclick="AnalyseAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Analyse</button>
+        </div>
+        <div class="bai-chips">
+            @foreach (var (name, smiles) in BioSamples.Molecules)
+            {
+                <button type="button" class="bai-chip @(smiles == Smiles ? "is-active" : null)" @onclick="() => PickAsync(smiles)">@name</button>
+            }
+        </div>
+        <AiError Message="@Error" />
+        @if (_r is { } r)
+        {
+            <div class="bai-grid-2" style="align-items:start">
+                <div class="bai-bio-mol">
+                    <svg viewBox="@r.Depiction.ViewBox" style="width:100%; max-height:300px" role="img" aria-label="@($"2-D structure of {r.Descriptors.Formula}")">
+                        @foreach (var b in r.Depiction.Bonds)
+                        {
+                            <line x1="@S(b.X1)" y1="@S(b.Y1)" x2="@S(b.X2)" y2="@S(b.Y2)" stroke="var(--bai-ink)" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="@(b.Dashed ? "4 3" : null)" />
+                        }
+                        @foreach (var a in r.Depiction.Labels)
+                        {
+                            <circle cx="@S(a.X)" cy="@S(a.Y)" r="10" fill="var(--bai-surface-solid, var(--bai-bg))" />
+                            <!text x="@S(a.X)" y="@S(a.Y + 5)" text-anchor="middle" style="font: 700 14px var(--bai-font-body); fill:@a.Color">@a.Text</!text>
+                        }
+                    </svg>
+                    <p class="bai-small bai-muted" style="margin:0; text-align:center"><b>@r.Descriptors.Formula</b> · canonical <code>@r.Canonical</code></p>
+                </div>
+                <div class="bai-stack">
+                    <div class="bai-stats">
+                        <div class="bai-stat"><div class="bai-stat-label">MW</div><div class="bai-stat-value">@r.Descriptors.MolecularWeight.ToString("0.0", CultureInfo.InvariantCulture)</div></div>
+                        <div class="bai-stat"><div class="bai-stat-label">cLogP</div><div class="bai-stat-value">@r.Descriptors.LogP.ToString("0.00", CultureInfo.InvariantCulture)</div></div>
+                        <div class="bai-stat"><div class="bai-stat-label">TPSA</div><div class="bai-stat-value">@r.Descriptors.Tpsa.ToString("0.0", CultureInfo.InvariantCulture)</div></div>
+                        <div class="bai-stat"><div class="bai-stat-label">QED</div><div class="bai-stat-value">@r.Profile.Qed.ToString("0.00", CultureInfo.InvariantCulture)</div></div>
+                    </div>
+                    <div class="bai-row bai-small bai-muted">
+                        <span>HBD <b>@r.Descriptors.HBondDonors</b></span><span>HBA <b>@r.Descriptors.HBondAcceptors</b></span>
+                        <span>Rot. bonds <b>@r.Descriptors.RotatableBonds</b></span><span>Rings <b>@r.Descriptors.RingCount</b> (@r.Descriptors.AromaticRingCount aromatic)</span>
+                        <span>Fsp³ <b>@r.Descriptors.FractionCsp3.ToString("0.00", CultureInfo.InvariantCulture)</b></span>
+                    </div>
+                    <div>
+                        <span class="bai-label">Drug-likeness rules</span>
+                        <div class="bai-chips">
+                            @foreach (var rule in r.Profile.Rules)
+                            {
+                                <span class="bai-badge @(rule.Passed ? "bai-badge-local" : "bai-badge-danger")" title="@string.Join("; ", rule.Violations)"><i class="bi @(rule.Passed ? "bi-check2" : "bi-x")" aria-hidden="true"></i>@rule.Rule</span>
+                            }
+                        </div>
+                    </div>
+                    <div>
+                        <span class="bai-label">ADMET estimates</span>
+                        <table class="bai-table">
+                            <tbody>
+                                <tr><td>Solubility (ESOL)</td><td>@r.Profile.SolubilityClass · logS @r.Profile.EsolLogS.ToString("0.00", CultureInfo.InvariantCulture)</td></tr>
+                                <tr><td>GI absorption / BBB</td><td>@(r.Profile.GiAbsorption ? "high" : "low") / @(r.Profile.BloodBrainBarrier ? "permeant" : "not permeant")</td></tr>
+                                <tr><td>hERG risk</td><td><span class="bai-badge @(r.Profile.HergRisk > 0.5 ? "bai-badge-danger" : "bai-badge-local")">@r.Profile.HergRisk.ToString("0.00", CultureInfo.InvariantCulture)</span> @string.Join(", ", r.Profile.HergReasons)</td></tr>
+                                <tr><td>CYP inhibition</td><td>@(string.Join(", ", r.Profile.CypFlags.Where(kv => kv.Value).Select(kv => kv.Key)) is { Length: > 0 } cyp ? cyp : "none flagged")</td></tr>
+                                <tr><td>P-gp substrate</td><td>@(r.Profile.LikelyPgpSubstrate ? "likely" : "unlikely")</td></tr>
+                                <tr><td>Structural alerts</td><td>@(r.Alerts.Count == 0 ? "clean" : string.Join(", ", r.Alerts.Select(a => $"{a.Name} ({a.Family})")))</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Medicinal chemistry review with AI</button>
+            @if (Explanation is not null) { <AiOutput Text="@Explanation" IsBusy="@IsBusy" /> }
+        }
+    </div>
+</AiCard>
+
+@code {
+    private Result? _r;
+
+    [Parameter] public string Title { get; set; } = "Molecule explorer";
+    [Parameter] public string? Smiles { get; set; } = BioSamples.Molecules[0].Smiles;
+
+    private sealed record Result(string Canonical, DescriptorSet Descriptors, AdmetProfile Profile, IReadOnlyList<StructuralAlert> Alerts, MoleculeDepiction Depiction);
+
+    protected override Task OnInitializedAsync() => AnalyseAsync();
+
+    private Task PickAsync(string smiles)
+    {
+        Smiles = smiles;
+        return AnalyseAsync();
+    }
+
+    private async Task AnalyseAsync()
+    {
+        var smiles = Smiles?.Trim();
+        _r = await AnalyseAsync(() =>
+        {
+            if (string.IsNullOrEmpty(smiles))
+            {
+                throw new FormatException("Enter a SMILES string.");
+            }
+
+            var mol = Molecule.FromSmiles(smiles);
+            var profile = Admet.Profile(mol);
+            return new Result(mol.ToSmiles(), profile.Descriptors, profile, StructuralAlerts.Match(mol), MoleculeDepiction.Create(mol));
+        });
+        Explanation = null;
+    }
+
+    private Task Explain()
+    {
+        var r = _r!;
+        var d = r.Descriptors;
+        return ExplainAsync("small-molecule drug-likeness and ADMET triage", string.Create(CultureInfo.InvariantCulture,
+            $"SMILES {r.Canonical}; {d.Formula}; MW {d.MolecularWeight:0.0}; cLogP {d.LogP:0.00}; TPSA {d.Tpsa:0.0}; HBD {d.HBondDonors}; HBA {d.HBondAcceptors}; rotatable {d.RotatableBonds}; QED {r.Profile.Qed:0.00}. " +
+            $"Rules passed: {string.Join(", ", r.Profile.PassedRules)}; failed: {string.Join(", ", r.Profile.FailedRules.Select(f => $"{f.Rule} ({string.Join("; ", f.Violations)})"))}. " +
+            $"ESOL {r.Profile.SolubilityClass}; GI {(r.Profile.GiAbsorption ? "high" : "low")}; BBB {(r.Profile.BloodBrainBarrier ? "yes" : "no")}; hERG {r.Profile.HergRisk:0.00}; alerts: {string.Join(", ", r.Alerts.Select(a => a.Name))}. " +
+            $"Suggest one or two structural modifications that could address the main liability."));
+    }
+}

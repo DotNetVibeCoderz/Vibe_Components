@@ -1,0 +1,109 @@
+@page "/visualization"
+@inject DemoData Data
+<PageTitle>Visual analytics · Blazor.AI</PageTitle>
+
+<PageHeader Title="Visual analytics" Package="Blazor.AI.Visualization" Icon="bi-graph-up"
+            Lead="Pure SVG charts that follow the theme, with colour scales from Visual.Net and layout algorithms (force-directed, Sankey, squarified treemap, Web Mercator) written in C#. No JavaScript chart library." />
+
+<DemoSection Title="AiDashboard" Component="AiDashboard" Description="KPI tiles with sparklines, a 12-column grid for charts, and AI insights from the numbers." Code="@DashCode">
+    <AiDashboard Title="Kopi Nusantara · Q3" Subtitle="All channels, Indonesia" Metrics="@Data.Metrics"
+                 DataSummary="Top region Jabodetabek (Rp 512M). Online grew from Rp 420M in January to Rp 790M in December; stores flat around Rp 480M. Cart abandonment 37%.">
+        <div class="bai-span-8"><AiCard Title="Revenue by channel (Rp million)" Icon="bi-graph-up"><LineChart Series="@Data.MonthlyRevenue" XFormatter="@Month" /></AiCard></div>
+        <div class="bai-span-4"><AiCard Title="Sales by region" Icon="bi-geo"><BarChart Values="@Data.RegionSales" Horizontal="true" /></AiCard></div>
+    </AiDashboard>
+</DemoSection>
+
+<DemoSection Title="RealtimeCharts" Component="RealtimeCharts" Description="Streams from an IAsyncEnumerable, with rolling anomaly flags." Code="@RealtimeCode">
+    <RealtimeCharts Source="@DemoData.SensorStream()" Title="Roaster drum temperature (°C)" SeriesName="°C" />
+</DemoSection>
+
+<DemoSection Title="ForecastCharts" Component="ForecastCharts" Description="History, forecast and confidence band with a now marker." Code="@ForecastCode">
+    <ForecastCharts History="@_history" Forecast="@_forecast.Forecast" Lower="@_forecast.Lower" Upper="@_forecast.Upper" Title="Monthly sales" Subtitle="Holt-Winters, 12 months ahead" YLabel="Rp million" />
+</DemoSection>
+
+<DemoSection Title="PredictionCharts" Component="PredictionCharts" Description="Actual vs predicted and residuals with R², RMSE and MAE." Code="@PredictionCode">
+    <PredictionCharts Actual="@_actual" Predicted="@_predicted" />
+</DemoSection>
+
+<DemoSection Title="SankeyDiagram" Component="SankeyDiagram" Description="Where visitors come from and where they drop off." Code="@SankeyCode">
+    <AiCard Title="Checkout funnel" Icon="bi-funnel"><SankeyDiagram Links="@Data.Funnel" /></AiCard>
+</DemoSection>
+
+<DemoSection Title="Treemap" Component="Treemap" Description="Two-level squarified treemap." Code="@TreemapCode">
+    <AiCard Title="2026 budget (Rp million)" Icon="bi-grid-1x2"><Treemap Items="@Data.Budget" /></AiCard>
+</DemoSection>
+
+<DemoSection Title="Heatmap" Component="Heatmap" Description="Any matrix with any Visual.Net colormap." Code="@HeatmapCode">
+    <AiCard Title="Orders by weekday and hour" Icon="bi-grid-3x3"><Heatmap Values="@_heat" RowLabels="@Days" ColumnLabels="@Hours" Colormap="magma" ShowValues="false" Width="900" /></AiCard>
+</DemoSection>
+
+<DemoSection Title="GeoAnalyticsMap" Component="GeoAnalyticsMap" Description="OpenStreetMap tiles and bubbles sized by value; drag to pan." Code="@MapCode">
+    <AiCard Title="Customers by city" Icon="bi-map"><GeoAnalyticsMap Points="@Data.Cities" /></AiCard>
+</DemoSection>
+
+<DemoSection Title="NetworkGraph" Component="NetworkGraph" Description="Force-directed graph; drag nodes, click to focus." Code="@NetworkCode">
+    <AiCard Title="Blazor.AI package dependencies" Icon="bi-share"><NetworkGraph Nodes="@Data.Network.Nodes" Edges="@Data.Network.Edges" /></AiCard>
+</DemoSection>
+
+<DemoSection Title="KnowledgeGraph" Component="KnowledgeGraph" Description="Typed entities and labelled relations with search and details." Code="@KgCode">
+    <AiCard Title="Who builds what" Icon="bi-diagram-3"><KnowledgeGraph Nodes="@KgNodes" Edges="@KgEdges" /></AiCard>
+</DemoSection>
+
+@code {
+    private static readonly string[] Days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    private static readonly string[] Hours = Enumerable.Range(7, 14).Select(h => $"{h:00}:00").ToArray();
+    private double[] _history = [], _actual = [], _predicted = [];
+    private ForecastResult _forecast = default!;
+    private double[,] _heat = new double[7, 14];
+
+    private static readonly IReadOnlyList<GraphNode> KgNodes =
+    [
+        new("gravicode", "Gravicode Studios", "Organization") { Description = "Software studio in Bandung." },
+        new("fadhil", "Kang Fadhil", "Person") { Description = "Leads Gravicode Studios." },
+        new("bandung", "Bandung", "Place"), new("blazorai", "Blazor.AI", "Product"), new("hfnet", "HF.Net", "Product"),
+        new("science", "Gravicode.Science", "Product"), new("meai", "Microsoft.Extensions.AI", "Product"), new("kopi", "Kopi Nusantara", "Organization"),
+    ];
+
+    private static readonly IReadOnlyList<GraphEdge> KgEdges =
+    [
+        new("fadhil", "gravicode", "leads"), new("gravicode", "bandung", "based in"), new("gravicode", "blazorai", "builds"), new("gravicode", "hfnet", "builds"),
+        new("gravicode", "science", "builds"), new("blazorai", "meai", "uses"), new("blazorai", "hfnet", "uses"), new("blazorai", "science", "uses"),
+        new("kopi", "blazorai", "uses"), new("kopi", "bandung", "located in"),
+    ];
+
+    protected override void OnInitialized()
+    {
+        _history = SampleDatasets.MonthlySales().Frame.Numeric("sales").Values;
+        _forecast = TimeSeriesTools.Forecast(_history, 12, ForecastMethod.HoltWinters);
+        var rng = new Random(3);
+        _actual = Enumerable.Range(0, 120).Select(_ => 200 + rng.NextDouble() * 800).ToArray();
+        _predicted = _actual.Select(a => a * (0.92 + rng.NextDouble() * 0.16) + 15).ToArray();
+        for (var d = 0; d < 7; d++)
+        {
+            for (var h = 0; h < 14; h++)
+            {
+                var hour = h + 7;
+                _heat[d, h] = Math.Round((hour is >= 7 and <= 9 ? 40 : 10) + (hour is >= 15 and <= 17 ? 55 : 0) + (d >= 5 ? 25 : 0) + rng.NextDouble() * 12);
+            }
+        }
+    }
+
+    private static string Month(double x) => new DateTime(2026, (int)Math.Clamp(x, 0, 11) + 1, 1).ToString("MMM", CultureInfo.InvariantCulture);
+
+    private const string DashCode = """
+        <AiDashboard Title="Q3" Metrics="@metrics" DataSummary="@extraFacts">
+            <div class="bai-span-8"><LineChart Series="@series" /></div>
+            <div class="bai-span-4"><BarChart Values="@regions" Horizontal="true" /></div>
+        </AiDashboard>
+        """;
+
+    private const string RealtimeCode = """<RealtimeCharts Source="@telemetry.ReadAllAsync()" AnomalyZ="3" OnAnomaly="Alert" />""";
+    private const string ForecastCode = """<ForecastCharts History="@history" Forecast="@f.Forecast" Lower="@f.Lower" Upper="@f.Upper" />""";
+    private const string PredictionCode = """<PredictionCharts Actual="@y" Predicted="@yHat" />""";
+    private const string SankeyCode = """<SankeyDiagram Links="@(new[] { new SankeyLink("Ads", "Landing", 4200), ... })" />""";
+    private const string TreemapCode = """<Treemap Items="@budget" />""";
+    private const string HeatmapCode = """<Heatmap Values="@matrix" RowLabels="@days" ColumnLabels="@hours" Colormap="magma" />""";
+    private const string MapCode = """<GeoAnalyticsMap Points="@cities" TileUrl="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />""";
+    private const string NetworkCode = """<NetworkGraph Nodes="@nodes" Edges="@edges" OnNodeSelected="Show" />""";
+    private const string KgCode = """<KnowledgeGraph Nodes="@entities" Edges="@relations" />""";
+}

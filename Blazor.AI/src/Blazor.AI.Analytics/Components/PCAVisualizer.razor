@@ -1,0 +1,49 @@
+@namespace Blazor.AI.Analytics
+@inherits AnalyticsComponentBase
+@* Principal component analysis: scree plot, 2-D projection coloured by target, and loadings that explain each component. *@
+
+<AiCard Title="@Title" Subtitle="@($"{Data.Name} · {Data.FeatureColumns.Count} standardised features")" Icon="bi-arrows-angle-contract" Class="@Class">
+    <Actions><DatasetPicker /></Actions>
+    <ChildContent>
+        @if (_result is { } r)
+        {
+            <div class="bai-grid-2" style="align-items:start">
+                <ScatterChart Title="Projection on PC1 / PC2" Series="@Projection(r)" XLabel="@($"PC1 ({r.ExplainedVariance.ElementAtOrDefault(0):P0})")" YLabel="@($"PC2 ({r.ExplainedVariance.ElementAtOrDefault(1):P0})")" Height="320" PointRadius="2.5" />
+                <div class="bai-stack">
+                    <BarChart Title="Explained variance (scree)" Values="@r.ExplainedVariance.Select((v, i) => new BarValue($"PC{i + 1}", Math.Round(v * 100, 1)))" Height="200" />
+                    <div>
+                        <span class="bai-label">Loadings: what each component is made of</span>
+                        <div class="bai-table-wrap">
+                            <table class="bai-table">
+                                <thead><tr><th>Feature</th><th>PC1</th><th>PC2</th></tr></thead>
+                                <tbody>
+                                    @foreach (var l in r.Loadings.OrderByDescending(l => Math.Abs(l.PC1)))
+                                    {
+                                        <tr><td>@l.Feature</td><td class="bai-num" style="color:@Sign(l.PC1)">@l.PC1.ToString("+0.00;-0.00", CultureInfo.InvariantCulture)</td><td class="bai-num" style="color:@Sign(l.PC2)">@l.PC2.ToString("+0.00;-0.00", CultureInfo.InvariantCulture)</td></tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="bai-empty"><i class="bi bi-diagram-2" aria-hidden="true"></i>Needs at least two numeric features.</div>
+        }
+    </ChildContent>
+</AiCard>
+
+@code {
+    private ReductionResult? _result;
+
+    [Parameter] public string Title { get; set; } = "PCA visualizer";
+
+    protected override void OnDatasetChanged() =>
+        _result = Data.FeatureColumns.Count >= 2 ? UnsupervisedMl.Reduce(Data, ReductionMethod.Pca) : null;
+
+    private IReadOnlyList<ChartSeries> Projection(ReductionResult r) => DimensionColoring.Series(Data, r.Points);
+
+    private static string Sign(double v) => Math.Abs(v) < 0.3 ? "var(--bai-ink-faint)" : v > 0 ? "var(--bai-nila)" : "var(--bai-danger)";
+}

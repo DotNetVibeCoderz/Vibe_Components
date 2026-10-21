@@ -1,0 +1,56 @@
+@namespace Blazor.AI.Visualization
+@* Sankey flow diagram: columns from sources to sinks, link width proportional to value. *@
+
+<figure class="bai-chart @Class" style="margin:0">
+    @if (Title is not null)
+    {
+        <figcaption class="bai-chart-title">@Title</figcaption>
+    }
+    <svg viewBox="0 0 @Width @Height" role="img" aria-label="@(Title ?? "Sankey diagram")">
+        <g transform="translate(@Margin,8)">
+            @foreach (var link in _links)
+            {
+                var x0 = link.From.X + NodeWidth;
+                var x1 = link.To.X;
+                var mid = (x0 + x1) / 2;
+                <path d="@($"M{S(x0)},{S(link.SourceY)} C{S(mid)},{S(link.SourceY)} {S(mid)},{S(link.TargetY)} {S(x1)},{S(link.TargetY)}")"
+                      fill="none" stroke="@NodeColor(link.From.Id)" stroke-opacity="0.32" stroke-width="@S(link.Thickness)" class="bai-bar">
+                    <title>@link.Source.Source → @link.Source.Target: @Fmt(link.Source.Value)</title>
+                </path>
+            }
+            @foreach (var node in _nodes)
+            {
+                <rect x="@S(node.X)" y="@S(node.Y)" width="@NodeWidth" height="@S(node.Height)" rx="3" fill="@NodeColor(node.Id)">
+                    <title>@node.Id: @Fmt(node.Value)</title>
+                </rect>
+                var right = node.Column < _maxColumn;
+                <!text class="bai-node-label" x="@S(right ? node.X + NodeWidth + 6 : node.X - 6)" y="@S(node.Y + node.Height / 2 + 4)" text-anchor="@(right ? "start" : "end")">@node.Id <tspan class="bai-axis-text">@Fmt(node.Value)</tspan></!text>
+            }
+        </g>
+    </svg>
+</figure>
+
+@code {
+    private IReadOnlyList<SankeyLayout.Node> _nodes = [];
+    private IReadOnlyList<SankeyLayout.Link> _links = [];
+    private List<string> _ids = [];
+    private int _maxColumn;
+
+    [Parameter, EditorRequired] public IReadOnlyList<SankeyLink> Links { get; set; } = [];
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public int Width { get; set; } = 760;
+    [Parameter] public int Height { get; set; } = 360;
+    [Parameter] public int NodeWidth { get; set; } = 14;
+    [Parameter] public string? Class { get; set; }
+
+    private const int Margin = 90;
+
+    protected override void OnParametersSet()
+    {
+        (_nodes, _links) = SankeyLayout.Compute(Links, Width - 2 * Margin, Height - 16, NodeWidth);
+        _ids = _nodes.OrderBy(n => n.Column).ThenBy(n => n.Y).Select(n => n.Id).ToList();
+        _maxColumn = _nodes.Count == 0 ? 0 : _nodes.Max(n => n.Column);
+    }
+
+    private string NodeColor(string id) => SeriesColor(Math.Max(0, _ids.IndexOf(id)) % 6);
+}

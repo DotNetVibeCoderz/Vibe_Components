@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <Description>Blazor.AI decision intelligence: rules engine, DMN-style decision tables, decision trees, business policies, risk assessment, eligibility, approval workflows and dynamic pricing, with TypeSafe System One integration.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+    <PackageReference Include="Gravicode.TypeSafeSdk" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Blazor.AI.Visualization\Blazor.AI.Visualization.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,24 @@
+@namespace Blazor.AI.Components
+@* Attribution shown in app footers and docs. *@
+
+<span class="bai-credit @Class">
+    <svg class="bai-kawung-glyph" viewBox="0 0 24 24" aria-hidden="true" style="opacity:.8">
+        <ellipse cx="12" cy="5.5" rx="3" ry="5" style="animation:none;opacity:1" />
+        <ellipse cx="18.5" cy="12" rx="5" ry="3" style="animation:none;opacity:.7" />
+        <ellipse cx="12" cy="18.5" rx="3" ry="5" style="animation:none;opacity:1" />
+        <ellipse cx="5.5" cy="12" rx="5" ry="3" style="animation:none;opacity:.7" />
+    </svg>
+    @if (Indonesian)
+    {
+        <span>Dibuat oleh <strong>Gravicode Studios</strong> dipimpin oleh <strong>Kang Fadhil</strong></span>
+    }
+    else
+    {
+        <span>Made by <strong>Gravicode Studios</strong>, led by <strong>Kang Fadhil</strong> · <em>Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil</em></span>
+    }
+</span>
+
+@code {
+    [Parameter] public bool Indonesian { get; set; }
+    [Parameter] public string? Class { get; set; }
+}

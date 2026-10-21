@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <Description>Blazor.AI retrieval-augmented generation: document ingestion (PDF, text, markdown, CSV, Excel), chunking, vector search, PDF and spreadsheet chat, citations, knowledge explorer and knowledge-graph extraction.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+    <PackageReference Include="Gravicode.OfficeNet.PdfNet" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
+    <PackageReference Include="Gravicode.Science.GraviFrame" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Blazor.AI.Components\Blazor.AI.Components.csproj" />
+    <ProjectReference Include="..\Blazor.AI.Visualization\Blazor.AI.Visualization.csproj" />
+  </ItemGroup>
+</Project>

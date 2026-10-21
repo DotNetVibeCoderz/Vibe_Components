@@ -1,0 +1,61 @@
+@namespace Blazor.AI.Bio
+@using Biotech.Net.Alignments.Phylogenetics
+@* Rectangular phylogram: x = cumulative branch length, leaves evenly spaced. *@
+
+@if (_layout is { } l)
+{
+    <svg viewBox="0 0 @Width @l.Height" style="width:100%" role="img" aria-label="Phylogenetic tree">
+        @foreach (var e in l.Edges)
+        {
+            <path d="@e" fill="none" stroke="var(--bai-ink-muted)" stroke-width="1.6" />
+        }
+        @foreach (var (x, y, name) in l.Leaves)
+        {
+            <circle cx="@S(x)" cy="@S(y)" r="3.5" fill="var(--bai-soga)" />
+            <!text x="@S(x + 8)" y="@S(y + 4)" class="bai-axis-text" style="font-size:12px; fill:var(--bai-ink)">@name</!text>
+        }
+        <line x1="20" x2="@S(20 + l.Scale * l.Bar)" y1="@(l.Height - 10)" y2="@(l.Height - 10)" stroke="var(--bai-ink-faint)" />
+        <!text x="@S(24 + l.Scale * l.Bar)" y="@(l.Height - 6)" class="bai-axis-text">@l.Bar.ToString("0.###", CultureInfo.InvariantCulture)</!text>
+    </svg>
+}
+
+@code {
+    private Layout? _layout;
+
+    [Parameter, EditorRequired] public PhylogeneticTree Tree { get; set; } = default!;
+    [Parameter] public int Width { get; set; } = 480;
+    [Parameter] public int RowHeight { get; set; } = 28;
+
+    private sealed record Layout(List<string> Edges, List<(double X, double Y, string Name)> Leaves, double Height, double Scale, double Bar);
+
+    protected override void OnParametersSet()
+    {
+        var depth = new Dictionary<TreeNode, double>();
+        foreach (var node in Tree.Root.PreOrder())
+        {
+            depth[node] = node.Parent is null ? 0 : depth[node.Parent] + Math.Max(0, node.BranchLength ?? 0);
+        }
+
+        var maxDepth = Math.Max(1e-9, depth.Values.Max());
+        var scale = (Width - 140) / maxDepth;
+        var y = new Dictionary<TreeNode, double>();
+        var row = 0;
+        foreach (var node in Tree.Root.PostOrder())
+        {
+            y[node] = node.IsLeaf ? 16 + row++ * RowHeight : node.Children.Average(c => y[c]);
+        }
+
+        double X(TreeNode n) => 20 + depth[n] * scale;
+        var edges = new List<string>();
+        foreach (var node in Tree.Root.PreOrder().Where(n => !n.IsLeaf))
+        {
+            var ys = node.Children.Select(c => y[c]).ToList();
+            edges.Add($"M{S(X(node))},{S(ys.Min())} V{S(ys.Max())}");
+            edges.AddRange(node.Children.Select(c => $"M{S(X(node))},{S(y[c])} H{S(X(c))}"));
+        }
+
+        // Scale bar: a round number near a fifth of the tree depth.
+        var bar = Math.Pow(10, Math.Floor(Math.Log10(maxDepth / 5)));
+        _layout = new Layout(edges, Tree.Root.Leaves().Select(n => (X(n), y[n], n.Name ?? "")).ToList(), 16 + row * RowHeight + 14, scale, bar);
+    }
+}

@@ -1,0 +1,40 @@
+@namespace Blazor.AI.Analytics
+@* Classification end to end: train, then inspect the confusion matrix, ROC curve and per-class report. *@
+
+<div class="bai-stack @Class">
+    <ModelTrainer Title="@Title" Task="MlTask.Classification" Dataset="@Dataset" Provider="@Provider" OnTrained="r => _result = r" />
+    @if (_result is { } r)
+    {
+        <div class="bai-grid-2" style="align-items:start">
+            @if (r.ConfusionMatrix is { } cm)
+            {
+                <AiCard Title="Confusion matrix" Subtitle="Rows = actual, columns = predicted" Icon="bi-grid-3x3">
+                    <Heatmap Values="@cm" RowLabels="@Labels(r, cm.GetLength(0))" ColumnLabels="@Labels(r, cm.GetLength(1))" Colormap="Blues" Width="420" LabelWidth="80" TopLabelHeight="50" />
+                </AiCard>
+            }
+            @if (MlTrainer.Roc(r) is { Fpr.Length: > 0 } roc)
+            {
+                <AiCard Title="ROC curve" Subtitle="@($"AUC {r.Metrics.GetValueOrDefault("ROC AUC"):0.000}")" Icon="bi-graph-up">
+                    <LineChart Series="@([new ChartSeries("ROC", roc.Fpr.Zip(roc.Tpr, (x, y) => new ChartPoint(x, y)).ToArray()) { Area = true }, new ChartSeries("Chance", [new(0, 0), new(1, 1)]) { Dashed = true, Color = "var(--bai-ink-faint)" }])"
+                               XLabel="False positive rate" YLabel="True positive rate" YMin="0" YMax="1" Height="260" />
+                </AiCard>
+            }
+        </div>
+        @if (r.Report is not null)
+        {
+            <details><summary class="bai-small" style="cursor:pointer">Classification report</summary><pre class="bai-code" style="margin-top:.4rem">@r.Report</pre></details>
+        }
+    }
+</div>
+
+@code {
+    private TrainingResult? _result;
+
+    [Parameter] public string Title { get; set; } = "Classification workbench";
+    [Parameter] public AnalyticsDataset? Dataset { get; set; }
+    [Parameter] public string? Provider { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private static IReadOnlyList<string> Labels(TrainingResult r, int count) =>
+        Enumerable.Range(0, count).Select(i => r.ClassLabels.ElementAtOrDefault(i) ?? i.ToString(CultureInfo.InvariantCulture)).ToArray();
+}

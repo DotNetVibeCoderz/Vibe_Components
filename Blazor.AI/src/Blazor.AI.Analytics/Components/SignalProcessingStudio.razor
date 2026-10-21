@@ -1,0 +1,95 @@
+@namespace Blazor.AI.Analytics
+@* Compose a signal from sine waves and noise (or use a dataset column), inspect its spectrum with FFT, and filter it. *@
+
+<AiCard Title="@Title" Subtitle="FFT powered by GraviNum" Icon="bi-soundwave" Class="@Class">
+    <div class="bai-grid-2" style="align-items:start">
+        <div class="bai-stack">
+            <div class="bai-grid-2">
+                <div><label class="bai-label" for="sp-rate">Sample rate (Hz)</label><input id="sp-rate" type="number" min="8" class="bai-input" @bind="_rate" /></div>
+                <div><label class="bai-label" for="sp-n">Samples</label><input id="sp-n" type="number" min="32" max="8192" class="bai-input" @bind="_samples" /></div>
+            </div>
+            <span class="bai-label">Components</span>
+            @foreach (var c in _components)
+            {
+                <div class="bai-row" style="flex-wrap:nowrap">
+                    <label class="bai-small">f <input type="number" step="0.5" min="0" class="bai-input" style="width:5rem" @bind="c.Frequency" /> Hz</label>
+                    <label class="bai-small">A <input type="number" step="0.1" min="0" class="bai-input" style="width:4.5rem" @bind="c.Amplitude" /></label>
+                    <button type="button" class="bai-icon-btn" aria-label="Remove component" @onclick="() => _components.Remove(c)"><i class="bi bi-x"></i></button>
+                </div>
+            }
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="() => _components.Add(new Wave { Frequency = 12, Amplitude = 0.5 })"><i class="bi bi-plus" aria-hidden="true"></i>Wave</button>
+                <label class="bai-small">Noise <input type="number" step="0.05" min="0" class="bai-input" style="width:4.5rem" @bind="_noise" /></label>
+            </div>
+            <span class="bai-label">Filter</span>
+            <div class="bai-row">
+                <select class="bai-select" style="width:auto" @bind="_filter" aria-label="Filter type">
+                    <option value="none">None</option>
+                    <option value="low">Low-pass</option>
+                    <option value="high">High-pass</option>
+                    <option value="band">Band-pass</option>
+                </select>
+                @if (_filter is "low" or "band") { <label class="bai-small">below <input type="number" class="bai-input" style="width:4.5rem" @bind="_high" /> Hz</label> }
+                @if (_filter is "high" or "band") { <label class="bai-small">above <input type="number" class="bai-input" style="width:4.5rem" @bind="_low" /> Hz</label> }
+            </div>
+        </div>
+        <div class="bai-stack">
+            @{
+                var signal = Signal();
+                var filtered = _filter == "none" ? null : TimeSeriesTools.FftFilter(signal, _rate, _filter is "high" or "band" ? _low : null, _filter is "low" or "band" ? _high : null);
+                var (freq, mag) = TimeSeriesTools.Spectrum(signal, _rate);
+                var shown = Math.Min(signal.Length, (int)_rate * 2);
+            }
+            <LineChart Title="Time domain (first 2 s)" Series="@TimeSeries(signal, filtered, shown)" XLabel="seconds" Height="200" />
+            <LineChart Title="Spectrum" Series="@([new ChartSeries("Amplitude", freq.Zip(mag, (f, m) => new ChartPoint(f, m)).ToArray()) { Area = true }])" XLabel="Hz" ShowLegend="false" Height="200" />
+            <span class="bai-small bai-muted">Peak at @freq[Array.IndexOf(mag, mag.Skip(1).DefaultIfEmpty(0).Max())].ToString("0.##", CultureInfo.InvariantCulture) Hz · resolution @((_rate / signal.Length).ToString("0.###", CultureInfo.InvariantCulture)) Hz</span>
+        </div>
+    </div>
+</AiCard>
+
+@code {
+    private readonly List<Wave> _components = [new() { Frequency = 3, Amplitude = 1 }, new() { Frequency = 25, Amplitude = 0.4 }];
+    private double _rate = 128, _noise = 0.3, _low = 10, _high = 8;
+    private int _samples = 1024;
+    private string _filter = "low";
+
+    [Parameter] public string Title { get; set; } = "Signal processing studio";
+
+    /// <summary>Analyse this signal instead of the synthetic one.</summary>
+    [Parameter] public IReadOnlyList<double>? Input { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    private double[] Signal()
+    {
+        if (Input is { Count: > 8 })
+        {
+            return Input.ToArray();
+        }
+
+        var rng = new Random(4);
+        var n = Math.Clamp(_samples, 32, 8192);
+        return Enumerable.Range(0, n).Select(i =>
+        {
+            var t = i / _rate;
+            return _components.Sum(c => c.Amplitude * Math.Sin(2 * Math.PI * c.Frequency * t)) + _noise * SampleDatasets.Gaussian(rng);
+        }).ToArray();
+    }
+
+    private IReadOnlyList<ChartSeries> TimeSeries(double[] signal, double[]? filtered, int count)
+    {
+        var series = new List<ChartSeries> { new("Signal", Enumerable.Range(0, count).Select(i => new ChartPoint(i / _rate, signal[i])).ToArray()) { Color = "var(--bai-ink-faint)" } };
+        if (filtered is not null)
+        {
+            series.Add(new ChartSeries("Filtered", Enumerable.Range(0, count).Select(i => new ChartPoint(i / _rate, filtered[i])).ToArray()));
+        }
+
+        return series;
+    }
+
+    private sealed class Wave
+    {
+        public double Frequency { get; set; }
+        public double Amplitude { get; set; }
+    }
+}

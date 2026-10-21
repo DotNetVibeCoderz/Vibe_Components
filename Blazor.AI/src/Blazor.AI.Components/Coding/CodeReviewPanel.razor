@@ -1,0 +1,113 @@
+@namespace Blazor.AI.Components
+@inherits AiComponentBase
+@* Structured code review: a score, severity-ranked findings with line numbers and concrete fixes. *@
+
+<AiCard Title="@Title" Subtitle="@Subtitle" Icon="bi-shield-check" Class="@Class">
+    <div class="bai-stack">
+        <div class="bai-grid-2">
+            <div>
+                <label class="bai-label" for="@($"{_id}-lang")">Language</label>
+                <select id="@($"{_id}-lang")" class="bai-select" @bind="_language">
+                    @foreach (var l in new[] { "C#", "Razor", "TypeScript", "JavaScript", "Python", "SQL", "Java", "Go" }) { <option>@l</option> }
+                </select>
+            </div>
+            <div>
+                <label class="bai-label" for="@($"{_id}-focus")">Focus</label>
+                <select id="@($"{_id}-focus")" class="bai-select" @bind="_focus">
+                    <option>Everything</option>
+                    <option>Security</option>
+                    <option>Performance and memory</option>
+                    <option>Correctness and bugs</option>
+                    <option>Readability</option>
+                </select>
+            </div>
+        </div>
+        <div>
+            <label class="bai-label" for="@($"{_id}-code")">Code to review</label>
+            <textarea id="@($"{_id}-code")" class="bai-textarea" rows="10" style="font-family:var(--bai-font-mono); font-size:.82rem" @bind="Code" placeholder="Paste a method, class or diff…"></textarea>
+        </div>
+        <div class="bai-row">
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(Code))" @onclick="ReviewAsync">
+                @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-search" aria-hidden="true"></i> }
+                Review code
+            </button>
+        </div>
+        <AiError Message="@Error" OnRetry="ReviewAsync" />
+
+        @if (_review is not null)
+        {
+            <div class="bai-output">
+                <div class="bai-row" style="margin-bottom:.75rem">
+                    @if (_review.Score is { } score)
+                    {
+                        <span class="bai-stat-value" style="color:@(score >= 80 ? "var(--bai-nila)" : score >= 50 ? "var(--bai-soga)" : "var(--bai-danger)")">@score</span>
+                        <span class="bai-muted bai-small">/ 100</span>
+                    }
+                    <span class="bai-spacer"></span>
+                    @foreach (var group in _review.Findings.GroupBy(f => f.Severity))
+                    {
+                        <span class="bai-badge @SeverityClass(group.Key)">@group.Count() @group.Key</span>
+                    }
+                </div>
+                @if (_review.Summary is not null)
+                {
+                    <p style="margin:0 0 .75rem">@_review.Summary</p>
+                }
+                @if (_review.Findings.Count > 0)
+                {
+                    <div class="bai-table-wrap">
+                        <table class="bai-table">
+                            <thead><tr><th>Severity</th><th>Line</th><th>Finding</th><th>Suggested fix</th></tr></thead>
+                            <tbody>
+                                @foreach (var f in _review.Findings)
+                                {
+                                    <tr>
+                                        <td><span class="bai-badge @SeverityClass(f.Severity)">@f.Severity</span></td>
+                                        <td class="bai-num">@(f.Line?.ToString() ?? "–")</td>
+                                        <td><strong>@f.Title</strong><div class="bai-small bai-muted">@f.Detail</div></td>
+                                        <td class="bai-small">@f.Suggestion</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else if (_review.Markdown is not null)
+                {
+                    <AiMarkdown Text="@_review.Markdown" />
+                }
+            </div>
+        }
+    </div>
+</AiCard>
+
+@code {
+    private readonly string _id = "bai-review-" + Guid.NewGuid().ToString("N")[..6];
+    private string _language = "C#";
+    private string _focus = "Everything";
+    private ReviewResult? _review;
+
+    [Parameter] public string Title { get; set; } = "Code review";
+    [Parameter] public string? Subtitle { get; set; } = "Bugs, security and performance, ranked";
+    [Parameter] public string? Code { get; set; }
+    [Parameter] public EventCallback<ReviewResult> OnReviewed { get; set; }
+
+    public Task ReviewAsync() => RunAsync(async ct =>
+    {
+        _review = null;
+        var system = $"You are a meticulous senior {_language} code reviewer. Focus: {_focus}. Review the code and reply with JSON only: " +
+                     "{\"summary\": string, \"score\": 0-100, \"findings\": [{\"severity\": \"critical\"|\"major\"|\"minor\"|\"info\", " +
+                     "\"line\": number|null, \"title\": string, \"detail\": string, \"suggestion\": string}]}. Order findings by severity. " +
+                     "Do not report style nits as major. If the code is fine, return an empty findings array.";
+        var raw = await Ai.CompleteAsync(system, "Review this code:\n" + PromptTags.Wrap(PromptTags.Input, Code), AiTasks.Code, Provider, new ChatOptions { Temperature = 0.1f }, ct);
+        _review = ReviewResult.Parse(raw);
+        await OnReviewed.InvokeAsync(_review);
+    });
+
+    private static string SeverityClass(string severity) => severity switch
+    {
+        "critical" or "major" => "bai-badge-danger",
+        "minor" => "bai-badge-ai",
+        _ => "bai-badge-local",
+    };
+}

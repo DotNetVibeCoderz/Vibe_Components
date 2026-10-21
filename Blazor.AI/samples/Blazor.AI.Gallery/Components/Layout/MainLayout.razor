@@ -1,0 +1,71 @@
+@inherits LayoutComponentBase
+@inject NavigationManager Nav
+
+<div class="g-shell">
+    <aside class="g-sidebar @(_menuOpen ? "is-open" : null)" aria-label="Sections">
+        <a class="g-brand" href="/">
+            <svg class="g-brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+                <ellipse cx="12" cy="5.5" rx="3" ry="5" /><ellipse cx="18.5" cy="12" rx="5" ry="3" /><ellipse cx="12" cy="18.5" rx="3" ry="5" /><ellipse cx="5.5" cy="12" rx="5" ry="3" />
+            </svg>
+            <span>Blazor<span class="g-brand-dot">.</span>AI</span>
+        </a>
+        <nav>
+            <NavLink class="g-nav" href="" Match="NavLinkMatch.All" @onclick="Close"><i class="bi bi-house" aria-hidden="true"></i>Overview</NavLink>
+            <NavLink class="g-nav" href="settings" @onclick="Close"><i class="bi bi-sliders2" aria-hidden="true"></i>Models & settings</NavLink>
+            <div class="g-nav-group">Components</div>
+            @foreach (var s in GalleryNavigation.Sections)
+            {
+                <NavLink class="g-nav" href="@s.Href" @onclick="Close">
+                    <i class="bi @s.Icon" aria-hidden="true"></i><span class="bai-spacer">@s.Title</span>
+                    @if (s.Components > 0) { <span class="g-count">@s.Components</span> }
+                </NavLink>
+            }
+        </nav>
+        <div class="g-sidebar-foot"><AiCredit Indonesian="true" /></div>
+    </aside>
+
+    <div class="g-main">
+        <header class="g-topbar">
+            <button type="button" class="bai-icon-btn g-menu" aria-label="Open menu" @onclick="() => _menuOpen = !_menuOpen"><i class="bi bi-list"></i></button>
+            <AiProviderPicker ShowLabel="true" />
+            <span class="bai-spacer"></span>
+            <a class="bai-icon-btn" href="https://github.com/DotNetVibeCoderz/Vibe_Components/tree/main/Blazor.AI" target="_blank" rel="noopener" aria-label="Source on GitHub" title="Source on GitHub"><i class="bi bi-github"></i></a>
+            <AiThemeToggle />
+        </header>
+        <main class="g-content" id="main">
+            <ErrorBoundary @ref="_boundary">
+                <ChildContent>@Body</ChildContent>
+                <ErrorContent Context="ex">
+                    <div class="bai-alert" role="alert"><i class="bi bi-bug" aria-hidden="true"></i><div class="bai-spacer">Something went wrong on this page: @ex.Message</div><button type="button" class="bai-btn-ghost" @onclick="Recover">Try again</button></div>
+                </ErrorContent>
+            </ErrorBoundary>
+        </main>
+        <footer class="g-footer">
+            <AiCredit />
+            <span class="bai-faint">Blazor.AI 1.0 · .NET 10 · MIT</span>
+        </footer>
+    </div>
+</div>
+
+<AiAssistant Title="Gallery guide" Subtitle="Ask how to use any component"
+             SystemPrompt="@AssistantPrompt"
+             Suggestions="@(["Which component fills forms from the clipboard?", "How do I add Anthropic as a provider?", "How does PDF chat cite sources?"])" />
+
+@code {
+    private bool _menuOpen;
+    private ErrorBoundary? _boundary;
+
+    private static readonly string AssistantPrompt =
+        "You are the guide for the Blazor.AI component gallery. Blazor.AI is a .NET 10 Blazor component library by Gravicode Studios (led by Kang Fadhil). " +
+        "Packages: Core (providers: OpenAI, Azure OpenAI, Anthropic, Gemini, Mistral, Cohere, DeepSeek, Grok, Ollama, LocalGen, llama.cpp, Hugging Face; guardrails), " +
+        "Components (SmartPaste, SmartTextArea, SmartComboBox, AiChat, AiCopilot, generators), RAG (DocumentIngestion, SmartDocumentChat, PdfChat, SpreadsheetChat), " +
+        "Agents (AgentStudio, AiMultiAgentPanel, MCPServerExplorer, AgentWorkflowDesigner), Decision (RuleEditor, DecisionTableEditor, TypeSafe), Analytics (ML, data science, RL), " +
+        "LocalModels (Hugging Face local inference), Visualization (charts). Setup: services.AddBlazorAI(configuration).AddAzureOpenAI(...); services.AddBlazorAIComponents(). " +
+        "Answer briefly with code snippets when useful.";
+
+    protected override void OnParametersSet() => _boundary?.Recover();
+
+    private void Close() => _menuOpen = false;
+
+    private void Recover() => _boundary?.Recover();
+}

@@ -1,0 +1,42 @@
+@namespace Blazor.AI.Bio
+@using Blazor.AI.Agents
+@* A lab copilot that answers with Biotech.Net computations (tool calls) instead of recalled numbers. *@
+
+<AiAgentChat Agent="@_agent" AllowAgentSwitch="false" Height="@Height" Suggestions="@Suggestions" Class="@Class" />
+
+@code {
+    private AgentDefinition _agent = default!;
+
+    [Inject] private BioToolsActivator Tools { get; set; } = default!;
+
+    [Parameter] public string Height { get; set; } = "520px";
+    [Parameter] public string? Provider { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    [Parameter] public IReadOnlyList<string> Suggestions { get; set; } =
+    [
+        "What is the GC content and Tm of ATGGCCATTGTAATGGGCCGCTGAAAGGGTGCCCGATAG?",
+        "Is caffeine (Cn1cnc2c1c(=O)n(C)c(=O)n2C) drug-like? Check ADMET.",
+        "Design two SpCas9 guides for ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTG",
+        "Compute pI and instability of MALWMRLLPLLALLALWGPDPAAAFVNQHLCGSHLVEALYLVCGERGFFYTPKTRREAEDLQVGQVELGGGPGAGSLQPLALEGSLQKRGIVEQCCTSICSLYQLENYCN",
+    ];
+
+    protected override void OnInitialized()
+    {
+        Tools.EnsureRegistered();
+        _agent = new AgentDefinition
+        {
+            Id = "bio-copilot",
+            Name = "Bio copilot",
+            Role = "Molecular biology and cheminformatics assistant",
+            Icon = "bi-virus",
+            Provider = Provider,
+            Temperature = 0.2f,
+            MaxIterations = 6,
+            Tools = BioTools.All.Select(t => t.Name).ToList(),
+            Instructions = "You are a careful molecular biology and cheminformatics assistant. Whenever the user gives a sequence or SMILES, call the matching tool " +
+                           "to compute values instead of estimating them, then interpret the results briefly. Say which tool produced each number. " +
+                           "Flag assumptions and never give clinical advice.",
+        };
+    }
+}

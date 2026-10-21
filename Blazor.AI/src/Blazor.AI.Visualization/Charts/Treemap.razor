@@ -1,0 +1,48 @@
+@namespace Blazor.AI.Visualization
+@* Squarified treemap; two levels when items have children. Area is proportional to value. *@
+
+<figure class="bai-chart @Class" style="margin:0">
+    @if (Title is not null)
+    {
+        <figcaption class="bai-chart-title">@Title</figcaption>
+    }
+    <svg viewBox="0 0 @Width @Height" role="img" aria-label="@(Title ?? "Treemap")">
+        @foreach (var cell in _cells)
+        {
+            var color = cell.Depth == 0 ? SeriesColor(_top.IndexOf(cell.Item.Label) % 6) : "rgba(255,255,255,.18)";
+            <g>
+                <rect x="@S(cell.X + 1)" y="@S(cell.Y + 1)" width="@S(Math.Max(0, cell.Width - 2))" height="@S(Math.Max(0, cell.Height - 2))" rx="4"
+                      fill="@color" fill-opacity="@(cell.Depth == 0 ? "0.85" : "1")" stroke="@(cell.Depth == 0 ? "none" : "rgba(255,255,255,.35)")">
+                    <title>@cell.Item.Label: @Fmt(cell.Item.Value) (@((cell.Item.Value / _total * 100).ToString("0.#", CultureInfo.InvariantCulture))% of total)</title>
+                </rect>
+                @if (cell.Width > 50 && cell.Height > 22)
+                {
+                    <!text x="@S(cell.X + 7)" y="@S(cell.Y + 15)" fill="#fff" style="font-size:@(cell.Depth == 0 ? "12px" : "10.5px"); font-weight:600; pointer-events:none">@cell.Item.Label</!text>
+                    @if (cell.Height > 38 && (cell.Depth > 0 || cell.Item.Children is null))
+                    {
+                        <!text x="@S(cell.X + 7)" y="@S(cell.Y + 30)" fill="#fff" fill-opacity="0.8" style="font-size:10px; font-family:var(--bai-font-mono); pointer-events:none">@Fmt(cell.Item.Value)</!text>
+                    }
+                }
+            </g>
+        }
+    </svg>
+</figure>
+
+@code {
+    private List<TreemapLayout.Cell> _cells = [];
+    private List<string> _top = [];
+    private double _total = 1;
+
+    [Parameter, EditorRequired] public IReadOnlyList<TreemapItem> Items { get; set; } = [];
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public int Width { get; set; } = 720;
+    [Parameter] public int Height { get; set; } = 380;
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _cells = TreemapLayout.Compute(Items, Width, Height);
+        _top = Items.OrderByDescending(i => i.Value).Select(i => i.Label).ToList();
+        _total = Math.Max(1e-9, Items.Sum(i => i.Value));
+    }
+}

@@ -1,0 +1,82 @@
+@namespace Blazor.AI.Analytics
+@inherits AnalyticsComponentBase
+@* AutoML: cross-validates every algorithm on the dataset, ranks them, and explains the winner. *@
+
+<AiCard Title="@Title" Subtitle="@($"{Data.Name} · {Data.Task} · {Folds}-fold cross-validation")" Icon="bi-trophy" Class="@Class">
+    <Actions><DatasetPicker /></Actions>
+    <ChildContent>
+        <div class="bai-stack">
+            <div class="bai-row">
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || Data.Target is null || Data.Task is not (MlTask.Classification or MlTask.Regression))" @onclick="RunSearchAsync">
+                    @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-lightning-charge" aria-hidden="true"></i> }
+                    Find the best model
+                </button>
+                @if (IsBusy && _current is not null) { <span class="bai-small bai-muted">Evaluating @_current…</span> }
+                @if (Data.Target is null) { <span class="bai-small bai-muted">Choose a target column first.</span> }
+            </div>
+            <AiError Message="@Error" />
+            @if (_board is { Count: > 0 })
+            {
+                <div class="bai-table-wrap">
+                    <table class="bai-table">
+                        <thead><tr><th>Rank</th><th>Algorithm</th><th>@(Data.Task == MlTask.Regression ? "R²" : "Accuracy") (mean ± sd)</th><th></th><th>Time</th></tr></thead>
+                        <tbody>
+                            @for (var i = 0; i < _board.Count; i++)
+                            {
+                                var row = _board[i];
+                                <tr style="@(i == 0 ? "background:var(--bai-soga-soft)" : null)">
+                                    <td class="bai-num">@(i + 1)@(i == 0 ? " 🏆" : null)</td>
+                                    <td><strong>@row.Model.Name</strong><div class="bai-small bai-muted">@row.Model.Description</div></td>
+                                    <td class="bai-num">@row.Mean.ToString("0.000", CultureInfo.InvariantCulture) ± @row.Std.ToString("0.000", CultureInfo.InvariantCulture)</td>
+                                    <td style="min-width:8rem"><div class="bai-meter"><span style="width:@(Math.Clamp(row.Mean * 100, 0, 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div></td>
+                                    <td class="bai-num">@row.Duration.TotalMilliseconds.ToString("0") ms</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <AiOutput Text="@_advice" IsBusy="@IsBusy" Placeholder="A recommendation will appear here." />
+            }
+        </div>
+    </ChildContent>
+</AiCard>
+
+@code {
+    private IReadOnlyList<(ModelSpec Model, double Mean, double Std, TimeSpan Duration)>? _board;
+    private string? _current, _advice;
+
+    [Parameter] public string Title { get; set; } = "AutoML studio";
+    [Parameter] public int Folds { get; set; } = 5;
+    [Parameter] public EventCallback<ModelSpec> OnBestModel { get; set; }
+
+    protected override void OnDatasetChanged()
+    {
+        _board = null;
+        _advice = null;
+    }
+
+    private Task RunSearchAsync() => RunAsync(async ct =>
+    {
+        var progress = new Progress<string>(name =>
+        {
+            _current = name;
+            InvokeAsync(StateHasChanged);
+        });
+        var data = Data;
+        _board = await Compute(() => MlTrainer.Leaderboard(data, data.Task, Folds, progress, ct), ct);
+        _current = null;
+        StateHasChanged();
+        await OnBestModel.InvokeAsync(_board[0].Model);
+
+        var table = string.Join("\n", _board.Select((b, i) => $"{i + 1}. {b.Model.Name}: {b.Mean:0.000} ± {b.Std:0.000} ({b.Duration.TotalMilliseconds:0} ms)"));
+        var builder = new StringBuilder();
+        _advice = string.Empty;
+        await foreach (var token in Ai.StreamAsync("You are an ML engineer. Recommend which model to ship from this cross-validation leaderboard, weighing accuracy, variance, speed and interpretability. 4 sentences max.",
+                           PromptTags.Wrap(PromptTags.Input, $"Dataset: {data.Name} ({data.Task}, {data.Frame.RowCount} rows)\n{table}"), AiTasks.Insight, Provider, null, ct))
+        {
+            builder.Append(token);
+            _advice = builder.ToString();
+            RenderThrottled();
+        }
+    });
+}

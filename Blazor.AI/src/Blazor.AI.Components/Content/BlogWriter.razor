@@ -1,0 +1,13 @@
+@namespace Blazor.AI.Components
+@* SEO-aware blog posts with metadata. *@
+
+<AiGenerator Spec="@Spec" Provider="@Provider" Class="@Class" Values="@Values" OnGenerated="@OnGenerated" />
+
+@code {
+    /// <summary>The generator definition. Override it to change prompts or fields.</summary>
+    [Parameter] public GeneratorSpec Spec { get; set; } = GeneratorSpecs.Blog;
+    [Parameter] public string? Provider { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public IReadOnlyDictionary<string, string>? Values { get; set; }
+    [Parameter] public EventCallback<string> OnGenerated { get; set; }
+}

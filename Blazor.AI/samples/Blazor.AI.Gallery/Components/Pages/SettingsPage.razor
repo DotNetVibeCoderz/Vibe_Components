@@ -1,0 +1,101 @@
+@page "/settings"
+@implements IDisposable
+@inject IAiClientFactory Factory
+<PageTitle>Models & settings · Blazor.AI</PageTitle>
+
+<PageHeader Title="Models & settings" Package="Blazor.AI.Core" Icon="bi-sliders2"
+            Lead="Providers registered in this app, and a form to add one at runtime. Keys added here live only in this server's memory; use user-secrets or environment variables for anything permanent." />
+
+<div class="bai-grid-2" style="align-items:start">
+    <AiCard Title="Registered providers" Icon="bi-hdd-stack">
+        @foreach (var p in Factory.Providers)
+        {
+            <div class="bai-result">
+                <div class="bai-result-head">
+                    <strong>@p.Label</strong>
+                    <span class="bai-row">
+                        <span class="bai-badge @(p.Deployment == AiDeploymentMode.Local ? "bai-badge-local" : "bai-badge-cloud")">@p.Deployment</span>
+                        @if (p.Name == Factory.DefaultProvider.Name) { <span class="bai-badge bai-badge-ai">default</span> }
+                        else { <button type="button" class="bai-btn-ghost" style="padding:.15rem .6rem" @onclick="() => Factory.SetDefault(p.Name)">Make default</button> }
+                    </span>
+                </div>
+                <span class="bai-small bai-muted">@p.Kind · @(p.Endpoint ?? "default endpoint") · embeddings: @(p.EmbeddingModel ?? "offline hashing")</span>
+                <div class="bai-row">
+                    <button type="button" class="bai-btn-ghost" style="padding:.15rem .6rem" disabled="@(_testing == p.Name)" @onclick="() => TestAsync(p.Name)">Test connection</button>
+                    @if (_results.TryGetValue(p.Name, out var r)) { <span class="bai-small @(r.StartsWith("✓", StringComparison.Ordinal) ? "bai-delta-up" : "bai-delta-down")">@r</span> }
+                </div>
+            </div>
+        }
+    </AiCard>
+
+    <AiCard Title="Add a provider" Icon="bi-plus-circle">
+        <form class="bai-stack" @onsubmit="Add" @onsubmit:preventDefault="true">
+            <div class="bai-grid-2">
+                <div><label class="bai-label" for="s-name">Name</label><input id="s-name" class="bai-input" @bind="_new.Name" /></div>
+                <div>
+                    <label class="bai-label" for="s-kind">Provider</label>
+                    <select id="s-kind" class="bai-select" @bind="_new.Kind">
+                        @foreach (var k in Enum.GetValues<AiProviderKind>().Where(k => k is not (AiProviderKind.OnnxRuntime or AiProviderKind.LocalTransformers))) { <option value="@k">@k</option> }
+                    </select>
+                </div>
+                <div><label class="bai-label" for="s-model">Model / deployment</label><input id="s-model" class="bai-input" @bind="_new.Model" placeholder="@Blazor.AI.Core.Providers.ProviderDefaults.Model(_new.Kind)" /></div>
+                <div><label class="bai-label" for="s-emb">Embedding model (optional)</label><input id="s-emb" class="bai-input" @bind="_new.EmbeddingModel" /></div>
+                <div style="grid-column:1/-1"><label class="bai-label" for="s-ep">Endpoint (optional)</label><input id="s-ep" class="bai-input" @bind="_new.Endpoint" placeholder="@(Blazor.AI.Core.Providers.ProviderDefaults.Endpoint(_new.Kind) ?? "provider default")" /></div>
+                <div style="grid-column:1/-1"><label class="bai-label" for="s-key">API key</label><input id="s-key" class="bai-input" type="password" autocomplete="off" @bind="_new.ApiKey" /></div>
+            </div>
+            <button type="submit" class="bai-btn bai-btn-ai" style="width:fit-content" disabled="@string.IsNullOrWhiteSpace(_new.Name)"><i class="bi bi-plus-lg" aria-hidden="true"></i>Add provider</button>
+            <AiCodeBlock Code="@ConfigCode" />
+        </form>
+    </AiCard>
+</div>
+
+@code {
+    private AiProviderOptions _new = new() { Name = "ollama", Kind = AiProviderKind.Ollama };
+    private readonly Dictionary<string, string> _results = [];
+    private string? _testing;
+
+    private const string ConfigCode = """
+        // appsettings.json or user-secrets
+        "BlazorAI": {
+          "DefaultProvider": "azure",
+          "Providers": [
+            { "Name": "azure", "Kind": "AzureOpenAI", "Endpoint": "https://x.openai.azure.com/", "ApiKey": "...", "Model": "gpt-5-mini" },
+            { "Name": "claude", "Kind": "Anthropic", "ApiKey": "...", "Model": "claude-sonnet-5-5" },
+            { "Name": "ollama", "Kind": "Ollama", "Model": "llama3.2", "EmbeddingModel": "nomic-embed-text" }
+          ]
+        }
+        """;
+
+    protected override void OnInitialized() => Factory.ProvidersChanged += Refresh;
+
+    private void Add()
+    {
+        Factory.Register(_new);
+        _new = new AiProviderOptions { Name = "custom", Kind = AiProviderKind.Custom };
+    }
+
+    private async Task TestAsync(string provider)
+    {
+        _testing = provider;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var response = await Factory.GetChatClient(provider).GetResponseAsync("Reply with the single word: ready", new ChatOptions { MaxOutputTokens = 2000 });
+            _results[provider] = $"✓ {stopwatch.ElapsedMilliseconds} ms · \"{Shorten(response.Text)}\"";
+        }
+        catch (Exception ex)
+        {
+            _results[provider] = "✗ " + AiComponentBase.Describe(ex);
+        }
+        finally
+        {
+            _testing = null;
+        }
+    }
+
+    private static string Shorten(string text) => text.Length <= 40 ? text.Trim() : text[..40].Trim() + "…";
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Factory.ProvidersChanged -= Refresh;
+}

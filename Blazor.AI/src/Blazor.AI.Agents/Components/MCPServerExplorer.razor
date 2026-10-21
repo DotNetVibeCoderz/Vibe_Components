@@ -1,0 +1,186 @@
+@namespace Blazor.AI.Agents
+@implements IDisposable
+@* Connect to Model Context Protocol servers, browse their tools, prompts and resources, try tools,
+   and make them available to every agent. *@
+
+<AiCard Title="@Title" Subtitle="Model Context Protocol" Icon="bi-plug" Class="@Class">
+    <div class="bai-stack">
+        <form class="bai-grid-2" @onsubmit="ConnectAsync" @onsubmit:preventDefault="true">
+            <div>
+                <label class="bai-label" for="mcp-name">Name</label>
+                <input id="mcp-name" class="bai-input" @bind="_name" placeholder="e.g. docs" />
+            </div>
+            <div>
+                <label class="bai-label" for="mcp-kind">Transport</label>
+                <select id="mcp-kind" class="bai-select" @bind="_transport">
+                    <option value="http">Streamable HTTP / SSE</option>
+                    @if (Connector.AllowStdio) { <option value="stdio">stdio (local process)</option> }
+                </select>
+            </div>
+            <div style="grid-column:1 / -1">
+                <label class="bai-label" for="mcp-endpoint">@(_transport == "http" ? "Server URL" : "Command line")</label>
+                <div class="bai-row">
+                    <input id="mcp-endpoint" class="bai-input bai-spacer" @bind="_endpoint" placeholder="@(_transport == "http" ? "https://your-server.example.com/mcp" : "npx -y @modelcontextprotocol/server-everything")" />
+                    <button type="submit" class="bai-btn bai-btn-ai" disabled="@(_busy || string.IsNullOrWhiteSpace(_endpoint))">
+                        @if (_busy) { <AiThinking Label="@null" /> } else { <i class="bi bi-plug" aria-hidden="true"></i> }
+                        Connect
+                    </button>
+                </div>
+            </div>
+            @if (_transport == "http")
+            {
+                <div style="grid-column:1 / -1">
+                    <label class="bai-label" for="mcp-auth">Authorization header (optional)</label>
+                    <input id="mcp-auth" class="bai-input" type="password" @bind="_auth" placeholder="Bearer …" autocomplete="off" />
+                </div>
+            }
+        </form>
+        <AiError Message="@_error" />
+
+        @if (Connector.Connections.Count == 0)
+        {
+            <div class="bai-empty"><i class="bi bi-plug" aria-hidden="true"></i>No servers connected. Connected servers' tools show up in Agent Studio automatically.</div>
+        }
+
+        @foreach (var connection in Connector.Connections)
+        {
+            <div class="bai-result">
+                <div class="bai-result-head">
+                    <span><strong>@connection.ServerName</strong> <span class="bai-faint bai-small">@connection.ServerVersion</span></span>
+                    <span class="bai-row">
+                        <span class="bai-badge bai-badge-local">@connection.Tools.Count tools</span>
+                        <span class="bai-badge">@connection.Prompts.Count prompts</span>
+                        <span class="bai-badge">@connection.Resources.Count resources</span>
+                        <button type="button" class="bai-icon-btn" title="Refresh" aria-label="Refresh" @onclick="() => Connector.RefreshAsync(connection)"><i class="bi bi-arrow-clockwise"></i></button>
+                        <button type="button" class="bai-icon-btn" title="Disconnect" aria-label="Disconnect" @onclick="() => DisconnectAsync(connection)"><i class="bi bi-x-lg"></i></button>
+                    </span>
+                </div>
+                <span class="bai-small bai-muted">@connection.Endpoint</span>
+                @if (!string.IsNullOrWhiteSpace(connection.Instructions)) { <span class="bai-small">@connection.Instructions</span> }
+
+                <AiTabs Tabs="@Tabs" @bind-Selected="_tab" />
+                @if (_tab == "Tools")
+                {
+                    @foreach (var tool in connection.Tools)
+                    {
+                        <details>
+                            <summary style="cursor:pointer"><code>@tool.Name</code> <span class="bai-small bai-muted">@tool.Description</span></summary>
+                            <div class="bai-stack" style="margin:.5rem 0 .75rem">
+                                <AiCodeBlock Code="@tool.JsonSchema.ToString()" />
+                                <textarea class="bai-textarea" rows="3" style="font-family:var(--bai-font-mono); font-size:.8rem" aria-label="Arguments JSON"
+                                          value="@ArgsFor(tool.Name)" @onchange="e => SetArgs(tool.Name, e)"></textarea>
+                                <button type="button" class="bai-btn" style="width:fit-content" @onclick="() => CallAsync(tool)"><i class="bi bi-play-fill" aria-hidden="true"></i>Call tool</button>
+                                @if (_results.TryGetValue(tool.Name, out var result)) { <div class="bai-output" style="white-space:pre-wrap">@result</div> }
+                            </div>
+                        </details>
+                    }
+                }
+                else if (_tab == "Prompts")
+                {
+                    @foreach (var prompt in connection.Prompts)
+                    {
+                        <div class="bai-small"><code>@prompt.Name</code> — @prompt.Description</div>
+                    }
+                }
+                else
+                {
+                    @foreach (var resource in connection.Resources)
+                    {
+                        <div class="bai-row bai-small">
+                            <code>@resource.Uri</code><span class="bai-muted">@resource.Name</span><span class="bai-spacer"></span>
+                            <button type="button" class="bai-btn-ghost" @onclick="() => ReadAsync(resource)">Read</button>
+                        </div>
+                        @if (_results.TryGetValue(resource.Uri, out var content)) { <div class="bai-output" style="white-space:pre-wrap; max-height:14rem; overflow:auto">@content</div> }
+                    }
+                }
+            </div>
+        }
+    </div>
+</AiCard>
+
+@code {
+    private static readonly string[] Tabs = ["Tools", "Prompts", "Resources"];
+    private readonly Dictionary<string, string> _args = [];
+    private readonly Dictionary<string, string> _results = [];
+    private string _tab = "Tools";
+    private string _transport = "http";
+    private string? _name, _endpoint, _auth, _error;
+    private bool _busy;
+
+    [Inject] private McpConnector Connector { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "MCP server explorer";
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized() => Connector.Changed += Refresh;
+
+    private async Task ConnectAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var name = string.IsNullOrWhiteSpace(_name) ? $"server{Connector.Connections.Count + 1}" : _name!.Trim();
+            if (_transport == "http")
+            {
+                if (!Uri.TryCreate(_endpoint, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+                {
+                    _error = "Enter a full http(s) URL, e.g. https://example.com/mcp.";
+                    return;
+                }
+
+                var headers = string.IsNullOrWhiteSpace(_auth) ? null : new Dictionary<string, string> { ["Authorization"] = _auth! };
+                await Connector.ConnectHttpAsync(name, uri, headers);
+            }
+            else
+            {
+                var parts = _endpoint!.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                await Connector.ConnectStdioAsync(name, parts[0], parts.Skip(1).ToList());
+            }
+
+            _endpoint = _name = _auth = null;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not connect: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CallAsync(ModelContextProtocol.Client.McpClientTool tool)
+    {
+        try
+        {
+            _results[tool.Name] = await McpConnector.CallToolAsync(tool, _args.GetValueOrDefault(tool.Name, "{}"));
+        }
+        catch (Exception ex)
+        {
+            _results[tool.Name] = "Error: " + ex.Message;
+        }
+    }
+
+    private async Task ReadAsync(ModelContextProtocol.Client.McpClientResource resource)
+    {
+        try
+        {
+            _results[resource.Uri] = await McpConnector.ReadResourceAsync(resource);
+        }
+        catch (Exception ex)
+        {
+            _results[resource.Uri] = "Error: " + ex.Message;
+        }
+    }
+
+    private string ArgsFor(string tool) => _args.GetValueOrDefault(tool, "{}");
+
+    private void SetArgs(string tool, ChangeEventArgs e) => _args[tool] = e.Value?.ToString() ?? "{}";
+
+    private Task DisconnectAsync(McpConnection connection) => Connector.DisconnectAsync(connection);
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Connector.Changed -= Refresh;
+}

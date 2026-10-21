@@ -1,0 +1,63 @@
+@namespace Blazor.AI.Analytics
+@* Collaborative filtering on a ratings matrix: edit ratings, pick a user, see recommendations with reasons and item similarity. *@
+
+<AiCard Title="@Title" Subtitle="Item-based collaborative filtering (adjusted cosine)" Icon="bi-hand-thumbs-up" Class="@Class">
+    <div class="bai-stack">
+        <div class="bai-table-wrap">
+            <table class="bai-table">
+                <thead><tr><th>User \ item</th>@foreach (var item in Items) { <th style="text-transform:none">@item</th> }</tr></thead>
+                <tbody>
+                    @for (var u = 0; u < Users.Count; u++)
+                    {
+                        var user = u;
+                        <tr style="@(user == _user ? "background:var(--bai-soga-soft)" : null)">
+                            <td><button type="button" class="bai-tab @(user == _user ? "is-active" : null)" @onclick="() => Select(user)">@Users[user]</button></td>
+                            @for (var i = 0; i < Items.Count; i++)
+                            {
+                                var item = i;
+                                <td><input type="number" min="0" max="5" class="bai-input" style="width:3.4rem; padding:.2rem .35rem; text-align:center; @(Ratings[user, item] == 0 ? "opacity:.5" : null)"
+                                           value="@Ratings[user, item].ToString(CultureInfo.InvariantCulture)" @onchange="e => Rate(user, item, e)" aria-label="@($"{Users[user]} rating of {Items[item]}")" /></td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <span class="bai-small bai-muted">0 = not rated. Click a user to see their recommendations.</span>
+        <div class="bai-grid-2" style="align-items:start">
+            <div>
+                <span class="bai-label">Recommended for @Users[_user]</span>
+                @foreach (var rec in _recommender.Recommend(_user, Top))
+                {
+                    <div class="bai-result">
+                        <div class="bai-result-head"><strong>@Items[rec.Item]</strong><span class="bai-badge bai-badge-ai">predicted @rec.Score.ToString("0.0", CultureInfo.InvariantCulture) ★</span></div>
+                        <span class="bai-small bai-muted">Because you liked @string.Join(" and ", rec.Because.Select(b => Items[b]))</span>
+                    </div>
+                }
+            </div>
+            <Heatmap Title="Item similarity" Values="@_recommender.SimilarityMatrix" RowLabels="@Items" ColumnLabels="@Items" Colormap="coolwarm" Min="-1" Max="1" Width="520" LabelWidth="100" TopLabelHeight="80" />
+        </div>
+    </div>
+</AiCard>
+
+@code {
+    private Recommender _recommender = default!;
+    private int _user;
+
+    [Parameter] public string Title { get; set; } = "Recommendation workbench";
+    [Parameter] public IReadOnlyList<string> Users { get; set; } = SampleDatasets.Ratings().Users;
+    [Parameter] public IReadOnlyList<string> Items { get; set; } = SampleDatasets.Ratings().Items;
+    [Parameter] public double[,] Ratings { get; set; } = SampleDatasets.Ratings().Ratings;
+    [Parameter] public int Top { get; set; } = 4;
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnParametersSet() => _recommender = new Recommender(Users, Items, Ratings);
+
+    private void Select(int user) => _user = user;
+
+    private void Rate(int user, int item, ChangeEventArgs e)
+    {
+        Ratings[user, item] = Math.Clamp(double.TryParse(e.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0, 0, 5);
+        _recommender = new Recommender(Users, Items, Ratings);
+    }
+}

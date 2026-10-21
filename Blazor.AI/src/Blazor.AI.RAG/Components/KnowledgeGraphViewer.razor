@@ -1,0 +1,48 @@
+@namespace Blazor.AI.RAG
+@inherits AiComponentBase
+@* Builds a knowledge graph from a document in the knowledge base (or pasted text) and explores it. *@
+
+<AiCard Title="@Title" Subtitle="Entities and how they relate" Icon="bi-share" Class="@Class">
+    <div class="bai-stack">
+        <div class="bai-row">
+            <select class="bai-select" style="width:auto; min-width:14rem" @bind="_source" aria-label="Source">
+                <option value="">Pasted text</option>
+                @foreach (var doc in Kb.Documents) { <option value="@doc.Id">@doc.Name</option> }
+            </select>
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || (string.IsNullOrEmpty(_source) && string.IsNullOrWhiteSpace(Text)))" @onclick="ExtractAsync">
+                @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-stars" aria-hidden="true"></i> }
+                Build graph
+            </button>
+        </div>
+        @if (string.IsNullOrEmpty(_source))
+        {
+            <textarea class="bai-textarea" rows="5" @bind="Text" placeholder="Paste an article, report or meeting notes…" aria-label="Text to analyse"></textarea>
+        }
+        <AiError Message="@Error" />
+        @if (_nodes.Count > 0)
+        {
+            <KnowledgeGraph Nodes="@_nodes" Edges="@_edges" />
+        }
+    </div>
+</AiCard>
+
+@code {
+    private IReadOnlyList<GraphNode> _nodes = [];
+    private IReadOnlyList<GraphEdge> _edges = [];
+    private string? _source;
+
+    [Inject] private KnowledgeBase Kb { get; set; } = default!;
+    [Inject] private KnowledgeGraphExtractor Extractor { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Knowledge graph";
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public int MaxEntities { get; set; } = 30;
+    [Parameter] public EventCallback<(IReadOnlyList<GraphNode> Nodes, IReadOnlyList<GraphEdge> Edges)> OnExtracted { get; set; }
+
+    private Task ExtractAsync() => RunAsync(async ct =>
+    {
+        var text = string.IsNullOrEmpty(_source) ? Text! : Kb.Documents.First(d => d.Id == _source).Text;
+        (_nodes, _edges) = await Extractor.ExtractAsync(text, MaxEntities, Provider, ct);
+        await OnExtracted.InvokeAsync((_nodes, _edges));
+    });
+}

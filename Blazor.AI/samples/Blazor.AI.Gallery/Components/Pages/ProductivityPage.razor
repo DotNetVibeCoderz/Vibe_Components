@@ -1,0 +1,61 @@
+@page "/productivity"
+<PageTitle>Productivity · Blazor.AI</PageTitle>
+
+<PageHeader Title="Productivity" Package="Blazor.AI.Components" Icon="bi-briefcase"
+            Lead="Tools for building with models: author and store prompts (encrypted at rest), extract typed objects, design schemas, and run multi-step plans." />
+
+<DemoSection Title="PromptBuilder" Component="PromptBuilder" Description="Role, task, context, constraints and examples assemble into a prompt you can test, improve and save." Code="@BuilderCode">
+    <PromptBuilder />
+</DemoSection>
+
+<DemoSection Title="PromptLibrary" Component="PromptLibrary" Description="Search, favourite and run saved prompts; variables become a form." Code="@LibraryCode">
+    <PromptLibrary />
+</DemoSection>
+
+<DemoSection Title="StructuredOutputForm" Component="StructuredOutputForm" Description="Extract a strongly-typed C# object from free text. The JSON Schema comes from the type." Code="@StructuredCode">
+    <StructuredOutputForm TModel="Invoice" Title="Invoice extractor"
+                          SourceText="Invoice INV-2026-0419 from PT Sumber Makmur dated 18 October 2026. Bill to Kopi Nusantara, Jl. Braga 12 Bandung. 40 kg Gayo green beans at Rp 210.000/kg. Subtotal Rp 8.400.000, VAT 11% Rp 924.000, total Rp 9.324.000. Due in 30 days. Paid: no." />
+</DemoSection>
+
+<DemoSection Title="JsonSchemaGenerator" Component="JsonSchemaGenerator" Description="Infer a schema from sample JSON (locally, no AI) or describe the data in words; get C# records and TypeScript types too." Code="@SchemaCode">
+    <JsonSchemaGenerator />
+</DemoSection>
+
+<DemoSection Title="WorkflowAssistant" Component="WorkflowAssistant" Description="Turn a goal into editable steps; each step's output feeds the next." Code="@WorkflowCode">
+    <WorkflowAssistant />
+</DemoSection>
+
+@code {
+    public enum Status { Draft, Sent, Paid, Overdue }
+
+    public sealed class Invoice
+    {
+        public string? InvoiceNumber { get; set; }
+        public string? Vendor { get; set; }
+        public string? Customer { get; set; }
+        public DateOnly? IssueDate { get; set; }
+        public decimal? Subtotal { get; set; }
+        public decimal? Tax { get; set; }
+        public decimal? Total { get; set; }
+        public int? DueInDays { get; set; }
+        public bool Paid { get; set; }
+        public Status Status { get; set; }
+    }
+
+    private const string BuilderCode = """<PromptBuilder Category="Support" OnSaved="Notify" />""";
+    private const string LibraryCode = """<PromptLibrary />  @* uses IPromptStore (AES-GCM encrypted) *@""";
+
+    private const string StructuredCode = """
+        <StructuredOutputForm TModel="Invoice" @bind-Model="invoice" SourceText="@pastedText" />
+
+        public sealed class Invoice
+        {
+            public string? InvoiceNumber { get; set; }
+            public decimal? Total { get; set; }
+            public DateOnly? IssueDate { get; set; }
+        }
+        """;
+
+    private const string SchemaCode = """<JsonSchemaGenerator OnGenerated="UseSchema" />""";
+    private const string WorkflowCode = """<WorkflowAssistant MaxSteps="6" OnCompleted="Archive" />""";
+}

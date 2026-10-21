@@ -1,0 +1,83 @@
+@namespace Blazor.AI.RAG
+@inherits AiComponentBase
+@* Semantic search over the knowledge base: passages ranked by meaning, with source and page. *@
+
+<div class="@CssClass("bai-stack")" @attributes="AdditionalAttributes">
+    <form class="bai-row" @onsubmit="SearchAsync" @onsubmit:preventDefault="true" role="search">
+        <input class="bai-input bai-spacer" type="search" @bind="Query" @bind:event="oninput" placeholder="@Placeholder" aria-label="Search the knowledge base" />
+        <select class="bai-select" style="width:auto" @bind="_top" aria-label="Number of results">
+            <option value="3">Top 3</option>
+            <option value="5">Top 5</option>
+            <option value="10">Top 10</option>
+        </select>
+        <button type="submit" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(Query))"><i class="bi bi-search" aria-hidden="true"></i>Search</button>
+    </form>
+    <AiError Message="@Error" />
+    @if (_searched && _hits.Count == 0 && !IsBusy)
+    {
+        <div class="bai-empty"><i class="bi bi-search" aria-hidden="true"></i>@(Kb.ChunkCount == 0 ? "The knowledge base is empty. Add documents first." : "No passages matched. Try describing it differently.")</div>
+    }
+    @if (ShowGrid)
+    {
+        <SemanticResultGrid Hits="@_hits" />
+    }
+    else
+    {
+        @foreach (var hit in _hits)
+        {
+            <div class="bai-result">
+                <div class="bai-result-head">
+                    <span class="bai-result-title"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> @hit.SourceLabel</span>
+                    <span class="bai-badge bai-badge-ai">@((hit.Score * 100).ToString("0"))%</span>
+                </div>
+                <p class="bai-small" style="margin:0">@Highlight(hit.Text)</p>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private IReadOnlyList<KnowledgeHit> _hits = [];
+    private bool _searched;
+    private int _top = 5;
+
+    [Inject] private KnowledgeBase Kb { get; set; } = default!;
+
+    [Parameter] public string? Query { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Ask in your own words, e.g. how long do refunds take?";
+    [Parameter] public string? DocumentId { get; set; }
+
+    /// <summary>Show results in a sortable grid instead of cards.</summary>
+    [Parameter] public bool ShowGrid { get; set; }
+
+    [Parameter] public EventCallback<IReadOnlyList<KnowledgeHit>> OnResults { get; set; }
+
+    public Task SearchAsync() => RunAsync(async ct =>
+    {
+        _hits = await Kb.SearchAsync(Query!, _top, DocumentId, cancellationToken: ct);
+        _searched = true;
+        await OnResults.InvokeAsync(_hits);
+    });
+
+    // Bold the query words in the snippet (rendered as text spans, never raw HTML).
+    private RenderFragment Highlight(string text) => builder =>
+    {
+        var words = (Query ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length > 3).Select(w => w.ToLowerInvariant()).ToHashSet();
+        var snippet = text.Length > 420 ? text[..420] + "…" : text;
+        var seq = 0;
+        foreach (var token in System.Text.RegularExpressions.Regex.Split(snippet, @"(\s+)"))
+        {
+            if (words.Contains(token.Trim('.', ',', '?', '!', ':', ';').ToLowerInvariant()))
+            {
+                builder.OpenElement(seq++, "mark");
+                builder.AddAttribute(seq++, "style", "background:var(--bai-soga-soft); color:inherit; padding:0 .1em; border-radius:3px");
+                builder.AddContent(seq++, token);
+                builder.CloseElement();
+            }
+            else
+            {
+                builder.AddContent(seq++, token);
+            }
+        }
+    };
+}

@@ -1,0 +1,13 @@
+@namespace Blazor.AI.Components
+@* Generates README sections, API references or XML comments from code. *@
+
+<AiGenerator Spec="@Spec" Provider="@Provider" Class="@Class" Values="@Values" OnGenerated="@OnGenerated" />
+
+@code {
+    /// <summary>The generator definition. Override it to change prompts or fields.</summary>
+    [Parameter] public GeneratorSpec Spec { get; set; } = GeneratorSpecs.Documentation;
+    [Parameter] public string? Provider { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public IReadOnlyDictionary<string, string>? Values { get; set; }
+    [Parameter] public EventCallback<string> OnGenerated { get; set; }
+}

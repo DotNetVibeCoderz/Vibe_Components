@@ -1,0 +1,108 @@
+@namespace Blazor.AI.Components
+@inherits AiComponentBase
+@* Renders any GeneratorSpec: a form, a streaming result and one-click refinements. *@
+
+<AiCard Title="@Spec.Title" Subtitle="@Spec.Subtitle" Icon="@Spec.Icon" Class="@Class">
+    <div class="bai-stack">
+        <div class="bai-grid-2">
+            @foreach (var field in Spec.Fields)
+            {
+                var id = $"{_id}-{field.Name}";
+                <div style="@(field.Wide || field.Kind == GeneratorFieldKind.TextArea ? "grid-column:1 / -1" : null)">
+                    <label class="bai-label" for="@id">@field.Label@(field.Required ? " *" : null)</label>
+                    @switch (field.Kind)
+                    {
+                        case GeneratorFieldKind.TextArea:
+                            <textarea id="@id" class="bai-textarea" rows="4" placeholder="@field.Placeholder" value="@Get(field)" @onchange="e => Set(field, e)"></textarea>
+                            break;
+                        case GeneratorFieldKind.Select:
+                            <select id="@id" class="bai-select" value="@Get(field)" @onchange="e => Set(field, e)">
+                                @foreach (var option in field.Options ?? []) { <option>@option</option> }
+                            </select>
+                            break;
+                        case GeneratorFieldKind.Number:
+                            <input id="@id" class="bai-input" type="number" value="@Get(field)" @onchange="e => Set(field, e)" />
+                            break;
+                        default:
+                            <input id="@id" class="bai-input" placeholder="@field.Placeholder" value="@Get(field)" @onchange="e => Set(field, e)" />
+                            break;
+                    }
+                </div>
+            }
+        </div>
+        <div class="bai-row">
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || !IsValid)" @onclick="GenerateAsync">
+                <i class="bi bi-stars" aria-hidden="true"></i>@Spec.ActionLabel
+            </button>
+            @if (IsBusy)
+            {
+                <button type="button" class="bai-btn-ghost" @onclick="CancelCurrent">Stop</button>
+            }
+            else if (!string.IsNullOrEmpty(_output))
+            {
+                @foreach (var refine in Spec.Refinements)
+                {
+                    <button type="button" class="bai-chip" @onclick="() => RefineAsync(refine)">@refine</button>
+                }
+            }
+        </div>
+        <AiError Message="@Error" OnRetry="GenerateAsync" />
+        <AiOutput Text="@_output" IsBusy="@IsBusy" DownloadName="@Spec.DownloadName" />
+    </div>
+</AiCard>
+
+@code {
+    private readonly string _id = "bai-gen-" + Guid.NewGuid().ToString("N")[..6];
+    private readonly Dictionary<string, string?> _values = new(StringComparer.OrdinalIgnoreCase);
+    private string? _output;
+
+    [Parameter, EditorRequired] public GeneratorSpec Spec { get; set; } = default!;
+
+    /// <summary>Initial form values, keyed by field name.</summary>
+    [Parameter] public IReadOnlyDictionary<string, string>? Values { get; set; }
+
+    [Parameter] public EventCallback<string> OnGenerated { get; set; }
+
+    public string? Output => _output;
+
+    private bool IsValid => Spec.Fields.Where(f => f.Required).All(f => !string.IsNullOrWhiteSpace(Get(f)));
+
+    protected override void OnParametersSet()
+    {
+        foreach (var field in Spec.Fields)
+        {
+            if (!_values.ContainsKey(field.Name))
+            {
+                _values[field.Name] = Values?.GetValueOrDefault(field.Name) ?? field.Default ?? (field.Kind == GeneratorFieldKind.Select ? field.Options?.FirstOrDefault() : null);
+            }
+        }
+    }
+
+    private string? Get(GeneratorField field) => _values.GetValueOrDefault(field.Name);
+
+    private void Set(GeneratorField field, ChangeEventArgs e) => _values[field.Name] = e.Value?.ToString();
+
+    public Task GenerateAsync()
+    {
+        var prompt = PromptTemplating.Render(Spec.Template, _values);
+        return StreamAsync(PromptTemplating.Render(Spec.SystemPrompt, _values), PromptTags.Wrap(PromptTags.Input, prompt), Spec.Task);
+    }
+
+    private Task RefineAsync(string instruction) =>
+        StreamAsync($"Rewrite the text. Instruction: {instruction}. Keep the format (markdown) and the facts. Reply with the rewritten text only.",
+            PromptTags.Wrap(PromptTags.Input, _output), AiTasks.Rewrite);
+
+    private Task StreamAsync(string system, string user, string task) => RunAsync(async ct =>
+    {
+        var builder = new StringBuilder();
+        _output = string.Empty;
+        await foreach (var token in Ai.StreamAsync(system, user, task, Provider, new ChatOptions { Temperature = Spec.Temperature }, ct))
+        {
+            builder.Append(token);
+            _output = builder.ToString();
+            RenderThrottled();
+        }
+
+        await OnGenerated.InvokeAsync(_output);
+    });
+}

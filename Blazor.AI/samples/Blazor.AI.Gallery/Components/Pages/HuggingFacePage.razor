@@ -1,0 +1,78 @@
+@page "/huggingface"
+<PageTitle>Hugging Face · Blazor.AI</PageTitle>
+
+<PageHeader Title="Hugging Face" Package="Blazor.AI.LocalModels" Icon="bi-emoji-smile"
+            Lead="Run Hugging Face models on your own server with HF.Net: downloaded once from the Hub, then private and offline. Each component can also use the hosted Inference API." />
+
+<div class="bai-alert is-info" style="margin-bottom:1.5rem">
+    <i class="bi bi-hdd-network" aria-hidden="true"></i>
+    <span>The first run of each local model downloads it (roughly 20–500 MB) into the Hugging Face cache and can take a minute. Later runs load from disk.</span>
+</div>
+
+<DemoSection Title="ModelHubBrowser" Component="ModelHubBrowser" Description="Search the Hub by keyword and task; inspect files, size and weights format." Code="@HubCode">
+    <ModelHubBrowser />
+</DemoSection>
+
+<DemoSection Title="ModelDownloader" Component="ModelDownloader" Description="Pre-download models with progress, and manage what is loaded in memory." Code="@DownloadCode">
+    <ModelDownloader />
+</DemoSection>
+
+<DemoSection Title="InferencePlayground" Component="InferencePlayground" Description="Classification, NER, fill-mask, QA, similarity, embeddings and local text generation." Code="@PlaygroundCode">
+    <InferencePlayground />
+</DemoSection>
+
+<DemoSection Title="SentimentAnalysisPanel" Component="SentimentAnalysisPanel" Description="One text or a batch, with an overall distribution." Code="@SentimentCode">
+    <SentimentAnalysisPanel />
+</DemoSection>
+
+<DemoSection Title="TextClassificationPanel" Component="TextClassificationPanel" Description="Fine-tuned labels, or zero-shot with your own." Code="@ClassifyCode">
+    <TextClassificationPanel />
+</DemoSection>
+
+<DemoSection Title="NERViewer" Component="NERViewer" Description="People, organisations and places highlighted inline." Code="@NerCode">
+    <NERViewer />
+</DemoSection>
+
+<DemoSection Title="TextEmbeddingStudio" Component="TextEmbeddingStudio" Description="Similarity heatmap and a 2-D map of your sentences." Code="@EmbedCode">
+    <TextEmbeddingStudio />
+</DemoSection>
+
+<DemoSection Title="ImageClassificationPanel" Component="ImageClassificationPanel" Description="ViT ImageNet classes or CLIP zero-shot labels." Code="@ImageCode">
+    <ImageClassificationPanel />
+</DemoSection>
+
+<DemoSection Title="OCRPanel" Component="OCRPanel" Description="Local TrOCR for text lines, or a vision LLM for full documents and tables." Code="@OcrCode">
+    <OCRPanel />
+</DemoSection>
+
+<DemoSection Title="SpeechRecognitionPanel" Component="SpeechRecognitionPanel" Description="Live dictation in the browser, or Whisper on an audio file." Code="@SpeechCode">
+    <SpeechRecognitionPanel />
+</DemoSection>
+
+<DemoSection Title="TextToSpeechPanel" Component="TextToSpeechPanel" Description="Browser voices offline, or a neural TTS model." Code="@TtsCode">
+    <TextToSpeechPanel />
+</DemoSection>
+
+@code {
+    private const string HubCode = """
+        builder.Services.AddBlazorAILocalModels(o => o.HuggingFaceToken = config["HuggingFace:Token"]);
+
+        <ModelHubBrowser OnModelSelected="Use" />
+        """;
+
+    private const string DownloadCode = """<ModelDownloader RepoId="sentence-transformers/all-MiniLM-L6-v2" />""";
+    private const string PlaygroundCode = """<InferencePlayground />""";
+    private const string SentimentCode = """<SentimentAnalysisPanel Model="w11wo/indonesian-roberta-base-sentiment-classifier" />""";
+    private const string ClassifyCode = """<TextClassificationPanel Engine="InferenceEngine.Local" />""";
+    private const string NerCode = """<NERViewer Model="cahya/bert-base-indonesian-NER" />""";
+    private const string EmbedCode = """
+        <TextEmbeddingStudio />
+
+        // Use local embeddings everywhere (RAG, semantic search):
+        builder.Services.AddBlazorAI().AddLocalTransformers(embeddingModel: "sentence-transformers/all-MiniLM-L6-v2");
+        """;
+    private const string ImageCode = """<ImageClassificationPanel />""";
+    private const string OcrCode = """<OCRPanel Provider="azure" OnRecognized="Save" />""";
+    private const string SpeechCode = """<SpeechRecognitionPanel OnTranscribed="Fill" />""";
+    private const string TtsCode = """<TextToSpeechPanel Text="@announcement" />""";
+}

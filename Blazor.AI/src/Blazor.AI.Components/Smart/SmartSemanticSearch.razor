@@ -1,0 +1,82 @@
+@namespace Blazor.AI.Components
+@typeparam TItem
+@inherits AiComponentBase
+@* Semantic search over any in-memory collection. Results are ranked by embedding similarity. *@
+
+<div class="@CssClass("bai-stack")" @attributes="AdditionalAttributes">
+    <form class="bai-row" @onsubmit="SearchAsync" @onsubmit:preventDefault="true" role="search">
+        <div class="bai-spacer" style="position:relative">
+            <i class="bi bi-search bai-faint" aria-hidden="true" style="position:absolute; left:.8rem; top:50%; transform:translateY(-50%)"></i>
+            <input class="bai-input" style="padding-left:2.2rem" type="search" placeholder="@Placeholder" @bind="_query" @bind:event="oninput" aria-label="Search by meaning" />
+        </div>
+        <button class="bai-btn bai-btn-ai" type="submit" disabled="@IsBusy">
+            @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-stars" aria-hidden="true"></i> }
+            Search
+        </button>
+    </form>
+    <AiError Message="@Error" />
+
+    @if (_searched && _results.Count == 0 && !IsBusy)
+    {
+        <div class="bai-empty"><i class="bi bi-binoculars" aria-hidden="true"></i>No close matches. Try describing what you need in other words.</div>
+    }
+
+    @if (_results.Count > 0)
+    {
+        <div aria-live="polite">
+            @foreach (var result in _results)
+            {
+                <div class="bai-result">
+                    @if (ItemTemplate is not null)
+                    {
+                        <div class="bai-result-head">
+                            <div class="bai-spacer">@ItemTemplate(result.Item)</div>
+                            <span class="bai-badge bai-badge-ai">@((result.Score * 100).ToString("0"))%</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="bai-result-head">
+                            <span class="bai-result-title">@result.Text</span>
+                            <span class="bai-badge bai-badge-ai">@((result.Score * 100).ToString("0"))%</span>
+                        </div>
+                    }
+                    <div class="bai-meter" aria-hidden="true"><span style="width:@(Math.Clamp(result.Score * 100, 0, 100).ToString("0", System.Globalization.CultureInfo.InvariantCulture))%"></span></div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private string? _query;
+    private bool _searched;
+    private IReadOnlyList<SemanticMatch<TItem>> _results = [];
+
+    [Inject] private ISemanticMatcher Matcher { get; set; } = default!;
+
+    [Parameter, EditorRequired] public IEnumerable<TItem> Items { get; set; } = [];
+
+    /// <summary>Text used to embed each item (title + description works well).</summary>
+    [Parameter, EditorRequired] public Func<TItem, string> TextSelector { get; set; } = item => item?.ToString() ?? string.Empty;
+
+    [Parameter] public RenderFragment<TItem>? ItemTemplate { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Describe what you are looking for…";
+    [Parameter] public int Top { get; set; } = 8;
+    [Parameter] public double MinScore { get; set; } = 0.08;
+    [Parameter] public string? InitialQuery { get; set; }
+    [Parameter] public EventCallback<IReadOnlyList<SemanticMatch<TItem>>> OnResults { get; set; }
+
+    protected override Task OnInitializedAsync()
+    {
+        _query = InitialQuery;
+        return string.IsNullOrWhiteSpace(InitialQuery) ? Task.CompletedTask : SearchAsync();
+    }
+
+    public Task SearchAsync() => string.IsNullOrWhiteSpace(_query) ? Task.CompletedTask : RunAsync(async ct =>
+    {
+        _results = await Matcher.MatchAsync(_query!, Items, TextSelector, Top, MinScore, Provider, ct);
+        _searched = true;
+        await OnResults.InvokeAsync(_results);
+    });
+}

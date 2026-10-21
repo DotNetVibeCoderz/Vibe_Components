@@ -1,0 +1,108 @@
+@namespace Blazor.AI.Bio
+@inherits BioComponentBase
+@using Biotech.Net.Alignments
+@* Pairwise alignment (global / local / semi-global) with BLOSUM/PAM or match–mismatch scoring. *@
+
+<AiCard Title="@Title" Subtitle="Needleman–Wunsch · Smith–Waterman" Icon="bi-distribute-horizontal" Class="@Class">
+    <div class="bai-stack">
+        <div class="bai-grid-2">
+            <SequenceInput @bind-Value="Target" Label="Target" Rows="4" Samples="@([("Hb β", BioSamples.HemoglobinBeta)])" />
+            <SequenceInput @bind-Value="Query" Label="Query" Rows="4" Samples="@([("Hb α", HemoglobinAlpha)])" />
+        </div>
+        <div class="bai-row">
+            <select class="bai-select" style="width:auto" @bind="_type" aria-label="Sequence type">
+                <option value="@SequenceType.Protein">Protein</option>
+                <option value="@SequenceType.Dna">DNA</option>
+            </select>
+            <select class="bai-select" style="width:auto" @bind="_mode" aria-label="Mode">
+                @foreach (var m in Enum.GetValues<Biotech.Net.Native.AlignmentMode>()) { <option value="@m">@m</option> }
+            </select>
+            @if (_type == SequenceType.Protein)
+            {
+                <select class="bai-select" style="width:auto" @bind="_matrix" aria-label="Substitution matrix">
+                    @foreach (var name in Matrices) { <option>@name</option> }
+                </select>
+            }
+            <label class="bai-small">Gap open <input type="number" class="bai-input" style="width:4.5rem" @bind="_open" /></label>
+            <label class="bai-small">extend <input type="number" class="bai-input" style="width:4.5rem" @bind="_extend" /></label>
+            <button type="button" class="bai-btn bai-btn-ai" @onclick="AlignAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Align</button>
+        </div>
+        <AiError Message="@Error" />
+        @if (_r is { } r)
+        {
+            <div class="bai-stats">
+                <div class="bai-stat"><div class="bai-stat-label">Score</div><div class="bai-stat-value">@r.Score</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Identity</div><div class="bai-stat-value">@r.Identity.ToString("P1", CultureInfo.InvariantCulture)</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Similarity</div><div class="bai-stat-value">@((r.Positives / (double)Math.Max(1, r.Length)).ToString("P1", CultureInfo.InvariantCulture))</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Gaps</div><div class="bai-stat-value">@r.Gaps <span class="bai-small">(@r.GapOpenings opens)</span></div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Aligned length</div><div class="bai-stat-value">@r.Length</div></div>
+            </div>
+            <div class="bai-bio-align" role="figure" aria-label="Alignment">
+                @for (var i = 0; i < r.AlignedTarget.Length; i += 60)
+                {
+                    var len = Math.Min(60, r.AlignedTarget.Length - i);
+                    var t = r.AlignedTarget.Substring(i, len);
+                    var q = r.AlignedQuery.Substring(i, len);
+                    <div class="bai-bio-block">
+                        <div><span class="bai-bio-pos">T @(r.TargetStart + Ungapped(r.AlignedTarget, i) + 1)</span>@for (var j = 0; j < len; j++) { var c = t[j]; <span class="@CellClass(c, q[j])">@c</span> }</div>
+                        <div><span class="bai-bio-pos"></span>@for (var j = 0; j < len; j++) { <span class="bai-bio-mid">@Mid(t[j], q[j])</span> }</div>
+                        <div><span class="bai-bio-pos">Q @(r.QueryStart + Ungapped(r.AlignedQuery, i) + 1)</span>@for (var j = 0; j < len; j++) { var c = q[j]; <span class="@CellClass(c, t[j])">@c</span> }</div>
+                    </div>
+                }
+            </div>
+            <details><summary class="bai-small">CIGAR and text output</summary><AiCodeBlock Code="@($"CIGAR {r.Cigar()}\n\n{r.Format(60)}")" /></details>
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain with AI</button>
+            @if (Explanation is not null) { <AiOutput Text="@Explanation" IsBusy="@IsBusy" /> }
+        }
+    </div>
+</AiCard>
+
+@code {
+    private const string HemoglobinAlpha = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGKKVADALTNAVAHVDDMPNALSALSDLHAHKLRVDPVNFKLLSHCLLVTLAAHLPAEFTPAVHASLDKFLASVSTVLTSKYR";
+    private static readonly string[] Matrices = ["BLOSUM62", "BLOSUM45", "BLOSUM80", "PAM250", "PAM30"];
+    private SequenceType _type = SequenceType.Protein;
+    private Biotech.Net.Native.AlignmentMode _mode = Biotech.Net.Native.AlignmentMode.Global;
+    private string _matrix = "BLOSUM62";
+    private int _open = -10, _extend = -1;
+    private PairwiseAlignment? _r;
+
+    [Parameter] public string Title { get; set; } = "Pairwise sequence aligner";
+    [Parameter] public string? Target { get; set; } = BioSamples.HemoglobinBeta;
+    [Parameter] public string? Query { get; set; } = HemoglobinAlpha;
+
+    protected override Task OnInitializedAsync() => AlignAsync();
+
+    private async Task AlignAsync()
+    {
+        var (target, query, type, mode, matrix, open, extend) = (Target, Query, _type, _mode, _matrix, Math.Min(0, _open), Math.Min(0, _extend));
+        _r = await AnalyseAsync(() =>
+        {
+            var t = BioInput.ParseOne(target, type, "target") ?? throw new FormatException("Paste a target sequence.");
+            var q = BioInput.ParseOne(query, type, "query") ?? throw new FormatException("Paste a query sequence.");
+            if ((long)t.Length * q.Length > 25_000_000)
+            {
+                throw new ArgumentException("Sequences are too long for an interactive alignment (limit ≈ 5 kb × 5 kb).");
+            }
+
+            var aligner = new PairwiseAligner
+            {
+                Mode = mode,
+                SubstitutionMatrix = type == SequenceType.Protein ? SubstitutionMatrix.Load(matrix) : SubstitutionMatrix.MatchMismatch(2, -3, "ACGT"),
+                OpenGapScore = open,
+                ExtendGapScore = extend,
+            };
+            return aligner.Align(t, q);
+        });
+        Explanation = null;
+    }
+
+    private static int Ungapped(string aligned, int upTo) => aligned.AsSpan(0, upTo).Count('-') is var gaps ? upTo - gaps : upTo;
+
+    private static string Mid(char a, char b) => a == '-' || b == '-' ? " " : a == b ? "|" : SubstitutionMatrix.Blosum62.Score(a, b) > 0 ? ":" : "·";
+
+    private static string CellClass(char c, char other) => c == '-' ? "bai-bio-gap" : c == other ? "bai-bio-id" : "bai-bio-mm";
+
+    private Task Explain() => ExplainAsync("pairwise sequence alignment", string.Create(CultureInfo.InvariantCulture,
+        $"{_mode} alignment, {(_type == SequenceType.Protein ? _matrix : "DNA match/mismatch")}, gap {_open}/{_extend}. Score {_r!.Score}, identity {_r.Identity:P1}, positives {_r.Positives}/{_r.Length}, gaps {_r.Gaps} ({_r.GapOpenings} openings). " +
+        $"Target {_r.Target.Id} {_r.TargetStart + 1}-{_r.TargetEnd}, query {_r.Query.Id} {_r.QueryStart + 1}-{_r.QueryEnd}. First 120 columns:\n{_r.AlignedTarget[..Math.Min(120, _r.Length)]}\n{_r.AlignedQuery[..Math.Min(120, _r.Length)]}"));
+}

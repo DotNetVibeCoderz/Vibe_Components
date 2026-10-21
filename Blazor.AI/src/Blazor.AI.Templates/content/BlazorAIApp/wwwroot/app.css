@@ -1,0 +1,42 @@
+.app-top {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: .8rem 1.5rem;
+    border-bottom: 1px solid var(--bai-line);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    backdrop-filter: blur(12px);
+    background: color-mix(in srgb, var(--bai-bg) 80%, transparent);
+}
+
+.app-brand {
+    display: inline-flex;
+    gap: .5rem;
+    align-items: center;
+    font-family: var(--bai-font-display);
+    font-weight: 700;
+    color: var(--bai-ink);
+    text-decoration: none;
+}
+
+.app-brand i { color: var(--bai-soga); }
+
+.app-nav { display: flex; gap: .9rem; }
+.app-nav a { color: var(--bai-ink-muted); text-decoration: none; font-weight: 500; }
+.app-nav a.active { color: var(--bai-ink); }
+
+.app-main { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem 3rem; }
+
+.app-title { font-family: var(--bai-font-display); font-weight: 700; letter-spacing: -.02em; }
+.app-lead { color: var(--bai-ink-muted); max-width: 60ch; margin-bottom: 1.5rem; }
+
+.app-foot { padding: 1.5rem; text-align: center; }
+
+@media (max-width: 640px) {
+    .app-top { flex-wrap: wrap; padding: .7rem 1rem; }
+    .app-main { padding: 1.25rem 1rem 2rem; }
+}
+
+h1:focus { outline: none; }

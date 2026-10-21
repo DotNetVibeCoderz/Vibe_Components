@@ -1,0 +1,203 @@
+@namespace Blazor.AI.Agents
+@implements IDisposable
+@* A Kanban board where agents do the work: plan a goal into tasks, run each with its agent, review, approve. *@
+
+<div class="@($"bai-stack {Class}".Trim())">
+    <div class="bai-row">
+        <input class="bai-input bai-spacer" @bind="_goal" placeholder="Goal, e.g. Prepare a launch plan for our new mobile banking feature" aria-label="Goal" />
+        <button type="button" class="bai-btn bai-btn-ai" disabled="@(_planning || string.IsNullOrWhiteSpace(_goal))" @onclick="PlanAsync">
+            @if (_planning) { <AiThinking Label="@null" /> } else { <i class="bi bi-kanban" aria-hidden="true"></i> }
+            Plan tasks
+        </button>
+        <button type="button" class="bai-btn-ghost" @onclick="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i>Add task</button>
+        <button type="button" class="bai-btn" disabled="@(!Board.Tasks.Any(t => t.Status == AgentTaskStatus.Todo))" @onclick="RunAllAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Run all to-do</button>
+    </div>
+    <AiError Message="@_error" />
+
+    <div style="display:grid; grid-template-columns:repeat(4, minmax(13rem, 1fr)); gap:.85rem; overflow-x:auto">
+        @foreach (var status in Enum.GetValues<AgentTaskStatus>())
+        {
+            <section class="bai-glass" style="padding:.75rem; min-height:18rem; @(_dragOver == status ? "outline:2px dashed var(--bai-soga)" : null)"
+                     @ondragover:preventDefault="true" @ondragenter="() => _dragOver = status" @ondrop="() => Drop(status)" aria-label="@Label(status)">
+                <div class="bai-row" style="margin-bottom:.6rem">
+                    <span class="bai-label" style="margin:0">@Label(status)</span>
+                    <span class="bai-badge">@Board.Tasks.Count(t => t.Status == status)</span>
+                </div>
+                @foreach (var task in Board.Tasks.Where(t => t.Status == status))
+                {
+                    var agent = Catalog.Get(task.AgentId ?? string.Empty);
+                    <article class="bai-result" draggable="true" style="cursor:grab" @ondragstart="() => _dragging = task">
+                        <input class="bai-input" style="padding:.25rem .45rem; font-weight:600" @bind="task.Title" aria-label="Task title" />
+                        @if (task.Description is not null) { <span class="bai-small bai-muted">@task.Description</span> }
+                        <div class="bai-row">
+                            <select class="bai-select" style="width:auto; padding:.2rem .5rem; font-size:.78rem" value="@task.AgentId" @onchange="e => task.AgentId = e.Value?.ToString()" aria-label="Assigned agent">
+                                @foreach (var a in Catalog.Agents) { <option value="@a.Id">@a.Name</option> }
+                            </select>
+                            <span class="bai-spacer"></span>
+                            @if (task.IsRunning)
+                            {
+                                <AiThinking Label="@null" />
+                            }
+                            else if (status is AgentTaskStatus.Todo or AgentTaskStatus.Review)
+                            {
+                                <button type="button" class="bai-icon-btn" title="@(status == AgentTaskStatus.Review ? "Run again" : "Run with agent")" aria-label="Run task" @onclick="() => RunTaskAsync(task)"><i class="bi bi-play"></i></button>
+                            }
+                            @if (status == AgentTaskStatus.Review)
+                            {
+                                <button type="button" class="bai-icon-btn" title="Approve" aria-label="Approve task" @onclick="() => Move(task, AgentTaskStatus.Done)"><i class="bi bi-check2-circle"></i></button>
+                            }
+                            <button type="button" class="bai-icon-btn" title="Delete" aria-label="Delete task" @onclick="() => Remove(task)"><i class="bi bi-x"></i></button>
+                        </div>
+                        @if (!string.IsNullOrEmpty(task.Result))
+                        {
+                            <details>
+                                <summary class="bai-small" style="cursor:pointer">@(agent?.Name ?? "Agent")'s result</summary>
+                                <div class="bai-output" style="margin-top:.35rem; max-height:16rem; overflow:auto"><AiMarkdown Text="@task.Result" /></div>
+                            </details>
+                        }
+                    </article>
+                }
+            </section>
+        }
+    </div>
+</div>
+
+@code {
+    private AgentTask? _dragging;
+    private AgentTaskStatus? _dragOver;
+    private string? _goal, _error;
+    private bool _planning;
+    private long _lastRender;
+
+    [Inject] private AgentTaskBoardState Board { get; set; } = default!;
+    [Inject] private AgentCatalog Catalog { get; set; } = default!;
+    [Inject] private AgentRuntime Runtime { get; set; } = default!;
+
+    [Parameter] public string? Provider { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Board.Changed += Refresh;
+        _goal = Board.Goal;
+    }
+
+    private async Task PlanAsync()
+    {
+        _planning = true;
+        _error = null;
+        try
+        {
+            await Board.PlanAsync(_goal!, Provider);
+        }
+        catch (Exception ex)
+        {
+            _error = AiComponentBase.Describe(ex);
+        }
+        finally
+        {
+            _planning = false;
+        }
+    }
+
+    private async Task RunAllAsync()
+    {
+        foreach (var task in Board.Tasks.Where(t => t.Status == AgentTaskStatus.Todo).ToList())
+        {
+            await RunTaskAsync(task);
+        }
+    }
+
+    private async Task RunTaskAsync(AgentTask task)
+    {
+        var agent = Catalog.Get(task.AgentId ?? string.Empty) ?? Catalog.Agents.FirstOrDefault();
+        if (agent is null)
+        {
+            return;
+        }
+
+        task.IsRunning = true;
+        task.Status = AgentTaskStatus.InProgress;
+        task.Result = string.Empty;
+        _error = null;
+
+        // Give the agent the goal and what teammates already produced.
+        var done = Board.Tasks.Where(t => t != task && !string.IsNullOrEmpty(t.Result) && t.Status is AgentTaskStatus.Review or AgentTaskStatus.Done)
+            .Select(t => $"### {t.Title}\n{t.Result}");
+        var prompt = $"Overall goal: {Board.Goal ?? _goal}\n\nYour task: {task.Title}\n{task.Description}\n\n" +
+                     (done.Any() ? "Results from teammates so far:\n" + string.Join("\n\n", done) : string.Empty);
+        var builder = new StringBuilder();
+        try
+        {
+            await foreach (var token in Runtime.StreamAsync(agent, prompt))
+            {
+                builder.Append(token);
+                task.Result = builder.ToString();
+                Throttle();
+            }
+
+            task.Status = AgentTaskStatus.Review;
+        }
+        catch (Exception ex)
+        {
+            task.Status = AgentTaskStatus.Todo;
+            _error = $"{task.Title}: {AiComponentBase.Describe(ex)}";
+        }
+        finally
+        {
+            task.IsRunning = false;
+            Board.Notify();
+        }
+    }
+
+    private void Drop(AgentTaskStatus status)
+    {
+        if (_dragging is not null)
+        {
+            Move(_dragging, status);
+        }
+
+        _dragging = null;
+        _dragOver = null;
+    }
+
+    private void Move(AgentTask task, AgentTaskStatus status)
+    {
+        task.Status = status;
+        Board.Notify();
+    }
+
+    private void Add()
+    {
+        Board.Tasks.Add(new AgentTask { Title = "New task", AgentId = Catalog.Agents.FirstOrDefault()?.Id });
+        Board.Notify();
+    }
+
+    private void Remove(AgentTask task)
+    {
+        Board.Tasks.Remove(task);
+        Board.Notify();
+    }
+
+    private static string Label(AgentTaskStatus status) => status switch
+    {
+        AgentTaskStatus.Todo => "To do",
+        AgentTaskStatus.InProgress => "In progress",
+        AgentTaskStatus.Review => "Review",
+        _ => "Done",
+    };
+
+    private void Throttle()
+    {
+        var now = Environment.TickCount64;
+        if (now - _lastRender > 80)
+        {
+            _lastRender = now;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Board.Changed -= Refresh;
+}

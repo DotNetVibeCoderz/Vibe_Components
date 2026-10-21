@@ -1,0 +1,78 @@
+@namespace Blazor.AI.Components
+@inherits AiComponentBase
+@* Zero-shot classification into your own labels, with per-label confidence and the model's reasoning. *@
+
+<AiCard Title="@Title" Subtitle="@Subtitle" Icon="bi-tags" Class="@Class">
+    <div class="bai-stack">
+        @if (ShowInput)
+        {
+            <textarea class="bai-textarea" rows="4" @bind="Text" placeholder="@Placeholder" aria-label="Text to classify"></textarea>
+        }
+        @if (EditableLabels)
+        {
+            <div>
+                <label class="bai-label" for="@_labelsId">Labels (comma-separated)</label>
+                <input id="@_labelsId" class="bai-input" @bind="_labelText" />
+            </div>
+        }
+        else
+        {
+            <div class="bai-chips">
+                @foreach (var label in CurrentLabels) { <span class="bai-chip @(label == _result?.Label ? "is-active" : null)" style="cursor:default">@label</span> }
+            </div>
+        }
+        <div class="bai-row">
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(Text) || CurrentLabels.Count == 0)" @onclick="ClassifyAsync">
+                @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-stars" aria-hidden="true"></i> }
+                Classify
+            </button>
+        </div>
+        <AiError Message="@Error" OnRetry="ClassifyAsync" />
+        @if (_result is not null)
+        {
+            <div class="bai-output">
+                <div class="bai-row" style="margin-bottom:.6rem">
+                    <span class="bai-muted bai-small">Best match</span>
+                    <strong style="font-family:var(--bai-font-display); font-size:1.15rem">@_result.Label</strong>
+                    <span class="bai-badge bai-badge-ai">@((_result.Confidence * 100).ToString("0"))% confident</span>
+                </div>
+                <AiScoreBars Values="_result.Scores" Highlight="@_result.Label" />
+                @if (!string.IsNullOrWhiteSpace(_result.Reasoning))
+                {
+                    <p class="bai-small bai-muted" style="margin:.75rem 0 0"><i class="bi bi-chat-quote" aria-hidden="true"></i> @_result.Reasoning</p>
+                }
+            </div>
+        }
+    </div>
+</AiCard>
+
+@code {
+    private readonly string _labelsId = "bai-cls-" + Guid.NewGuid().ToString("N")[..6];
+    private string _labelText = string.Empty;
+    private ClassificationResult? _result;
+
+    [Parameter] public string Title { get; set; } = "Classifier";
+    [Parameter] public string? Subtitle { get; set; } = "Sort text into your own categories";
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public IReadOnlyList<string> Labels { get; set; } = ["Positive", "Negative", "Neutral"];
+    [Parameter] public bool EditableLabels { get; set; } = true;
+    [Parameter] public bool ShowInput { get; set; } = true;
+
+    /// <summary>Extra guidance, e.g. "Classify by the customer's main intent".</summary>
+    [Parameter] public string? Instructions { get; set; }
+
+    [Parameter] public string Placeholder { get; set; } = "Paste a review, ticket, email or message…";
+    [Parameter] public EventCallback<ClassificationResult> OnClassified { get; set; }
+
+    private IReadOnlyList<string> CurrentLabels => EditableLabels
+        ? _labelText.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+        : Labels;
+
+    protected override void OnInitialized() => _labelText = string.Join(", ", Labels);
+
+    public Task ClassifyAsync() => RunAsync(async ct =>
+    {
+        _result = await Ai.ClassifyAsync(Text!, CurrentLabels, Instructions, Provider, ct);
+        await OnClassified.InvokeAsync(_result);
+    });
+}

@@ -1,0 +1,69 @@
+@namespace Blazor.AI.LocalModels
+@inherits HfComponentBase
+@* Embed sentences, compare them in a similarity heatmap, and see them on a 2-D map (PCA). *@
+
+<AiCard Title="@Title" Subtitle="Sentence embeddings" Icon="bi-vector-pen" Class="@Class">
+    <div class="bai-stack">
+        <EngineSelector @bind-Engine="Engine" @bind-Model="_model" Suggestions="@Suggestions" />
+        <textarea class="bai-textarea" rows="7" @bind="Text" placeholder="One sentence per line" aria-label="Sentences"></textarea>
+        <div class="bai-row">
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(Text))" @onclick="EmbedAsync">
+                @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-play-fill" aria-hidden="true"></i> }
+                Embed
+            </button>
+            @if (LoadStatus is not null) { <span class="bai-small bai-muted">@LoadStatus</span> }
+            @if (_vectors.Count > 0) { <span class="bai-small bai-muted">@_vectors.Count × @_vectors[0].Length dimensions</span> }
+        </div>
+        <AiError Message="@Error" />
+        @if (_vectors.Count > 1)
+        {
+            var labels = _sentences.Select(s => s.Length > 26 ? s[..25] + "…" : s).ToArray();
+            <div class="bai-grid-2" style="align-items:start">
+                <Heatmap Title="Cosine similarity" Values="@Blazor.AI.Core.Vectors.VectorMath.SimilarityMatrix(_vectors.Select(v => (ReadOnlyMemory<float>)v).ToList())" RowLabels="@labels" ColumnLabels="@labels" Colormap="magma" Width="520" LabelWidth="150" TopLabelHeight="110" />
+                <ScatterChart Title="2-D map (PCA)" Series="@([new ChartSeries("Sentences", Project().Select((p, i) => new ChartPoint(p.X, p.Y, _sentences[i])).ToArray())])" Height="300" PointRadius="5" />
+            </div>
+        }
+    </div>
+</AiCard>
+
+@code {
+    private static readonly string[] Suggestions = ["sentence-transformers/all-MiniLM-L6-v2", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", "BAAI/bge-small-en-v1.5", "intfloat/multilingual-e5-small"];
+    private List<float[]> _vectors = [];
+    private List<string> _sentences = [];
+    private string? _model;
+
+    [Parameter] public string Title { get; set; } = "Text embedding studio";
+
+    [Parameter] public string? Text { get; set; } =
+        "How do I reset my password?\nI forgot my login credentials.\nWhat are your opening hours?\nWhen does the store open?\nThe weather is lovely today.";
+
+    protected override void OnParametersSet() => _model ??= Model ?? ModelOptions.EmbeddingModel;
+
+    private Task EmbedAsync() => RunAsync(async ct =>
+    {
+        _sentences = Text!.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Take(40).ToList();
+        if (Engine == InferenceEngine.Local)
+        {
+            var generator = new LocalEmbeddingGenerator(Registry, _model);
+            await EnsureLocalAsync(_model!, "text", Registry.TextModelAsync);
+            _vectors = (await generator.GenerateAsync(_sentences, cancellationToken: ct)).Select(e => e.Vector.ToArray()).ToList();
+        }
+        else
+        {
+            _vectors = [];
+            foreach (var s in _sentences)
+            {
+                _vectors.Add(await HostedApi.EmbedAsync(_model!, s, ct));
+            }
+        }
+    });
+
+    private (double X, double Y)[] Project()
+    {
+        var rows = _vectors.Select(v => v.Select(x => (double)x).ToArray()).ToList();
+        var x = Gravicode.Science.GraviNum.NdArray.FromRows(rows);
+        var pca = new Gravicode.Science.GraviLearn.Decomposition.PCA(2);
+        var p = pca.FitTransform(x);
+        return Enumerable.Range(0, p.Rows).Select(i => (p[i, 0], p[i, 1])).ToArray();
+    }
+}

@@ -1,0 +1,62 @@
+@namespace Blazor.AI.Components
+@* A dockable copilot that knows what is on screen: pass the current record via Context and quick actions via Actions. *@
+
+<AiDockPanel Title="@Title" Icon="bi-stars" @bind-Mode="Mode" Collapsed="!Open" CollapsedChanged="OnCollapsedAsync" Width="@Width">
+    <HeaderActions>
+        <AiProviderPicker Value="@_provider" ValueChanged="v => _provider = v" />
+    </HeaderActions>
+    <ChildContent>
+        @if (QuickActions is { Count: > 0 })
+        {
+            <div class="bai-chips" style="padding:.75rem 1rem 0">
+                @foreach (var action in QuickActions)
+                {
+                    <button type="button" class="bai-chip" @onclick="() => _chat!.SendAsync(action)"><i class="bi bi-lightning-charge" aria-hidden="true"></i>@action</button>
+                }
+            </div>
+        }
+        <AiChat @ref="_chat" ShowHeader="false" Height="100%" Provider="@_provider" SystemPrompt="@SystemPrompt" Tools="@Tools"
+                ContextProvider="ProvideContext" Suggestions="@Suggestions" EmptyTitle="@EmptyTitle" EmptyText="@EmptyText"
+                Class="bai-chat-flat" />
+    </ChildContent>
+</AiDockPanel>
+
+@code {
+    private AiChat? _chat;
+    private string? _provider;
+
+    [Parameter] public string Title { get; set; } = "Copilot";
+    [Parameter] public bool Open { get; set; } = true;
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public DockMode Mode { get; set; } = DockMode.Right;
+    [Parameter] public int Width { get; set; } = 400;
+    [Parameter] public string? Provider { get; set; }
+
+    [Parameter] public string SystemPrompt { get; set; } =
+        "You are a copilot inside a business application. Use the current context to answer precisely. " +
+        "When you propose changes, list them clearly so the user can apply them.";
+
+    /// <summary>Text describing what the user is looking at (a record, a document, a selection). Re-read before every request.</summary>
+    [Parameter] public string? Context { get; set; }
+
+    /// <summary>Alternative to <see cref="Context"/> for context that must be fetched.</summary>
+    [Parameter] public Func<Task<string?>>? ContextProvider { get; set; }
+
+    /// <summary>One-click prompts shown above the chat, e.g. "Summarise this customer".</summary>
+    [Parameter] public IReadOnlyList<string>? QuickActions { get; set; }
+
+    [Parameter] public IReadOnlyList<string>? Suggestions { get; set; }
+    [Parameter] public IList<AITool>? Tools { get; set; }
+    [Parameter] public string EmptyTitle { get; set; } = "Your copilot is ready";
+    [Parameter] public string EmptyText { get; set; } = "It can see the record on screen. Ask it to explain, summarise or draft.";
+
+    protected override void OnParametersSet() => _provider ??= Provider;
+
+    private async Task<string?> ProvideContext() => ContextProvider is not null ? await ContextProvider() : Context;
+
+    private Task OnCollapsedAsync(bool collapsed)
+    {
+        Open = !collapsed;
+        return OpenChanged.InvokeAsync(Open);
+    }
+}

@@ -1,0 +1,70 @@
+@namespace Blazor.AI.RAG
+@* Renders a grounded answer: [n] markers become numbered citations; sources expand to the exact passage used. *@
+
+<div class="@($"bai-stack {Class}".Trim())">
+    <div class="bai-markdown">@Rendered</div>
+    @if (Citations.Count > 0 && ShowSources)
+    {
+        <div>
+            <span class="bai-label">Sources</span>
+            @for (var i = 0; i < Citations.Count; i++)
+            {
+                var hit = Citations[i];
+                var number = i + 1;
+                var cited = _cited.Contains(number);
+                <details id="@($"{_id}-{number}")" class="bai-result" open="@(_open == number)" style="@(cited ? null : "opacity:.7")">
+                    <summary style="cursor:pointer; list-style:none" @onclick="() => Toggle(number)" @onclick:preventDefault="true">
+                        <span class="bai-result-head">
+                            <span><span class="bai-badge bai-badge-ai">@number</span> <strong>@hit.SourceLabel</strong>@if (!cited) { <span class="bai-small bai-faint"> · retrieved, not cited</span> }</span>
+                            <span class="bai-num bai-small bai-muted">@((hit.Score * 100).ToString("0"))% match</span>
+                        </span>
+                    </summary>
+                    <p class="bai-small" style="margin:.5rem 0 0; white-space:pre-wrap">@hit.Text</p>
+                </details>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private readonly string _id = "bai-cite-" + Guid.NewGuid().ToString("N")[..6];
+    private HashSet<int> _cited = [];
+    private int? _open;
+    private string? _renderedFor;
+    private MarkupString _rendered;
+
+    [Parameter] public string? Answer { get; set; }
+    [Parameter] public IReadOnlyList<KnowledgeHit> Citations { get; set; } = [];
+    [Parameter] public bool ShowSources { get; set; } = true;
+    [Parameter] public string? Class { get; set; }
+
+    private MarkupString Rendered
+    {
+        get
+        {
+            if (_renderedFor != Answer)
+            {
+                _renderedFor = Answer;
+                var html = MarkdownRenderer.ToHtml(Answer);
+                _cited = [];
+                // Markdig escapes all input, so the only markup we inject is our own citation links.
+                html = RagPatterns.Citation().Replace(html, m =>
+                {
+                    var n = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
+                    if (n < 1 || n > Citations.Count)
+                    {
+                        return m.Value;
+                    }
+
+                    _cited.Add(n);
+                    return $"<sup class=\"bai-cite\"><a href=\"#{_id}-{n}\" title=\"{System.Net.WebUtility.HtmlEncode(Citations[n - 1].SourceLabel)}\">{n}</a></sup>";
+                });
+                _rendered = new MarkupString(html);
+            }
+
+            return _rendered;
+        }
+    }
+
+    private void Toggle(int number) => _open = _open == number ? null : number;
+}

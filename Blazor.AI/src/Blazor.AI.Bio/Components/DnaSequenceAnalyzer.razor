@@ -1,0 +1,172 @@
+@namespace Blazor.AI.Bio
+@inherits BioComponentBase
+@using Biotech.Net.Sequences
+@* DNA at a glance: composition, molecular weight and Tm, GC profile, ORF map, six-frame translation and motif search. *@
+
+<AiCard Title="@Title" Subtitle="Biotech.Net.Sequences" Icon="bi-virus" Class="@Class">
+    <div class="bai-stack">
+        <SequenceInput @bind-Value="Sequence" Label="DNA sequence" Samples="@Samples" />
+        <div class="bai-row">
+            <button type="button" class="bai-btn bai-btn-ai" @onclick="AnalyseAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Analyse</button>
+            <label class="bai-small">Min ORF <input type="number" min="30" step="30" class="bai-input" style="width:5.5rem" @bind="_minOrf" /> nt</label>
+            <label class="bai-small">GC window <input type="number" min="10" class="bai-input" style="width:5rem" @bind="_window" /></label>
+        </div>
+        <AiError Message="@Error" />
+        @if (_r is { } r)
+        {
+            <div class="bai-stats">
+                <div class="bai-stat"><div class="bai-stat-label">Length</div><div class="bai-stat-value">@r.Dna.Length.ToString("N0") <span class="bai-small">bp</span></div></div>
+                <div class="bai-stat"><div class="bai-stat-label">GC content</div><div class="bai-stat-value">@r.Dna.GcContent().ToString("P1", CultureInfo.InvariantCulture)</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">dsDNA MW</div><div class="bai-stat-value" style="font-size:1.2rem">@Fmt(r.Mw) Da</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Tm (first 30 nt)</div><div class="bai-stat-value">@r.Tm.ToString("0.0", CultureInfo.InvariantCulture) °C</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">ORFs</div><div class="bai-stat-value">@r.Orfs.Count</div></div>
+            </div>
+            <div class="bai-grid-2" style="align-items:start">
+                <div>
+                    <span class="bai-label">Composition</span>
+                    <AiScoreBars Values="@r.Composition" Sort="false" />
+                    <span class="bai-label" style="margin-top:.8rem">ORF map (forward above, reverse below)</span>
+                    <svg viewBox="0 0 600 90" style="width:100%" role="img" aria-label="ORF map">
+                        <line x1="0" x2="600" y1="45" y2="45" stroke="var(--bai-line-strong)" stroke-width="2" />
+                        @foreach (var orf in r.Orfs)
+                        {
+                            var x = orf.Start * 600.0 / r.Dna.Length;
+                            var w = Math.Max(2, orf.Length * 600.0 / r.Dna.Length);
+                            var fwd = orf.Strand == Strand.Forward;
+                            var y = (fwd ? 8 : 52) + (Math.Abs(orf.Frame) - 1) % 3 * 10;
+                            <rect x="@S(x)" y="@y" width="@S(w)" height="8" rx="3" fill="@(fwd ? "var(--bai-soga)" : "var(--bai-nila)")" style="cursor:pointer" @onclick="() => _selected = orf">
+                                <title>@FrameLabel(orf) · @(orf.Start + 1)–@orf.End · @orf.ProteinLength aa</title>
+                            </rect>
+                        }
+                    </svg>
+                </div>
+                <div>
+                    <LineChart Title="@($"GC content, {_window}-nt window")" Series="@([new ChartSeries("GC", r.Window.Select(w => new ChartPoint(w.Center, w.Value * 100)).ToArray()) { Area = true }])" ShowLegend="false" Height="200" />
+                </div>
+            </div>
+            @if (r.Orfs.Count > 0)
+            {
+                <div class="bai-table-wrap" style="max-height:14rem; overflow:auto">
+                    <table class="bai-table">
+                        <thead><tr><th>Strand/frame</th><th>Start</th><th>End</th><th>Length</th><th>Protein</th><th>Stop</th></tr></thead>
+                        <tbody>
+                            @foreach (var orf in r.Orfs.OrderByDescending(o => o.Length))
+                            {
+                                <tr style="cursor:pointer; @(orf == _selected ? "background:var(--bai-soga-soft)" : null)" @onclick="() => _selected = orf">
+                                    <td>@FrameLabel(orf)</td><td class="bai-num">@(orf.Start + 1)</td><td class="bai-num">@orf.End</td>
+                                    <td class="bai-num">@orf.Length nt</td><td class="bai-num">@orf.ProteinLength aa</td><td>@(orf.HasStop ? "yes" : "partial")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (_selected is { } sel)
+                {
+                    <AiCodeBlock Code="@($">orf_{sel.Strand}{sel.Frame}_{sel.Start + 1}-{sel.End}\n{BioInput.Wrap(sel.Translate(r.Dna).ToString(), 60)}")" />
+                }
+            }
+            <AiTabs Tabs="@Views" @bind-Selected="_view" />
+            @switch (_view)
+            {
+                case "Reverse complement":
+                    <AiCodeBlock Code="@BioInput.Wrap(r.Dna.ReverseComplement().ToString())" />
+                    break;
+                case "Six frames":
+                    <AiCodeBlock Code="@string.Join("\n", SixFrame.Translate(r.Dna).Select(f => $"{(f.Item1 > 0 ? "+" : "")}{f.Item1}  {Clip(f.Item2.ToString())}"))" />
+                    break;
+                case "Motif search":
+                    <div class="bai-row">
+                        <input class="bai-input" style="width:14rem; font-family:var(--bai-font-mono)" @bind="_motif" placeholder="IUPAC motif, e.g. GAATTC or TATAWAW" aria-label="Motif" />
+                        <button type="button" class="bai-btn-ghost" @onclick="Search">Find</button>
+                        @if (_matches is not null) { <span class="bai-small bai-muted">@_matches.Count match(es)</span> }
+                    </div>
+                    @if (_matches is { Count: > 0 }) { <div class="bai-chips">@foreach (var m in _matches.Take(50)) { <span class="bai-badge">@(m.Start + 1)–@m.End @(m.Strand == Strand.Forward ? "+" : "−") @m.Matched</span> }</div> }
+                    break;
+                default:
+                    <AiCodeBlock Code="@BioInput.Wrap(r.Dna.ToString())" />
+                    break;
+            }
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain with AI</button>
+            @if (Explanation is not null) { <AiOutput Text="@Explanation" IsBusy="@IsBusy" /> }
+        }
+    </div>
+</AiCard>
+
+@code {
+    private static readonly string[] Views = ["Sequence", "Reverse complement", "Six frames", "Motif search"];
+    private static readonly IReadOnlyList<(string, string)> Samples = [("EGFP", BioSamples.Egfp), ("Short gene", "ATGGCCATTGTAATGGGCCGCTGAAAGGGTGCCCGATAG")];
+    private Result? _r;
+    private Orf? _selected;
+    private string _view = Views[0];
+    private int _minOrf = 90, _window = 60;
+    private string? _motif = "GAATTC";
+    private IReadOnlyList<MotifMatch>? _matches;
+
+    [Parameter] public string Title { get; set; } = "DNA sequence analyzer";
+    [Parameter] public string? Sequence { get; set; } = BioSamples.Egfp;
+    [Parameter] public EventCallback<Sequence> OnAnalysed { get; set; }
+
+    private sealed record Result(Sequence Dna, double Mw, double Tm, IReadOnlyList<Orf> Orfs, IReadOnlyList<WindowValue> Window, List<KeyValuePair<string, double>> Composition);
+
+    protected override Task OnInitializedAsync() => AnalyseAsync();
+
+    private async Task AnalyseAsync()
+    {
+        var text = Sequence;
+        var minOrf = Math.Max(30, _minOrf);
+        var window = Math.Max(10, _window);
+        _r = await AnalyseAsync(() =>
+        {
+            var dna = BioInput.ParseOne(text, SequenceType.Dna) ?? throw new FormatException("Paste a DNA sequence first.");
+            var counts = dna.Composition();
+            return new Result(
+                dna,
+                NucleicAcidMass.MolecularWeight(dna, doubleStranded: true),
+                MeltingTemperature.NearestNeighbor(dna.Subsequence(0, Math.Min(30, dna.Length))),
+                OrfFinder.Find(dna, new OrfOptions { MinLength = minOrf }),
+                SlidingWindow.GcContent(dna, Math.Min(window, dna.Length), Math.Max(1, window / 2)),
+                "ACGT".Select(b => KeyValuePair.Create(b.ToString(), counts.GetValueOrDefault(b) / (double)dna.Length)).ToList());
+        });
+        _selected = _r?.Orfs.OrderByDescending(o => o.Length).FirstOrDefault();
+        _matches = null;
+        Explanation = null;
+        if (_r is not null)
+        {
+            await OnAnalysed.InvokeAsync(_r.Dna);
+        }
+    }
+
+    private void Search()
+    {
+        if (_r is null || string.IsNullOrWhiteSpace(_motif))
+        {
+            return;
+        }
+
+        try
+        {
+            _matches = MotifSearch.FindIupac(_r.Dna, _motif.Trim().ToUpperInvariant(), bothStrands: true);
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
+        {
+            Error = ex.Message;
+        }
+    }
+
+    private Task Explain()
+    {
+        var r = _r!;
+        var longest = r.Orfs.OrderByDescending(o => o.Length).FirstOrDefault();
+        var facts = string.Create(CultureInfo.InvariantCulture,
+            $"Length {r.Dna.Length} bp, GC {r.Dna.GcContent():P1}, MW {r.Mw:N0} Da, Tm(30 nt) {r.Tm:0.0} °C, {r.Orfs.Count} ORFs ≥{_minOrf} nt. " +
+            $"Longest ORF: {(longest is null ? "none" : $"{longest.Strand}{longest.Frame} {longest.Start + 1}-{longest.End}, {longest.ProteinLength} aa, protein starts {Clip(longest.Translate(r.Dna).ToString(), 40)}")}. " +
+            $"GC window range {r.Window.Min(w => w.Value):P0}–{r.Window.Max(w => w.Value):P0}.");
+        return ExplainAsync("DNA sequence analysis", facts);
+    }
+
+    private static string FrameLabel(Orf orf) => (orf.Strand == Strand.Forward ? "+" : "−") + Math.Abs(orf.Frame).ToString(CultureInfo.InvariantCulture);
+
+    private static string Clip(string s, int max = 100) => s.Length <= max ? s : s[..max] + "…";
+
+    private static string S(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+}

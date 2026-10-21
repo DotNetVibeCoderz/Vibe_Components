@@ -1,0 +1,57 @@
+@namespace Blazor.AI.Analytics
+@inherits AnalyticsComponentBase
+@* Compare PCA (linear, global), LDA (supervised separation) and t-SNE (non-linear, local neighbourhoods) side by side. *@
+
+<AiCard Title="@Title" Subtitle="@Data.Name" Icon="bi-box" Class="@Class">
+    <Actions><DatasetPicker /></Actions>
+    <ChildContent>
+        <div class="bai-stack">
+            <div class="bai-row">
+                <AiTabs Tabs="@Methods" @bind-Selected="_method" />
+                @if (_method == "t-SNE")
+                {
+                    <label class="bai-small">Perplexity <input type="number" min="5" max="50" class="bai-input" style="width:4.5rem" @bind="_perplexity" /></label>
+                }
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || Data.FeatureColumns.Count < 2 || (_method == "LDA" && Data.Task != MlTask.Classification))" @onclick="RunReductionAsync">
+                    @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-play-fill" aria-hidden="true"></i> }
+                    Project
+                </button>
+            </div>
+            <p class="bai-small bai-muted" style="margin:0">@Description</p>
+            <AiError Message="@Error" />
+            @if (_result is { } r)
+            {
+                <ScatterChart Series="@DimensionColoring.Series(Data, r.Points)" XLabel="@r.Axes[0]" YLabel="@r.Axes[1]" Height="380" PointRadius="2.5" />
+                <span class="bai-small bai-muted">@r.Points.GetLength(0) points@(r.Points.GetLength(0) < Data.Frame.RowCount ? " (sampled for speed)" : null) · computed in @_elapsed.TotalSeconds.ToString("0.0")s</span>
+            }
+        </div>
+    </ChildContent>
+</AiCard>
+
+@code {
+    private static readonly string[] Methods = ["PCA", "LDA", "t-SNE"];
+    private string _method = "PCA";
+    private double _perplexity = 25;
+    private ReductionResult? _result;
+    private TimeSpan _elapsed;
+
+    [Parameter] public string Title { get; set; } = "Dimension reduction studio";
+
+    private string Description => _method switch
+    {
+        "LDA" => "LDA finds the directions that best separate the target classes (needs a classification target).",
+        "t-SNE" => "t-SNE keeps similar rows close together; distances between far-apart clusters are not meaningful. Slower.",
+        _ => "PCA rotates the data onto the directions of greatest variance; fast and faithful to global structure.",
+    };
+
+    protected override void OnDatasetChanged() => _result = null;
+
+    private Task RunReductionAsync() => RunAsync(async ct =>
+    {
+        var method = _method switch { "LDA" => ReductionMethod.Lda, "t-SNE" => ReductionMethod.TSne, _ => ReductionMethod.Pca };
+        var data = Data;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        _result = await Compute(() => UnsupervisedMl.Reduce(data, method, perplexity: _perplexity), ct);
+        _elapsed = stopwatch.Elapsed;
+    });
+}

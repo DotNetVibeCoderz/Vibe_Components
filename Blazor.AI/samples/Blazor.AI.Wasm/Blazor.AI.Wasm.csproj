@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <RootNamespace>Blazor.AI.Wasm</RootNamespace>
+    <!-- The Anthropic/OpenAI SDKs are trimmer-annotated but not fully trim-safe; keep the sample simple. -->
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Blazor.AI.Components\Blazor.AI.Components.csproj" />
+    <ProjectReference Include="..\..\src\Blazor.AI.Visualization\Blazor.AI.Visualization.csproj" />
+    <ProjectReference Include="..\..\src\Blazor.AI.Decision\Blazor.AI.Decision.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,105 @@
+@namespace Blazor.AI.Components
+@inherits AiComponentBase
+@*
+    SmartPaste: put it inside a <form> (or any element with data-smartpaste-scope). On click it reads the clipboard,
+    discovers the form's fields (name, label, type, options) and fills them. Values are applied through input/change
+    events, so @bind and EditForm models update normally. Pass Fields + OnPasted to work without DOM discovery.
+*@
+
+<span class="@CssClass("bai-row")" style="display:inline-flex" @attributes="AdditionalAttributes">
+    <button type="button" class="@ButtonClass" @ref="_button" disabled="@IsBusy" @onclick="PasteAsync"
+            title="Fill the form from text on your clipboard">
+        @if (IsBusy)
+        {
+            <AiThinking Label="@null" />
+            <span>Filling…</span>
+        }
+        else
+        {
+            <i class="bi bi-clipboard2-check" aria-hidden="true"></i>
+            <span>@Label</span>
+        }
+    </button>
+    @if (_status is not null)
+    {
+        <span class="bai-small @(Error is null ? "bai-muted" : null)" role="status">@_status</span>
+    }
+</span>
+@if (_askForText)
+{
+    <div class="bai-glass" style="margin-top:.6rem; padding:.75rem">
+        <label class="bai-label" for="@_textId">Clipboard access is blocked. Paste the text here instead:</label>
+        <textarea id="@_textId" class="bai-textarea" @bind="_manualText" rows="4"></textarea>
+        <div class="bai-row" style="margin-top:.5rem">
+            <button type="button" class="bai-btn bai-btn-ai" @onclick="() => FillAsync(_manualText)">Fill form</button>
+            <button type="button" class="bai-btn-ghost" @onclick="() => _askForText = false">Cancel</button>
+        </div>
+    </div>
+}
+<AiError Message="@Error" />
+
+@code {
+    private readonly string _textId = "bai-sp-" + Guid.NewGuid().ToString("N")[..6];
+    private ElementReference _button;
+    private string? _status;
+    private bool _askForText;
+    private string? _manualText;
+
+    [Inject] private ISmartPasteService SmartPasteService { get; set; } = default!;
+
+    [Parameter] public string Label { get; set; } = "Smart Paste";
+    [Parameter] public string ButtonClass { get; set; } = "bai-btn bai-btn-ai";
+
+    /// <summary>Explicit field list. When null, fields are discovered from the surrounding form.</summary>
+    [Parameter] public IReadOnlyList<SmartPasteField>? Fields { get; set; }
+
+    /// <summary>Whether to write values into the DOM form. Disable when you apply <see cref="OnPasted"/> results yourself.</summary>
+    [Parameter] public bool ApplyToForm { get; set; } = true;
+
+    /// <summary>Raised with the extracted values.</summary>
+    [Parameter] public EventCallback<SmartPasteResult> OnPasted { get; set; }
+
+    /// <summary>Fills from the given text instead of the clipboard (useful for demos and tests).</summary>
+    public Task PasteTextAsync(string text) => FillAsync(text);
+
+    private async Task PasteAsync()
+    {
+        var text = await Js.ReadClipboardAsync();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            _askForText = true;
+            _status = null;
+            return;
+        }
+
+        await FillAsync(text);
+    }
+
+    private Task FillAsync(string? text)
+    {
+        _askForText = false;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            _status = "Copy some text first, then try again.";
+            return Task.CompletedTask;
+        }
+
+        return RunAsync(async ct =>
+        {
+            _status = null;
+            var fields = Fields ?? await Js.CollectFormFieldsAsync(_button);
+            if (fields.Count == 0)
+            {
+                _status = "No fillable fields found. Place SmartPaste inside a form whose inputs have a name or id.";
+                return;
+            }
+
+            var result = await SmartPasteService.ExtractAsync(text, fields, Provider, ct);
+            var applied = ApplyToForm && result.Values.Count > 0 ? await Js.ApplyFormValuesAsync(_button, result.Values) : result.Values.Count;
+            _status = result.Values.Count == 0
+                ? "Nothing in the text matched these fields."
+                : $"Filled {applied} of {fields.Count} fields. Review before saving.";
+            await OnPasted.InvokeAsync(result);
+        });
+    }
+}

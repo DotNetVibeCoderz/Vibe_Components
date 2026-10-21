@@ -1,0 +1,20 @@
+@inherits LayoutComponentBase
+
+<header class="app-top">
+    <a href="/" class="app-brand"><i class="bi bi-stars" aria-hidden="true"></i>BlazorAIApp</a>
+    <nav class="app-nav">
+        <NavLink href="" Match="NavLinkMatch.All">Home</NavLink>
+@*#if (agents)
+        <NavLink href="agent">Agent</NavLink>
+#endif*@
+    </nav>
+    <span class="bai-spacer"></span>
+    <AiProviderPicker />
+    <AiThemeToggle />
+</header>
+
+<main class="app-main">
+    @Body
+</main>
+
+<footer class="app-foot"><AiCredit /></footer>

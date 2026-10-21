@@ -1,0 +1,197 @@
+@namespace Blazor.AI.Decision
+@inherits AiComponentBase
+@*
+    From policy document to executable rules: paste the policy text, let AI draft the rules, review conflicts,
+    test them, and publish a version. The plain-language explanation is generated from the rules themselves.
+*@
+
+<div class="@CssClass("bai-stack")" @attributes="AdditionalAttributes">
+    <AiCard Title="@($"{_policy.Name} · v{_policy.Version}")" Subtitle="@($"{_policy.Status} · effective {_policy.EffectiveFrom:dd MMM yyyy}")" Icon="bi-journal-check">
+        <Actions>
+            <span class="bai-badge @(_policy.Status == "Active" ? "bai-badge-local" : "bai-badge-ai")">@_policy.Status</span>
+            <button type="button" class="bai-btn" disabled="@(Conflicts.Count > 0 || _policy.Rules.Count == 0)" @onclick="Publish" title="@(Conflicts.Count > 0 ? "Resolve conflicts first" : "Publish this version")">
+                <i class="bi bi-cloud-check" aria-hidden="true"></i>Publish v@(_policy.Status == "Active" ? _policy.Version + 1 : _policy.Version)
+            </button>
+        </Actions>
+        <ChildContent>
+            <div class="bai-grid-2" style="align-items:start">
+                <div class="bai-stack">
+                    <div class="bai-grid-2">
+                        <div><label class="bai-label" for="bp-name">Policy name</label><input id="bp-name" class="bai-input" @bind="_policy.Name" /></div>
+                        <div><label class="bai-label" for="bp-date">Effective from</label><input id="bp-date" type="date" class="bai-input" @bind="_policy.EffectiveFrom" /></div>
+                    </div>
+                    <div>
+                        <label class="bai-label" for="bp-text">Policy text</label>
+                        <textarea id="bp-text" class="bai-textarea" rows="9" @bind="_policy.Text"></textarea>
+                    </div>
+                    <div class="bai-row">
+                        <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(_policy.Text))" @onclick="DraftRulesAsync">
+                            @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-stars" aria-hidden="true"></i> }
+                            Draft rules from policy
+                        </button>
+                        <button type="button" class="bai-btn-ghost" disabled="@(IsBusy || _policy.Rules.Count == 0)" @onclick="ExplainAsync"><i class="bi bi-chat-square-text" aria-hidden="true"></i>Explain in plain language</button>
+                    </div>
+                    <AiError Message="@Error" />
+                    @if (_explanation is not null)
+                    {
+                        <AiOutput Text="@_explanation" IsBusy="@IsBusy" />
+                    }
+                </div>
+                <div class="bai-stack">
+                    @if (Conflicts.Count > 0)
+                    {
+                        <div class="bai-alert" role="alert">
+                            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+                            <div>
+                                <strong>@Conflicts.Count possible conflict(s)</strong>
+                                <ul style="margin:.25rem 0 0; padding-left:1rem">@foreach (var c in Conflicts) { <li>@c</li> }</ul>
+                            </div>
+                        </div>
+                    }
+                    else if (_policy.Rules.Count > 0)
+                    {
+                        <div class="bai-alert is-info"><i class="bi bi-check2-circle" aria-hidden="true"></i>No conflicts between rules.</div>
+                    }
+                    <div>
+                        <span class="bai-label">Version history</span>
+                        @foreach (var v in _history.AsEnumerable().Reverse())
+                        {
+                            <div class="bai-row bai-small"><span class="bai-badge">v@v.Version</span><span>@v.Rules rules</span><span class="bai-muted">published @v.PublishedAt.ToString("dd MMM HH:mm")</span></div>
+                        }
+                        @if (_history.Count == 0) { <span class="bai-small bai-muted">Not published yet.</span> }
+                    </div>
+                </div>
+            </div>
+        </ChildContent>
+    </AiCard>
+    <RuleEditor Title="Rules" Rules="@_policy.Rules" Facts="@Facts" Provider="@Provider" />
+</div>
+
+@code {
+    private readonly Policy _policy = new();
+    private readonly List<(int Version, int Rules, DateTimeOffset PublishedAt)> _history = [];
+    private string? _explanation;
+
+    [Parameter] public string? PolicyText { get; set; }
+
+    [Parameter] public IDictionary<string, object?> Facts { get; set; } = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["amount"] = 7_500_000d,
+        ["category"] = "travel",
+        ["employeeLevel"] = 3d,
+        ["hasReceipt"] = true,
+    };
+
+    [Parameter] public EventCallback<IReadOnlyList<BusinessRule>> OnPublished { get; set; }
+
+    private const string SamplePolicy =
+        "Expense reimbursement policy.\n" +
+        "1. Expenses without a receipt are rejected, unless the amount is under Rp 100.000.\n" +
+        "2. Travel expenses up to Rp 5.000.000 are approved automatically for employees at level 3 or above.\n" +
+        "3. Any expense above Rp 25.000.000 needs CFO approval.\n" +
+        "4. Entertainment expenses are capped at Rp 2.000.000 per claim; anything above goes to the finance team.\n" +
+        "5. All other expenses go to the employee's manager.";
+
+    protected override void OnInitialized() => _policy.Text = PolicyText ?? SamplePolicy;
+
+    private List<string> Conflicts
+    {
+        get
+        {
+            var issues = new List<string>();
+            var enabled = _policy.Rules.Where(r => r.Enabled).ToList();
+            foreach (var group in enabled.GroupBy(r => r.Priority))
+            {
+                var assigned = group.SelectMany(r => Assignments(r.Actions).Select(v => (Rule: r.Name, Var: v))).GroupBy(x => x.Var, StringComparer.OrdinalIgnoreCase);
+                foreach (var a in assigned.Where(g => g.Select(x => x.Rule).Distinct().Count() > 1))
+                {
+                    issues.Add($"{string.Join(" and ", a.Select(x => x.Rule).Distinct())} both set \"{a.Key}\" at priority {group.Key}; order is ambiguous.");
+                }
+            }
+
+            foreach (var rule in enabled)
+            {
+                if (RuleEngine.Validate(rule.Condition) is { } e1) issues.Add($"{rule.Name}: {e1}");
+                if (RuleEngine.Validate(rule.Actions, true) is { } e2) issues.Add($"{rule.Name}: {e2}");
+            }
+
+            return issues;
+        }
+    }
+
+    private static IEnumerable<string> Assignments(string actions) =>
+        actions.Split([';', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(a => a.Split('=', 2)[0].Trim()).Where(a => a.Length > 0);
+
+    private Task DraftRulesAsync() => RunAsync(async ct =>
+    {
+        var system = "Turn the policy into executable business rules. Reply with JSON only: {\"rules\": [{\"name\": string, \"condition\": expression, " +
+                     "\"actions\": \"var = expr; ...\", \"priority\": number (higher = evaluated first; exceptions higher than defaults)}]}. " +
+                     "Expression syntax: = != < <= > >=, and/or/not, x in ('a','b'), strings in single quotes, numbers without separators. " +
+                     $"Use these variable names where they fit: {string.Join(", ", Facts.Keys)}. Set a variable named 'route' with values like 'auto-approve', 'reject', 'manager', 'finance', 'cfo'.";
+        var node = await Ai.GenerateJsonAsync(system, PromptTags.Wrap(PromptTags.Input, _policy.Text), AiTasks.Decision, Provider, ct) as JsonObject;
+        var drafted = (node?["rules"] as JsonArray ?? []).OfType<JsonObject>()
+            .Select(r => new BusinessRule
+            {
+                Name = r["name"]?.ToString() ?? "Rule",
+                Condition = r["condition"]?.ToString() ?? "true",
+                Actions = r["actions"]?.ToString() ?? string.Empty,
+                Priority = r["priority"] is JsonValue p && p.TryGetValue<int>(out var priority) ? priority : 0,
+            })
+            .Where(r => RuleEngine.Validate(r.Condition) is null)
+            .ToList();
+
+        if (drafted.Count == 0)
+        {
+            Error = "No valid rules came back. Try again with a more capable model, or add rules manually below.";
+            return;
+        }
+
+        _policy.Rules.Clear();
+        _policy.Rules.AddRange(drafted);
+        _policy.Status = "Draft";
+    });
+
+    private Task ExplainAsync() => RunAsync(async ct =>
+    {
+        var rules = string.Join("\n", _policy.Rules.Where(r => r.Enabled).OrderByDescending(r => r.Priority).Select(r => $"- [{r.Priority}] {r.Name}: WHEN {r.Condition} THEN {r.Actions}"));
+        var builder = new StringBuilder();
+        _explanation = string.Empty;
+        await foreach (var token in Ai.StreamAsync("Explain these business rules to non-technical staff as a short numbered list. Mention which rule wins when several apply.",
+                           PromptTags.Wrap(PromptTags.Input, rules), AiTasks.Summarize, Provider, null, ct))
+        {
+            builder.Append(token);
+            _explanation = builder.ToString();
+            RenderThrottled();
+        }
+    });
+
+    private async Task Publish()
+    {
+        if (_policy.Status == "Active")
+        {
+            _policy.Version++;
+        }
+
+        _policy.Status = "Active";
+        _history.Add((_policy.Version, _policy.Rules.Count, DateTimeOffset.Now));
+        await OnPublished.InvokeAsync(_policy.Rules);
+    }
+
+    private sealed class Policy
+    {
+        public string Name { get; set; } = "Expense policy";
+        public string Text { get; set; } = string.Empty;
+        public int Version { get; set; } = 1;
+        public string Status { get; set; } = "Draft";
+        public DateTime EffectiveFrom { get; set; } = DateTime.Today;
+        public List<BusinessRule> Rules { get; } =
+        [
+            new() { Name = "No receipt", Condition = "hasReceipt = false and amount >= 100000", Actions = "route = 'reject'", Priority = 100, StopOnMatch = true },
+            new() { Name = "CFO threshold", Condition = "amount > 25000000", Actions = "route = 'cfo'", Priority = 90, StopOnMatch = true },
+            new() { Name = "Entertainment cap", Condition = "category = 'entertainment' and amount > 2000000", Actions = "route = 'finance'", Priority = 80, StopOnMatch = true },
+            new() { Name = "Travel auto-approve", Condition = "category = 'travel' and amount <= 5000000 and employeeLevel >= 3", Actions = "route = 'auto-approve'", Priority = 70, StopOnMatch = true },
+            new() { Name = "Default", Condition = "true", Actions = "route = 'manager'", Priority = 0 },
+        ];
+    }
+}

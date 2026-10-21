@@ -1,0 +1,62 @@
+@page "/decision"
+@inject TypeSafeDecisionService TypeSafe
+<PageTitle>Decision intelligence · Blazor.AI</PageTitle>
+
+<PageHeader Title="Decision intelligence" Package="Blazor.AI.Decision" Icon="bi-diagram-2"
+            Lead="Transparent, auditable decisions: a safe rule language, DMN-style decision tables and trees, plus TypeSafe System One for judgements that rules cannot capture." />
+
+@if (TypeSafe.IsSimulated)
+{
+    <div class="bai-alert is-info" style="margin-bottom:1.5rem"><i class="bi bi-info-circle" aria-hidden="true"></i>TypeSafe is running in simulator mode. Set <code>TypeSafe:ApiKey</code> for real System One judgements.</div>
+}
+
+<DemoSection Title="RuleEditor" Component="RuleEditor" Description="Readable rules, validated as you type and tested against facts. Describe a policy and AI writes the rule." Code="@RuleCode">
+    <RuleEditor />
+</DemoSection>
+
+<DemoSection Title="DecisionTableEditor" Component="DecisionTableEditor" Description="DMN-style tables with hit policies and FEEL-like cells." Code="@TableCode">
+    <DecisionTableEditor />
+</DemoSection>
+
+<DemoSection Title="DecisionTreeViewer" Component="DecisionTreeViewer" Description="See the path a case takes through the tree." Code="@TreeCode">
+    <DecisionTreeViewer />
+</DemoSection>
+
+<DemoSection Title="BusinessPolicyDesigner" Component="BusinessPolicyDesigner" Description="Policy text to executable rules, with conflict checks, versions and a plain-language explanation." Code="@PolicyCode">
+    <BusinessPolicyDesigner />
+</DemoSection>
+
+<DemoSection Title="RiskAssessmentPanel" Component="RiskAssessmentPanel" Description="Weighted scorecard plus TypeSafe judgements, then AI-proposed mitigations." Code="@RiskCode">
+    <RiskAssessmentPanel />
+</DemoSection>
+
+<DemoSection Title="EligibilityEngineUI" Component="EligibilityEngineUI" Description="Required and optional criteria with a friendly explanation for the applicant." Code="@EligibilityCode">
+    <EligibilityEngineUI />
+</DemoSection>
+
+<DemoSection Title="IntelligentApprovalWorkflow" Component="IntelligentApprovalWorkflow" Description="Rules decide clear cases, AI judges the rest, humans review low confidence. Logged to the audit trail." Code="@ApprovalCode">
+    <IntelligentApprovalWorkflow />
+</DemoSection>
+
+<DemoSection Title="DynamicPricingEngine" Component="DynamicPricingEngine" Description="Profit-optimal price under elasticity, then margin, competitor and inventory guardrails." Code="@PricingCode">
+    <DynamicPricingEngine />
+</DemoSection>
+
+@code {
+    private const string RuleCode = """
+        builder.Services.AddBlazorAIDecision(o => o.ApiKey = config["TypeSafe:ApiKey"]);
+
+        <RuleEditor Rules="@rules" Facts="@facts" OnEvaluated="Apply" />
+
+        // or in code:
+        var result = new RuleEngine().Evaluate(rules, facts);
+        """;
+
+    private const string TableCode = """<DecisionTableEditor Table="@DecisionTable.LoanSample()" />""";
+    private const string TreeCode = """<DecisionTreeViewer Root="@tree" Facts="@caseFacts" />""";
+    private const string PolicyCode = """<BusinessPolicyDesigner PolicyText="@policy" OnPublished="Deploy" />""";
+    private const string RiskCode = """<RiskAssessmentPanel CaseDescription="@application" Factors="@factors" />""";
+    private const string EligibilityCode = """<EligibilityEngineUI Criteria="@criteria" Applicant="@applicant" Language="Bahasa Indonesia" />""";
+    private const string ApprovalCode = """<IntelligentApprovalWorkflow AutoApproveLimit="2000000" ConfidenceThreshold="0.75" />""";
+    private const string PricingCode = """<DynamicPricingEngine Inputs="@inputs" OnPriced="UpdateCatalog" />""";
+}

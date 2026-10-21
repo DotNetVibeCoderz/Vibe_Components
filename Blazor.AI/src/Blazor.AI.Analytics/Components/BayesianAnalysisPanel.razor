@@ -1,0 +1,77 @@
+@namespace Blazor.AI.Analytics
+@inherits AiComponentBase
+@* Bayesian A/B testing: posterior distributions, probability B beats A, expected lift and the expected loss of choosing B. *@
+
+<AiCard Title="@Title" Subtitle="Beta–Binomial posteriors (GraviProb) with Monte Carlo comparison" Icon="bi-intersect" Class="@Class">
+    <div class="bai-grid-2" style="align-items:start">
+        <div class="bai-stack">
+            <div class="bai-grid-2">
+                <div><label class="bai-label" for="ba-sa">A: conversions</label><input id="ba-sa" type="number" min="0" class="bai-input" @bind="SuccessA" /></div>
+                <div><label class="bai-label" for="ba-na">A: visitors</label><input id="ba-na" type="number" min="1" class="bai-input" @bind="TotalA" /></div>
+                <div><label class="bai-label" for="ba-sb">B: conversions</label><input id="ba-sb" type="number" min="0" class="bai-input" @bind="SuccessB" /></div>
+                <div><label class="bai-label" for="ba-nb">B: visitors</label><input id="ba-nb" type="number" min="1" class="bai-input" @bind="TotalB" /></div>
+                <div><label class="bai-label" for="ba-pa">Prior α</label><input id="ba-pa" type="number" step="0.5" min="0.1" class="bai-input" @bind="PriorAlpha" /></div>
+                <div><label class="bai-label" for="ba-pb">Prior β</label><input id="ba-pb" type="number" step="0.5" min="0.1" class="bai-input" @bind="PriorBeta" /></div>
+            </div>
+            <button type="button" class="bai-btn bai-btn-ai" @onclick="Analyse"><i class="bi bi-calculator" aria-hidden="true"></i>Analyse</button>
+            @if (_error is not null) { <AiError Message="@_error" /> }
+            @if (_result is { } res)
+            {
+                var frequentist = HypothesisTests.TwoProportionZ(SuccessA, TotalA, SuccessB, TotalB);
+                <div class="bai-output">
+                    <p style="margin:0 0 .4rem"><strong>@(res.ProbabilityBBeatsA.ToString("P1", CultureInfo.InvariantCulture))</strong> chance that B converts better than A.</p>
+                    <p class="bai-small bai-muted" style="margin:0">@Verdict(res)</p>
+                </div>
+                <div class="bai-small bai-muted">For comparison, a frequentist z-test gives p = @frequentist.PValue.ToString("0.0000", CultureInfo.InvariantCulture).</div>
+            }
+        </div>
+        <div class="bai-stack">
+            @if (_result is { } r)
+            {
+                <div class="bai-stats">
+                    <div class="bai-stat"><div class="bai-stat-label">P(B &gt; A)</div><div class="bai-stat-value">@r.ProbabilityBBeatsA.ToString("P1", CultureInfo.InvariantCulture)</div></div>
+                    <div class="bai-stat"><div class="bai-stat-label">Expected lift</div><div class="bai-stat-value @(r.ExpectedLift >= 0 ? "bai-delta-up" : "bai-delta-down")">@r.ExpectedLift.ToString("+0.0%;-0.0%", CultureInfo.InvariantCulture)</div><div class="bai-small bai-muted">95%: @r.LiftInterval.Low.ToString("P1", CultureInfo.InvariantCulture) to @r.LiftInterval.High.ToString("P1", CultureInfo.InvariantCulture)</div></div>
+                    <div class="bai-stat"><div class="bai-stat-label">Loss if B is wrong</div><div class="bai-stat-value" style="font-size:1.1rem">@r.ExpectedLossChoosingB.ToString("0.0000", CultureInfo.InvariantCulture)</div></div>
+                </div>
+                <LineChart Title="Posterior conversion rate" Series="@([new ChartSeries("A", r.Grid.Zip(r.DensityA, (x, y) => new ChartPoint(x, y)).ToArray()) { Area = true }, new ChartSeries("B", r.Grid.Zip(r.DensityB, (x, y) => new ChartPoint(x, y)).ToArray()) { Area = true }])"
+                           XFormatter="@(x => x.ToString("P1", CultureInfo.InvariantCulture))" Height="250" />
+            }
+        </div>
+    </div>
+</AiCard>
+
+@code {
+    private BayesianAbResult? _result;
+    private string? _error;
+
+    [Parameter] public string Title { get; set; } = "Bayesian A/B analysis";
+    [Parameter] public int SuccessA { get; set; } = 120;
+    [Parameter] public int TotalA { get; set; } = 1_000;
+    [Parameter] public int SuccessB { get; set; } = 151;
+    [Parameter] public int TotalB { get; set; } = 1_000;
+    [Parameter] public double PriorAlpha { get; set; } = 1;
+    [Parameter] public double PriorBeta { get; set; } = 1;
+
+    /// <summary>Recommend B only when P(B &gt; A) exceeds this.</summary>
+    [Parameter] public double DecisionThreshold { get; set; } = 0.95;
+
+    protected override void OnInitialized() => Analyse();
+
+    private void Analyse()
+    {
+        if (SuccessA > TotalA || SuccessB > TotalB || TotalA < 1 || TotalB < 1)
+        {
+            _error = "Conversions cannot exceed visitors, and each variant needs at least one visitor.";
+            return;
+        }
+
+        _error = null;
+        _result = BayesianAb.Analyse(SuccessA, TotalA, SuccessB, TotalB, PriorAlpha, PriorBeta);
+    }
+
+    private string Verdict(BayesianAbResult r) => r.ProbabilityBBeatsA >= DecisionThreshold
+        ? $"Ship B: it clears the {DecisionThreshold:P0} bar and the expected loss if wrong is tiny."
+        : r.ProbabilityBBeatsA <= 1 - DecisionThreshold
+            ? "Keep A: B is very likely worse."
+            : "Keep collecting data: neither variant is clearly better yet.";
+}

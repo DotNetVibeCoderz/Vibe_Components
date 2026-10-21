@@ -1,0 +1,120 @@
+@namespace Blazor.AI.Visualization
+@implements IDisposable
+@*
+    A streaming line chart with a sliding window and live anomaly flags (rolling z-score).
+    Feed it with an IAsyncEnumerable<double> (Source) or call Push(value) yourself.
+*@
+
+<AiCard Title="@Title" Subtitle="@($"{_window.Count} of {WindowSize} points · {(_running ? "live" : "paused")}")" Icon="bi-activity" Class="@Class">
+    <Actions>
+        @if (Source is not null)
+        {
+            <button type="button" class="bai-btn-ghost" @onclick="Toggle" aria-label="@(_running ? "Pause stream" : "Resume stream")">
+                <i class="bi @(_running ? "bi-pause-fill" : "bi-play-fill")" aria-hidden="true"></i>@(_running ? "Pause" : "Resume")
+            </button>
+        }
+    </Actions>
+    <ChildContent>
+        <div class="bai-stats" style="margin-bottom:.6rem">
+            <div class="bai-stat"><div class="bai-stat-label">Latest</div><div class="bai-stat-value">@(_window.Count == 0 ? "–" : Fmt(_window[^1].Y))</div></div>
+            <div class="bai-stat"><div class="bai-stat-label">Mean</div><div class="bai-stat-value">@(_window.Count == 0 ? "–" : Fmt(_window.Average(p => p.Y)))</div></div>
+            <div class="bai-stat"><div class="bai-stat-label">Anomalies</div><div class="bai-stat-value @(_anomalies.Count > 0 ? "bai-delta-down" : null)">@_anomalies.Count</div></div>
+        </div>
+        <LineChart Series="@([new ChartSeries(SeriesName, _window.ToArray()) { Area = true }])" Highlights="@_anomalies.ToArray()" Height="@Height" ShowLegend="false" />
+    </ChildContent>
+</AiCard>
+
+@code {
+    private readonly List<ChartPoint> _window = [];
+    private readonly List<ChartPoint> _anomalies = [];
+    private CancellationTokenSource? _cts;
+    private bool _running;
+    private long _x;
+
+    [Parameter] public IAsyncEnumerable<double>? Source { get; set; }
+    [Parameter] public string Title { get; set; } = "Live signal";
+    [Parameter] public string SeriesName { get; set; } = "Value";
+    [Parameter] public int WindowSize { get; set; } = 120;
+
+    /// <summary>Flag points further than this many standard deviations from the rolling mean.</summary>
+    [Parameter] public double AnomalyZ { get; set; } = 3;
+
+    [Parameter] public int Height { get; set; } = 240;
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public EventCallback<ChartPoint> OnAnomaly { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Source is not null)
+        {
+            Start();
+        }
+    }
+
+    /// <summary>Appends a value (thread-safe to call from any thread).</summary>
+    public Task Push(double value) => InvokeAsync(async () =>
+    {
+        var point = new ChartPoint(_x++, value);
+        if (_window.Count >= 20)
+        {
+            var mean = _window.Average(p => p.Y);
+            var std = Math.Sqrt(_window.Average(p => (p.Y - mean) * (p.Y - mean)));
+            if (std > 1e-9 && Math.Abs(value - mean) / std >= AnomalyZ)
+            {
+                var anomaly = point with { Label = "Anomaly" };
+                _anomalies.Add(anomaly);
+                await OnAnomaly.InvokeAsync(anomaly);
+            }
+        }
+
+        _window.Add(point);
+        if (_window.Count > WindowSize)
+        {
+            _window.RemoveAt(0);
+            _anomalies.RemoveAll(a => a.X < _window[0].X);
+        }
+
+        StateHasChanged();
+    });
+
+    private void Toggle()
+    {
+        if (_running)
+        {
+            _cts?.Cancel();
+            _running = false;
+        }
+        else
+        {
+            Start();
+        }
+    }
+
+    private void Start()
+    {
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        _running = true;
+        _ = ConsumeAsync(_cts.Token);
+    }
+
+    private async Task ConsumeAsync(CancellationToken ct)
+    {
+        try
+        {
+            await foreach (var value in Source!.WithCancellation(ct))
+            {
+                await Push(value);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    public void Dispose() => _cts?.Cancel();
+}

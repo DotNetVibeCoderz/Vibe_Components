@@ -1,0 +1,118 @@
+@namespace Blazor.AI.Analytics
+@implements IDisposable
+@* Paint a grid world (walls, traps, goal, start); it becomes the "Designed grid world" every RL component trains on. *@
+
+<AiCard Title="@Title" Subtitle="@($"{_width} × {_height} grid")" Icon="bi-grid-3x3" Class="@Class">
+    <div class="bai-stack">
+        <div class="bai-row">
+            <span class="bai-label" style="margin:0">Brush</span>
+            @foreach (var tile in Enum.GetValues<GridTile>())
+            {
+                <button type="button" class="bai-chip @(_brush == tile ? "is-active" : null)" aria-pressed="@(_brush == tile)" @onclick="() => _brush = tile">
+                    <span class="bai-legend-swatch" style="background:@Color(tile)"></span>@tile
+                </button>
+            }
+            <span class="bai-spacer"></span>
+            <label class="bai-small">W <input type="number" min="3" max="16" class="bai-input" style="width:4rem" @bind="_width" @bind:after="Resize" /></label>
+            <label class="bai-small">H <input type="number" min="3" max="12" class="bai-input" style="width:4rem" @bind="_height" @bind:after="Resize" /></label>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(@_width, minmax(0, 2.6rem)); gap:3px; width:fit-content" role="grid" aria-label="Grid layout"
+             @onpointerup="() => _painting = false" @onpointerleave="() => _painting = false">
+            @for (var i = 0; i < _tiles.Length; i++)
+            {
+                var index = i;
+                <button type="button" role="gridcell" aria-label="@($"Cell {index % _width},{index / _width}: {_tiles[index]}")"
+                        style="aspect-ratio:1; border:0; border-radius:6px; background:@Color(_tiles[index]); cursor:crosshair"
+                        @onpointerdown="() => { _painting = true; Paint(index); }" @onpointerenter="() => { if (_painting) Paint(index); }"></button>
+            }
+        </div>
+        <div class="bai-row">
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@(!_tiles.Contains(GridTile.Goal))" @onclick="Apply"><i class="bi bi-check2" aria-hidden="true"></i>Use this world</button>
+            <button type="button" class="bai-btn-ghost" @onclick="LoadSample">Load sample</button>
+            @if (!_tiles.Contains(GridTile.Goal)) { <span class="bai-small" style="color:var(--bai-danger)">Add a goal cell.</span> }
+            @if (_applied) { <span class="bai-small bai-muted" role="status">Applied. Train it in the RL training studio.</span> }
+        </div>
+    </div>
+</AiCard>
+
+@code {
+    private GridTile[] _tiles = [];
+    private int _width, _height;
+    private GridTile _brush = GridTile.Wall;
+    private bool _painting, _applied;
+
+    [Inject] private RlWorkspace Workspace { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Environment designer";
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Workspace.Changed += Refresh;
+        LoadFrom(Workspace.Grid);
+    }
+
+    private void LoadFrom(DesignedGridWorld grid)
+    {
+        _width = grid.Width;
+        _height = grid.Height;
+        _tiles = (GridTile[])grid.Tiles.Clone();
+    }
+
+    private void LoadSample()
+    {
+        LoadFrom(DesignedGridWorld.Sample());
+        _applied = false;
+    }
+
+    private void Paint(int index)
+    {
+        if (_brush == GridTile.Start)
+        {
+            for (var i = 0; i < _tiles.Length; i++)
+            {
+                if (_tiles[i] == GridTile.Start) _tiles[i] = GridTile.Empty;
+            }
+        }
+
+        _tiles[index] = _brush;
+        _applied = false;
+    }
+
+    private void Resize()
+    {
+        _width = Math.Clamp(_width, 3, 16);
+        _height = Math.Clamp(_height, 3, 12);
+        var resized = new GridTile[_width * _height];
+        var oldWidth = Workspace.Grid.Width;
+        for (var y = 0; y < _height; y++)
+        {
+            for (var x = 0; x < _width; x++)
+            {
+                var old = y * oldWidth + x;
+                resized[y * _width + x] = x < oldWidth && old < _tiles.Length ? _tiles[old] : GridTile.Empty;
+            }
+        }
+
+        _tiles = resized;
+    }
+
+    private void Apply()
+    {
+        Workspace.SetGrid(_width, _height, (GridTile[])_tiles.Clone());
+        _applied = true;
+    }
+
+    private static string Color(GridTile tile) => tile switch
+    {
+        GridTile.Wall => "var(--bai-ink-muted)",
+        GridTile.Goal => "var(--bai-nila)",
+        GridTile.Trap => "var(--bai-danger)",
+        GridTile.Start => "var(--bai-soga)",
+        _ => "var(--bai-line-strong)",
+    };
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Workspace.Changed -= Refresh;
+}

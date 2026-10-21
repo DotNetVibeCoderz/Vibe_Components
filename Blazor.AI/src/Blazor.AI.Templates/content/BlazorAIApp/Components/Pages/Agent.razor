@@ -1,0 +1,18 @@
+@page "/agent"
+
+<PageTitle>Agent · BlazorAIApp</PageTitle>
+
+<h1 class="app-title">Tool-calling agent</h1>
+<p class="app-lead">Agents call the .NET tools you register in <code>Program.cs</code>. Try asking for the current time.</p>
+
+<AiAgentChat Agent="@_agent" AllowAgentSwitch="false" Suggestions="@(["What time is it on the server?"])" />
+
+@code {
+    private readonly AgentDefinition _agent = new()
+    {
+        Name = "Helper",
+        Role = "App assistant",
+        Instructions = "You are a helpful assistant. Use tools when they help and say which tool you used.",
+        Tools = ["current_time"],
+    };
+}

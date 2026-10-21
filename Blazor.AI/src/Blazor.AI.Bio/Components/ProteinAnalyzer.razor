@@ -1,0 +1,114 @@
+@namespace Blazor.AI.Bio
+@inherits BioComponentBase
+@using Biotech.Net.Proteomics
+@using Biotech.Net.Proteomics.MassSpec
+@* ProtParam-style analysis: physico-chemical properties, hydropathy, charge vs pH, topology hints and tryptic peptides. *@
+
+<AiCard Title="@Title" Subtitle="Biotech.Net.Proteomics" Icon="bi-hexagon" Class="@Class">
+    <div class="bai-stack">
+        <SequenceInput @bind-Value="Sequence" Label="Protein sequence" Rows="4" Samples="@([("Insulin", BioSamples.Insulin), ("Hb β", BioSamples.HemoglobinBeta)])" />
+        <div class="bai-row">
+            <button type="button" class="bai-btn bai-btn-ai" @onclick="AnalyseAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Analyse</button>
+            <select class="bai-select" style="width:auto" @bind="_scale" aria-label="Hydropathy scale">
+                @foreach (var s in Scales.Keys) { <option>@s</option> }
+            </select>
+        </div>
+        <AiError Message="@Error" />
+        @if (_r is { } r)
+        {
+            <div class="bai-stats">
+                <div class="bai-stat"><div class="bai-stat-label">Length</div><div class="bai-stat-value">@r.Length <span class="bai-small">aa</span></div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Mass</div><div class="bai-stat-value" style="font-size:1.2rem">@((r.Mw / 1000).ToString("0.00", CultureInfo.InvariantCulture)) kDa</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">pI</div><div class="bai-stat-value">@r.Pi.ToString("0.00", CultureInfo.InvariantCulture)</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Instability</div><div class="bai-stat-value">@r.Instability.ToString("0.0", CultureInfo.InvariantCulture) <span class="bai-badge @(r.Instability < 40 ? "bai-badge-local" : "bai-badge-danger")">@(r.Instability < 40 ? "stable" : "unstable")</span></div></div>
+                <div class="bai-stat"><div class="bai-stat-label">GRAVY</div><div class="bai-stat-value">@r.Gravy.ToString("0.000", CultureInfo.InvariantCulture)</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Half-life</div><div class="bai-stat-value" style="font-size:1.1rem">@r.HalfLife</div></div>
+            </div>
+            <div class="bai-row bai-small bai-muted">
+                <span>Aliphatic index <b>@r.Aliphatic.ToString("0.0", CultureInfo.InvariantCulture)</b></span>
+                <span>Aromaticity <b>@r.Aromaticity.ToString("P1", CultureInfo.InvariantCulture)</b></span>
+                <span>ε<sub>280</sub> <b>@r.Extinction.Reduced.ToString("N0", CultureInfo.InvariantCulture)</b> M⁻¹cm⁻¹ (reduced)</span>
+                <span>Helix/turn/sheet <b>@r.Ss.Helix.ToString("P0", CultureInfo.InvariantCulture) / @r.Ss.Turn.ToString("P0", CultureInfo.InvariantCulture) / @r.Ss.Sheet.ToString("P0", CultureInfo.InvariantCulture)</b></span>
+                <span>Signal peptide <b>@(r.Signal.HasSignalPeptide ? $"yes, cleaves after {r.Signal.CleavageSite}" : "no")</b></span>
+                <span>TM helices <b>@r.Tm.Count</b></span>
+            </div>
+            <div class="bai-grid-2" style="align-items:start">
+                <LineChart Title="@($"{_scale} profile (window 9)")" Series="@([ChartSeries.FromValues(_scale, Profile(r))])" Highlights="@TmHighlights(r)" ShowLegend="false" Height="220" XLabel="Residue" />
+                <LineChart Title="Net charge vs pH" Series="@([new ChartSeries("Charge", r.Charge.Select(c => new ChartPoint(c.Item1, c.Item2)).ToArray())])" ShowLegend="false" Height="220" XLabel="pH" MarkerX="@r.Pi" MarkerLabel="pI" />
+            </div>
+            <div class="bai-grid-2" style="align-items:start">
+                <div>
+                    <span class="bai-label">Amino-acid composition</span>
+                    <BarChart Values="@r.Composition.Select(kv => new BarValue(kv.Key.ToString(), kv.Value * 100))" ShowValues="false" Height="200" />
+                </div>
+                <div>
+                    <span class="bai-label">Tryptic peptides (7–30 aa, observable by MS)</span>
+                    <div class="bai-table-wrap" style="max-height:200px; overflow:auto">
+                        <table class="bai-table">
+                            <thead><tr><th>Peptide</th><th>Position</th><th>Mono mass</th></tr></thead>
+                            <tbody>@foreach (var p in r.Peptides) { <tr><td><code>@p.Sequence</code></td><td class="bai-num">@(p.Start + 1)–@p.End</td><td class="bai-num">@p.MonoisotopicMass.ToString("0.0000", CultureInfo.InvariantCulture)</td></tr> }</tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain with AI</button>
+            @if (Explanation is not null) { <AiOutput Text="@Explanation" IsBusy="@IsBusy" /> }
+        }
+    </div>
+</AiCard>
+
+@code {
+    private static readonly Dictionary<string, AminoAcidScale> Scales = new()
+    {
+        ["Kyte–Doolittle"] = AminoAcidScale.KyteDoolittle,
+        ["Hopp–Woods"] = AminoAcidScale.HoppWoods,
+        ["Eisenberg"] = AminoAcidScale.Eisenberg,
+        ["Flexibility"] = AminoAcidScale.Flexibility,
+        ["Emini surface"] = AminoAcidScale.EminiSurface,
+    };
+
+    private string _scale = "Kyte–Doolittle";
+    private Result? _r;
+
+    [Parameter] public string Title { get; set; } = "Protein analyzer";
+    [Parameter] public string? Sequence { get; set; } = BioSamples.Insulin;
+
+    private sealed record Result(
+        ProteinAnalysis Analysis, int Length, double Mw, double Pi, double Instability, double Gravy, double Aliphatic, double Aromaticity, string HalfLife,
+        ExtinctionCoefficient Extinction, SecondaryStructureFraction Ss, (double, double)[] Charge, SignalPeptidePrediction Signal,
+        IReadOnlyList<TransmembraneSegment> Tm, IReadOnlyList<KeyValuePair<char, double>> Composition, IReadOnlyList<DigestedPeptide> Peptides);
+
+    protected override Task OnInitializedAsync() => AnalyseAsync();
+
+    private async Task AnalyseAsync()
+    {
+        var text = Sequence;
+        _r = await AnalyseAsync(() =>
+        {
+            var protein = BioInput.ParseOne(text, SequenceType.Protein) ?? throw new FormatException("Paste a protein sequence first.");
+            var residues = protein.ToString();
+            var p = new ProteinAnalysis(residues);
+            return new Result(
+                p, p.Length, p.MolecularWeight(), p.IsoelectricPoint(), p.InstabilityIndex(), p.Gravy(), p.AliphaticIndex(), p.Aromaticity(), p.HalfLife().Text,
+                p.ExtinctionCoefficient(), p.SecondaryStructureFraction(), p.ChargeCurve(0, 14, 0.25), SignalPeptidePredictor.Predict(residues),
+                TransmembranePredictor.Predict(residues), p.AminoAcidFractions().OrderBy(kv => kv.Key).ToList(),
+                Digestion.Digest(residues, Enzyme.Trypsin).Where(d => d.Length is >= 7 and <= 30).ToList());
+        });
+        Explanation = null;
+    }
+
+    private double[] Profile(Result r) => r.Length < 9 ? [] : r.Analysis.Profile(Scales[_scale], 9);
+
+    private static IReadOnlyList<ChartPoint> TmHighlights(Result r) =>
+        r.Tm.Select(t => new ChartPoint((t.Start + t.End) / 2.0, t.MaxWindowHydropathy, $"TM {t.Start + 1}–{t.End}")).ToList();
+
+    private Task Explain()
+    {
+        var r = _r!;
+        return ExplainAsync("protein physico-chemical analysis", string.Create(CultureInfo.InvariantCulture,
+            $"Length {r.Length} aa, MW {r.Mw:N0} Da, pI {r.Pi:0.00}, instability index {r.Instability:0.0}, GRAVY {r.Gravy:0.000}, aliphatic index {r.Aliphatic:0.0}, aromaticity {r.Aromaticity:P1}, " +
+            $"half-life {r.HalfLife}, ε280 {r.Extinction.Reduced:N0}, secondary structure helix {r.Ss.Helix:P0}/turn {r.Ss.Turn:P0}/sheet {r.Ss.Sheet:P0}, " +
+            $"signal peptide {(r.Signal.HasSignalPeptide ? $"predicted, cleavage after {r.Signal.CleavageSite}" : "not predicted")}, transmembrane segments {string.Join(", ", r.Tm.Select(t => $"{t.Start + 1}-{t.End}"))}, " +
+            $"{r.Peptides.Count} observable tryptic peptides. Sequence starts {(Sequence ?? "")[..Math.Min(40, (Sequence ?? "").Length)]}."));
+    }
+}

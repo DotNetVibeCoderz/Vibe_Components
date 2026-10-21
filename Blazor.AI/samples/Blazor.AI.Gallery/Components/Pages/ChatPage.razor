@@ -1,0 +1,59 @@
+@page "/chat"
+<PageTitle>Conversational · Blazor.AI</PageTitle>
+
+<PageHeader Title="Conversational" Package="Blazor.AI.Components" Icon="bi-chat-square-dots"
+            Lead="Copilot-style chat with streaming markdown, tool calls, stop and regenerate. The assistant bubble in the corner is AiAssistant; the copilot below sees the record on screen." />
+
+<DemoSection Title="AiChat" Component="AiChat" Description="A full chat surface. This one can call two app tools: order lookup and exchange rates." Code="@ChatCode">
+    <AiChat Title="Kopi Nusantara support" Subtitle="Try: where is order INV-1001?" Icon="bi-cup-hot"
+            SystemPrompt="You are a friendly support assistant for Kopi Nusantara, an Indonesian coffee shop. Use tools for order status and currency questions."
+            Tools="@_tools" Suggestions="@(["Where is order INV-1001?", "How much is 25 USD in IDR?", "Recommend a coffee for cold brew"])" Height="520px" />
+</DemoSection>
+
+<DemoSection Title="AiCopilot" Component="AiCopilot" Description="A dockable copilot (left, right or floating). It receives the record on screen as context before every question." Code="@CopilotCode">
+    <AiCard Title="Customer: PT Sinar Tani" Icon="bi-building" Subtitle="CRM record">
+        <dl class="bai-kv">
+            <dt>Segment</dt><dd>Agribusiness, 120 employees, Lampung</dd>
+            <dt>Plan</dt><dd>Business, renews 2026-12-01</dd>
+            <dt>Open tickets</dt><dd>2 (late delivery, invoice correction)</dd>
+            <dt>Last 3 orders</dt><dd>Rp 12.4M, Rp 9.8M, Rp 15.1M</dd>
+            <dt>NPS</dt><dd>6 (passive)</dd>
+        </dl>
+        <button type="button" class="bai-btn bai-btn-ai" style="margin-top:1rem" @onclick="() => _copilotOpen = true"><i class="bi bi-stars" aria-hidden="true"></i>Open copilot</button>
+    </AiCard>
+</DemoSection>
+
+<AiCopilot @bind-Open="_copilotOpen" Context="@CustomerContext"
+           QuickActions="@(["Summarise this customer", "Draft a renewal email", "What is the churn risk?"])" />
+
+<DemoSection Title="AiAssistant" Component="AiAssistant" Description="The floating helper at the bottom right of every gallery page. Add it to your MainLayout." Code="@AssistantCode">
+    <p class="bai-muted">Click the amber button at the bottom right to open it.</p>
+</DemoSection>
+
+@code {
+    private bool _copilotOpen;
+    private readonly IList<AITool> _tools =
+    [
+        AIFunctionFactory.Create(GalleryTools.LookupOrder, "lookup_order", "Looks up the status of a customer order by its number."),
+        AIFunctionFactory.Create(GalleryTools.ExchangeRate, "exchange_rate", "Indicative exchange rate between two currencies."),
+    ];
+
+    private const string CustomerContext = "Customer PT Sinar Tani, agribusiness, 120 employees, Lampung. Plan Business renews 2026-12-01. " +
+        "Open tickets: late delivery, invoice correction. Last orders Rp 12.4M, 9.8M, 15.1M. NPS 6.";
+
+    private const string ChatCode = """
+        <AiChat Title="Support" SystemPrompt="You are a support assistant."
+                Tools="@tools" Suggestions="@(["Where is my order?"])" />
+
+        @code {
+            IList<AITool> tools = [AIFunctionFactory.Create(LookupOrder, "lookup_order", "Order status by number")];
+        }
+        """;
+
+    private const string CopilotCode = """
+        <AiCopilot @bind-Open="open" Context="@customer.ToSummary()"
+                   QuickActions="@(["Summarise this customer", "Draft a renewal email"])" />
+        """;
+
+    private const string AssistantCode = """<AiAssistant Title="Help" Suggestions="@(["How do I export?"])" />""";
+}

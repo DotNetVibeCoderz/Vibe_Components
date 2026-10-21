@@ -1,0 +1,54 @@
+@page "/"
+
+<PageTitle>Blazor.AI · WebAssembly</PageTitle>
+
+<h1 class="wasm-title">AI components, running in your browser</h1>
+<p class="wasm-lead">
+    This page is a static WebAssembly app: no server, no keys. The simulated model, the rule engine and the charts
+    all run client-side. Point it at a local Ollama by setting <code>Ollama:Model</code> in <code>wwwroot/appsettings.json</code>.
+</p>
+
+<div class="bai-grid-2" style="align-items:start">
+    <AiCard Title="Smart Paste" Subtitle="Copy a signature, then press Smart Paste" Icon="bi-clipboard2-check">
+        <form data-smartpaste-scope class="bai-stack" @onsubmit:preventDefault="true">
+            <div class="g-clip">@Sample</div>
+            <div><label class="bai-label" for="w-name">Name</label><input id="w-name" name="name" class="bai-input" /></div>
+            <div><label class="bai-label" for="w-email">Email</label><input id="w-email" name="email" type="email" class="bai-input" /></div>
+            <div><label class="bai-label" for="w-city">City</label><input id="w-city" name="city" class="bai-input" /></div>
+            <div class="bai-row">
+                <SmartPaste @ref="_paste" />
+                <button type="button" class="bai-btn-ghost" @onclick="() => _paste!.PasteTextAsync(Sample)">Use the sample</button>
+            </div>
+        </form>
+    </AiCard>
+
+    <AiChat Title="Assistant" Height="460px" Suggestions="@(["Summarise what WebAssembly is", "Give me three product name ideas"])" />
+</div>
+
+<div class="bai-grid-2" style="align-items:start; margin-top:1.5rem">
+    <AiCard Title="Weekly active users" Subtitle="Visualization package, pure SVG" Icon="bi-graph-up">
+        <LineChart Series="@_series" Height="240" ShowLegend="true" />
+    </AiCard>
+    <SmartSummarizer Text="@Article" />
+</div>
+
+<div style="margin-top:1.5rem">
+    <RuleEditor />
+</div>
+
+@code {
+    private const string Sample = "Thanks!\nRatna Dewi · Product Lead\nratna.dewi@example.id · Yogyakarta";
+
+    private const string Article = "Blazor WebAssembly runs .NET directly in the browser on a WebAssembly runtime. Apps are downloaded once, " +
+        "then execute client-side with full access to the DOM through JavaScript interop. Because no server round trip is needed for UI " +
+        "events, interactions feel instant, and apps can work offline as progressive web apps. The trade-off is a larger initial download " +
+        "and the fact that secrets cannot be kept in the client.";
+
+    private SmartPaste? _paste;
+
+    private readonly ChartSeries[] _series =
+    [
+        ChartSeries.FromValues("This year", [120, 135, 150, 148, 170, 190, 210, 230]) with { Area = true },
+        ChartSeries.FromValues("Last year", [100, 104, 112, 118, 121, 130, 138, 142]) with { Dashed = true },
+    ];
+}

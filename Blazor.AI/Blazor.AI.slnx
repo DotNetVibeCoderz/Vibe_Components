@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/Blazor.AI.Gallery/Blazor.AI.Gallery.csproj" />
+    <Project Path="samples/Blazor.AI.Wasm/Blazor.AI.Wasm.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Blazor.AI.Abstractions/Blazor.AI.Abstractions.csproj" />
+    <Project Path="src/Blazor.AI.Agents/Blazor.AI.Agents.csproj" />
+    <Project Path="src/Blazor.AI.Analytics/Blazor.AI.Analytics.csproj" />
+    <Project Path="src/Blazor.AI.Bio/Blazor.AI.Bio.csproj" />
+    <Project Path="src/Blazor.AI.Components/Blazor.AI.Components.csproj" />
+    <Project Path="src/Blazor.AI.Core/Blazor.AI.Core.csproj" />
+    <Project Path="src/Blazor.AI.Decision/Blazor.AI.Decision.csproj" />
+    <Project Path="src/Blazor.AI.LocalModels/Blazor.AI.LocalModels.csproj" />
+    <Project Path="src/Blazor.AI.RAG/Blazor.AI.RAG.csproj" />
+    <Project Path="src/Blazor.AI.Templates/Blazor.AI.Templates.csproj" />
+    <Project Path="src/Blazor.AI.Visualization/Blazor.AI.Visualization.csproj" />
+  </Folder>
+</Solution>

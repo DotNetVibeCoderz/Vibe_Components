@@ -1,0 +1,133 @@
+@namespace Blazor.AI.Components
+@inherits AiComponentBase
+@*
+    SmartComboBox: a text input whose suggestions are ranked by meaning, not spelling.
+    Typing "car repairs" can suggest "Vehicle maintenance". Bind with @bind-Value.
+*@
+
+<div class="@CssClass("bai-combo")" @attributes="AdditionalAttributes">
+    <input id="@Id" class="bai-input" type="text" role="combobox" autocomplete="off" placeholder="@Placeholder"
+           aria-expanded="@_open" aria-controls="@_listId" aria-autocomplete="list"
+           aria-activedescendant="@(_active >= 0 ? $"{_listId}-{_active}" : null)"
+           value="@Value" @oninput="OnInputAsync" @onkeydown="OnKeyDownAsync" @onfocus="OnFocusAsync" @onblur="OnBlurAsync" />
+    @if (IsBusy)
+    {
+        <span style="position:absolute; right:.7rem; top:50%; transform:translateY(-50%)"><AiThinking Label="@null" /></span>
+    }
+    @if (_open && _matches.Count > 0)
+    {
+        <ul id="@_listId" class="bai-combo-list" role="listbox">
+            @for (var i = 0; i < _matches.Count; i++)
+            {
+                var index = i;
+                var match = _matches[i];
+                <li id="@($"{_listId}-{i}")" role="option" aria-selected="@(i == _active)" class="@(i == _active ? "is-active" : null)"
+                    @onmousedown="() => SelectAsync(match.Item)" @onmousedown:preventDefault="true" @onmouseover="() => _active = index">
+                    <span>@match.Item</span>
+                    @if (ShowScores)
+                    {
+                        <span class="bai-num bai-small bai-faint">@((match.Score * 100).ToString("0"))%</span>
+                    }
+                </li>
+            }
+        </ul>
+    }
+</div>
+<AiError Message="@Error" />
+
+@code {
+    private readonly string _listId = "bai-combo-" + Guid.NewGuid().ToString("N")[..6];
+    private IReadOnlyList<SemanticMatch<string>> _matches = [];
+    private bool _open;
+    private int _active = -1;
+    private CancellationTokenSource? _debounce;
+
+    [Inject] private ISemanticMatcher Matcher { get; set; } = default!;
+
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    /// <summary>The allowed values to suggest.</summary>
+    [Parameter, EditorRequired] public IEnumerable<string> Items { get; set; } = [];
+
+    [Parameter] public string? Id { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public int MaxSuggestions { get; set; } = 6;
+
+    /// <summary>Hide suggestions below this cosine similarity.</summary>
+    [Parameter] public double MinScore { get; set; } = 0.05;
+
+    [Parameter] public bool ShowScores { get; set; } = true;
+    [Parameter] public int DebounceMs { get; set; } = 250;
+
+    private async Task OnInputAsync(ChangeEventArgs e)
+    {
+        Value = e.Value?.ToString();
+        await ValueChanged.InvokeAsync(Value);
+        _debounce?.Cancel();
+        _debounce = new CancellationTokenSource();
+        var token = _debounce.Token;
+        try
+        {
+            await Task.Delay(DebounceMs, token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        await SearchAsync();
+    }
+
+    private Task SearchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Value))
+        {
+            _matches = Items.Take(MaxSuggestions).Select(i => new SemanticMatch<string>(i, i, 0)).ToArray();
+            _open = _matches.Count > 0;
+            return Task.CompletedTask;
+        }
+
+        return RunAsync(async ct =>
+        {
+            _matches = await Matcher.MatchAsync(Value!, Items, s => s, MaxSuggestions, MinScore, Provider, ct);
+            _active = _matches.Count > 0 ? 0 : -1;
+            _open = true;
+        });
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowDown" when _matches.Count > 0:
+                _open = true;
+                _active = (_active + 1) % _matches.Count;
+                break;
+            case "ArrowUp" when _matches.Count > 0:
+                _active = _active <= 0 ? _matches.Count - 1 : _active - 1;
+                break;
+            case "Enter" when _open && _active >= 0 && _active < _matches.Count:
+                await SelectAsync(_matches[_active].Item);
+                break;
+            case "Escape":
+                _open = false;
+                break;
+        }
+    }
+
+    private Task OnFocusAsync() => _matches.Count == 0 ? SearchAsync() : Task.FromResult(_open = true);
+
+    private async Task OnBlurAsync()
+    {
+        await Task.Delay(120);
+        _open = false;
+    }
+
+    private async Task SelectAsync(string item)
+    {
+        Value = item;
+        _open = false;
+        await ValueChanged.InvokeAsync(Value);
+    }
+}

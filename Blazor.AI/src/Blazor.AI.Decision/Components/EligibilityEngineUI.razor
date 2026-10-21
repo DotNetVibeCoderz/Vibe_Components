@@ -1,0 +1,117 @@
+@namespace Blazor.AI.Decision
+@inherits AiComponentBase
+@* Program eligibility: required and optional criteria, per-criterion results, and a clear explanation for the applicant. *@
+
+<AiCard Title="@Title" Subtitle="@ProgramName" Icon="bi-person-check" Class="@Class">
+    <div class="bai-grid-2" style="align-items:start">
+        <div class="bai-stack">
+            <span class="bai-label">Criteria</span>
+            @foreach (var c in Criteria)
+            {
+                var error = RuleEngine.Validate(c.Expression);
+                <div class="bai-result">
+                    <div class="bai-row" style="flex-wrap:nowrap">
+                        <input class="bai-input" style="padding:.25rem .45rem; font-weight:600" @bind="c.Name" aria-label="Criterion name" />
+                        <label class="bai-small bai-muted" style="white-space:nowrap"><input type="checkbox" class="form-check-input" @bind="c.Required" /> required</label>
+                        <button type="button" class="bai-icon-btn" aria-label="Remove criterion" @onclick="() => Criteria.Remove(c)"><i class="bi bi-x"></i></button>
+                    </div>
+                    <input class="bai-input" style="font-family:var(--bai-font-mono); font-size:.8rem; @(error is null ? null : "border-color:var(--bai-danger)")" @bind="c.Expression" @bind:event="oninput" aria-label="Criterion expression" />
+                    @if (error is not null) { <span class="bai-small" style="color:var(--bai-danger)">@error</span> }
+                </div>
+            }
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" @onclick="() => Criteria.Add(new EligibilityCriterion())"><i class="bi bi-plus" aria-hidden="true"></i>Criterion</button>
+        </div>
+        <div class="bai-stack">
+            <FactsEditor Facts="@Applicant" Label="Applicant" />
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="CheckAsync"><i class="bi bi-check2-all" aria-hidden="true"></i>Check eligibility</button>
+            @if (_results is not null)
+            {
+                var eligible = _results.Where(r => r.Criterion.Required).All(r => r.Passed);
+                <div class="bai-output">
+                    <div class="bai-row" style="margin-bottom:.5rem">
+                        <i class="bi @(eligible ? "bi-check-circle-fill" : "bi-x-circle-fill")" style="font-size:1.4rem; color:@(eligible ? "var(--bai-nila)" : "var(--bai-danger)")" aria-hidden="true"></i>
+                        <strong style="font-family:var(--bai-font-display); font-size:1.15rem">@(eligible ? "Eligible" : "Not eligible")</strong>
+                        <span class="bai-spacer"></span>
+                        <span class="bai-badge">@_results.Count(r => !r.Criterion.Required && r.Passed)/@_results.Count(r => !r.Criterion.Required) bonus criteria</span>
+                    </div>
+                    @foreach (var r in _results)
+                    {
+                        <div class="bai-row bai-small" style="flex-wrap:nowrap; margin-bottom:.25rem">
+                            <i class="bi @(r.Passed ? "bi-check2" : r.Criterion.Required ? "bi-x-lg" : "bi-dash")" style="color:@(r.Passed ? "var(--bai-nila)" : r.Criterion.Required ? "var(--bai-danger)" : "var(--bai-ink-faint)")" aria-hidden="true"></i>
+                            <span>@r.Criterion.Name</span>
+                            @if (!r.Criterion.Required) { <span class="bai-faint">(optional)</span> }
+                            @if (r.Error is not null) { <span style="color:var(--bai-danger)">@r.Error</span> }
+                        </div>
+                    }
+                </div>
+                <AiOutput Text="@_explanation" IsBusy="@IsBusy" Placeholder="A plain-language explanation for the applicant will appear here." />
+            }
+            <AiError Message="@Error" />
+        </div>
+    </div>
+</AiCard>
+
+@code {
+    private List<(EligibilityCriterion Criterion, bool Passed, string? Error)>? _results;
+    private string? _explanation;
+
+    [Parameter] public string Title { get; set; } = "Eligibility engine";
+    [Parameter] public string ProgramName { get; set; } = "KUR micro-business loan (sample)";
+    [Parameter] public string? Language { get; set; }
+
+    [Parameter] public List<EligibilityCriterion> Criteria { get; set; } =
+    [
+        new() { Name = "Business operating ≥ 6 months", Expression = "businessMonths >= 6" },
+        new() { Name = "Has a valid business ID (NIB)", Expression = "hasNib = true" },
+        new() { Name = "Not currently receiving another subsidised loan", Expression = "activeSubsidisedLoan = false" },
+        new() { Name = "Loan amount within Rp 10–500 million", Expression = "between(amount, 10000000, 500000000)" },
+        new() { Name = "Applicant aged 21+", Expression = "age >= 21" },
+        new() { Name = "Women-led business (priority)", Expression = "ownerGender = 'female'", Required = false },
+        new() { Name = "Located outside Java (priority)", Expression = "province not in ('DKI Jakarta', 'Jawa Barat', 'Jawa Tengah', 'Jawa Timur', 'Banten', 'DI Yogyakarta')", Required = false },
+    ];
+
+    [Parameter] public IDictionary<string, object?> Applicant { get; set; } = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["businessMonths"] = 14d,
+        ["hasNib"] = true,
+        ["activeSubsidisedLoan"] = false,
+        ["amount"] = 75_000_000d,
+        ["age"] = 34d,
+        ["ownerGender"] = "female",
+        ["province"] = "Sulawesi Selatan",
+    };
+
+    [Parameter] public EventCallback<bool> OnChecked { get; set; }
+
+    private Task CheckAsync() => RunAsync(async ct =>
+    {
+        var facts = new Dictionary<string, object?>(Applicant, StringComparer.OrdinalIgnoreCase);
+        _results = Criteria.Select(c =>
+        {
+            try
+            {
+                return (c, RuleEngine.Compile(c.Expression).EvaluateBool(facts), (string?)null);
+            }
+            catch (FormatException ex)
+            {
+                return (c, false, ex.Message);
+            }
+        }).ToList();
+
+        var eligible = _results.Where(r => r.Criterion.Required).All(r => r.Passed);
+        StateHasChanged();
+        await OnChecked.InvokeAsync(eligible);
+
+        var summary = string.Join("\n", _results.Select(r => $"- {r.Criterion.Name}: {(r.Passed ? "met" : "NOT met")}{(r.Criterion.Required ? string.Empty : " (optional)")}"));
+        var system = "Explain an eligibility decision to the applicant in 3-5 friendly sentences" + (Language is null ? "." : $" in {Language}.") +
+                     " State the outcome first, then exactly what they can do to qualify (if not eligible). Do not invent criteria.";
+        var builder = new StringBuilder();
+        _explanation = string.Empty;
+        await foreach (var token in Ai.StreamAsync(system, PromptTags.Wrap(PromptTags.Input, $"Program: {ProgramName}\nOutcome: {(eligible ? "eligible" : "not eligible")}\n{summary}"), AiTasks.Decision, Provider, null, ct))
+        {
+            builder.Append(token);
+            _explanation = builder.ToString();
+            RenderThrottled();
+        }
+    });
+}

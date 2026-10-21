@@ -1,0 +1,155 @@
+@namespace Blazor.AI.Components
+@typeparam TModel where TModel : class, new()
+@inherits AiComponentBase
+@using System.Reflection
+@*
+    Extracts a strongly-typed TModel from free text and renders it as an editable form.
+    The JSON Schema of TModel is generated with Microsoft.Extensions.AI, so the model knows the exact shape.
+*@
+
+<AiCard Title="@Title" Subtitle="@typeof(TModel).Name" Icon="bi-ui-checks-grid" Class="@Class">
+    <div class="bai-stack">
+        <div>
+            <label class="bai-label" for="@($"{_id}-src")">@SourceLabel</label>
+            <textarea id="@($"{_id}-src")" class="bai-textarea" rows="5" @bind="SourceText" placeholder="@Placeholder"></textarea>
+        </div>
+        <div class="bai-row">
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(SourceText))" @onclick="ExtractAsync">
+                @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-stars" aria-hidden="true"></i> }
+                Extract
+            </button>
+            <span class="bai-spacer"></span>
+            <AiTabs Tabs="@Views" @bind-Selected="_view" />
+        </div>
+        <AiError Message="@Error" OnRetry="ExtractAsync" />
+
+        @if (_view == "Form")
+        {
+            <div class="bai-grid-2">
+                @foreach (var property in Properties)
+                {
+                    var id = $"{_id}-{property.Name}";
+                    var type = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+                    <div>
+                        <label class="bai-label" for="@id">@Humanize(property.Name)</label>
+                        @if (type == typeof(bool))
+                        {
+                            <div class="form-check form-switch"><input id="@id" class="form-check-input" type="checkbox" checked="@(property.GetValue(Model) is true)" @onchange="e => SetValue(property, e.Value)" /></div>
+                        }
+                        else if (type.IsEnum)
+                        {
+                            <select id="@id" class="bai-select" value="@property.GetValue(Model)?.ToString()" @onchange="e => SetValue(property, e.Value)">
+                                @foreach (var name in Enum.GetNames(type)) { <option>@name</option> }
+                            </select>
+                        }
+                        else
+                        {
+                            <input id="@id" class="bai-input" type="@InputType(type)" value="@Display(property)" @onchange="e => SetValue(property, e.Value)" />
+                        }
+                    </div>
+                }
+            </div>
+        }
+        else if (_view == "JSON")
+        {
+            <AiCodeBlock Code="@JsonSerializer.Serialize(Model, SchemaTools.Lenient)" />
+        }
+        else
+        {
+            <AiCodeBlock Code="@_schema.ToString()" />
+        }
+    </div>
+</AiCard>
+
+@code {
+    private static readonly string[] Views = ["Form", "JSON", "Schema"];
+    private readonly string _id = "bai-so-" + Guid.NewGuid().ToString("N")[..6];
+    private string _view = "Form";
+    private JsonElement _schema;
+
+    [Parameter] public TModel Model { get; set; } = new();
+    [Parameter] public EventCallback<TModel> ModelChanged { get; set; }
+    [Parameter] public string Title { get; set; } = "Structured output";
+    [Parameter] public string SourceLabel { get; set; } = "Source text";
+    [Parameter] public string? SourceText { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Paste an email, document or note to extract from…";
+
+    /// <summary>Extra guidance for the extraction.</summary>
+    [Parameter] public string? Instructions { get; set; }
+
+    private static PropertyInfo[] Properties { get; } = typeof(TModel)
+        .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+        .Where(p => p.CanRead && p.CanWrite && IsSimple(p.PropertyType))
+        .ToArray();
+
+    protected override void OnInitialized() => _schema = AIJsonUtilities.CreateJsonSchema(typeof(TModel), serializerOptions: SchemaTools.Lenient);
+
+    public Task ExtractAsync() => RunAsync(async ct =>
+    {
+        var system = "Extract the data described by this JSON Schema from the input. Reply with one JSON object only. " +
+                     "Use null for anything the input does not state. " + (Instructions ?? string.Empty) +
+                     "\nJSON Schema:\n" + _schema +
+                     "\n" + PromptTags.Wrap(PromptTags.Schema, SchemaTools.SampleOf(typeof(TModel)).ToJsonString());
+        var raw = await Ai.CompleteAsync(system, PromptTags.Wrap(PromptTags.Input, SourceText), AiTasks.Extract, Provider, new ChatOptions { Temperature = 0f }, ct);
+        var json = LlmJson.ExtractJson(raw) ?? throw new InvalidOperationException("The model did not return JSON.");
+        try
+        {
+            Model = JsonSerializer.Deserialize<TModel>(json, SchemaTools.Lenient) ?? new TModel();
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException($"The model's JSON did not match {typeof(TModel).Name}: {ex.Message}", ex);
+        }
+
+        await ModelChanged.InvokeAsync(Model);
+    });
+
+    private void SetValue(PropertyInfo property, object? raw)
+    {
+        var type = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+        var text = raw?.ToString();
+        try
+        {
+            object? value = type == typeof(bool) ? raw is bool b ? b : bool.TryParse(text, out var parsed) && parsed
+                : string.IsNullOrEmpty(text) ? null
+                : type.IsEnum ? Enum.Parse(type, text)
+                : type == typeof(string) ? text
+                : type == typeof(DateTime) ? DateTime.Parse(text, System.Globalization.CultureInfo.InvariantCulture)
+                : type == typeof(DateTimeOffset) ? DateTimeOffset.Parse(text, System.Globalization.CultureInfo.InvariantCulture)
+                : type == typeof(DateOnly) ? DateOnly.Parse(text, System.Globalization.CultureInfo.InvariantCulture)
+                : type == typeof(Guid) ? Guid.Parse(text)
+                : Convert.ChangeType(text, type, System.Globalization.CultureInfo.InvariantCulture);
+            property.SetValue(Model, value);
+            _ = ModelChanged.InvokeAsync(Model);
+        }
+        catch (FormatException)
+        {
+            Error = $"\"{text}\" is not a valid {type.Name} for {Humanize(property.Name)}.";
+        }
+    }
+
+    private string? Display(PropertyInfo property) => property.GetValue(Model) switch
+    {
+        null => null,
+        DateTime d => d.ToString("yyyy-MM-dd"),
+        DateTimeOffset d => d.ToString("yyyy-MM-dd"),
+        DateOnly d => d.ToString("yyyy-MM-dd"),
+        IFormattable f => f.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
+        var v => v.ToString(),
+    };
+
+    private static string InputType(Type type) =>
+        type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(DateOnly) ? "date"
+        : type.IsPrimitive || type == typeof(decimal) ? "number"
+        : "text";
+
+    private static bool IsSimple(Type type)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        return type.IsPrimitive || type.IsEnum || type == typeof(string) || type == typeof(decimal) || type == typeof(DateTime)
+               || type == typeof(DateTimeOffset) || type == typeof(DateOnly) || type == typeof(Guid);
+    }
+
+    private static string Humanize(string name) =>
+        string.Concat(name.Select((c, i) => i > 0 && char.IsUpper(c) && !char.IsUpper(name[i - 1]) ? " " + char.ToLowerInvariant(c) : c.ToString()));
+}

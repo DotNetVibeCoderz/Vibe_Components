@@ -1,0 +1,148 @@
+@namespace Blazor.AI.Decision
+@inherits AiComponentBase
+@*
+    Risk assessment that combines a transparent weighted scorecard with TypeSafe System One judgements on
+    qualitative factors, then asks the LLM for mitigations. Every number is shown, so the score is explainable.
+*@
+
+<AiCard Title="@Title" Subtitle="@(TypeSafe.IsSimulated ? "TypeSafe simulator (no API key)" : "TypeSafe System One")" Icon="bi-shield-exclamation" Class="@Class">
+    <div class="bai-grid-2" style="align-items:start">
+        <div class="bai-stack">
+            <div>
+                <label class="bai-label" for="ra-case">Case description</label>
+                <textarea id="ra-case" class="bai-textarea" rows="4" @bind="CaseDescription"></textarea>
+            </div>
+            <div>
+                <span class="bai-label">Scorecard factors (0 = no risk, 10 = maximum)</span>
+                @foreach (var factor in Factors)
+                {
+                    <div class="bai-row" style="flex-wrap:nowrap; margin-bottom:.35rem">
+                        <span style="flex:1 1 auto" class="bai-small">@factor.Name</span>
+                        <input type="range" class="form-range" style="width:7rem" min="0" max="10" step="1" @bind="factor.Value" @bind:event="oninput" aria-label="@factor.Name" />
+                        <span class="bai-num bai-small" style="width:1.5rem; text-align:right">@factor.Value</span>
+                        <span class="bai-faint bai-small" title="Weight">×@factor.Weight.ToString("0.#", CultureInfo.InvariantCulture)</span>
+                    </div>
+                }
+            </div>
+            <div>
+                <span class="bai-label">Questions for TypeSafe</span>
+                @foreach (var (key, question) in Questions)
+                {
+                    <div class="bai-small" style="margin-bottom:.2rem">• @question</div>
+                }
+            </div>
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="AssessAsync">
+                @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-shield-check" aria-hidden="true"></i> }
+                Assess risk
+            </button>
+            <AiError Message="@Error" />
+        </div>
+
+        <div class="bai-stack">
+            @if (_overall is { } overall)
+            {
+                <div class="bai-output" style="text-align:center">
+                    <svg viewBox="0 0 200 116" style="width:220px; display:block; margin:0 auto" role="img" aria-label="@($"Risk score {overall:0}")">
+                        <path d="M20,100 A80,80 0 0 1 180,100" fill="none" stroke="var(--bai-line)" stroke-width="16" stroke-linecap="round" />
+                        <path d="@Arc(overall / 100)" fill="none" stroke="@LevelColor(overall)" stroke-width="16" stroke-linecap="round" />
+                        <text x="100" y="92" text-anchor="middle" style="font-family:var(--bai-font-display); font-size:34px; font-weight:700" fill="var(--bai-ink)">@overall.ToString("0")</text>
+                        <text x="100" y="110" text-anchor="middle" style="font-size:11px" fill="var(--bai-ink-muted)">of 100</text>
+                    </svg>
+                    <strong style="color:@LevelColor(overall); font-size:1.1rem">@Level(overall)</strong>
+                </div>
+                <div>
+                    <span class="bai-label">What drives the score</span>
+                    <AiScoreBars Values="@_contributions" AsPercent="false" />
+                </div>
+                @if (_judgements.Count > 0)
+                {
+                    <div>
+                        <span class="bai-label">TypeSafe judgements (probability "yes")</span>
+                        <AiScoreBars Values="@_judgements.Select(j => KeyValuePair.Create(Questions[j.Key], j.Value))" Sort="false" />
+                    </div>
+                }
+                <AiOutput Text="@_mitigation" IsBusy="@IsBusy" Placeholder="Mitigations will appear here." />
+            }
+            else
+            {
+                <div class="bai-empty"><i class="bi bi-speedometer2" aria-hidden="true"></i>Adjust the factors and run the assessment.</div>
+            }
+        </div>
+    </div>
+</AiCard>
+
+@code {
+    private double? _overall;
+    private List<KeyValuePair<string, double>> _contributions = [];
+    private IReadOnlyDictionary<string, double> _judgements = new Dictionary<string, double>();
+    private string? _mitigation;
+
+    [Inject] private TypeSafeDecisionService TypeSafe { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Risk assessment";
+
+    [Parameter] public string CaseDescription { get; set; } =
+        "SME loan of Rp 750 million for a coffee roastery in Bandung, 3 years trading, revenue grew 40% last year, one late payment on an equipment lease, owner pledges the roasting machine as collateral.";
+
+    [Parameter] public List<RiskFactor> Factors { get; set; } =
+    [
+        new("Financial leverage", 6, 2),
+        new("Payment history", 4, 2.5),
+        new("Market volatility", 5, 1),
+        new("Collateral weakness", 3, 1.5),
+        new("Management experience gap", 2, 1),
+    ];
+
+    /// <summary>Qualitative questions answered by TypeSafe (key → question). Weighted equally, each 0..1.</summary>
+    [Parameter] public IReadOnlyDictionary<string, string> Questions { get; set; } = new Dictionary<string, string>
+    {
+        ["repayment_doubt"] = "Is there serious doubt about this borrower's ability to repay?",
+        ["fraud_signals"] = "Does the case show signs of fraud or misrepresentation?",
+        ["concentration"] = "Is the business dangerously dependent on a single customer, supplier or product?",
+    };
+
+    /// <summary>Share of the overall score taken from TypeSafe judgements (the rest is the scorecard).</summary>
+    [Parameter] public double JudgementWeight { get; set; } = 0.4;
+
+    [Parameter] public EventCallback<double> OnAssessed { get; set; }
+
+    private Task AssessAsync() => RunAsync(async ct =>
+    {
+        var totalWeight = Factors.Sum(f => f.Weight);
+        var scorecard = totalWeight == 0 ? 0 : Factors.Sum(f => f.Value * f.Weight) / (totalWeight * 10);
+        _contributions = Factors.Select(f => KeyValuePair.Create(f.Name, Math.Round(f.Value * f.Weight / Math.Max(1e-9, totalWeight) * 10, 1))).ToList();
+
+        var state = new { description = CaseDescription, factors = Factors.ToDictionary(f => f.Name, f => f.Value) };
+        _judgements = await TypeSafe.AskManyAsync(state, Questions, ct);
+        var judgement = _judgements.Count == 0 ? scorecard : _judgements.Values.Average();
+        _overall = Math.Round(((1 - JudgementWeight) * scorecard + JudgementWeight * judgement) * 100, 1);
+        StateHasChanged();
+        await OnAssessed.InvokeAsync(_overall.Value);
+
+        var facts = string.Join("\n", _contributions.Select(c => $"- {c.Key}: contributes {c.Value} points")) + "\n" +
+                    string.Join("\n", _judgements.Select(j => $"- {Questions[j.Key]} → {j.Value:P0}"));
+        var builder = new StringBuilder();
+        _mitigation = string.Empty;
+        await foreach (var token in Ai.StreamAsync(
+                           "You are a credit risk officer. Given the case and the risk drivers, propose 3 specific mitigations (covenants, collateral, monitoring), most impactful first. Be concise.",
+                           PromptTags.Wrap(PromptTags.Input, $"Case: {CaseDescription}\nOverall risk: {_overall:0}/100 ({Level(_overall.Value)})\nDrivers:\n{facts}"),
+                           AiTasks.Insight, Provider, null, ct))
+        {
+            builder.Append(token);
+            _mitigation = builder.ToString();
+            RenderThrottled();
+        }
+    });
+
+    private static string Level(double score) => score switch { >= 70 => "High risk", >= 40 => "Moderate risk", _ => "Low risk" };
+
+    private static string LevelColor(double score) => score switch { >= 70 => "var(--bai-danger)", >= 40 => "var(--bai-soga)", _ => "var(--bai-nila)" };
+
+    private static string Arc(double fraction)
+    {
+        var angle = Math.PI * (1 - Math.Clamp(fraction, 0.001, 1));
+        var x = 100 + 80 * Math.Cos(angle);
+        var y = 100 - 80 * Math.Sin(angle);
+        return $"M20,100 A80,80 0 0 1 {x.ToString("0.##", CultureInfo.InvariantCulture)},{y.ToString("0.##", CultureInfo.InvariantCulture)}";
+    }
+}

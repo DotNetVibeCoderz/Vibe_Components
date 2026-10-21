@@ -1,0 +1,177 @@
+@namespace Blazor.AI.Components
+@inherits AiComponentBase
+@*
+    Guided prompt engineering: role, task, context, constraints, format and examples assemble into a live preview.
+    {{variables}} are detected automatically. Test the prompt, ask the model to improve it, and save it to the library.
+*@
+
+<AiCard Title="@Title" Subtitle="@Subtitle" Icon="bi-bricks" Class="@Class">
+    <div class="bai-grid-2" style="align-items:start">
+        <div class="bai-stack">
+            <div>
+                <label class="bai-label" for="@($"{_id}-role")">Role: who should the model be?</label>
+                <input id="@($"{_id}-role")" class="bai-input" @bind="_role" @bind:event="oninput" placeholder="e.g. a senior customer-success manager" />
+            </div>
+            <div>
+                <label class="bai-label" for="@($"{_id}-task")">Task *</label>
+                <textarea id="@($"{_id}-task")" class="bai-textarea" rows="3" @bind="_task" @bind:event="oninput" placeholder="e.g. Write a renewal email for {{customer}} whose plan ends on {{date}}"></textarea>
+            </div>
+            <div>
+                <label class="bai-label" for="@($"{_id}-ctx")">Context</label>
+                <textarea id="@($"{_id}-ctx")" class="bai-textarea" rows="2" @bind="_context" @bind:event="oninput" placeholder="Background the model needs"></textarea>
+            </div>
+            <div class="bai-grid-2">
+                <div>
+                    <label class="bai-label" for="@($"{_id}-fmt")">Output format</label>
+                    <select id="@($"{_id}-fmt")" class="bai-select" @bind="_format">
+                        <option value="">Free text</option>
+                        <option>Markdown with headings</option>
+                        <option>Bullet list</option>
+                        <option>JSON object</option>
+                        <option>Table</option>
+                        <option>Email</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="bai-label" for="@($"{_id}-tone")">Tone</label>
+                    <input id="@($"{_id}-tone")" class="bai-input" @bind="_tone" @bind:event="oninput" placeholder="e.g. warm, concise" />
+                </div>
+            </div>
+            <div>
+                <label class="bai-label" for="@($"{_id}-rules")">Constraints (one per line)</label>
+                <textarea id="@($"{_id}-rules")" class="bai-textarea" rows="2" @bind="_constraints" @bind:event="oninput" placeholder="Max 150 words&#10;Do not mention pricing"></textarea>
+            </div>
+            <div>
+                <label class="bai-label" for="@($"{_id}-ex")">Example of a good answer</label>
+                <textarea id="@($"{_id}-ex")" class="bai-textarea" rows="2" @bind="_example" @bind:event="oninput"></textarea>
+            </div>
+        </div>
+
+        <div class="bai-stack">
+            <div>
+                <div class="bai-row" style="margin-bottom:.35rem">
+                    <span class="bai-label" style="margin:0">Preview</span>
+                    <span class="bai-spacer"></span>
+                    <span class="bai-badge">≈ @(Preview.Length / 4) tokens</span>
+                </div>
+                <AiCodeBlock Code="@Preview" Language="prompt" />
+            </div>
+            @if (Variables.Count > 0)
+            {
+                <div>
+                    <span class="bai-label">Test values</span>
+                    @foreach (var variable in Variables)
+                    {
+                        <div class="bai-row" style="margin-bottom:.4rem">
+                            <code style="min-width:7rem">{{@variable}}</code>
+                            <input class="bai-input bai-spacer" value="@_testValues.GetValueOrDefault(variable)" @onchange="e => _testValues[variable] = e.Value?.ToString()" aria-label="@($"Value for {variable}")" />
+                        </div>
+                    }
+                </div>
+            }
+            <div class="bai-row">
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(_task))" @onclick="TestAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Test prompt</button>
+                <button type="button" class="bai-btn-ghost" disabled="@(IsBusy || string.IsNullOrWhiteSpace(_task))" @onclick="ImproveAsync"><i class="bi bi-magic" aria-hidden="true"></i>Improve with AI</button>
+                <button type="button" class="bai-btn-ghost" disabled="@string.IsNullOrWhiteSpace(_task)" @onclick="SaveAsync"><i class="bi bi-bookmark-plus" aria-hidden="true"></i>Save</button>
+            </div>
+            @if (_saved is not null)
+            {
+                <div class="bai-alert is-info" role="status"><i class="bi bi-check2-circle" aria-hidden="true"></i>@_saved</div>
+            }
+            <AiError Message="@Error" />
+            <AiOutput Text="@_output" IsBusy="@IsBusy" Placeholder="Test the prompt to see the model's answer." />
+        </div>
+    </div>
+</AiCard>
+
+@code {
+    private readonly string _id = "bai-pb-" + Guid.NewGuid().ToString("N")[..6];
+    private readonly Dictionary<string, string?> _testValues = new(StringComparer.OrdinalIgnoreCase);
+    private string? _role, _task, _context, _format, _tone, _constraints, _example, _output, _saved;
+
+    [Inject] private IPromptStore Store { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Prompt builder";
+    [Parameter] public string? Subtitle { get; set; } = "Structure a prompt, test it, save it";
+    [Parameter] public string Category { get; set; } = "Custom";
+    [Parameter] public EventCallback<PromptTemplate> OnSaved { get; set; }
+
+    private string SystemPart => string.IsNullOrWhiteSpace(_role) ? string.Empty : $"You are {_role.Trim()}.";
+
+    private string Preview
+    {
+        get
+        {
+            var b = new StringBuilder();
+            if (SystemPart.Length > 0) b.AppendLine(SystemPart).AppendLine();
+            if (!string.IsNullOrWhiteSpace(_task)) b.AppendLine("## Task").AppendLine(_task.Trim()).AppendLine();
+            if (!string.IsNullOrWhiteSpace(_context)) b.AppendLine("## Context").AppendLine(_context.Trim()).AppendLine();
+            var rules = (_constraints ?? string.Empty).Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+            if (!string.IsNullOrWhiteSpace(_tone)) rules.Insert(0, $"Tone: {_tone.Trim()}");
+            if (!string.IsNullOrWhiteSpace(_format)) rules.Insert(0, $"Format: {_format}");
+            if (rules.Count > 0)
+            {
+                b.AppendLine("## Requirements");
+                foreach (var rule in rules) b.Append("- ").AppendLine(rule);
+                b.AppendLine();
+            }
+
+            if (!string.IsNullOrWhiteSpace(_example)) b.AppendLine("## Example of a good answer").AppendLine(_example.Trim());
+            return b.ToString().TrimEnd();
+        }
+    }
+
+    private IReadOnlyList<string> Variables => PromptTemplating.Variables(Preview);
+
+    private Task TestAsync() => RunAsync(async ct =>
+    {
+        var rendered = PromptTemplating.Render(Preview, _testValues);
+        var builder = new StringBuilder();
+        _output = string.Empty;
+        await foreach (var token in Ai.StreamAsync(null, rendered, AiTasks.Generate, Provider, null, ct))
+        {
+            builder.Append(token);
+            _output = builder.ToString();
+            RenderThrottled();
+        }
+    });
+
+    private Task ImproveAsync() => RunAsync(async ct =>
+    {
+        var system = "You are a prompt engineer. Improve the prompt so it is unambiguous, specific and testable. Keep every {{variable}}. " +
+                     "Reply with JSON only: {\"role\": string, \"task\": string, \"context\": string, \"constraints\": [string], \"rationale\": string}.";
+        var node = await Ai.GenerateJsonAsync(system, PromptTags.Wrap(PromptTags.Input, Preview), AiTasks.Json, Provider, ct) as JsonObject;
+        if (node is null)
+        {
+            Error = "The model did not return a structured suggestion. Try again or edit the prompt manually.";
+            return;
+        }
+
+        _role = node["role"]?.ToString() ?? _role;
+        _task = node["task"]?.ToString() ?? _task;
+        _context = node["context"]?.ToString() ?? _context;
+        if (node["constraints"] is JsonArray constraints)
+        {
+            _constraints = string.Join('\n', constraints.Select(c => c?.ToString()));
+        }
+
+        _output = node["rationale"] is { } why ? $"**Why these changes:** {why}" : _output;
+    });
+
+    private async Task SaveAsync()
+    {
+        var name = (_task ?? "Prompt").Trim();
+        var prompt = new PromptTemplate
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Name = name.Length > 48 ? name[..48] + "…" : name,
+            Category = Category,
+            SystemPrompt = SystemPart.Length > 0 ? SystemPart : null,
+            Template = Preview.Replace(SystemPart, string.Empty, StringComparison.Ordinal).Trim(),
+            Tags = Variables.ToArray(),
+        };
+        await Store.SaveAsync(prompt);
+        _saved = $"Saved \"{prompt.Name}\" to the prompt library.";
+        await OnSaved.InvokeAsync(prompt);
+    }
+}

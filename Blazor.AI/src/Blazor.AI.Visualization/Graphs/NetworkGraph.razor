@@ -1,0 +1,149 @@
+@namespace Blazor.AI.Visualization
+@* Force-directed network graph. Drag nodes to rearrange; click to select; nodes are coloured by group. *@
+
+<figure class="bai-chart @Class" style="margin:0">
+    @if (Title is not null)
+    {
+        <figcaption class="bai-chart-title">@Title</figcaption>
+    }
+    <svg @ref="_svg" viewBox="0 0 @Width @Height" role="img" aria-label="@(Title ?? "Network graph")" style="touch-action:none"
+         @onpointermove="OnPointerMove" @onpointerup="EndDrag" @onpointerleave="EndDrag">
+        <defs>
+            <marker id="@_arrowId" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--bai-ink-faint)" />
+            </marker>
+        </defs>
+        @foreach (var edge in Edges)
+        {
+            if (!_positions.TryGetValue(edge.Source, out var a) || !_positions.TryGetValue(edge.Target, out var b))
+            {
+                continue;
+            }
+
+            var highlighted = _selected is not null && (edge.Source == _selected || edge.Target == _selected);
+            var (x2, y2) = Shorten(a, b, Radius(edge.Target) + 3);
+            <line x1="@S(a.X)" y1="@S(a.Y)" x2="@S(x2)" y2="@S(y2)" class="bai-edge"
+                  stroke-width="@S(1 + Math.Min(4, edge.Weight))" stroke-opacity="@(_selected is null || highlighted ? "0.9" : "0.2")"
+                  marker-end="@(Directed ? $"url(#{_arrowId})" : null)">
+                <title>@Label(edge.Source) → @Label(edge.Target)@(edge.Label is null ? null : $" ({edge.Label})")</title>
+            </line>
+            @if (ShowEdgeLabels && edge.Label is not null)
+            {
+                <!text class="bai-edge-label" x="@S((a.X + b.X) / 2)" y="@S((a.Y + b.Y) / 2 - 3)" text-anchor="middle">@edge.Label</!text>
+            }
+        }
+        @foreach (var node in Nodes)
+        {
+            if (!_positions.TryGetValue(node.Id, out var p))
+            {
+                continue;
+            }
+
+            var r = Radius(node.Id);
+            var dim = _selected is not null && node.Id != _selected && !Neighbors(_selected).Contains(node.Id);
+            <g transform="@($"translate({S(p.X)},{S(p.Y)})")" style="cursor:grab; opacity:@(dim ? "0.3" : "1")"
+               @onpointerdown="e => StartDrag(e, node.Id)" @onclick="() => SelectAsync(node)">
+                <circle r="@S(r)" fill="@GroupColor(node.Group)" stroke="var(--bai-bg)" stroke-width="2">
+                    <title>@node.Label@(node.Group is null ? null : $" · {node.Group}")@(node.Description is null ? null : $"\n{node.Description}")</title>
+                </circle>
+                <!text class="bai-node-label" y="@S(r + 13)" text-anchor="middle">@node.Label</!text>
+            </g>
+        }
+    </svg>
+    @if (_groups.Count > 1)
+    {
+        <ChartLegend Items="@_groups.Select(g => (g, GroupColor(g))).ToArray()" />
+    }
+</figure>
+
+@code {
+    private readonly string _arrowId = "bai-arrow-" + Guid.NewGuid().ToString("N")[..6];
+    private ElementReference _svg;
+    private Dictionary<string, (double X, double Y)> _positions = [];
+    private List<string> _groups = [];
+    private Dictionary<string, int> _degree = [];
+    private string? _layoutKey;
+    private string? _dragging;
+    private string? _selected;
+    private Blazor.AI.Components.Infrastructure.BlazorAIJs.Rect _rect;
+
+    [Inject] private Blazor.AI.Components.Infrastructure.BlazorAIJs Js { get; set; } = default!;
+
+    [Parameter, EditorRequired] public IReadOnlyList<GraphNode> Nodes { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<GraphEdge> Edges { get; set; } = [];
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public bool Directed { get; set; } = true;
+    [Parameter] public bool ShowEdgeLabels { get; set; }
+    [Parameter] public int Width { get; set; } = 720;
+    [Parameter] public int Height { get; set; } = 440;
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public EventCallback<GraphNode> OnNodeSelected { get; set; }
+
+    /// <summary>Highlights a node and its neighbours (e.g. from a search box).</summary>
+    [Parameter] public string? SelectedNodeId { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        var key = string.Join(',', Nodes.Select(n => n.Id)) + "|" + string.Join(',', Edges.Select(e => e.Source + ">" + e.Target)) + "|" + Width + "x" + Height;
+        if (key != _layoutKey)
+        {
+            _layoutKey = key;
+            _positions = ForceLayout.Compute(Nodes, Edges, Width, Height);
+            _groups = Nodes.Select(n => n.Group ?? "Other").Distinct().ToList();
+            _degree = Nodes.ToDictionary(n => n.Id, n => Edges.Count(e => e.Source == n.Id || e.Target == n.Id));
+        }
+
+        if (SelectedNodeId is not null)
+        {
+            _selected = SelectedNodeId;
+        }
+    }
+
+    private double Radius(string id)
+    {
+        var size = Nodes.FirstOrDefault(n => n.Id == id)?.Size ?? 1;
+        return 6 + Math.Min(12, Math.Sqrt(_degree.GetValueOrDefault(id) + 1) * 2.4) * Math.Clamp(size, 0.5, 3);
+    }
+
+    private string GroupColor(string? group) => SeriesColor(Math.Max(0, _groups.IndexOf(group ?? "Other")));
+
+    private string Label(string id) => Nodes.FirstOrDefault(n => n.Id == id)?.Label ?? id;
+
+    private HashSet<string> Neighbors(string id) =>
+        Edges.Where(e => e.Source == id || e.Target == id).Select(e => e.Source == id ? e.Target : e.Source).ToHashSet();
+
+    private static (double X, double Y) Shorten((double X, double Y) a, (double X, double Y) b, double by)
+    {
+        var dx = b.X - a.X;
+        var dy = b.Y - a.Y;
+        var length = Math.Sqrt(dx * dx + dy * dy);
+        return length <= by ? b : (b.X - dx / length * by, b.Y - dy / length * by);
+    }
+
+    private async Task StartDrag(PointerEventArgs e, string id)
+    {
+        _dragging = id;
+        _rect = await Js.BoundingRectAsync(_svg);
+    }
+
+    private void OnPointerMove(PointerEventArgs e)
+    {
+        if (_dragging is null || _rect.Width <= 0)
+        {
+            return;
+        }
+
+        var scale = Width / _rect.Width;
+        var x = Math.Clamp((e.ClientX - _rect.X) * scale, 10, Width - 10);
+        var y = Math.Clamp((e.ClientY - _rect.Y) * scale, 10, Height - 10);
+        _positions[_dragging] = (x, y);
+    }
+
+    private void EndDrag() => _dragging = null;
+
+    private async Task SelectAsync(GraphNode node)
+    {
+        _selected = _selected == node.Id ? null : node.Id;
+        await OnNodeSelected.InvokeAsync(node);
+    }
+}

@@ -1,0 +1,192 @@
+@namespace Blazor.AI.Analytics
+@inherits AnalyticsComponentBase
+@*
+    Build features step by step (scale, log, square, ratio, interaction, bin, one-hot, fill, drop) on the workspace
+    dataset. Each step is recorded so the pipeline is reproducible; AI suggests features from the data profile.
+*@
+
+<AiCard Title="@Title" Subtitle="@($"{Workspace.Dataset.Name} · {Workspace.Dataset.Frame.ColumnCount} columns")" Icon="bi-sliders" Class="@Class">
+    <Actions><DatasetPicker ShowTarget="false" /></Actions>
+    <ChildContent>
+        <div class="bai-grid-2" style="align-items:start">
+            <div class="bai-stack">
+                <div class="bai-grid-2">
+                    <div>
+                        <label class="bai-label" for="fe-op">Operation</label>
+                        <select id="fe-op" class="bai-select" @bind="_op">
+                            @foreach (var op in Operations) { <option>@op</option> }
+                        </select>
+                    </div>
+                    <div>
+                        <label class="bai-label" for="fe-col">Column</label>
+                        <select id="fe-col" class="bai-select" @bind="_column">
+                            @foreach (var c in Workspace.Dataset.Frame.ColumnNames) { <option>@c</option> }
+                        </select>
+                    </div>
+                    @if (_op is "Ratio (a / b)" or "Interaction (a × b)")
+                    {
+                        <div>
+                            <label class="bai-label" for="fe-col2">Second column</label>
+                            <select id="fe-col2" class="bai-select" @bind="_column2">
+                                @foreach (var c in Workspace.Dataset.NumericColumns) { <option>@c</option> }
+                            </select>
+                        </div>
+                    }
+                    @if (_op == "Bin")
+                    {
+                        <div><label class="bai-label" for="fe-bins">Bins</label><input id="fe-bins" type="number" min="2" max="20" class="bai-input" @bind="_bins" /></div>
+                    }
+                </div>
+                <div class="bai-row">
+                    <button type="button" class="bai-btn" @onclick="Apply"><i class="bi bi-plus-lg" aria-hidden="true"></i>Apply step</button>
+                    <button type="button" class="bai-btn-ghost" disabled="@(_history.Count == 0)" @onclick="Undo"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>Undo</button>
+                    <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="SuggestAsync"><i class="bi bi-stars" aria-hidden="true"></i>Suggest features</button>
+                </div>
+                <AiError Message="@(_error ?? Error)" />
+                <div>
+                    <span class="bai-label">Pipeline</span>
+                    @if (_steps.Count == 0) { <span class="bai-small bai-muted">No steps yet.</span> }
+                    <ol class="bai-small" style="margin:0; padding-left:1.2rem">@foreach (var s in _steps) { <li><code>@s</code></li> }</ol>
+                </div>
+                @if (_suggestions is not null) { <AiOutput Text="@_suggestions" IsBusy="@IsBusy" /> }
+            </div>
+            <div>
+                <span class="bai-label">Preview (first 8 rows)</span>
+                <div class="bai-table-wrap" style="max-height:22rem; overflow:auto">
+                    <table class="bai-table">
+                        <thead><tr>@foreach (var c in Workspace.Dataset.Frame.ColumnNames) { <th>@c</th> }</tr></thead>
+                        <tbody>
+                            @for (var r = 0; r < Math.Min(8, Workspace.Dataset.Frame.RowCount); r++)
+                            {
+                                var row = r;
+                                <tr>@foreach (var col in Workspace.Dataset.Frame.Columns) { <td class="bai-num">@(col.IsMissing(row) ? "–" : col.GetValue(row) is double d ? Fmt(d) : col.GetValue(row))</td> }</tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </ChildContent>
+</AiCard>
+
+@code {
+    private static readonly string[] Operations = ["Standardize (z-score)", "Min-max scale", "Log (1 + x)", "Square", "Ratio (a / b)", "Interaction (a × b)", "Bin", "One-hot encode", "Fill missing with mean", "Drop column"];
+    private readonly List<string> _steps = [];
+    private readonly Stack<AnalyticsDataset> _history = new();
+    private string _op = Operations[0];
+    private string? _column, _column2, _error, _suggestions;
+    private int _bins = 5;
+
+    [Parameter] public string Title { get; set; } = "Feature engineering";
+
+    protected override void OnDatasetChanged()
+    {
+        _column = Workspace.Dataset.FeatureColumns.FirstOrDefault() ?? Workspace.Dataset.Frame.ColumnNames.FirstOrDefault();
+        _column2 = Workspace.Dataset.NumericColumns.Skip(1).FirstOrDefault();
+    }
+
+    private void Apply()
+    {
+        _error = null;
+        var ds = Workspace.Dataset;
+        var frame = ds.Frame;
+        if (_column is null || !frame.HasColumn(_column))
+        {
+            _error = "Pick a column.";
+            return;
+        }
+
+        try
+        {
+            var numeric = frame[_column] as NumericSeries;
+            if (numeric is null && _op is not ("One-hot encode" or "Drop column"))
+            {
+                _error = $"{_column} is not numeric; use one-hot encoding or drop it.";
+                return;
+            }
+
+            DataFrame result;
+            string step;
+            switch (_op)
+            {
+                case "Standardize (z-score)":
+                    result = frame.WithColumn(numeric!.Standardize().Rename(_column + "_z"));
+                    step = $"{_column}_z = zscore({_column})";
+                    break;
+                case "Min-max scale":
+                    result = frame.WithColumn(numeric!.MinMaxScale().Rename(_column + "_mm"));
+                    step = $"{_column}_mm = minmax({_column})";
+                    break;
+                case "Log (1 + x)":
+                    result = frame.WithColumn(numeric!.Apply(v => Math.Log(1 + Math.Max(0, v))).Rename(_column + "_log"));
+                    step = $"{_column}_log = log1p({_column})";
+                    break;
+                case "Square":
+                    result = frame.WithColumn(numeric!.Apply(v => v * v).Rename(_column + "_sq"));
+                    step = $"{_column}_sq = {_column}²";
+                    break;
+                case "Ratio (a / b)" or "Interaction (a × b)":
+                    var other = frame.Numeric(_column2 ?? _column);
+                    var ratio = _op.StartsWith("Ratio", StringComparison.Ordinal);
+                    var name = ratio ? $"{_column}_per_{_column2}" : $"{_column}_x_{_column2}";
+                    var values = numeric!.Values;
+                    result = frame.WithColumn(name, i => ratio ? (other.Values[i] == 0 ? 0 : values[i] / other.Values[i]) : values[i] * other.Values[i]);
+                    step = ratio ? $"{name} = {_column} / {_column2}" : $"{name} = {_column} × {_column2}";
+                    break;
+                case "Bin":
+                    result = frame.WithColumn(numeric!.Bin(Math.Clamp(_bins, 2, 20)).Rename(_column + "_bin"));
+                    step = $"{_column}_bin = bin({_column}, {_bins})";
+                    break;
+                case "One-hot encode":
+                    var text = frame[_column].ToStringArray();
+                    result = frame;
+                    foreach (var value in text.Distinct().Take(20))
+                    {
+                        var copy = value;
+                        result = result.WithColumn($"{_column}={value}", i => text[i] == copy ? 1 : 0);
+                    }
+
+                    result = result.Drop([_column]);
+                    step = $"onehot({_column})";
+                    break;
+                case "Fill missing with mean":
+                    result = frame.WithColumn(numeric!.FillMissingWithMean());
+                    step = $"fillna({_column}, mean)";
+                    break;
+                default:
+                    result = frame.Drop([_column]);
+                    step = $"drop({_column})";
+                    break;
+            }
+
+            _history.Push(ds);
+            _steps.Add(step);
+            Workspace.Dataset = ds with { Frame = result, Target = result.HasColumn(ds.Target ?? string.Empty) ? ds.Target : null };
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private void Undo()
+    {
+        Workspace.Dataset = _history.Pop();
+        _steps.RemoveAt(_steps.Count - 1);
+    }
+
+    private Task SuggestAsync() => RunAsync(async ct =>
+    {
+        var d = Workspace.Dataset;
+        var profile = string.Join("\n", d.Frame.NumericColumns.Select(c => $"- {c.Name}: mean {c.Mean():0.##}, min {c.Min():0.##}, max {c.Max():0.##}, skew {c.Skewness():0.##}"));
+        var builder = new StringBuilder();
+        _suggestions = string.Empty;
+        await foreach (var token in Ai.StreamAsync($"Suggest 4 engineered features for predicting '{d.Target}' ({d.Task}). For each: the formula using existing columns, and why it may help. Mention log transforms for skew > 1.",
+                           PromptTags.Wrap(PromptTags.Input, $"{d.Name}: {d.Description}\n{profile}"), AiTasks.Insight, Provider, null, ct))
+        {
+            builder.Append(token);
+            _suggestions = builder.ToString();
+            RenderThrottled();
+        }
+    });
+}

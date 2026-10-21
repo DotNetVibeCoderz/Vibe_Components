@@ -1,0 +1,12 @@
+<header class="g-page-head">
+    <span class="g-eyebrow"><i class="bi @Icon" aria-hidden="true"></i>@Package</span>
+    <h1 tabindex="-1">@Title</h1>
+    <p>@Lead</p>
+</header>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Package { get; set; } = "Blazor.AI";
+    [Parameter] public string Icon { get; set; } = "bi-box";
+    [Parameter] public string? Lead { get; set; }
+}

@@ -1,0 +1,140 @@
+@namespace Blazor.AI.Analytics
+@inherits AnalyticsComponentBase
+@* Profile a dataset: shape, per-column statistics and distributions, a paged preview, and an AI briefing. *@
+
+<AiCard Title="@Title" Subtitle="@Data.Description" Icon="bi-table" Class="@Class">
+    <Actions><DatasetPicker /></Actions>
+    <ChildContent>
+        <div class="bai-stack">
+            <div class="bai-stats">
+                <div class="bai-stat"><div class="bai-stat-label">Rows</div><div class="bai-stat-value">@Data.Frame.RowCount.ToString("N0")</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Columns</div><div class="bai-stat-value">@Data.Frame.ColumnCount</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Missing cells</div><div class="bai-stat-value">@Data.Frame.Columns.Sum(c => c.MissingCount)</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Target</div><div class="bai-stat-value" style="font-size:1.05rem">@(Data.Target ?? "–")</div></div>
+            </div>
+
+            <AiTabs Tabs="@Views" @bind-Selected="_view" />
+            @if (_view == "Columns")
+            {
+                <div class="bai-table-wrap">
+                    <table class="bai-table">
+                        <thead><tr><th>Column</th><th>Type</th><th>Missing</th><th>Mean / top value</th><th>Std</th><th>Min</th><th>Max</th><th>Distribution</th></tr></thead>
+                        <tbody>
+                            @foreach (var column in Data.Frame.Columns)
+                            {
+                                <tr style="cursor:pointer; @(column.Name == _selected ? "background:var(--bai-soga-soft)" : null)" @onclick="() => _selected = column.Name">
+                                    <td><strong>@column.Name</strong>@if (column.Name == Data.Target) { <span class="bai-badge bai-badge-ai" style="margin-left:.3rem">target</span> }</td>
+                                    <td><span class="bai-badge">@column.DataType</span></td>
+                                    <td class="bai-num">@column.MissingCount</td>
+                                    @if (column is NumericSeries n)
+                                    {
+                                        <td class="bai-num">@Fmt(n.Mean())</td>
+                                        <td class="bai-num">@Fmt(n.Std())</td>
+                                        <td class="bai-num">@Fmt(n.Min())</td>
+                                        <td class="bai-num">@Fmt(n.Max())</td>
+                                        <td><Sparkline Values="@Histogram(n).Values" Width="80" Height="22" /></td>
+                                    }
+                                    else
+                                    {
+                                        <td>@column.ValueCounts().FirstOrDefault().Item1</td><td>–</td><td>–</td><td>–</td><td class="bai-small bai-muted">@column.Unique().Count unique</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (Data.Frame.HasColumn(_selected ?? string.Empty))
+                {
+                    var column = Data.Frame[_selected!];
+                    @if (column is NumericSeries numeric)
+                    {
+                        var hist = Histogram(numeric);
+                        <BarChart Title="@($"Distribution of {numeric.Name}")" Values="@hist.Edges.Zip(hist.Values, (e, v) => new BarValue(Fmt(e), v))" ShowValues="false" Height="200" />
+                    }
+                    else
+                    {
+                        <BarChart Title="@($"Top values of {column.Name}")" Values="@column.ValueCounts().Take(12).Select(v => new BarValue(Convert.ToString(v.Item1, CultureInfo.InvariantCulture) ?? "–", v.Item2))" Horizontal="true" />
+                    }
+                }
+            }
+            else
+            {
+                <div class="bai-table-wrap" style="max-height:24rem; overflow:auto">
+                    <table class="bai-table">
+                        <thead><tr><th>#</th>@foreach (var c in Data.Frame.ColumnNames) { <th>@c</th> }</tr></thead>
+                        <tbody>
+                            @for (var r = _page * PageSize; r < Math.Min(Data.Frame.RowCount, (_page + 1) * PageSize); r++)
+                            {
+                                var row = r;
+                                <tr><td class="bai-num bai-faint">@(row + 1)</td>@foreach (var col in Data.Frame.Columns) { <td class="@(col is NumericSeries ? "bai-num" : null)">@Cell(col, row)</td> }</tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="bai-row">
+                    <button type="button" class="bai-btn-ghost" disabled="@(_page == 0)" @onclick="() => _page--">Previous</button>
+                    <span class="bai-small bai-muted">Page @(_page + 1) of @PageCount</span>
+                    <button type="button" class="bai-btn-ghost" disabled="@(_page + 1 >= PageCount)" @onclick="() => _page++">Next</button>
+                </div>
+            }
+
+            <div class="bai-row">
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="BriefAsync"><i class="bi bi-stars" aria-hidden="true"></i>Brief me on this data</button>
+            </div>
+            <AiError Message="@Error" />
+            @if (_brief is not null) { <AiOutput Text="@_brief" IsBusy="@IsBusy" /> }
+        </div>
+    </ChildContent>
+</AiCard>
+
+@code {
+    private static readonly string[] Views = ["Columns", "Rows"];
+    private const int PageSize = 15;
+    private string _view = Views[0];
+    private string? _selected, _brief;
+    private int _page;
+
+    [Parameter] public string Title { get; set; } = "Dataset explorer";
+
+    private int PageCount => Math.Max(1, (Data.Frame.RowCount + PageSize - 1) / PageSize);
+
+    protected override void OnDatasetChanged()
+    {
+        _page = 0;
+        _selected = null;
+        _brief = null;
+    }
+
+    private static Visual.Net.Core.Statistics.PlotStats.Histogram Histogram(NumericSeries series) =>
+        Visual.Net.Core.Statistics.PlotStats.Hist(series.Values.Where(double.IsFinite).ToArray(), bins: 16);
+
+    private static string Cell(Series column, int row) =>
+        column.IsMissing(row) ? "–" : column.GetValue(row) is double d ? Fmt(d) : Convert.ToString(column.GetValue(row), CultureInfo.CurrentCulture) ?? string.Empty;
+
+    private Task BriefAsync() => RunAsync(async ct =>
+    {
+        var profile = new StringBuilder($"Dataset: {Data.Name} ({Data.Frame.RowCount} rows). {Data.Description}\nTarget: {Data.Target ?? "none"}\n");
+        foreach (var column in Data.Frame.NumericColumns)
+        {
+            profile.AppendLine(CultureInfo.InvariantCulture, $"- {column.Name}: mean {column.Mean():0.###}, std {column.Std():0.###}, min {column.Min():0.###}, max {column.Max():0.###}, missing {column.MissingCount}");
+        }
+
+        if (Data.Frame.NumericColumns.Count > 1 && Data.Target is not null && Data.Frame[Data.Target] is NumericSeries target)
+        {
+            foreach (var column in Data.Frame.NumericColumns.Where(c => c.Name != Data.Target))
+            {
+                profile.AppendLine(CultureInfo.InvariantCulture, $"- correlation({column.Name}, {Data.Target}) = {column.Correlation(target):0.00}");
+            }
+        }
+
+        var builder = new StringBuilder();
+        _brief = string.Empty;
+        await foreach (var token in Ai.StreamAsync("You are a data scientist. From the profile, write: what the data is, 3 notable patterns (cite numbers), data-quality issues, and 2 modelling suggestions. Use only the numbers given.",
+                           PromptTags.Wrap(PromptTags.Input, profile.ToString()), AiTasks.Insight, Provider, null, ct))
+        {
+            builder.Append(token);
+            _brief = builder.ToString();
+            RenderThrottled();
+        }
+    });
+}

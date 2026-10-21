@@ -1,0 +1,33 @@
+@page "/content"
+<PageTitle>Content · Blazor.AI</PageTitle>
+
+<PageHeader Title="Content generators" Package="Blazor.AI.Components" Icon="bi-pen"
+            Lead="Purpose-built writing tools with streaming output and one-click refinements. Each is a GeneratorSpec, so you can change prompts and fields or make your own." />
+
+<DemoSection Title="ContentGenerator" Component="ContentGenerator" Description="Articles, FAQs, press releases, product copy and more." Code="@ContentCode">
+    <ContentGenerator Values="@(new Dictionary<string, string> { ["topic"] = "How small coffee farms in Aceh can use soil sensors", ["audience"] = "farmer cooperatives" })" />
+</DemoSection>
+
+<DemoSection Title="BlogWriter" Component="BlogWriter" Description="Structured, SEO-aware posts with meta description and keywords." Code="@BlogCode">
+    <BlogWriter Values="@(new Dictionary<string, string> { ["topic"] = "Adding AI to a Blazor app in an afternoon", ["keyword"] = "blazor ai", ["audience"] = ".NET developers" })" />
+</DemoSection>
+
+<DemoSection Title="StoryGenerator" Component="StoryGenerator" Description="Short fiction with genre, setting, characters and reader age." Code="@StoryCode">
+    <StoryGenerator />
+</DemoSection>
+
+<DemoSection Title="MarketingGenerator" Component="MarketingGenerator" Description="Value proposition, headlines, ads, email subject lines and CTA in one go." Code="@MarketingCode">
+    <MarketingGenerator Values="@(new Dictionary<string, string> { ["product"] = "Kopi Nusantara monthly subscription box", ["audience"] = "remote workers in Jakarta", ["offer"] = "first box 50% off" })" />
+</DemoSection>
+
+<DemoSection Title="SocialMediaGenerator" Component="SocialMediaGenerator" Description="Platform-native posts in several variants." Code="@SocialCode">
+    <SocialMediaGenerator Values="@(new Dictionary<string, string> { ["message"] = "Blazor.AI 1.0 is out: 98 AI components for Blazor, local or cloud models, made in Indonesia." })" />
+</DemoSection>
+
+@code {
+    private const string ContentCode = """<ContentGenerator Values="@(new Dictionary<string, string> { ["topic"] = "..." })" OnGenerated="Save" />""";
+    private const string BlogCode = """<BlogWriter Provider="anthropic" />""";
+    private const string StoryCode = """<StoryGenerator Spec="@(GeneratorSpecs.Story with { Temperature = 1.0f })" />""";
+    private const string MarketingCode = """<MarketingGenerator />""";
+    private const string SocialCode = """<SocialMediaGenerator OnGenerated="Schedule" />""";
+}

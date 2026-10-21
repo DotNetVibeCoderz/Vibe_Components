@@ -1,0 +1,83 @@
+@namespace Blazor.AI.LocalModels
+@inherits HfComponentBase
+@* Text to speech with the browser's built-in voices (free, offline) or a Hugging Face TTS model on the Inference API. *@
+
+<AiCard Title="@Title" Subtitle="@(_mode == Modes[0] ? $"{_voices.Count} voices available in this browser" : "Neural TTS on Hugging Face")" Icon="bi-volume-up" Class="@Class">
+    <div class="bai-stack">
+        <AiTabs Tabs="@Modes" @bind-Selected="_mode" />
+        <textarea class="bai-textarea" rows="4" @bind="Text" aria-label="Text to speak"></textarea>
+        @if (_mode == Modes[0])
+        {
+            <div class="bai-row">
+                <select class="bai-select" style="width:auto; max-width:22rem" @bind="_voice" aria-label="Voice">
+                    @foreach (var v in _voices.OrderBy(v => v.Lang)) { <option value="@v.Name">@v.Name (@v.Lang)</option> }
+                </select>
+                <label class="bai-small">Speed <input type="range" class="form-range" style="width:7rem" min="0.5" max="2" step="0.1" @bind="_rate" @bind:event="oninput" /></label>
+                <label class="bai-small">Pitch <input type="range" class="form-range" style="width:7rem" min="0.5" max="2" step="0.1" @bind="_pitch" @bind:event="oninput" /></label>
+            </div>
+        }
+        else
+        {
+            <input class="bai-input" style="font-family:var(--bai-font-mono); font-size:.8rem" @bind="_ttsModel" aria-label="TTS model" />
+        }
+        <div class="bai-row">
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(Text))" @onclick="SpeakAsync">
+                @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-play-fill" aria-hidden="true"></i> }
+                Speak
+            </button>
+            <button type="button" class="bai-btn-ghost" @onclick="() => Js.StopSpeakingAsync().AsTask()"><i class="bi bi-stop-fill" aria-hidden="true"></i>Stop</button>
+            @if (_audio is not null) { <a class="bai-btn-ghost" href="@_audio" download="speech.flac"><i class="bi bi-download" aria-hidden="true"></i>Download audio</a> }
+        </div>
+        <AiError Message="@Error" />
+    </div>
+</AiCard>
+
+@code {
+    private static readonly string[] Modes = ["Browser voices", "Hugging Face model"];
+    private string _mode = Modes[0];
+    private IReadOnlyList<BlazorAIJs.SpeechVoice> _voices = [];
+    private string? _voice, _ttsModel, _audio;
+    private double _rate = 1, _pitch = 1;
+
+    [Parameter] public string Title { get; set; } = "Text to speech";
+    [Parameter] public string? Text { get; set; } = "Selamat datang di Blazor dot A I. Dibuat oleh Gravicode Studios, dipimpin oleh Kang Fadhil.";
+
+    protected override void OnParametersSet() => _ttsModel ??= Model ?? ModelOptions.TextToSpeechModel;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Voices load asynchronously in some browsers; retry briefly.
+            for (var i = 0; i < 5 && _voices.Count == 0; i++)
+            {
+                _voices = await Js.ListVoicesAsync();
+                if (_voices.Count == 0)
+                {
+                    await Task.Delay(300);
+                }
+            }
+
+            _voice = _voices.FirstOrDefault(v => v.Lang.StartsWith("id", StringComparison.OrdinalIgnoreCase))?.Name ?? _voices.FirstOrDefault(v => v.IsDefault)?.Name ?? _voices.FirstOrDefault()?.Name;
+            StateHasChanged();
+        }
+    }
+
+    private Task SpeakAsync() => RunAsync(async ct =>
+    {
+        if (_mode == Modes[0])
+        {
+            if (!await Js.SpeakAsync(Text!, _voice, _rate, _pitch))
+            {
+                Error = "This browser does not support speech synthesis.";
+            }
+
+            return;
+        }
+
+        var (audio, contentType) = await HostedApi.SpeakAsync(_ttsModel!, Text!, ct);
+        var base64 = Convert.ToBase64String(audio);
+        _audio = $"data:{contentType};base64,{base64}";
+        await Js.PlayAudioAsync(base64, contentType);
+    });
+}

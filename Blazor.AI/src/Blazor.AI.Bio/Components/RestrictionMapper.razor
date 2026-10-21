@@ -1,0 +1,140 @@
+@namespace Blazor.AI.Bio
+@inherits BioComponentBase
+@using Biotech.Net.Sequences
+@* Restriction analysis: single cutters, a cut-site map, and a virtual agarose gel of the digest. *@
+
+<AiCard Title="@Title" Subtitle="@($"{RestrictionEnzymes.All.Count} commercial enzymes")" Icon="bi-scissors" Class="@Class">
+    <div class="bai-stack">
+        <SequenceInput @bind-Value="Sequence" Label="DNA / plasmid" Rows="4" Samples="@([("EGFP", BioSamples.Egfp)])" />
+        <div class="bai-row">
+            <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_circular" /> circular (plasmid)</label>
+            <input class="bai-input bai-spacer" @bind="_enzymes" placeholder="Enzymes, e.g. EcoRI, BamHI, NcoI" aria-label="Enzymes" />
+            <button type="button" class="bai-btn bai-btn-ai" @onclick="DigestAsync"><i class="bi bi-scissors" aria-hidden="true"></i>Digest</button>
+        </div>
+        <AiError Message="@Error" />
+        @if (_r is { } r)
+        {
+            <div>
+                <span class="bai-label">Single cutters (click to add)</span>
+                <div class="bai-chips">
+                    @foreach (var e in r.SingleCutters) { <button type="button" class="bai-chip" @onclick="() => Add(e.Name)" title="@e.Site">@e.Name</button> }
+                    @if (r.SingleCutters.Count == 0) { <span class="bai-small bai-muted">None.</span> }
+                </div>
+            </div>
+            <div class="bai-grid-2" style="align-items:start">
+                <div>
+                    <span class="bai-label">Cut-site map</span>
+                    <svg viewBox="0 0 600 @(60 + r.Cuts.Select(c => c.Enzyme.Name).Distinct().Count() * 0)" style="width:100%" role="img" aria-label="Restriction map">
+                        <rect x="0" y="26" width="600" height="8" rx="4" fill="var(--bai-line-strong)" />
+                        @foreach (var (cut, i) in r.Cuts.Select((c, i) => (c, i)))
+                        {
+                            var x = cut.Position * 600.0 / r.Length;
+                            <line x1="@S(x)" x2="@S(x)" y1="18" y2="42" stroke="var(--bai-soga)" stroke-width="2" />
+                            <!text x="@S(x)" y="@(i % 2 == 0 ? 12 : 56)" text-anchor="@(x < 40 ? "start" : x > 560 ? "end" : "middle")" class="bai-axis-text" style="font-weight:600">@cut.Enzyme.Name</!text>
+                        }
+                    </svg>
+                    <div class="bai-table-wrap">
+                        <table class="bai-table">
+                            <thead><tr><th>Enzyme</th><th>Site</th><th>Cut at</th><th>Overhang</th></tr></thead>
+                            <tbody>@foreach (var c in r.Cuts) { <tr><td>@c.Enzyme.Name</td><td><code>@c.Enzyme.Site</code></td><td class="bai-num">@c.Position</td><td>@c.Enzyme.OverhangType</td></tr> }</tbody>
+                        </table>
+                    </div>
+                </div>
+                <div>
+                    <span class="bai-label">Virtual gel (1% agarose)</span>
+                    <svg viewBox="0 0 260 320" style="width:100%; max-width:300px; background:#0d1130; border-radius:10px" role="img" aria-label="Virtual agarose gel">
+                        @foreach (var l in Ladder)
+                        {
+                            <rect x="30" y="@S(BandY(l) - 1.5)" width="70" height="3" fill="#7f8de0" opacity=".85" />
+                            <!text x="24" y="@S(BandY(l) + 3)" text-anchor="end" style="font-size:9px; font-family:var(--bai-font-mono)" fill="#aab1e6">@Fmt(l)</!text>
+                        }
+                        @foreach (var f in r.Fragments.Distinct())
+                        {
+                            var copies = r.Fragments.Count(x => x == f);
+                            <rect x="140" y="@S(BandY(f) - 2)" width="80" height="@(copies > 1 ? 5 : 4)" fill="#f6c87b" opacity="@(0.65 + 0.1 * copies)"><title>@f bp@(copies > 1 ? $" ×{copies}" : null)</title></rect>
+                        }
+                        <!text x="65" y="314" text-anchor="middle" style="font-size:10px" fill="#aab1e6">ladder</!text>
+                        <!text x="180" y="314" text-anchor="middle" style="font-size:10px" fill="#aab1e6">digest</!text>
+                    </svg>
+                    <p class="bai-small bai-muted" style="margin:.4rem 0 0">Fragments: @string.Join(", ", r.Fragments.OrderByDescending(f => f).Select(f => $"{f} bp"))</p>
+                </div>
+            </div>
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Plan a cloning strategy with AI</button>
+            @if (Explanation is not null) { <AiOutput Text="@Explanation" IsBusy="@IsBusy" /> }
+        }
+    </div>
+</AiCard>
+
+@code {
+    private static readonly int[] Ladder = [10000, 6000, 3000, 2000, 1500, 1000, 700, 500, 300, 200, 100];
+    private bool _circular;
+    private string _enzymes = "";
+    private Result? _r;
+
+    [Parameter] public string Title { get; set; } = "Restriction mapper";
+    [Parameter] public string? Sequence { get; set; } = BioSamples.Egfp;
+
+    private sealed record Result(int Length, IReadOnlyList<RestrictionEnzyme> SingleCutters, IReadOnlyList<RestrictionCut> Cuts, IReadOnlyList<int> Fragments);
+
+    protected override Task OnInitializedAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_enzymes))
+        {
+            _enzymes = SuggestEnzymes(Sequence);
+        }
+
+        return DigestAsync();
+    }
+
+    // Enzymes cutting the sample 1–2 times give a readable first digest.
+    private static string SuggestEnzymes(string? text)
+    {
+        try
+        {
+            var dna = BioInput.ParseOne(text, SequenceType.Dna);
+            return dna is null ? "EcoRI, BamHI" : string.Join(", ", RestrictionEnzymes.All.Where(e => RestrictionDigest.FindCuts(dna, e).Count is 1 or 2).Take(4).Select(e => e.Name));
+        }
+        catch (FormatException)
+        {
+            return "EcoRI, BamHI";
+        }
+    }
+
+    private void Add(string enzyme)
+    {
+        if (!_enzymes.Split(',', StringSplitOptions.TrimEntries).Contains(enzyme, StringComparer.OrdinalIgnoreCase))
+        {
+            _enzymes = string.IsNullOrWhiteSpace(_enzymes) ? enzyme : _enzymes + ", " + enzyme;
+        }
+    }
+
+    private async Task DigestAsync()
+    {
+        var text = Sequence;
+        var circular = _circular;
+        var names = _enzymes.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        _r = await AnalyseAsync(() =>
+        {
+            var dna = BioInput.ParseOne(text, SequenceType.Dna) ?? throw new FormatException("Paste a DNA sequence first.");
+            var unknown = names.Where(n => !RestrictionEnzymes.TryGet(n, out _)).ToList();
+            if (unknown.Count > 0)
+            {
+                throw new FormatException($"Unknown enzyme(s): {string.Join(", ", unknown)}.");
+            }
+
+            var enzymes = names.Select(RestrictionEnzymes.Get).ToList();
+            var digest = RestrictionDigest.Digest(dna, enzymes, circular);
+            return new Result(dna.Length, RestrictionEnzymes.SingleCutters(dna, circular), digest.Cuts.OrderBy(c => c.Position).ToList(), digest.FragmentSizes);
+        });
+        Explanation = null;
+    }
+
+    // Log-linear migration: larger fragments travel less.
+    private static double BandY(double bp) => 20 + (Math.Log10(10000) - Math.Log10(Math.Clamp(bp, 80, 12000))) / (Math.Log10(10000) - Math.Log10(80)) * 270;
+
+    private Task Explain() => ExplainAsync("restriction digest for cloning",
+        $"Sequence {_r!.Length} bp ({(_circular ? "circular" : "linear")}). Enzymes: {_enzymes}. Cuts: {string.Join("; ", _r.Cuts.Select(c => $"{c.Enzyme.Name} at {c.Position} ({c.Enzyme.OverhangType})"))}. " +
+        $"Fragments: {string.Join(", ", _r.Fragments)} bp. Single cutters: {string.Join(", ", _r.SingleCutters.Select(e => e.Name))}. Suggest a directional cloning strategy using compatible single cutters.");
+
+    private static string S(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+}

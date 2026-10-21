@@ -1,0 +1,154 @@
+@namespace Blazor.AI.Decision
+@* Renders a decision tree top-down; test facts highlight the path taken to the outcome. *@
+
+<AiCard Title="@Title" Subtitle="@Subtitle" Icon="bi-diagram-2" Class="@Class">
+    <div class="bai-stack">
+        <div style="overflow-x:auto">
+            <svg viewBox="0 0 @S(_width) @S(_height)" style="display:block; width:100%; min-width:@(S(Math.Min(_width, 900)))px" role="img" aria-label="@Title">
+                @foreach (var (node, x, y) in _layout)
+                {
+                    foreach (var (child, answer) in new[] { (node.Yes, true), (node.No, false) })
+                    {
+                        if (child is null || !_positions.TryGetValue(child.Id, out var c)) { continue; }
+                        var onPath = _path.Contains((node.Id, answer));
+                        <path d="@($"M{S(x)},{S(y + BoxH / 2)} C{S(x)},{S((y + c.Y) / 2 + 10)} {S(c.X)},{S((y + c.Y) / 2 - 10)} {S(c.X)},{S(c.Y - BoxH / 2)}")"
+                              fill="none" stroke="@(onPath ? "var(--bai-soga)" : "var(--bai-line-strong)")" stroke-width="@(onPath ? 3 : 1.5)" />
+                        <!text x="@S((x + c.X) / 2 + (answer ? -8 : 8))" y="@S((y + c.Y) / 2)" text-anchor="@(answer ? "end" : "start")" class="bai-edge-label" style="font-weight:600">@(answer ? "yes" : "no")</!text>
+                    }
+                }
+                @foreach (var (node, x, y) in _layout)
+                {
+                    var reached = node == _leaf || _path.Any(p => p.Id == node.Id);
+                    var color = node.IsLeaf ? OutcomeColor(node.Outcome) : "var(--bai-glass-strong)";
+                    <g transform="@($"translate({S(x - BoxW / 2)},{S(y - BoxH / 2)})")">
+                        <rect width="@BoxW" height="@BoxH" rx="@(node.IsLeaf ? 22 : 10)" fill="@color" fill-opacity="@(node.IsLeaf ? "0.9" : "1")"
+                              stroke="@(reached ? "var(--bai-soga)" : "var(--bai-line-strong)")" stroke-width="@(reached ? 3 : 1)">
+                            <title>@(node.Condition ?? node.Outcome)@(node.Coverage is { } cov ? $" · {cov:P0} of cases" : null)</title>
+                        </rect>
+                        <!text x="@S(BoxW / 2)" y="@S(BoxH / 2 + (node.Coverage is null ? 4 : 0))" text-anchor="middle" style="font-size:11.5px; font-weight:600" fill="@(node.IsLeaf ? "#fff" : "var(--bai-ink)")">@Truncate(node.Label, 24)</!text>
+                        @if (node.Coverage is { } coverage)
+                        {
+                            <!text x="@S(BoxW / 2)" y="@S(BoxH / 2 + 14)" text-anchor="middle" style="font-size:9.5px; font-family:var(--bai-font-mono)" fill="@(node.IsLeaf ? "rgba(255,255,255,.8)" : "var(--bai-ink-faint)")">@coverage.ToString("P0", CultureInfo.InvariantCulture)</!text>
+                        }
+                    </g>
+                }
+            </svg>
+        </div>
+        @if (ShowTester)
+        {
+            <div class="bai-grid-2" style="align-items:start">
+                <FactsEditor Facts="@Facts" Label="Test case" />
+                <div class="bai-stack">
+                    <button type="button" class="bai-btn" @onclick="Evaluate"><i class="bi bi-play-fill" aria-hidden="true"></i>Trace decision</button>
+                    @if (_leaf is not null)
+                    {
+                        <div class="bai-output">
+                            <div class="bai-row"><span class="bai-muted bai-small">Outcome</span><strong style="font-family:var(--bai-font-display); font-size:1.15rem">@_leaf.Outcome</strong></div>
+                            <ol class="bai-small" style="margin:.4rem 0 0; padding-left:1.1rem">
+                                @foreach (var step in _trace) { <li>@step.Node.Label → <strong>@(step.Answer ? "yes" : "no")</strong> <code class="bai-faint">@step.Node.Condition</code></li> }
+                            </ol>
+                        </div>
+                    }
+                    <AiError Message="@_error" />
+                </div>
+            </div>
+        }
+    </div>
+</AiCard>
+
+@code {
+    private const double BoxW = 170;
+    private const double BoxH = 46;
+    private readonly List<(DecisionTreeNode Node, double X, double Y)> _layout = [];
+    private readonly Dictionary<string, (double X, double Y)> _positions = [];
+    private HashSet<(string Id, bool Answer)> _path = [];
+    private IReadOnlyList<(DecisionTreeNode Node, bool Answer)> _trace = [];
+    private DecisionTreeNode? _leaf;
+    private DecisionTreeNode? _laidOut;
+    private double _width, _height;
+    private string? _error;
+
+    [Parameter] public DecisionTreeNode Root { get; set; } = DecisionTreeNode.ChurnSample();
+    [Parameter] public string Title { get; set; } = "Decision tree";
+    [Parameter] public string? Subtitle { get; set; } = "Follow the path a case takes";
+    [Parameter] public bool ShowTester { get; set; } = true;
+
+    [Parameter] public IDictionary<string, object?> Facts { get; set; } = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["contract"] = "monthly",
+        ["tenureMonths"] = 10d,
+        ["tickets"] = 4d,
+        ["monthlyCharges"] = 90_000d,
+    };
+
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_laidOut, Root))
+        {
+            _laidOut = Root;
+            Layout();
+        }
+    }
+
+    // Tidy layout: leaves get consecutive x slots, parents centre over their children.
+    private void Layout()
+    {
+        _layout.Clear();
+        _positions.Clear();
+        var slot = 0;
+        var depth = 0;
+
+        double Place(DecisionTreeNode node, int level)
+        {
+            depth = Math.Max(depth, level);
+            double x;
+            if (node.IsLeaf || (node.Yes is null && node.No is null))
+            {
+                x = slot++ * (BoxW + 24) + BoxW / 2 + 12;
+            }
+            else
+            {
+                var children = new[] { node.Yes, node.No }.Where(c => c is not null).Select(c => Place(c!, level + 1)).ToList();
+                x = children.Average();
+            }
+
+            var y = level * (BoxH + 56) + BoxH / 2 + 12;
+            _layout.Add((node, x, y));
+            _positions[node.Id] = (x, y);
+            return x;
+        }
+
+        Place(Root, 0);
+        _width = Math.Max(BoxW + 24, slot * (BoxW + 24));
+        _height = (depth + 1) * (BoxH + 56);
+    }
+
+    private void Evaluate()
+    {
+        try
+        {
+            _error = null;
+            var (leaf, path) = Root.Evaluate(new Dictionary<string, object?>(Facts, StringComparer.OrdinalIgnoreCase));
+            _leaf = leaf;
+            _trace = path;
+            _path = path.Select(p => (p.Node.Id, p.Answer)).ToHashSet();
+        }
+        catch (FormatException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private static string OutcomeColor(string? outcome) => outcome?.ToLowerInvariant() switch
+    {
+        { } o when o.Contains("high") || o.Contains("decline") || o.Contains("reject") => "#c2414b",
+        { } o when o.Contains("medium") || o.Contains("review") => "#c9853f",
+        _ => "#2ead9c",
+    };
+
+    private static string S(double v) => v.ToString("0.#", CultureInfo.InvariantCulture);
+
+    private static string Truncate(string text, int max) => text.Length <= max ? text : text[..(max - 1)] + "…";
+}

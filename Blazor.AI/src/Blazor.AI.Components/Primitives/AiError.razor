@@ -1,0 +1,18 @@
+@namespace Blazor.AI.Components
+
+@if (!string.IsNullOrEmpty(Message))
+{
+    <div class="bai-alert" role="alert">
+        <i class="bi bi-exclamation-octagon" aria-hidden="true"></i>
+        <div class="bai-spacer">@Message</div>
+        @if (OnRetry.HasDelegate)
+        {
+            <button type="button" class="bai-btn-ghost" @onclick="OnRetry">Try again</button>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+}

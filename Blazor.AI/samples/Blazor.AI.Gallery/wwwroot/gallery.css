@@ -1,0 +1,365 @@
+/* Blazor.AI Gallery — layout on top of the library theme (blazor-ai.css). */
+
+body {
+    margin: 0;
+    min-height: 100vh;
+}
+
+h1, h2, h3 {
+    font-family: var(--bai-font-display);
+}
+
+a { color: var(--bai-soga); }
+
+:focus-visible { outline: none; box-shadow: var(--bai-focus); border-radius: 6px; }
+
+.g-shell {
+    display: grid;
+    grid-template-columns: 17rem minmax(0, 1fr);
+    min-height: 100vh;
+}
+
+/* ---------- Sidebar ---------- */
+
+.g-sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 1.1rem 0.8rem;
+    border-right: 1px solid var(--bai-line);
+    background: color-mix(in srgb, var(--bai-bg) 70%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    overflow-y: auto;
+    z-index: 20;
+}
+
+.g-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.2rem 0.6rem 1.1rem;
+    color: var(--bai-ink);
+    text-decoration: none;
+    font-family: var(--bai-font-display);
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    font-variation-settings: "wdth" 85;
+}
+
+.g-brand-dot { color: var(--bai-soga); }
+
+.g-brand-mark { width: 26px; height: 26px; }
+.g-brand-mark ellipse:nth-child(odd) { fill: var(--bai-soga); }
+.g-brand-mark ellipse:nth-child(even) { fill: var(--bai-tarum); }
+[data-bs-theme="dark"] .g-brand-mark ellipse:nth-child(even) { fill: #7f8de0; }
+
+.g-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.45rem 0.65rem;
+    border-radius: 9px;
+    color: var(--bai-ink-muted);
+    text-decoration: none;
+    font-size: 0.88rem;
+    font-weight: 500;
+}
+
+.g-nav:hover { background: var(--bai-line); color: var(--bai-ink); }
+
+.g-nav.active {
+    background: var(--bai-glass-strong);
+    color: var(--bai-ink);
+    box-shadow: inset 3px 0 0 var(--bai-soga);
+}
+
+.g-nav i { font-size: 1rem; width: 1.1rem; text-align: center; }
+
+.g-count {
+    font-family: var(--bai-font-mono);
+    font-size: 0.68rem;
+    color: var(--bai-ink-faint);
+}
+
+.g-nav-group {
+    margin: 1rem 0.65rem 0.35rem;
+    color: var(--bai-ink-faint);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.g-sidebar-foot {
+    margin-top: auto;
+    padding: 1rem 0.6rem 0;
+}
+
+/* ---------- Main ---------- */
+
+.g-main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.g-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.65rem 1.6rem;
+    border-bottom: 1px solid var(--bai-line);
+    background: color-mix(in srgb, var(--bai-bg) 72%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.g-menu { display: none; }
+
+.g-content {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 1.8rem 1.6rem 3rem;
+}
+
+.g-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    justify-content: space-between;
+    padding: 1rem 1.6rem 1.4rem;
+    border-top: 1px solid var(--bai-line);
+    font-size: 0.78rem;
+}
+
+/* ---------- Page header & sections ---------- */
+
+.g-page-head { margin-bottom: 1.8rem; }
+
+.g-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--bai-soga);
+    font-family: var(--bai-font-mono);
+    font-size: 0.74rem;
+    font-weight: 500;
+}
+
+.g-page-head h1 {
+    margin: 0.35rem 0 0.4rem;
+    font-size: clamp(1.8rem, 3.2vw, 2.6rem);
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    line-height: 1.05;
+    font-variation-settings: "wdth" 88;
+}
+
+.g-page-head p {
+    max-width: 46rem;
+    margin: 0;
+    color: var(--bai-ink-muted);
+    font-size: 1.02rem;
+    line-height: 1.55;
+}
+
+.g-demo { margin-bottom: 2.4rem; scroll-margin-top: 5rem; }
+
+.g-demo-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.6rem 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.g-demo-head h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+}
+
+.g-demo-head code {
+    color: var(--bai-soga);
+    font-size: 0.8rem;
+}
+
+.g-demo-head p {
+    flex-basis: 100%;
+    margin: 0;
+    color: var(--bai-ink-muted);
+    font-size: 0.9rem;
+}
+
+/* ---------- Home ---------- */
+
+.g-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 2rem;
+    align-items: center;
+    margin: 0.5rem 0 3rem;
+}
+
+.g-hero h1 {
+    margin: 0.6rem 0 1rem;
+    font-size: clamp(2.4rem, 5vw, 4.1rem);
+    font-weight: 750;
+    line-height: 0.98;
+    letter-spacing: -0.045em;
+    font-variation-settings: "wdth" 80;
+}
+
+.g-hero h1 em {
+    font-style: normal;
+    color: var(--bai-soga);
+}
+
+.g-hero-lead {
+    max-width: 32rem;
+    color: var(--bai-ink-muted);
+    font-size: 1.08rem;
+    line-height: 1.6;
+}
+
+.g-clipboard {
+    position: relative;
+    padding: 0.9rem 1rem;
+    border: 1px dashed var(--bai-line-strong);
+    border-radius: var(--bai-radius-sm);
+    background: var(--bai-glass);
+    font-family: var(--bai-font-mono);
+    font-size: 0.78rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    color: var(--bai-ink-muted);
+}
+
+.g-clipboard::before {
+    content: "clipboard";
+    position: absolute;
+    top: -0.65rem;
+    left: 0.8rem;
+    padding: 0 0.4rem;
+    background: var(--bai-bg);
+    color: var(--bai-ink-faint);
+    font-size: 0.66rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.g-packages {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+    gap: 1rem;
+}
+
+.g-package {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 1.1rem 1.15rem;
+    color: inherit;
+    text-decoration: none;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.g-package:hover { transform: translateY(-2px); border-color: var(--bai-soga); }
+
+.g-package h3 { margin: 0; font-size: 1.02rem; font-weight: 650; }
+
+.g-package p { margin: 0; color: var(--bai-ink-muted); font-size: 0.84rem; line-height: 1.5; }
+
+.g-numbers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2.2rem;
+    margin: 1.4rem 0 0;
+}
+
+.g-numbers div { display: grid; }
+
+.g-numbers strong {
+    font-family: var(--bai-font-display);
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1;
+}
+
+.g-numbers span { color: var(--bai-ink-faint); font-size: 0.78rem; }
+
+.g-section-title {
+    margin: 0 0 1rem;
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+}
+
+.g-steps {
+    counter-reset: step;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: 1rem;
+    margin: 0 0 2.6rem;
+    padding: 0;
+    list-style: none;
+}
+
+.g-steps li { counter-increment: step; padding: 1rem 1.1rem; }
+
+.g-steps li::before {
+    content: counter(step);
+    display: inline-grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    margin-bottom: 0.5rem;
+    border-radius: 50%;
+    background: var(--bai-soga-soft);
+    color: var(--bai-soga);
+    font-family: var(--bai-font-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 1000px) {
+    .g-hero { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 900px) {
+    .g-shell { grid-template-columns: 1fr; }
+
+    .g-sidebar {
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: 17rem;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+        box-shadow: var(--bai-glass-shadow);
+    }
+
+    .g-sidebar.is-open { transform: none; }
+    .g-menu { display: inline-grid; }
+    .g-content { padding: 1.2rem 1rem 2.4rem; }
+    .g-topbar { padding: 0.6rem 1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .g-package, .g-sidebar { transition: none; }
+}
+
+/* FocusOnNavigate moves focus to the heading for screen readers; no ring for that programmatic focus. */
+h1:focus, h1:focus-visible { outline: none; box-shadow: none; }

@@ -1,0 +1,93 @@
+@namespace Blazor.AI.LocalModels
+@inherits HfComponentBase
+@* Sentiment for one text or a batch (one per line), with a summary distribution. Runs a fine-tuned transformer locally by default. *@
+
+<AiCard Title="@Title" Subtitle="Transformer sentiment classifier" Icon="bi-emoji-smile" Class="@Class">
+    <div class="bai-stack">
+        <EngineSelector @bind-Engine="Engine" @bind-Model="_model" Suggestions="@Suggestions" />
+        <textarea class="bai-textarea" rows="6" @bind="Text" placeholder="One review, comment or message per line" aria-label="Texts"></textarea>
+        <div class="bai-row">
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(Text))" @onclick="AnalyseAsync">
+                @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-play-fill" aria-hidden="true"></i> }
+                Analyse
+            </button>
+            @if (LoadStatus is not null) { <span class="bai-small bai-muted">@LoadStatus</span> }
+        </div>
+        <AiError Message="@Error" />
+        @if (_results.Count > 0)
+        {
+            <div class="bai-grid-2" style="align-items:start">
+                <div>
+                    @foreach (var (text, label, score) in _results)
+                    {
+                        <div class="bai-result">
+                            <div class="bai-result-head">
+                                <span class="bai-small" style="overflow:hidden; text-overflow:ellipsis">@text</span>
+                                <span class="bai-badge @Badge(label)">@label @score.ToString("P0", CultureInfo.InvariantCulture)</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div>
+                    <span class="bai-label">Overall</span>
+                    <AiScoreBars Values="@_results.GroupBy(r => r.Label).Select(g => KeyValuePair.Create(g.Key, g.Count() / (double)_results.Count))" />
+                    <span class="bai-small bai-muted">@_results.Count texts · @_elapsed.TotalMilliseconds.ToString("0") ms</span>
+                </div>
+            </div>
+        }
+    </div>
+</AiCard>
+
+@code {
+    private static readonly string[] Suggestions = ["distilbert/distilbert-base-uncased-finetuned-sst-2-english", "cardiffnlp/twitter-roberta-base-sentiment-latest", "w11wo/indonesian-roberta-base-sentiment-classifier", "nlptown/bert-base-multilingual-uncased-sentiment"];
+    private readonly List<(string Text, string Label, double Score)> _results = [];
+    private string? _model;
+    private TimeSpan _elapsed;
+
+    [Parameter] public string Title { get; set; } = "Sentiment analysis";
+
+    [Parameter] public string? Text { get; set; } = "The delivery was fast and the packaging was perfect!\nCustomer service never answered my emails.\nThe product is okay, nothing special.";
+
+    [Parameter] public EventCallback<IReadOnlyList<(string Text, string Label, double Score)>> OnAnalysed { get; set; }
+
+    protected override void OnParametersSet() => _model ??= Model ?? ModelOptions.SentimentModel;
+
+    private Task AnalyseAsync() => RunAsync(async ct =>
+    {
+        _results.Clear();
+        var lines = Text!.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Take(100).ToList();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        if (Engine == InferenceEngine.Local)
+        {
+            var model = await EnsureLocalAsync(_model!, "text", Registry.TextModelAsync);
+            var predictions = await Registry.RunAsync(_model!, "text", () => lines.Select(l => model.Predict(l, 1)[0]).ToList(), ct);
+            _results.AddRange(lines.Zip(predictions, (l, p) => (l, Normalize(p.Label), p.Score)));
+        }
+        else
+        {
+            foreach (var line in lines)
+            {
+                var top = (await HostedApi.ClassifyAsync(_model!, line, ct))[0];
+                _results.Add((line, Normalize(top.Label), top.Score));
+            }
+        }
+
+        _elapsed = stopwatch.Elapsed;
+        await OnAnalysed.InvokeAsync(_results);
+    });
+
+    private static string Normalize(string label) => label.ToUpperInvariant() switch
+    {
+        "LABEL_0" or "NEGATIVE" or "NEG" or "1 STAR" or "2 STARS" => "negative",
+        "LABEL_1" or "NEUTRAL" or "NEU" or "3 STARS" => label.Equals("LABEL_1", StringComparison.OrdinalIgnoreCase) ? "positive" : "neutral",
+        "LABEL_2" or "POSITIVE" or "POS" or "4 STARS" or "5 STARS" => "positive",
+        _ => label.ToLowerInvariant(),
+    };
+
+    private static string Badge(string label) => label switch
+    {
+        "positive" => "bai-badge-local",
+        "negative" => "bai-badge-danger",
+        _ => string.Empty,
+    };
+}

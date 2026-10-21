@@ -1,0 +1,15 @@
+<Router AppAssembly="typeof(Program).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(Layout.MainLayout)">
+            <div class="bai-empty" style="margin-top:3rem">
+                <i class="bi bi-signpost-2" aria-hidden="true"></i>
+                <strong>That page does not exist.</strong>
+                <a href="/">Back to the gallery</a>
+            </div>
+        </LayoutView>
+    </NotFound>
+</Router>

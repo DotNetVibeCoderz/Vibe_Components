@@ -1,0 +1,87 @@
+@namespace Blazor.AI.Components
+@inherits AiComponentBase
+@* Summarises pasted or bound text in a chosen style, length and language. *@
+
+<AiCard Title="@Title" Subtitle="@Subtitle" Icon="bi-text-paragraph" Class="@Class">
+    <div class="bai-stack">
+        @if (ShowInput)
+        {
+            <div>
+                <label class="bai-label" for="@_inputId">Text to summarise</label>
+                <textarea id="@_inputId" class="bai-textarea" rows="7" @bind="Text" placeholder="Paste an article, report, email thread or meeting notes…"></textarea>
+                <div class="bai-small bai-faint" style="margin-top:.25rem">@WordCount(Text) words</div>
+            </div>
+        }
+        <div class="bai-grid-2">
+            <div>
+                <label class="bai-label" for="@_styleId">Style</label>
+                <select id="@_styleId" class="bai-select" @bind="Style">
+                    <option value="@SummaryStyle.Paragraph">Paragraph</option>
+                    <option value="@SummaryStyle.Bullets">Bullet points</option>
+                    <option value="@SummaryStyle.TlDr">One-line TL;DR</option>
+                    <option value="@SummaryStyle.Executive">Executive summary</option>
+                </select>
+            </div>
+            <div>
+                <label class="bai-label" for="@_langId">Language</label>
+                <select id="@_langId" class="bai-select" @bind="Language">
+                    <option value="">Same as input</option>
+                    <option>English</option>
+                    <option>Bahasa Indonesia</option>
+                    <option>Japanese</option>
+                    <option>Spanish</option>
+                    <option>Arabic</option>
+                </select>
+            </div>
+        </div>
+        <div>
+            <label class="bai-label" for="@_lenId">Length: up to @MaxWords words</label>
+            <input id="@_lenId" type="range" class="form-range" min="20" max="400" step="10" @bind="MaxWords" @bind:event="oninput" />
+        </div>
+        <div class="bai-row">
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(Text))" @onclick="SummarizeAsync">
+                <i class="bi bi-stars" aria-hidden="true"></i>Summarise
+            </button>
+            @if (IsBusy)
+            {
+                <button type="button" class="bai-btn-ghost" @onclick="CancelCurrent">Stop</button>
+            }
+        </div>
+        <AiError Message="@Error" OnRetry="SummarizeAsync" />
+        <AiOutput Text="@_summary" IsBusy="@IsBusy" Placeholder="Your summary will appear here." DownloadName="summary.md" />
+    </div>
+</AiCard>
+
+@code {
+    private readonly string _inputId = "bai-sum-" + Guid.NewGuid().ToString("N")[..6];
+    private string _styleId => _inputId + "-s";
+    private string _langId => _inputId + "-l";
+    private string _lenId => _inputId + "-n";
+    private string? _summary;
+
+    [Parameter] public string Title { get; set; } = "Summariser";
+    [Parameter] public string? Subtitle { get; set; } = "Long text in, key points out";
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public bool ShowInput { get; set; } = true;
+    [Parameter] public SummaryStyle Style { get; set; } = SummaryStyle.Bullets;
+    [Parameter] public int MaxWords { get; set; } = 120;
+    [Parameter] public string? Language { get; set; }
+    [Parameter] public EventCallback<string> OnSummarized { get; set; }
+
+    public Task SummarizeAsync() => RunAsync(async ct =>
+    {
+        _summary = string.Empty;
+        var system = AiTextService.SummarySystemPrompt(Style, MaxWords, Language);
+        var builder = new StringBuilder();
+        await foreach (var token in Ai.StreamAsync(system, PromptTags.Wrap(PromptTags.Input, Text), AiTasks.Summarize, Provider, new ChatOptions { Temperature = 0.2f }, ct))
+        {
+            builder.Append(token);
+            _summary = builder.ToString();
+            RenderThrottled();
+        }
+
+        await OnSummarized.InvokeAsync(_summary);
+    });
+
+    private static int WordCount(string? text) => string.IsNullOrWhiteSpace(text) ? 0 : text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+}

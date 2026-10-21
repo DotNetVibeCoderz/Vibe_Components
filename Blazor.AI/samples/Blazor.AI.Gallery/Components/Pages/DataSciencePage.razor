@@ -1,0 +1,48 @@
+@page "/data-science"
+<PageTitle>Data science · Blazor.AI</PageTitle>
+
+<PageHeader Title="Data science" Package="Blazor.AI.Analytics" Icon="bi-bar-chart-line"
+            Lead="Statistics that explain themselves: exact p-values, effect sizes and plain-language readings, Bayesian A/B tests with GraviProb, and signal processing with GraviNum's FFT." />
+
+<DemoSection Title="CorrelationMatrixViewer" Component="CorrelationMatrixViewer" Description="Pearson or Spearman, strongest pairs and a scatter of the selected pair." Code="@CorrCode">
+    <CorrelationMatrixViewer Dataset="@SampleDatasets.HousePrices()" />
+</DemoSection>
+
+<DemoSection Title="StatisticalAnalysisPanel" Component="StatisticalAnalysisPanel" Description="Centre, spread, shape, bootstrap CI, KDE and box plot, grouped summaries." Code="@StatsCode">
+    <StatisticalAnalysisPanel Dataset="@SampleDatasets.CropYield()" />
+</DemoSection>
+
+<DemoSection Title="BayesianAnalysisPanel" Component="BayesianAnalysisPanel" Description="Posteriors, probability B beats A, expected lift and loss." Code="@BayesCode">
+    <BayesianAnalysisPanel />
+</DemoSection>
+
+<DemoSection Title="HypothesisTestingPanel" Component="HypothesisTestingPanel" Description="t-tests, ANOVA and chi-square on dataset columns." Code="@TestCode">
+    <HypothesisTestingPanel Dataset="@SampleDatasets.CustomerChurn()" />
+</DemoSection>
+
+<DemoSection Title="PCAVisualizer" Component="PCAVisualizer" Description="Scree plot, projection and loadings." Code="@PcaCode">
+    <PCAVisualizer Dataset="@SampleDatasets.CustomerChurn()" />
+</DemoSection>
+
+<DemoSection Title="DimensionReductionStudio" Component="DimensionReductionStudio" Description="PCA, LDA and t-SNE side by side." Code="@DrCode">
+    <DimensionReductionStudio Dataset="@SampleDatasets.CustomerChurn()" />
+</DemoSection>
+
+<DemoSection Title="TimeSeriesAnalyzer" Component="TimeSeriesAnalyzer" Description="Moving average, decomposition and autocorrelation." Code="@TsCode">
+    <TimeSeriesAnalyzer Dataset="@SampleDatasets.MonthlySales()" />
+</DemoSection>
+
+<DemoSection Title="SignalProcessingStudio" Component="SignalProcessingStudio" Description="Compose a signal, inspect its spectrum, filter it." Code="@SignalCode">
+    <SignalProcessingStudio />
+</DemoSection>
+
+@code {
+    private const string CorrCode = """<CorrelationMatrixViewer Dataset="@dataset" />""";
+    private const string StatsCode = """<StatisticalAnalysisPanel Dataset="@dataset" />""";
+    private const string BayesCode = """<BayesianAnalysisPanel SuccessA="120" TotalA="1000" SuccessB="151" TotalB="1000" />""";
+    private const string TestCode = """<HypothesisTestingPanel Dataset="@dataset" />""";
+    private const string PcaCode = """<PCAVisualizer Dataset="@dataset" />""";
+    private const string DrCode = """<DimensionReductionStudio Dataset="@dataset" />""";
+    private const string TsCode = """<TimeSeriesAnalyzer Dataset="@sales" />""";
+    private const string SignalCode = """<SignalProcessingStudio Input="@vibrationSamples" />""";
+}

@@ -1,0 +1,27 @@
+@namespace Blazor.AI.Components
+
+<div style="position:relative" class="@Class">
+    <pre class="bai-code" style="padding-right:2.6rem" aria-label="@(Language ?? "code")"><code>@Code</code></pre>
+    <button type="button" class="bai-icon-btn" style="position:absolute; top:.4rem; right:.4rem; color:#aab1e6"
+            title="Copy code" aria-label="Copy code" @onclick="CopyAsync">
+        <i class="bi @(_copied ? "bi-check2" : "bi-clipboard")"></i>
+    </button>
+</div>
+
+@code {
+    private bool _copied;
+
+    [Inject] private BlazorAIJs Js { get; set; } = default!;
+
+    [Parameter] public string? Code { get; set; }
+    [Parameter] public string? Language { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private async Task CopyAsync()
+    {
+        _copied = await Js.CopyTextAsync(Code ?? string.Empty);
+        StateHasChanged();
+        await Task.Delay(1500);
+        _copied = false;
+    }
+}

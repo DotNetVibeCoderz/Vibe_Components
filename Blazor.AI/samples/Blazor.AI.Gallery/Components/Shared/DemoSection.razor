@@ -1,0 +1,32 @@
+@* A gallery section: heading, one-line purpose, and Preview / Code tabs. *@
+
+<section class="g-demo" id="@Anchor">
+    <div class="g-demo-head">
+        <h2>@Title</h2>
+        <code>&lt;@Component /&gt;</code>
+        <span class="bai-spacer"></span>
+        <AiTabs Tabs="@Views" @bind-Selected="_view" />
+        @if (Description is not null) { <p>@Description</p> }
+    </div>
+    @if (_view == "Preview")
+    {
+        @ChildContent
+    }
+    else
+    {
+        <AiCodeBlock Code="@Code" Language="razor" />
+    }
+</section>
+
+@code {
+    private static readonly string[] Views = ["Preview", "Code"];
+    private string _view = "Preview";
+
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Component { get; set; } = string.Empty;
+    [Parameter] public string? Description { get; set; }
+    [Parameter] public string Code { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string Anchor => Component.ToLowerInvariant();
+}

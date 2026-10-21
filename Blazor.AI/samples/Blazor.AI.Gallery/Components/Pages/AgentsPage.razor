@@ -1,0 +1,59 @@
+@page "/agents"
+<PageTitle>Agents · Blazor.AI</PageTitle>
+
+<PageHeader Title="Agents" Package="Blazor.AI.Agents" Icon="bi-robot"
+            Lead="Build, run and debug tool-using agents. Every tool call is traced, agents can remember, teams can collaborate, and MCP servers plug in their tools." />
+
+<DemoSection Title="AgentStudio" Component="AgentStudio" Description="Edit an agent's instructions, model, tools and memory, and test it side by side." Code="@StudioCode">
+    <AgentStudio />
+</DemoSection>
+
+<DemoSection Title="AiAgentChat" Component="AiAgentChat" Description="Chat with an agent; tool calls appear inline with results and timings." Code="@ChatCode">
+    <AiAgentChat Suggestions="@(["What is (1250 * 12) / 7 + 3%?", "How many business days between 2026-10-01 and 2026-12-24?", "Monthly payment on a Rp 300,000,000 loan at 9.5% for 180 months?"])" Height="520px" />
+</DemoSection>
+
+<DemoSection Title="AiMultiAgentPanel" Component="AiMultiAgentPanel" Description="A team of specialists: pipeline, round table, or supervisor-routed." Code="@TeamCode">
+    <AiMultiAgentPanel Task="Write a short business case for adding solar panels to a coffee roastery in Bandung that uses 4,500 kWh per month." />
+</DemoSection>
+
+<DemoSection Title="AgentTaskBoard" Component="AgentTaskBoard" Description="Plan a goal into tasks assigned to agents, run them, review and approve. Drag cards between columns." Code="@BoardCode">
+    <AgentTaskBoard />
+</DemoSection>
+
+<DemoSection Title="AgentWorkflowDesigner" Component="AgentWorkflowDesigner" Description="Drag nodes, connect ports, branch on conditions, then run and watch nodes light up." Code="@WorkflowCode">
+    <AgentWorkflowDesigner />
+</DemoSection>
+
+<DemoSection Title="AgentDebugger" Component="AgentDebugger" Description="The full trace of every run on this page: inputs, tool calls, results, tokens, errors." Code="@DebuggerCode">
+    <AgentDebugger />
+</DemoSection>
+
+<DemoSection Title="ToolExecutionPanel" Component="ToolExecutionPanel" Description="Call any registered tool by hand; the form is generated from its JSON schema." Code="@ToolsCode">
+    <ToolExecutionPanel />
+</DemoSection>
+
+<DemoSection Title="AgentMemoryViewer" Component="AgentMemoryViewer" Description="Long-term memories, searchable by meaning. The Researcher agent has memory enabled." Code="@MemoryCode">
+    <AgentMemoryViewer />
+</DemoSection>
+
+<DemoSection Title="MCPServerExplorer" Component="MCPServerExplorer" Description="Connect Model Context Protocol servers; their tools become available to every agent." Code="@McpCode">
+    <MCPServerExplorer />
+</DemoSection>
+
+@code {
+    private const string StudioCode = """
+        builder.Services.AddBlazorAIAgents(tools =>
+            tools.Register(LookupOrder, "lookup_order", "Order status by number"));
+
+        <AgentStudio />
+        """;
+
+    private const string ChatCode = """<AiAgentChat Agent="@catalog.Get("analyst")" OnRunCompleted="Log" />""";
+    private const string TeamCode = """<AiMultiAgentPanel Task="@task" />""";
+    private const string BoardCode = """<AgentTaskBoard />""";
+    private const string WorkflowCode = """<AgentWorkflowDesigner Workflow="@AgentWorkflow.Sample()" OnCompleted="Publish" />""";
+    private const string DebuggerCode = """<AgentDebugger />""";
+    private const string ToolsCode = """<ToolExecutionPanel />""";
+    private const string MemoryCode = """<AgentMemoryViewer />""";
+    private const string McpCode = """<MCPServerExplorer />  @* tools from MCP servers are registered in ToolRegistry *@""";
+}

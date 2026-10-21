@@ -1,0 +1,138 @@
+@namespace Blazor.AI.Components
+@inherits AiComponentBase
+@* Browse, search, favourite, run and delete saved prompts. Prompts are stored encrypted (AES-GCM) by IPromptStore. *@
+
+<AiCard Title="@Title" Subtitle="@($"{_prompts.Count} prompts · encrypted at rest")" Icon="bi-collection" Class="@Class">
+    <div class="bai-row" style="margin-bottom:.85rem">
+        <input class="bai-input bai-spacer" type="search" placeholder="Search prompts…" @bind="_search" @bind:event="oninput" aria-label="Search prompts" />
+        <select class="bai-select" style="width:auto" @bind="_category" aria-label="Category">
+            <option value="">All categories</option>
+            @foreach (var category in _prompts.Select(p => p.Category).Distinct().Order()) { <option>@category</option> }
+        </select>
+    </div>
+
+    @if (Visible.Count == 0)
+    {
+        <div class="bai-empty"><i class="bi bi-inbox" aria-hidden="true"></i>No prompts match. Save one from the prompt builder.</div>
+    }
+
+    <div class="bai-grid-2" style="align-items:start">
+        <div>
+            @foreach (var prompt in Visible)
+            {
+                <button type="button" class="bai-result" style="width:100%; text-align:left; cursor:pointer; @(prompt.Id == _selected?.Id ? "border-color:var(--bai-soga)" : null)" @onclick="() => Select(prompt)">
+                    <span class="bai-result-head">
+                        <span class="bai-result-title">@prompt.Name</span>
+                        @if (prompt.IsFavorite) { <i class="bi bi-star-fill" style="color:var(--bai-soga)" aria-label="Favourite"></i> }
+                    </span>
+                    <span class="bai-small bai-muted">@prompt.Description</span>
+                    <span class="bai-row"><span class="bai-badge">@prompt.Category</span>@foreach (var tag in prompt.Tags.Take(3)) { <span class="bai-badge">#@tag</span> }</span>
+                </button>
+            }
+        </div>
+
+        @if (_selected is not null)
+        {
+            <div class="bai-stack">
+                <div class="bai-row">
+                    <h3 class="bai-card-title" style="font-size:1.1rem">@_selected.Name</h3>
+                    <span class="bai-spacer"></span>
+                    <button type="button" class="bai-icon-btn" title="Favourite" aria-label="Toggle favourite" @onclick="ToggleFavoriteAsync"><i class="bi @(_selected.IsFavorite ? "bi-star-fill" : "bi-star")"></i></button>
+                    <button type="button" class="bai-icon-btn" title="Delete" aria-label="Delete prompt" @onclick="DeleteAsync"><i class="bi bi-trash3"></i></button>
+                </div>
+                <AiCodeBlock Code="@_selected.Template" />
+                @foreach (var variable in PromptTemplating.Variables(_selected.Template))
+                {
+                    <div>
+                        <label class="bai-label" for="@($"{_id}-{variable}")">@variable</label>
+                        <textarea id="@($"{_id}-{variable}")" class="bai-textarea" style="min-height:2.6rem" rows="1" value="@_values.GetValueOrDefault(variable)" @onchange="e => _values[variable] = e.Value?.ToString()"></textarea>
+                    </div>
+                }
+                <div class="bai-row">
+                    <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="RunPromptAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Run prompt</button>
+                    <button type="button" class="bai-btn-ghost" @onclick="CopyAsync"><i class="bi bi-clipboard" aria-hidden="true"></i>Copy filled prompt</button>
+                </div>
+                <AiError Message="@Error" />
+                <AiOutput Text="@_output" IsBusy="@IsBusy" />
+            </div>
+        }
+    </div>
+</AiCard>
+
+@code {
+    private readonly string _id = "bai-pl-" + Guid.NewGuid().ToString("N")[..6];
+    private readonly Dictionary<string, string?> _values = new(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlyList<PromptTemplate> _prompts = [];
+    private PromptTemplate? _selected;
+    private string? _search, _category, _output;
+
+    [Inject] private IPromptStore Store { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Prompt library";
+    [Parameter] public EventCallback<string> OnRun { get; set; }
+
+    private List<PromptTemplate> Visible => _prompts
+        .Where(p => string.IsNullOrEmpty(_category) || p.Category == _category)
+        .Where(p => string.IsNullOrWhiteSpace(_search)
+                    || p.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                    || (p.Description?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || p.Tags.Any(t => t.Contains(_search, StringComparison.OrdinalIgnoreCase)))
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Store.Changed += OnStoreChanged;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _prompts = await Store.ListAsync();
+        _selected = _selected is null ? _prompts.FirstOrDefault() : _prompts.FirstOrDefault(p => p.Id == _selected.Id) ?? _prompts.FirstOrDefault();
+    }
+
+    private void OnStoreChanged() => InvokeAsync(async () =>
+    {
+        await LoadAsync();
+        StateHasChanged();
+    });
+
+    private void Select(PromptTemplate prompt)
+    {
+        _selected = prompt;
+        _values.Clear();
+        _output = null;
+    }
+
+    private string Filled => PromptTemplating.Render(_selected!.Template, _values);
+
+    private Task RunPromptAsync() => RunAsync(async ct =>
+    {
+        var builder = new StringBuilder();
+        _output = string.Empty;
+        await foreach (var token in Ai.StreamAsync(_selected!.SystemPrompt, Filled, AiTasks.Generate, Provider, null, ct))
+        {
+            builder.Append(token);
+            _output = builder.ToString();
+            RenderThrottled();
+        }
+
+        await OnRun.InvokeAsync(_output);
+    });
+
+    private async Task CopyAsync() => await Js.CopyTextAsync(Filled);
+
+    private async Task ToggleFavoriteAsync() => await Store.SaveAsync(_selected! with { IsFavorite = !_selected!.IsFavorite });
+
+    private async Task DeleteAsync()
+    {
+        await Store.DeleteAsync(_selected!.Id);
+        _selected = null;
+    }
+
+    public override ValueTask DisposeAsync()
+    {
+        Store.Changed -= OnStoreChanged;
+        return base.DisposeAsync();
+    }
+}

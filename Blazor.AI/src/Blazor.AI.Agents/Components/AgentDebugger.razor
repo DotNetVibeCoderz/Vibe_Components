@@ -1,0 +1,126 @@
+@namespace Blazor.AI.Agents
+@implements IDisposable
+@* Inspect agent runs: a timeline of inputs, tool calls (arguments, results, timings), answers and errors. *@
+
+<AiCard Title="@Title" Subtitle="@($"{Runtime.History.Count} runs this session")" Icon="bi-bug" Class="@Class">
+    <Actions>
+        <label class="bai-row bai-small" style="cursor:pointer"><input type="checkbox" class="form-check-input" @bind="_follow" /> Follow latest</label>
+    </Actions>
+    <ChildContent>
+        @if (Runtime.History.Count == 0)
+        {
+            <div class="bai-empty"><i class="bi bi-hourglass" aria-hidden="true"></i>No runs yet. Chat with an agent and its trace appears here.</div>
+        }
+        else
+        {
+            <div style="display:grid; grid-template-columns:minmax(14rem, 1fr) 2.4fr; gap:1rem">
+                <div style="max-height:32rem; overflow:auto">
+                    @foreach (var run in Runtime.History)
+                    {
+                        <button type="button" class="bai-result" style="width:100%; text-align:left; cursor:pointer; @(run == Selected ? "border-color:var(--bai-soga)" : null)" @onclick="() => { _selected = run; _follow = false; }">
+                            <span class="bai-result-head">
+                                <strong>@run.AgentName</strong>
+                                <span class="bai-badge @(run.Failed ? "bai-badge-danger" : run.CompletedAt is null ? "bai-badge-ai" : "bai-badge-local")">@(run.Failed ? "failed" : run.CompletedAt is null ? "running" : "done")</span>
+                            </span>
+                            <span class="bai-small bai-muted" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">@run.Input</span>
+                            <span class="bai-small bai-faint">@run.StartedAt.ToString("HH:mm:ss") · @run.Elapsed.TotalSeconds.ToString("0.0")s · @run.ToolCalls tools</span>
+                        </button>
+                    }
+                </div>
+                @if (Selected is { } current)
+                {
+                    <div class="bai-stack">
+                        <div class="bai-stats">
+                            <div class="bai-stat"><div class="bai-stat-label">Duration</div><div class="bai-stat-value">@current.Elapsed.TotalSeconds.ToString("0.0")s</div></div>
+                            <div class="bai-stat"><div class="bai-stat-label">Tool calls</div><div class="bai-stat-value">@current.ToolCalls</div></div>
+                            <div class="bai-stat"><div class="bai-stat-label">Tokens in / out</div><div class="bai-stat-value" style="font-size:1.1rem">@current.InputTokens / @current.OutputTokens</div></div>
+                        </div>
+                        <ol style="list-style:none; margin:0; padding:0; border-left:2px solid var(--bai-line-strong)">
+                            @foreach (var step in current.Steps)
+                            {
+                                <li style="position:relative; padding:0 0 .85rem 1.1rem">
+                                    <span style="position:absolute; left:-.42rem; top:.2rem; width:.75rem; height:.75rem; border-radius:50%; background:@Color(step)"></span>
+                                    <div class="bai-row bai-small">
+                                        <strong>@Label(step)</strong><span class="bai-muted">@step.Title</span>
+                                        <span class="bai-spacer"></span>
+                                        @if (step.Duration is { } d) { <span class="bai-num bai-faint">@d.TotalMilliseconds.ToString("0") ms</span> }
+                                        <span class="bai-num bai-faint">@step.Timestamp.ToString("HH:mm:ss.fff")</span>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(step.Detail))
+                                    {
+                                        @if (step.Kind is AgentStepKind.ToolCall or AgentStepKind.ToolResult)
+                                        {
+                                            <pre class="bai-code" style="margin-top:.3rem; padding:.5rem .7rem; white-space:pre-wrap">@step.Detail</pre>
+                                        }
+                                        else
+                                        {
+                                            <div class="bai-small" style="margin-top:.25rem; white-space:pre-wrap; max-height:12rem; overflow:auto">@step.Detail</div>
+                                        }
+                                    }
+                                </li>
+                            }
+                        </ol>
+                    </div>
+                }
+            </div>
+        }
+    </ChildContent>
+</AiCard>
+
+@code {
+    private AgentRun? _selected;
+    private bool _follow = true;
+    private long _lastRender;
+
+    [Inject] private AgentRuntime Runtime { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Agent debugger";
+    [Parameter] public string? Class { get; set; }
+
+    private AgentRun? Selected => _follow || _selected is null ? Runtime.History.FirstOrDefault() : _selected;
+
+    protected override void OnInitialized()
+    {
+        Runtime.RunStarted += OnRunStarted;
+        Runtime.RunCompleted += OnRunChanged;
+    }
+
+    private void OnRunStarted(AgentRun run)
+    {
+        run.StepAdded += _ => Throttle();
+        OnRunChanged(run);
+    }
+
+    private void OnRunChanged(AgentRun run) => InvokeAsync(StateHasChanged);
+
+    private void Throttle()
+    {
+        var now = Environment.TickCount64;
+        if (now - _lastRender > 100)
+        {
+            _lastRender = now;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static string Label(AgentStep step) => step.Kind switch
+    {
+        AgentStepKind.Input => "Input",
+        AgentStepKind.ToolCall => "Call",
+        AgentStepKind.ToolResult => step.IsError ? "Tool error" : "Result",
+        AgentStepKind.Output => "Answer",
+        AgentStepKind.Handoff => "Handoff",
+        _ => "Error",
+    };
+
+    private static string Color(AgentStep step) => step.IsError || step.Kind == AgentStepKind.Error ? "var(--bai-danger)"
+        : step.Kind is AgentStepKind.ToolCall or AgentStepKind.ToolResult ? "var(--bai-nila)"
+        : step.Kind == AgentStepKind.Output ? "var(--bai-soga)"
+        : "var(--bai-ink-faint)";
+
+    public void Dispose()
+    {
+        Runtime.RunStarted -= OnRunStarted;
+        Runtime.RunCompleted -= OnRunChanged;
+    }
+}

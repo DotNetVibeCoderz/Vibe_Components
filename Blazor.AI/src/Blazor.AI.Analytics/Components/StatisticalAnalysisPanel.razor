@@ -1,0 +1,101 @@
+@namespace Blazor.AI.Analytics
+@inherits AnalyticsComponentBase
+@* Descriptive statistics for any column: centre, spread, shape, quantiles, box plot, histogram with KDE, and grouped summaries. *@
+
+<AiCard Title="@Title" Subtitle="@Data.Name" Icon="bi-bar-chart-line" Class="@Class">
+    <Actions><DatasetPicker ShowTarget="false" /></Actions>
+    <ChildContent>
+        <div class="bai-stack">
+            <div class="bai-row">
+                <select class="bai-select" style="width:auto" @bind="_column" aria-label="Column">
+                    @foreach (var c in Data.NumericColumns) { <option>@c</option> }
+                </select>
+                <select class="bai-select" style="width:auto" @bind="_groupBy" aria-label="Group by">
+                    <option value="">No grouping</option>
+                    @foreach (var c in Data.Frame.ColumnNames.Where(c => c != _column)) { <option>@c</option> }
+                </select>
+            </div>
+            @if (Values.Length > 1)
+            {
+                var v = Values;
+                var box = Visual.Net.Core.Statistics.PlotStats.Box(v);
+                var (ciLow, _, ciHigh) = Visual.Net.Core.Statistics.PlotStats.BootstrapCi(v, iterations: 1000, seed: 1);
+                var series = Gravicode.Science.GraviNum.NdArray.FromValues(v);
+                <div class="bai-stats">
+                    <div class="bai-stat"><div class="bai-stat-label">Mean</div><div class="bai-stat-value">@Fmt(box.Mean)</div><div class="bai-small bai-muted">95% CI @Fmt(ciLow) – @Fmt(ciHigh)</div></div>
+                    <div class="bai-stat"><div class="bai-stat-label">Median</div><div class="bai-stat-value">@Fmt(box.Median)</div></div>
+                    <div class="bai-stat"><div class="bai-stat-label">Std dev</div><div class="bai-stat-value">@Fmt(Gravicode.Science.GraviNum.Statistics.Std(series, 1))</div></div>
+                    <div class="bai-stat"><div class="bai-stat-label">Skewness</div><div class="bai-stat-value">@Gravicode.Science.GraviNum.Statistics.Skewness(series).ToString("0.00", CultureInfo.InvariantCulture)</div></div>
+                    <div class="bai-stat"><div class="bai-stat-label">Kurtosis</div><div class="bai-stat-value">@Gravicode.Science.GraviNum.Statistics.Kurtosis(series).ToString("0.00", CultureInfo.InvariantCulture)</div></div>
+                    <div class="bai-stat"><div class="bai-stat-label">Outliers</div><div class="bai-stat-value">@box.Outliers.Length</div></div>
+                </div>
+                <div class="bai-grid-2" style="align-items:start">
+                    <div>
+                        <span class="bai-label">Distribution with kernel density</span>
+                        <LineChart Series="@DensitySeries(v)" ShowLegend="false" Height="230" />
+                    </div>
+                    <div>
+                        <span class="bai-label">Five-number summary</span>
+                        <svg viewBox="0 0 400 90" style="width:100%" role="img" aria-label="Box plot">
+                            @{ var axis = new LinearAxis(v.Min(), v.Max(), 20, 380, 6); }
+                            <line x1="@S(axis.Map(box.LowerWhisker))" x2="@S(axis.Map(box.UpperWhisker))" y1="40" y2="40" stroke="var(--bai-ink-faint)" />
+                            <rect x="@S(axis.Map(box.Q1))" y="22" width="@S(Math.Max(1, axis.Map(box.Q3) - axis.Map(box.Q1)))" height="36" rx="4" fill="var(--bai-soga-soft)" stroke="var(--bai-soga)" />
+                            <line x1="@S(axis.Map(box.Median))" x2="@S(axis.Map(box.Median))" y1="22" y2="58" stroke="var(--bai-soga)" stroke-width="3" />
+                            @foreach (var o in box.Outliers.Take(200)) { <circle cx="@S(axis.Map(o))" cy="40" r="3" fill="none" stroke="var(--bai-danger)" /> }
+                            @foreach (var t in axis.Ticks) { <!text class="bai-axis-text" x="@S(axis.Map(t))" y="82" text-anchor="middle">@Fmt(t)</!text> }
+                        </svg>
+                        <dl class="bai-kv">
+                            <dt>Min</dt><dd class="bai-num">@Fmt(box.Min)</dd>
+                            <dt>Q1</dt><dd class="bai-num">@Fmt(box.Q1)</dd>
+                            <dt>Q3</dt><dd class="bai-num">@Fmt(box.Q3)</dd>
+                            <dt>Max</dt><dd class="bai-num">@Fmt(box.Max)</dd>
+                            <dt>IQR</dt><dd class="bai-num">@Fmt(box.Iqr)</dd>
+                        </dl>
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(_groupBy))
+                {
+                    <div>
+                        <span class="bai-label">@_column by @_groupBy (mean)</span>
+                        <BarChart Values="@Groups().Select(g => new BarValue(g.Key, g.Mean))" Horizontal="true" />
+                    </div>
+                }
+            }
+        </div>
+    </ChildContent>
+</AiCard>
+
+@code {
+    private string? _column, _groupBy;
+
+    [Parameter] public string Title { get; set; } = "Statistical analysis";
+
+    private double[] Values => _column is not null && Data.Frame.HasColumn(_column) && Data.Frame[_column] is NumericSeries n ? n.Values.Where(double.IsFinite).ToArray() : [];
+
+    protected override void OnDatasetChanged()
+    {
+        _column = Data.Target is { } t && Data.NumericColumns.Contains(t) ? t : Data.NumericColumns.FirstOrDefault();
+        _groupBy = null;
+    }
+
+    private IReadOnlyList<ChartSeries> DensitySeries(double[] v)
+    {
+        var hist = Visual.Net.Core.Statistics.PlotStats.Hist(v, bins: 20, norm: Visual.Net.Core.Statistics.PlotStats.HistNorm.Density);
+        var (xs, ys) = Visual.Net.Core.Statistics.PlotStats.Kde(v, points: 120);
+        return
+        [
+            new ChartSeries("Histogram", hist.Centers().Zip(hist.Values, (x, y) => new ChartPoint(x, y)).ToArray()) { Area = true, Color = SeriesColor(1) },
+            new ChartSeries("Density", xs.Zip(ys, (x, y) => new ChartPoint(x, y)).ToArray()),
+        ];
+    }
+
+    private IEnumerable<(string Key, double Mean)> Groups()
+    {
+        var keys = Data.Frame[_groupBy!];
+        var values = Data.Frame.Numeric(_column!).Values;
+        var groups = Enumerable.Range(0, values.Length).GroupBy(i => Convert.ToString(keys.GetValue(i), CultureInfo.InvariantCulture) ?? "–");
+        return groups.Count() > 25
+            ? []
+            : groups.Select(g => (g.Key, g.Select(i => values[i]).Where(double.IsFinite).DefaultIfEmpty(0).Average())).OrderByDescending(g => g.Item2);
+    }
+}

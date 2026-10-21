@@ -1,0 +1,70 @@
+@namespace Blazor.AI.Visualization
+@* History, forecast and its confidence band in one view, with a "now" marker between them. *@
+
+<AiCard Title="@Title" Subtitle="@Subtitle" Icon="bi-graph-up-arrow" Class="@Class">
+    <ChildContent>
+        @if (History.Count == 0)
+        {
+            <div class="bai-empty"><i class="bi bi-graph-up" aria-hidden="true"></i>No history to forecast from yet.</div>
+        }
+        else
+        {
+            <LineChart Series="@BuildSeries()" Bands="@BuildBands()" MarkerX="@(History.Count - 1)" MarkerLabel="now"
+                       XFormatter="@XFormatter" YLabel="@YLabel" Height="@Height" />
+            @if (Forecast.Count > 0)
+            {
+                <div class="bai-stats" style="margin-top:.75rem">
+                    <div class="bai-stat"><div class="bai-stat-label">Last actual</div><div class="bai-stat-value">@Fmt(History[^1])</div></div>
+                    <div class="bai-stat"><div class="bai-stat-label">End of forecast</div><div class="bai-stat-value">@Fmt(Forecast[^1])</div></div>
+                    <div class="bai-stat">
+                        <div class="bai-stat-label">Change</div>
+                        <div class="bai-stat-value @(Change >= 0 ? "bai-delta-up" : "bai-delta-down")">@(Change >= 0 ? "+" : null)@Change.ToString("0.#", CultureInfo.InvariantCulture)%</div>
+                    </div>
+                    @if (Lower is not null && Upper is not null)
+                    {
+                        <div class="bai-stat"><div class="bai-stat-label">Range at horizon</div><div class="bai-stat-value" style="font-size:1.05rem">@Fmt(Lower[^1]) – @Fmt(Upper[^1])</div></div>
+                    }
+                </div>
+            }
+        }
+    </ChildContent>
+</AiCard>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<double> History { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<double> Forecast { get; set; } = [];
+    [Parameter] public IReadOnlyList<double>? Lower { get; set; }
+    [Parameter] public IReadOnlyList<double>? Upper { get; set; }
+    [Parameter] public string Title { get; set; } = "Forecast";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public string? YLabel { get; set; }
+
+    /// <summary>Formats the x index (for example as a date).</summary>
+    [Parameter] public Func<double, string>? XFormatter { get; set; }
+
+    [Parameter] public int Height { get; set; } = 280;
+    [Parameter] public string? Class { get; set; }
+
+    private double Change => History.Count == 0 || Forecast.Count == 0 || Math.Abs(History[^1]) < 1e-12
+        ? 0
+        : (Forecast[^1] - History[^1]) / Math.Abs(History[^1]) * 100;
+
+    private IReadOnlyList<ChartSeries> BuildSeries()
+    {
+        var series = new List<ChartSeries> { ChartSeries.FromValues("Actual", History) with { Area = true } };
+        if (Forecast.Count > 0)
+        {
+            // Start the forecast at the last actual point so the lines connect.
+            var points = new List<ChartPoint> { new(History.Count - 1, History[^1]) };
+            points.AddRange(Forecast.Select((v, i) => new ChartPoint(History.Count + i, v)));
+            series.Add(new ChartSeries("Forecast", points) { Dashed = true, Color = SeriesColor(1) });
+        }
+
+        return series;
+    }
+
+    private IReadOnlyList<ChartBand>? BuildBands() =>
+        Lower is null || Upper is null || Lower.Count != Forecast.Count || Upper.Count != Forecast.Count
+            ? null
+            : [new ChartBand("Confidence interval", Forecast.Select((_, i) => (double)(History.Count + i)).ToArray(), Lower, Upper)];
+}

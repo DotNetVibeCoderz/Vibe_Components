@@ -1,0 +1,152 @@
+@namespace Blazor.AI.Visualization
+@*
+    Slippy map built from XYZ raster tiles (OpenStreetMap by default) with bubble markers sized by value.
+    No JavaScript map library: tiles and markers are positioned with Web Mercator math in C#.
+    Pan with drag, zoom with the buttons. Respect the tile server's usage policy in production.
+*@
+
+<figure class="bai-chart @Class" style="margin:0">
+    @if (Title is not null)
+    {
+        <figcaption class="bai-chart-title">@Title</figcaption>
+    }
+    <div class="bai-map" style="height:@(Height)px" @ref="_host"
+         @onpointerdown="StartPan" @onpointermove="Pan" @onpointerup="EndPan" @onpointerleave="EndPan">
+        @foreach (var tile in Tiles())
+        {
+            <img src="@tile.Url" alt="" style="left:@(S(tile.Left))px; top:@(S(tile.Top))px" loading="lazy" draggable="false" />
+        }
+        <svg style="position:absolute; inset:0; width:100%; height:100%; overflow:visible" aria-label="@(Title ?? "Map")" role="img">
+            @foreach (var point in Points)
+            {
+                var (x, y) = ToScreen(point);
+                var r = 5 + Math.Sqrt(Math.Max(0, point.Value) / _maxValue) * MaxRadius;
+                <circle cx="@S(x)" cy="@S(y)" r="@S(r)" fill="@GroupColor(point.Group)" fill-opacity="0.55" stroke="@GroupColor(point.Group)" stroke-width="1.5"
+                        style="cursor:pointer" @onclick="() => OnPointSelected.InvokeAsync(point)" @onpointerdown:stopPropagation="true">
+                    <title>@point.Label: @Fmt(point.Value)@(point.Group is null ? null : $" · {point.Group}")</title>
+                </circle>
+            }
+        </svg>
+        <div class="bai-map-controls">
+            <button type="button" class="bai-btn" style="padding:.35rem .55rem" aria-label="Zoom in" @onclick="() => ZoomBy(1)" @onpointerdown:stopPropagation="true"><i class="bi bi-plus-lg"></i></button>
+            <button type="button" class="bai-btn" style="padding:.35rem .55rem" aria-label="Zoom out" @onclick="() => ZoomBy(-1)" @onpointerdown:stopPropagation="true"><i class="bi bi-dash-lg"></i></button>
+            <button type="button" class="bai-btn" style="padding:.35rem .55rem" aria-label="Fit all points" @onclick="Fit" @onpointerdown:stopPropagation="true"><i class="bi bi-arrows-fullscreen"></i></button>
+        </div>
+        <div class="bai-map-attribution">@((MarkupString)Attribution)</div>
+    </div>
+    @if (_groups.Count > 1)
+    {
+        <ChartLegend Items="@_groups.Select(g => (g, GroupColor(g))).ToArray()" />
+    }
+</figure>
+
+@code {
+    private ElementReference _host;
+    private double _zoom = 5;
+    private (double X, double Y) _center;
+    private (double X, double Y)? _panStart;
+    private (double X, double Y) _centerAtPanStart;
+    private double _maxValue = 1;
+    private List<string> _groups = [];
+    private string? _pointsKey;
+
+    [Parameter, EditorRequired] public IReadOnlyList<GeoPoint> Points { get; set; } = [];
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public int Height { get; set; } = 420;
+
+    /// <summary>Viewport width used for tile math. The map stretches to its container; 960 covers most layouts.</summary>
+    [Parameter] public int ViewportWidth { get; set; } = 960;
+
+    [Parameter] public double MaxRadius { get; set; } = 26;
+
+    /// <summary>XYZ tile URL template.</summary>
+    [Parameter] public string TileUrl { get; set; } = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+
+    [Parameter] public string Attribution { get; set; } = "© <a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\" rel=\"noopener\">OpenStreetMap</a> contributors";
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public EventCallback<GeoPoint> OnPointSelected { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        var key = string.Join(';', Points.Select(p => $"{p.Latitude},{p.Longitude}"));
+        if (key == _pointsKey)
+        {
+            return;
+        }
+
+        _pointsKey = key;
+        _maxValue = Math.Max(1e-9, Points.Select(p => p.Value).DefaultIfEmpty(1).Max());
+        _groups = Points.Select(p => p.Group ?? "Other").Distinct().ToList();
+        Fit();
+    }
+
+    private void Fit()
+    {
+        if (Points.Count == 0)
+        {
+            _zoom = 2;
+            _center = WebMercator.Project(0, 0, _zoom);
+            return;
+        }
+
+        _zoom = WebMercator.FitZoom(Points, ViewportWidth, Height);
+        var lat = (Points.Max(p => p.Latitude) + Points.Min(p => p.Latitude)) / 2;
+        var lon = (Points.Max(p => p.Longitude) + Points.Min(p => p.Longitude)) / 2;
+        _center = WebMercator.Project(lat, lon, _zoom);
+    }
+
+    private void ZoomBy(int delta)
+    {
+        var newZoom = Math.Clamp(_zoom + delta, 1, 18);
+        var factor = Math.Pow(2, newZoom - _zoom);
+        _center = (_center.X * factor, _center.Y * factor);
+        _zoom = newZoom;
+    }
+
+    private (double X, double Y) ToScreen(GeoPoint point)
+    {
+        var (x, y) = WebMercator.Project(point.Latitude, point.Longitude, _zoom);
+        return (x - _center.X + ViewportWidth / 2.0, y - _center.Y + Height / 2.0);
+    }
+
+    private IEnumerable<(string Url, double Left, double Top)> Tiles()
+    {
+        var z = (int)_zoom;
+        var count = 1 << z;
+        var left = _center.X - ViewportWidth / 2.0;
+        var top = _center.Y - Height / 2.0;
+        var x0 = (int)Math.Floor(left / WebMercator.TileSize);
+        var y0 = (int)Math.Floor(top / WebMercator.TileSize);
+        var x1 = (int)Math.Floor((left + ViewportWidth * 1.5) / WebMercator.TileSize);
+        var y1 = (int)Math.Floor((top + Height) / WebMercator.TileSize);
+        for (var ty = Math.Max(0, y0); ty <= Math.Min(count - 1, y1); ty++)
+        {
+            for (var tx = x0; tx <= x1; tx++)
+            {
+                var wrapped = ((tx % count) + count) % count;
+                var url = TileUrl.Replace("{z}", z.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
+                    .Replace("{x}", wrapped.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
+                    .Replace("{y}", ty.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+                yield return (url, tx * WebMercator.TileSize - left, ty * WebMercator.TileSize - top);
+            }
+        }
+    }
+
+    private void StartPan(PointerEventArgs e)
+    {
+        _panStart = (e.ClientX, e.ClientY);
+        _centerAtPanStart = _center;
+    }
+
+    private void Pan(PointerEventArgs e)
+    {
+        if (_panStart is { } start)
+        {
+            _center = (_centerAtPanStart.X - (e.ClientX - start.X), _centerAtPanStart.Y - (e.ClientY - start.Y));
+        }
+    }
+
+    private void EndPan() => _panStart = null;
+
+    private string GroupColor(string? group) => SeriesColor(Math.Max(0, _groups.IndexOf(group ?? "Other")));
+}

@@ -1,0 +1,127 @@
+@page "/smart"
+@inject DemoData Data
+<PageTitle>Smart components · Blazor.AI</PageTitle>
+
+<PageHeader Title="Smart components" Package="Blazor.AI.Components" Icon="bi-magic"
+            Lead="Drop-in AI for everyday forms and text, inspired by .NET Smart Components. Each one works with any provider and falls back to the offline simulator." />
+
+<DemoSection Title="SmartPaste" Component="SmartPaste" Description="Fills a form from whatever is on the clipboard. Fields are discovered from the form, so it works with existing markup." Code="@PasteCode">
+    <AiCard Title="New support ticket" Icon="bi-ticket-detailed">
+        <form data-smartpaste-scope class="bai-stack">
+            <div class="bai-grid-2">
+                <div><label class="bai-label" for="t-name">Customer name</label><input id="t-name" name="customerName" class="bai-input" @bind="_ticket.Name" /></div>
+                <div><label class="bai-label" for="t-email">Email</label><input id="t-email" name="email" type="email" class="bai-input" @bind="_ticket.Email" /></div>
+                <div><label class="bai-label" for="t-order">Order number</label><input id="t-order" name="orderNumber" class="bai-input" @bind="_ticket.Order" /></div>
+                <div>
+                    <label class="bai-label" for="t-cat">Category</label>
+                    <select id="t-cat" name="category" class="bai-select" @bind="_ticket.Category"><option value=""></option><option>Billing</option><option>Shipping</option><option>Product quality</option><option>Account</option></select>
+                </div>
+                <div style="grid-column:1/-1"><label class="bai-label" for="t-desc">Issue description</label><textarea id="t-desc" name="issueDescription" class="bai-textarea" rows="2" @bind="_ticket.Description"></textarea></div>
+            </div>
+            <div class="bai-row">
+                <SmartPaste @ref="_paste" />
+                <button type="button" class="bai-btn-ghost" @onclick="() => _paste!.PasteTextAsync(TicketText)">Use a sample email</button>
+            </div>
+        </form>
+    </AiCard>
+</DemoSection>
+
+<DemoSection Title="SmartTextArea" Component="SmartTextArea" Description="Suggests how the sentence continues, using your role and preferred phrases. Press Tab to accept." Code="@TextAreaCode">
+    <AiCard Title="Reply to customer" Icon="bi-reply">
+        <SmartTextArea @bind-Value="_reply" UserRole="Customer support agent for an Indonesian coffee shop"
+                       UserPhrases="@(["Thank you for your patience.", "We will send a replacement within 2 working days.", "Terima kasih atas pengertiannya."])"
+                       Placeholder="Start typing, e.g. Thank you for…" Rows="5" />
+    </AiCard>
+</DemoSection>
+
+<DemoSection Title="SmartComboBox" Component="SmartComboBox" Description="Suggestions ranked by meaning: type &quot;flight to Bali&quot; and get &quot;Travel &amp; accommodation&quot;." Code="@ComboCode">
+    <AiCard Title="Expense category" Icon="bi-receipt">
+        <SmartComboBox @bind-Value="_category" Items="@Data.Categories" Placeholder="Describe the expense…" />
+        <p class="bai-small bai-muted" style="margin:.6rem 0 0">Selected: <strong>@(_category ?? "–")</strong></p>
+    </AiCard>
+</DemoSection>
+
+<DemoSection Title="SmartSemanticSearch" Component="SmartSemanticSearch" Description="Search any collection by meaning, with your own item template." Code="@SearchCode">
+    <AiCard Title="Find in the shop" Icon="bi-search">
+        <SmartSemanticSearch TItem="Product" Items="@Data.Products" TextSelector="@(p => $"{p.Name}. {p.Category}. {p.Description}")" InitialQuery="something to make cold coffee at home">
+            <ItemTemplate>
+                <div class="bai-row"><strong>@context.Name</strong><span class="bai-badge">@context.Category</span><span class="bai-spacer"></span><span class="bai-num">Rp @context.Price.ToString("N0")</span></div>
+                <span class="bai-small bai-muted">@context.Description</span>
+            </ItemTemplate>
+        </SmartSemanticSearch>
+    </AiCard>
+</DemoSection>
+
+<DemoSection Title="SmartRecommendations" Component="SmartRecommendations" Description="Items similar to what the user engaged with, each with a one-line reason." Code="@RecCode">
+    <SmartRecommendations TItem="Product" Items="@Data.Products" Seeds="@Data.Products.Where(p => p.Name.Contains("V60") || p.Name.Contains("Gayo")).ToList()" TextSelector="@(p => $"{p.Name}: {p.Description}")" />
+</DemoSection>
+
+<DemoSection Title="SmartSummarizer" Component="SmartSummarizer" Description="Paragraph, bullets, TL;DR or executive summary, in any language." Code="@SummaryCode">
+    <SmartSummarizer Text="@Data.CompanyHandbook" Style="SummaryStyle.Bullets" />
+</DemoSection>
+
+<DemoSection Title="SmartTranslator" Component="SmartTranslator" Description="Keeps tone and formatting; supports regional languages such as Javanese and Sundanese." Code="@TranslatorCode">
+    <SmartTranslator Text="Our roastery is open Monday to Saturday. Bring your own cup and get a 10% discount!" Source="English" Target="Bahasa Indonesia" />
+</DemoSection>
+
+<DemoSection Title="SmartClassifier" Component="SmartClassifier" Description="Zero-shot classification into your labels with per-label confidence." Code="@ClassifierCode">
+    <SmartClassifier Text="I was charged twice for order INV-1002 and still have not received a refund. Please fix this today."
+                     Labels="@(["Billing", "Shipping", "Technical", "Praise", "Urgent"])" Instructions="Classify the customer's main intent." />
+</DemoSection>
+
+<DemoSection Title="SmartEmailComposer" Component="SmartEmailComposer" Description="From bullet points to a ready-to-send email, then one-click refinements." Code="@EmailCode">
+    <SmartEmailComposer />
+</DemoSection>
+
+@code {
+    private SmartPaste? _paste;
+    private readonly Ticket _ticket = new();
+    private string? _reply, _category;
+
+    private const string TicketText = """
+        From: Budi Hartono <budi.hartono@gmail.com>
+        Subject: Wrong beans in order INV-1003
+
+        Hello, my order INV-1003 arrived yesterday but I received Toraja instead of the Gayo I ordered.
+        The bag is still sealed. Can you send the right one? Thanks, Budi
+        """;
+
+    private const string PasteCode = """
+        <form>
+            <input name="customerName" />
+            <input name="email" type="email" />
+            <select name="category"><option>Billing</option><option>Shipping</option></select>
+            <textarea name="issueDescription"></textarea>
+            <SmartPaste />
+        </form>
+        """;
+
+    private const string TextAreaCode = """
+        <SmartTextArea @bind-Value="reply"
+                       UserRole="Customer support agent"
+                       UserPhrases="@(["Thank you for your patience."])" />
+        """;
+
+    private const string ComboCode = """<SmartComboBox @bind-Value="category" Items="@categories" />""";
+
+    private const string SearchCode = """
+        <SmartSemanticSearch TItem="Product" Items="@products" TextSelector="@(p => p.Name + ". " + p.Description)">
+            <ItemTemplate>@context.Name</ItemTemplate>
+        </SmartSemanticSearch>
+        """;
+
+    private const string RecCode = """<SmartRecommendations TItem="Product" Items="@products" Seeds="@viewed" TextSelector="@(p => p.Description)" />""";
+    private const string SummaryCode = """<SmartSummarizer Text="@longText" Style="SummaryStyle.Bullets" MaxWords="120" />""";
+    private const string TranslatorCode = """<SmartTranslator Text="@text" Target="Bahasa Indonesia" />""";
+    private const string ClassifierCode = """<SmartClassifier Text="@message" Labels="@(["Billing", "Shipping", "Technical"])" OnClassified="Route" />""";
+    private const string EmailCode = """<SmartEmailComposer OnDrafted="SaveDraft" />""";
+
+    private sealed class Ticket
+    {
+        public string? Name { get; set; }
+        public string? Email { get; set; }
+        public string? Order { get; set; }
+        public string? Category { get; set; }
+        public string? Description { get; set; }
+    }
+}

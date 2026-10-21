@@ -1,0 +1,105 @@
+@namespace Blazor.AI.LocalModels
+@inherits HfComponentBase
+@* Classify an image with a Vision Transformer (ImageNet labels) or zero-shot with CLIP and your own labels. *@
+
+<AiCard Title="@Title" Subtitle="@(_mode == Modes[0] ? "Vision Transformer, ImageNet classes" : "CLIP zero-shot with your labels")" Icon="bi-image" Class="@Class">
+    <div class="bai-stack">
+        <AiTabs Tabs="@Modes" @bind-Selected="_mode" />
+        <EngineSelector @bind-Engine="Engine" Model="@CurrentModel" ModelChanged="SetModel" Suggestions="@(_mode == Modes[0] ? VitModels : ClipModels)" />
+        @if (_mode == Modes[1])
+        {
+            <input class="bai-input" @bind="_labels" aria-label="Labels" placeholder="Comma-separated labels" />
+        }
+        <div class="bai-grid-2" style="align-items:start">
+            <div class="bai-stack">
+                <label class="bai-empty" style="cursor:pointer; position:relative">
+                    @if (_preview is not null) { <img src="@_preview" alt="Uploaded image" style="max-width:100%; max-height:260px; border-radius:10px" /> }
+                    else { <i class="bi bi-image" aria-hidden="true"></i><span><strong>Choose an image</strong> (JPG, PNG, WebP)</span> }
+                    <InputFile OnChange="LoadAsync" accept="image/*" style="position:absolute; inset:0; opacity:0; cursor:pointer" />
+                </label>
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || _image is null)" @onclick="ClassifyAsync">
+                    @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-play-fill" aria-hidden="true"></i> }
+                    Classify
+                </button>
+                @if (LoadStatus is not null) { <span class="bai-small bai-muted">@LoadStatus</span> }
+                <AiError Message="@Error" />
+            </div>
+            @if (_scores.Count > 0)
+            {
+                <div class="bai-output">
+                    <AiScoreBars Values="@_scores.Select(s => KeyValuePair.Create(s.Label, s.Score))" Highlight="@_scores[0].Label" />
+                </div>
+            }
+        </div>
+    </div>
+</AiCard>
+
+@code {
+    private static readonly string[] Modes = ["ImageNet classifier", "Zero-shot (CLIP)"];
+    private static readonly string[] VitModels = ["WinKawaks/vit-tiny-patch16-224", "google/vit-base-patch16-224", "WinKawaks/vit-small-patch16-224"];
+    private static readonly string[] ClipModels = ["openai/clip-vit-base-patch32", "openai/clip-vit-base-patch16"];
+    private string _mode = Modes[0];
+    private string? _vit, _clip, _preview, _contentType;
+    private byte[]? _image;
+    private string _labels = "a ripe durian, a rice field, a motorbike, a cat, a coffee cup";
+    private List<LabelScore> _scores = [];
+
+    [Parameter] public string Title { get; set; } = "Image classification";
+    [Parameter] public int MaxImageMb { get; set; } = 8;
+    [Parameter] public EventCallback<IReadOnlyList<LabelScore>> OnClassified { get; set; }
+
+    private string CurrentModel => _mode == Modes[0] ? _vit! : _clip!;
+
+    protected override void OnParametersSet()
+    {
+        _vit ??= Model ?? ModelOptions.ImageModel;
+        _clip ??= ModelOptions.ClipModel;
+    }
+
+    private void SetModel(string? model)
+    {
+        if (_mode == Modes[0]) _vit = model; else _clip = model;
+    }
+
+    private async Task LoadAsync(InputFileChangeEventArgs e)
+    {
+        using var memory = new MemoryStream();
+        await e.File.OpenReadStream(MaxImageMb * 1024L * 1024L).CopyToAsync(memory);
+        _image = memory.ToArray();
+        _contentType = e.File.ContentType;
+        _preview = $"data:{_contentType};base64,{Convert.ToBase64String(_image)}";
+        _scores = [];
+    }
+
+    private Task ClassifyAsync() => RunAsync(async ct =>
+    {
+        if (Engine == InferenceEngine.HostedApi)
+        {
+            _scores = (await HostedApi.ClassifyImageAsync(CurrentModel, _image!, _contentType ?? "image/png", ct)).ToList();
+            return;
+        }
+
+        var labels = _labels.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"bai-{Guid.NewGuid():N}.img");
+        await File.WriteAllBytesAsync(path, _image!, ct);
+        try
+        {
+            if (_mode == Modes[0])
+            {
+                var vit = await EnsureLocalAsync(_vit!, "vision", Registry.VisionModelAsync);
+                _scores = (await Registry.RunAsync(_vit!, "vision", () => vit.Classify(path, 5), ct)).Select(c => new LabelScore(c.Label, c.Score)).ToList();
+            }
+            else
+            {
+                var clip = await EnsureLocalAsync(_clip!, "clip", Registry.ClipModelAsync);
+                _scores = (await Registry.RunAsync(_clip!, "clip", () => clip.ZeroShot(path, labels), ct)).Select(c => new LabelScore(c.Label, c.Score)).OrderByDescending(s => s.Score).ToList();
+            }
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+
+        await OnClassified.InvokeAsync(_scores);
+    });
+}

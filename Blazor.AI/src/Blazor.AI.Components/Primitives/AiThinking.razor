@@ -1,0 +1,19 @@
+@namespace Blazor.AI.Components
+@* The kawung pulse: four petals lighting in turn while the model works. *@
+
+<span class="bai-thinking" role="status" aria-live="polite">
+    <svg class="bai-kawung-glyph" viewBox="0 0 24 24" aria-hidden="true">
+        <ellipse cx="12" cy="5.5" rx="3" ry="5" />
+        <ellipse cx="18.5" cy="12" rx="5" ry="3" />
+        <ellipse cx="12" cy="18.5" rx="3" ry="5" />
+        <ellipse cx="5.5" cy="12" rx="5" ry="3" />
+    </svg>
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <span>@Label</span>
+    }
+</span>
+
+@code {
+    [Parameter] public string? Label { get; set; } = "Thinking…";
+}

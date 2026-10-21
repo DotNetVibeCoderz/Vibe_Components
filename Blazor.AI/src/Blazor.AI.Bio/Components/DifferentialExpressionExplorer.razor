@@ -1,0 +1,127 @@
+@namespace Blazor.AI.Bio
+@inherits BioComponentBase
+@using Biotech.Net.Transcriptomics
+@* RNA-seq differential expression with DESeq2-style negative-binomial testing: volcano, MA plot and ranked gene table. *@
+
+<AiCard Title="@Title" Subtitle="DESeq2 method · Biotech.Net.Transcriptomics" Icon="bi-graph-up-arrow" Class="@Class">
+    <div class="bai-stack">
+        <div class="bai-row">
+            <label class="bai-chip" style="position:relative; cursor:pointer"><i class="bi bi-upload" aria-hidden="true"></i>Count matrix (CSV)<InputFile OnChange="LoadAsync" accept=".csv,.tsv,.txt" style="position:absolute; inset:0; opacity:0; cursor:pointer" aria-label="Load count matrix" /></label>
+            <button type="button" class="bai-chip" @onclick="UseSampleAsync">Sample: 400 genes × 6 samples</button>
+            <span class="bai-spacer"></span>
+            <label class="bai-small">padj &lt; <input type="number" step="0.01" class="bai-input" style="width:5rem" @bind="_alpha" @bind:after="Refresh" /></label>
+            <label class="bai-small">|log₂FC| ≥ <input type="number" step="0.25" class="bai-input" style="width:5rem" @bind="_lfc" @bind:after="Refresh" /></label>
+        </div>
+        <p class="bai-small bai-faint" style="margin:0">CSV: first column gene id, one column per sample, sample names containing “ctrl”/“control” are the reference group; everything else is treated.</p>
+        <AiError Message="@Error" />
+        @if (_busy) { <AiThinking Label="Fitting dispersions…" /> }
+        @if (_r is { } r)
+        {
+            <div class="bai-stats">
+                <div class="bai-stat"><div class="bai-stat-label">Genes tested</div><div class="bai-stat-value">@r.Count.ToString("N0")</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Up-regulated</div><div class="bai-stat-value" style="color:var(--bai-soga)">@_up.Count</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Down-regulated</div><div class="bai-stat-value" style="color:var(--bai-nila)">@_down.Count</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Samples</div><div class="bai-stat-value">@_samples</div></div>
+            </div>
+            <div class="bai-grid-2" style="align-items:start">
+                <ScatterChart Title="Volcano plot" Series="@_volcano" XLabel="log₂ fold change" YLabel="−log₁₀ padj" PointRadius="3" Height="300" />
+                <ScatterChart Title="MA plot" Series="@_ma" XLabel="log₁₀ mean expression" YLabel="log₂ fold change" PointRadius="3" Height="300" />
+            </div>
+            <div class="bai-table-wrap" style="max-height:18rem; overflow:auto">
+                <table class="bai-table">
+                    <thead><tr><th>Gene</th><th>Base mean</th><th>log₂FC</th><th>SE</th><th>p</th><th>padj</th></tr></thead>
+                    <tbody>
+                        @foreach (var g in _up.Concat(_down).OrderBy(g => g.PAdj).Take(60))
+                        {
+                            <tr>
+                                <td><b>@g.Gene</b></td><td class="bai-num">@g.BaseMean.ToString("N0", CultureInfo.InvariantCulture)</td>
+                                <td class="bai-num" style="color:@(g.Log2FoldChange > 0 ? "var(--bai-soga)" : "var(--bai-nila)")">@g.Log2FoldChange.ToString("+0.00;−0.00", CultureInfo.InvariantCulture)</td>
+                                <td class="bai-num">@g.LfcSE.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                <td class="bai-num">@g.PValue.ToString("0.0e0", CultureInfo.InvariantCulture)</td><td class="bai-num">@g.PAdj.ToString("0.0e0", CultureInfo.InvariantCulture)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Interpret the signature with AI</button>
+            @if (Explanation is not null) { <AiOutput Text="@Explanation" IsBusy="@IsBusy" /> }
+        }
+    </div>
+</AiCard>
+
+@code {
+    private double _alpha = 0.05, _lfc = 1;
+    private bool _busy;
+    private int _samples;
+    private DifferentialExpressionResult? _r;
+    private List<DifferentialExpressionRow> _up = [], _down = [];
+    private IReadOnlyList<ChartSeries> _volcano = [], _ma = [];
+
+    [Parameter] public string Title { get; set; } = "Differential expression explorer";
+
+    /// <summary>Counts as genes × samples with a "condition" annotation; defaults to a synthetic experiment.</summary>
+    [Parameter] public Dataset? Counts { get; set; }
+
+    [Parameter] public string Reference { get; set; } = "control";
+    [Parameter] public string Treatment { get; set; } = "treated";
+
+    protected override Task OnInitializedAsync() => RunAsync(Counts ?? BioSamples.CountMatrix());
+
+    private Task UseSampleAsync() => RunAsync(BioSamples.CountMatrix(seed: Random.Shared.Next(1, 1000)));
+
+    private async Task LoadAsync(InputFileChangeEventArgs e)
+    {
+        using var reader = new StreamReader(e.File.OpenReadStream(50 * 1024 * 1024));
+        var text = await reader.ReadToEndAsync();
+        var data = await AnalyseAsync(() => BioCounts.Parse(text, Reference, Treatment));
+        if (data is not null)
+        {
+            await RunAsync(data);
+        }
+    }
+
+    private async Task RunAsync(Dataset counts)
+    {
+        _busy = true;
+        StateHasChanged();
+        var (reference, treatment) = (Reference, Treatment);
+        _r = await AnalyseAsync(() => DESeq.Run(counts, "condition", reference, treatment));
+        _samples = counts.Columns;
+        _busy = false;
+        Refresh();
+    }
+
+    private void Refresh()
+    {
+        Explanation = null;
+        if (_r is null)
+        {
+            return;
+        }
+
+        var rows = _r.Rows().Where(g => double.IsFinite(g.PAdj) && double.IsFinite(g.Log2FoldChange)).ToList();
+        _up = rows.Where(g => g.PAdj < _alpha && g.Log2FoldChange >= _lfc).OrderByDescending(g => g.Log2FoldChange).ToList();
+        _down = rows.Where(g => g.PAdj < _alpha && g.Log2FoldChange <= -_lfc).OrderBy(g => g.Log2FoldChange).ToList();
+        var ns = rows.Except(_up).Except(_down);
+
+        ChartPoint V(DifferentialExpressionRow g) => new(g.Log2FoldChange, -Math.Log10(Math.Max(g.PAdj, 1e-300)), g.Gene);
+        ChartPoint M(DifferentialExpressionRow g) => new(Math.Log10(g.BaseMean + 1), g.Log2FoldChange, g.Gene);
+        _volcano =
+        [
+            new ChartSeries("n.s.", ns.Select(V).ToArray()) { Color = "var(--bai-ink-faint)" },
+            new ChartSeries("Up", _up.Select(V).ToArray()) { Color = "var(--bai-soga)" },
+            new ChartSeries("Down", _down.Select(V).ToArray()) { Color = "var(--bai-nila)" },
+        ];
+        _ma =
+        [
+            new ChartSeries("n.s.", ns.Select(M).ToArray()) { Color = "var(--bai-ink-faint)" },
+            new ChartSeries("Up", _up.Select(M).ToArray()) { Color = "var(--bai-soga)" },
+            new ChartSeries("Down", _down.Select(M).ToArray()) { Color = "var(--bai-nila)" },
+        ];
+    }
+
+    private Task Explain() => ExplainAsync("RNA-seq differential expression result", string.Create(CultureInfo.InvariantCulture,
+        $"DESeq2-style test, {Treatment} vs {Reference}, {_r!.Count} genes, {_samples} samples, thresholds padj<{_alpha}, |log2FC|≥{_lfc}. {_up.Count} up, {_down.Count} down. " +
+        $"Top up: {string.Join(", ", _up.Take(15).Select(g => $"{g.Gene} ({g.Log2FoldChange:+0.0})"))}. Top down: {string.Join(", ", _down.Take(15).Select(g => $"{g.Gene} ({g.Log2FoldChange:0.0})"))}. " +
+        $"Suggest which pathways or processes these genes may point to (clearly marked as hypotheses) and the next analysis (e.g. GSEA)."));
+}

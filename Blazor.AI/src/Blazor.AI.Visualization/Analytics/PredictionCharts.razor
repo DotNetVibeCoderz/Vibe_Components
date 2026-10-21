@@ -1,0 +1,56 @@
+@namespace Blazor.AI.Visualization
+@* Regression diagnostics: actual vs. predicted (with y = x), residuals, and R², RMSE, MAE. *@
+
+<AiCard Title="@Title" Subtitle="@Subtitle" Icon="bi-bullseye" Class="@Class">
+    @if (Actual.Count == 0 || Actual.Count != Predicted.Count)
+    {
+        <div class="bai-empty"><i class="bi bi-bullseye" aria-hidden="true"></i>Provide matching actual and predicted values.</div>
+    }
+    else
+    {
+        <div class="bai-stats" style="margin-bottom:.75rem">
+            <div class="bai-stat"><div class="bai-stat-label">R²</div><div class="bai-stat-value">@_r2.ToString("0.000", CultureInfo.InvariantCulture)</div></div>
+            <div class="bai-stat"><div class="bai-stat-label">RMSE</div><div class="bai-stat-value">@Fmt(_rmse)</div></div>
+            <div class="bai-stat"><div class="bai-stat-label">MAE</div><div class="bai-stat-value">@Fmt(_mae)</div></div>
+            <div class="bai-stat"><div class="bai-stat-label">Samples</div><div class="bai-stat-value">@Actual.Count</div></div>
+        </div>
+        <div class="bai-grid-2">
+            <ScatterChart Title="Actual vs predicted" Series="@([new ChartSeries("Samples", Actual.Select((a, i) => new ChartPoint(a, Predicted[i])).ToArray())])"
+                          IdentityLine="true" XLabel="Actual" YLabel="Predicted" Height="300" />
+            <ScatterChart Title="Residuals" Series="@([new ChartSeries("Residual", Predicted.Select((p, i) => new ChartPoint(p, Actual[i] - p)).ToArray()) { Color = SeriesColor(2) }])"
+                          XLabel="Predicted" YLabel="Actual − predicted" Height="300" />
+        </div>
+    }
+</AiCard>
+
+@code {
+    private double _r2, _rmse, _mae;
+
+    [Parameter, EditorRequired] public IReadOnlyList<double> Actual { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<double> Predicted { get; set; } = [];
+    [Parameter] public string Title { get; set; } = "Prediction quality";
+    [Parameter] public string? Subtitle { get; set; } = "Points on the dashed line are perfect predictions";
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Actual.Count == 0 || Actual.Count != Predicted.Count)
+        {
+            return;
+        }
+
+        var mean = Actual.Average();
+        double ssRes = 0, ssTot = 0, abs = 0;
+        for (var i = 0; i < Actual.Count; i++)
+        {
+            var e = Actual[i] - Predicted[i];
+            ssRes += e * e;
+            ssTot += (Actual[i] - mean) * (Actual[i] - mean);
+            abs += Math.Abs(e);
+        }
+
+        _r2 = ssTot < 1e-12 ? 0 : 1 - ssRes / ssTot;
+        _rmse = Math.Sqrt(ssRes / Actual.Count);
+        _mae = abs / Actual.Count;
+    }
+}

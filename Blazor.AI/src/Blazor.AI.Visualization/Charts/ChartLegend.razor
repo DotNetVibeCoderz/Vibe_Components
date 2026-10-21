@@ -1,0 +1,12 @@
+@namespace Blazor.AI.Visualization
+
+<ul class="bai-legend" aria-label="Legend">
+    @foreach (var (name, color) in Items)
+    {
+        <li><span class="bai-legend-swatch" style="background:@color" aria-hidden="true"></span>@name</li>
+    }
+</ul>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<(string Name, string Color)> Items { get; set; } = [];
+}

@@ -1,0 +1,146 @@
+@namespace Blazor.AI.LocalModels
+@inherits HfComponentBase
+@* Speech to text: live dictation in the browser (Web Speech API), or transcribe an audio file with Whisper on the Inference API. *@
+
+<AiCard Title="@Title" Subtitle="@(_mode == Modes[0] ? "Live in the browser, nothing uploaded by this app" : "Upload audio for Whisper")" Icon="bi-mic" Class="@Class">
+    <div class="bai-stack">
+        <AiTabs Tabs="@Modes" @bind-Selected="_mode" />
+        @if (_mode == Modes[0])
+        {
+            <div class="bai-row">
+                <select class="bai-select" style="width:auto" @bind="_language" aria-label="Language">
+                    <option value="id-ID">Bahasa Indonesia</option>
+                    <option value="en-US">English (US)</option>
+                    <option value="en-GB">English (UK)</option>
+                    <option value="jv-ID">Basa Jawa</option>
+                    <option value="ms-MY">Bahasa Melayu</option>
+                    <option value="ja-JP">日本語</option>
+                </select>
+                @if (_listening)
+                {
+                    <button type="button" class="bai-btn" style="background:var(--bai-danger)" @onclick="StopAsync"><i class="bi bi-stop-circle" aria-hidden="true"></i>Stop</button>
+                    <AiThinking Label="Listening…" />
+                }
+                else
+                {
+                    <button type="button" class="bai-btn bai-btn-ai" disabled="@(!_support.Recognition)" @onclick="StartAsync"><i class="bi bi-mic-fill" aria-hidden="true"></i>Start dictation</button>
+                }
+                @if (!_support.Recognition && _checked) { <span class="bai-small bai-muted">This browser has no speech recognition (try Chrome or Edge), or use Whisper.</span> }
+            </div>
+        }
+        else
+        {
+            <div class="bai-row">
+                <input class="bai-input bai-spacer" style="font-family:var(--bai-font-mono); font-size:.8rem" @bind="_whisper" aria-label="Speech model" />
+                <label class="bai-btn-ghost" style="position:relative; cursor:pointer"><i class="bi bi-file-earmark-music" aria-hidden="true"></i>Choose audio<InputFile OnChange="TranscribeAsync" accept="audio/*" style="position:absolute; inset:0; opacity:0; cursor:pointer" /></label>
+                @if (IsBusy) { <AiThinking Label="Transcribing…" /> }
+            </div>
+        }
+        <AiError Message="@Error" />
+        <div class="bai-output" style="min-height:6rem; white-space:pre-wrap">@_final<span class="bai-faint">@_interim</span>@if (string.IsNullOrEmpty(_final) && string.IsNullOrEmpty(_interim)) { <span class="bai-output-empty">Your words will appear here.</span> }</div>
+        @if (!string.IsNullOrWhiteSpace(_final))
+        {
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="() => Js.CopyTextAsync(_final!).AsTask()"><i class="bi bi-clipboard" aria-hidden="true"></i>Copy</button>
+                <button type="button" class="bai-btn-ghost" disabled="@IsBusy" @onclick="CleanUpAsync"><i class="bi bi-stars" aria-hidden="true"></i>Clean up with AI</button>
+                <button type="button" class="bai-btn-ghost" @onclick="() => { _final = null; _interim = null; }">Clear</button>
+            </div>
+        }
+    </div>
+</AiCard>
+
+@code {
+    private static readonly string[] Modes = ["Live dictation", "Audio file (Whisper)"];
+    private string _mode = Modes[0];
+    private string _language = "id-ID";
+    private string? _final, _interim, _whisper;
+    private bool _listening, _checked;
+    private BlazorAIJs.SpeechSupport _support;
+    private DotNetObjectReference<SpeechRecognitionPanel>? _self;
+
+    [Parameter] public string Title { get; set; } = "Speech recognition";
+    [Parameter] public EventCallback<string> OnTranscribed { get; set; }
+
+    protected override void OnParametersSet() => _whisper ??= Model ?? ModelOptions.SpeechModel;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _support = await Js.SpeechSupportedAsync();
+            _checked = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task StartAsync()
+    {
+        _self ??= DotNetObjectReference.Create(this);
+        _listening = await Js.StartRecognitionAsync(_self, _language);
+    }
+
+    private async Task StopAsync()
+    {
+        await Js.StopRecognitionAsync();
+        _listening = false;
+    }
+
+    [JSInvokable]
+    public Task OnSpeechResult(string final, string interim) => InvokeAsync(() =>
+    {
+        if (!string.IsNullOrWhiteSpace(final))
+        {
+            _final = (_final + " " + final.Trim()).Trim();
+            _ = OnTranscribed.InvokeAsync(_final);
+        }
+
+        _interim = string.IsNullOrWhiteSpace(interim) ? null : " " + interim;
+        StateHasChanged();
+    });
+
+    [JSInvokable]
+    public Task OnSpeechError(string error) => InvokeAsync(() =>
+    {
+        Error = error == "not-allowed" ? "Microphone access was denied. Allow it in the browser's site settings." : $"Speech recognition stopped: {error}.";
+        _listening = false;
+        StateHasChanged();
+    });
+
+    [JSInvokable]
+    public Task OnSpeechEnd() => InvokeAsync(() =>
+    {
+        _listening = false;
+        _interim = null;
+        StateHasChanged();
+    });
+
+    private Task TranscribeAsync(InputFileChangeEventArgs e) => RunAsync(async ct =>
+    {
+        using var memory = new MemoryStream();
+        await e.File.OpenReadStream(25 * 1024 * 1024).CopyToAsync(memory, ct);
+        _final = await HostedApi.TranscribeAsync(_whisper!, memory.ToArray(), string.IsNullOrEmpty(e.File.ContentType) ? "audio/wav" : e.File.ContentType, ct);
+        await OnTranscribed.InvokeAsync(_final);
+    });
+
+    private Task CleanUpAsync() => RunAsync(async ct =>
+    {
+        _final = await Ai.RewriteAsync(_final!, "Fix punctuation, capitalisation and obvious recognition errors; keep the speaker's words and language", Provider, ct);
+    });
+
+    public override async ValueTask DisposeAsync()
+    {
+        if (_listening)
+        {
+            try
+            {
+                await Js.StopRecognitionAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
+        _self?.Dispose();
+        await base.DisposeAsync();
+    }
+}

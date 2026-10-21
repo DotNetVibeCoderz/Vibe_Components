@@ -1,0 +1,104 @@
+@namespace Blazor.AI.Analytics
+@* Renders one simulation frame for the classic environments (CartPole, MountainCar, LunarLander, Pendulum, grid worlds). *@
+
+<svg viewBox="0 0 400 220" style="width:100%; max-width:560px; display:block; margin:0 auto; background:var(--bai-glass-strong); border-radius:12px" role="img" aria-label="@Environment simulation">
+    @switch (Kind)
+    {
+        case "CartPole":
+            var cx = 200 + Value("x") / 2.4 * 170;
+            var angle = Value("angle");
+            <line x1="10" x2="390" y1="170" y2="170" stroke="var(--bai-line-strong)" stroke-width="2" />
+            <rect x="@S(cx - 26)" y="152" width="52" height="22" rx="4" fill="var(--bai-tarum)" />
+            <line x1="@S(cx)" y1="152" x2="@S(cx + Math.Sin(angle) * 110)" y2="@S(152 - Math.Cos(angle) * 110)" stroke="var(--bai-soga)" stroke-width="7" stroke-linecap="round" />
+            <circle cx="@S(cx)" cy="152" r="5" fill="var(--bai-ink)" />
+            break;
+        case "MountainCar":
+            var track = Enumerable.Range(0, 81).Select(i => -1.2 + i * 1.8 / 80).Select(p => (X: 20 + (p + 1.2) / 1.8 * 360, Y: 190 - (Math.Sin(3 * p) * 0.45 + 0.55) * 150)).ToArray();
+            var pos = Value("x");
+            var carX = 20 + (pos + 1.2) / 1.8 * 360;
+            var carY = 190 - (Math.Sin(3 * pos) * 0.45 + 0.55) * 150;
+            <path d="@ChartMath.Path(track)" fill="none" stroke="var(--bai-line-strong)" stroke-width="3" />
+            <!text x="365" y="28" style="font-size:20px">🚩</!text>
+            <circle cx="@S(carX)" cy="@S(carY - 9)" r="10" fill="var(--bai-soga)" />
+            break;
+        case "LunarLander":
+            var lx = 200 + Value("x") * 170;
+            var ly = 190 - Math.Clamp(Value("y"), -0.2, 1.6) * 110;
+            <line x1="10" x2="390" y1="192" y2="192" stroke="var(--bai-line-strong)" stroke-width="2" />
+            <rect x="170" y="190" width="60" height="5" fill="var(--bai-nila)" />
+            <g transform="@($"translate({S(lx)},{S(ly)}) rotate({S(Value("angle") * 180 / Math.PI)})")">
+                @if (Value("main") > 0) { <path d="M-6,10 L0,26 L6,10 Z" fill="var(--bai-soga)" /> }
+                <rect x="-14" y="-10" width="28" height="20" rx="5" fill="var(--bai-tarum)" />
+                <line x1="-14" y1="10" x2="-20" y2="18" stroke="var(--bai-ink-muted)" stroke-width="2" />
+                <line x1="14" y1="10" x2="20" y2="18" stroke="var(--bai-ink-muted)" stroke-width="2" />
+            </g>
+            break;
+        case "Pendulum":
+            var a = Value("angle");
+            <circle cx="200" cy="110" r="5" fill="var(--bai-ink)" />
+            <line x1="200" y1="110" x2="@S(200 + Math.Sin(a) * 85)" y2="@S(110 - Math.Cos(a) * 85)" stroke="var(--bai-soga)" stroke-width="8" stroke-linecap="round" />
+            break;
+        case "Grid":
+            var w = Math.Max(1, (int)Value("w"));
+            var h = Math.Max(1, (int)Value("h"));
+            var cell = Math.Min(380.0 / w, 200.0 / h);
+            var ox = (400 - cell * w) / 2;
+            var oy = (220 - cell * h) / 2;
+            @for (var y = 0; y < h; y++)
+            {
+                @for (var x = 0; x < w; x++)
+                {
+                    <rect x="@S(ox + x * cell + 1)" y="@S(oy + y * cell + 1)" width="@S(cell - 2)" height="@S(cell - 2)" rx="4" fill="@TileColor(x, y)" />
+                }
+            }
+            @if (Trail is not null)
+            {
+                <path d="@ChartMath.Path(Trail.Select(p => (ox + (p.X + 0.5) * cell, oy + (p.Y + 0.5) * cell)))" fill="none" stroke="var(--bai-soga)" stroke-width="3" stroke-opacity="0.5" />
+            }
+            <circle cx="@S(ox + (Value("x") + 0.5) * cell)" cy="@S(oy + (Value("y") + 0.5) * cell)" r="@S(cell * 0.3)" fill="var(--bai-soga)" stroke="var(--bai-bg)" stroke-width="2" />
+            break;
+        default:
+            var i = 0;
+            @foreach (var (key, value) in State.Take(6))
+            {
+                <!text x="20" y="@(30 + i * 30)" class="bai-axis-label">@key</!text>
+                <!text x="380" y="@(30 + i * 30)" text-anchor="end" class="bai-axis-text">@ChartMath.Fmt(value)</!text>
+                i++;
+            }
+            break;
+    }
+</svg>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyDictionary<string, double> State { get; set; } = new Dictionary<string, double>();
+    [Parameter] public string Environment { get; set; } = string.Empty;
+
+    /// <summary>For grid worlds: the tile layout (DesignedGridWorld or classic grid).</summary>
+    [Parameter] public Func<int, int, GridTile>? Tiles { get; set; }
+
+    /// <summary>Cells visited so far, drawn as a trail.</summary>
+    [Parameter] public IReadOnlyList<(int X, int Y)>? Trail { get; set; }
+
+    private string Kind => Environment switch
+    {
+        _ when Environment.Contains("CartPole", StringComparison.OrdinalIgnoreCase) => "CartPole",
+        _ when Environment.Contains("MountainCar", StringComparison.OrdinalIgnoreCase) => "MountainCar",
+        _ when Environment.Contains("Lunar", StringComparison.OrdinalIgnoreCase) => "LunarLander",
+        _ when Environment.Contains("Pendulum", StringComparison.OrdinalIgnoreCase) => "Pendulum",
+        _ when State.ContainsKey("w") => "Grid",
+        _ => "Generic",
+    };
+
+    private double Value(string key) => State.TryGetValue(key, out var v) ? v : 0;
+
+    private string TileColor(int x, int y) => (Tiles?.Invoke(x, y) ?? GridTile.Empty) switch
+    {
+        GridTile.Wall => "var(--bai-ink-muted)",
+        GridTile.Goal => "var(--bai-nila)",
+        GridTile.Trap => "var(--bai-danger)",
+        GridTile.Start => "var(--bai-soga-soft)",
+        _ => "var(--bai-line)",
+    };
+
+    private static string S(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+}

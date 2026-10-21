@@ -1,0 +1,84 @@
+@namespace Blazor.AI.Visualization
+@* Matrix heatmap coloured with any Visual.Net colormap (viridis, magma, coolwarm...). Ideal for correlation and confusion matrices. *@
+
+<figure class="bai-chart @Class" style="margin:0">
+    @if (Title is not null)
+    {
+        <figcaption class="bai-chart-title">@Title</figcaption>
+    }
+    @if (Values is not null && Values.GetLength(0) > 0)
+    {
+        var rows = Values.GetLength(0);
+        var cols = Values.GetLength(1);
+        var cell = Math.Min(64, Math.Max(18, (Width - LabelWidth) / (double)cols));
+        var width = LabelWidth + cell * cols + 8;
+        var height = TopLabelHeight + cell * rows + 30;
+        <svg viewBox="0 0 @S(width) @S(height)" role="img" aria-label="@(Title ?? "Heatmap")" style="max-width:@(S(width))px">
+            @for (var c = 0; c < cols; c++)
+            {
+                var label = ColumnLabels?.ElementAtOrDefault(c) ?? (c + 1).ToString(CultureInfo.InvariantCulture);
+                <!text class="bai-axis-text" transform="@($"translate({S(LabelWidth + c * cell + cell / 2)},{S(TopLabelHeight - 6)}) rotate(-40)")">@Truncate(label)</!text>
+            }
+            @for (var r = 0; r < rows; r++)
+            {
+                var label = RowLabels?.ElementAtOrDefault(r) ?? (r + 1).ToString(CultureInfo.InvariantCulture);
+                <!text class="bai-axis-text" x="@S(LabelWidth - 6)" y="@S(TopLabelHeight + r * cell + cell / 2 + 4)" text-anchor="end">@Truncate(label)</!text>
+                @for (var c = 0; c < cols; c++)
+                {
+                    var value = Values[r, c];
+                    var fill = ColormapColor(Colormap, value, _min, _max);
+                    <rect x="@S(LabelWidth + c * cell)" y="@S(TopLabelHeight + r * cell)" width="@S(cell - 1)" height="@S(cell - 1)" rx="2" fill="@fill">
+                        <title>@(RowLabels?.ElementAtOrDefault(r)) × @(ColumnLabels?.ElementAtOrDefault(c)): @Fmt(value)</title>
+                    </rect>
+                    @if (ShowValues && cell >= 26)
+                    {
+                        <!text x="@S(LabelWidth + c * cell + cell / 2)" y="@S(TopLabelHeight + r * cell + cell / 2 + 4)" text-anchor="middle"
+                              style="font-size:10px; font-family:var(--bai-font-mono); pointer-events:none" fill="@ReadableOn(fill)">@Fmt(value)</!text>
+                    }
+                }
+            }
+            @* Colour scale *@
+            @for (var i = 0; i < 40; i++)
+            {
+                var t = _min + (_max - _min) * i / 39.0;
+                <rect x="@S(LabelWidth + i * (cell * cols / 40.0))" y="@S(height - 16)" width="@S(cell * cols / 40.0 + 0.5)" height="8" fill="@ColormapColor(Colormap, t, _min, _max)" />
+            }
+            <!text class="bai-axis-text" x="@S(LabelWidth)" y="@S(height - 20)">@Fmt(_min)</!text>
+            <!text class="bai-axis-text" x="@S(LabelWidth + cell * cols)" y="@S(height - 20)" text-anchor="end">@Fmt(_max)</!text>
+        </svg>
+    }
+</figure>
+
+@code {
+    private double _min, _max;
+
+    [Parameter, EditorRequired] public double[,]? Values { get; set; }
+    [Parameter] public IReadOnlyList<string>? RowLabels { get; set; }
+    [Parameter] public IReadOnlyList<string>? ColumnLabels { get; set; }
+    [Parameter] public string? Title { get; set; }
+
+    /// <summary>A Visual.Net colormap name, e.g. viridis, magma, coolwarm, RdBu.</summary>
+    [Parameter] public string Colormap { get; set; } = "viridis";
+
+    [Parameter] public bool ShowValues { get; set; } = true;
+    [Parameter] public double? Min { get; set; }
+    [Parameter] public double? Max { get; set; }
+    [Parameter] public int Width { get; set; } = 640;
+    [Parameter] public int LabelWidth { get; set; } = 110;
+    [Parameter] public int TopLabelHeight { get; set; } = 70;
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Values is null || Values.Length == 0)
+        {
+            return;
+        }
+
+        var all = Values.Cast<double>().Where(double.IsFinite).DefaultIfEmpty(0).ToArray();
+        _min = Min ?? all.Min();
+        _max = Max ?? all.Max();
+    }
+
+    private static string Truncate(string text) => text.Length <= 16 ? text : text[..15] + "…";
+}

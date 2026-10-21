@@ -1,0 +1,115 @@
+@namespace Blazor.AI.Components
+@typeparam TItem
+@inherits AiComponentBase
+@*
+    Content-based recommendations: items most similar to what the user engaged with (the "seed" items).
+    Optionally asks the model for a one-line reason per recommendation.
+*@
+
+<AiCard Title="@Title" Subtitle="@Subtitle" Icon="bi-magic" Class="@Class">
+    <Actions>
+        <button type="button" class="bai-btn-ghost" disabled="@IsBusy" @onclick="RecommendAsync"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>Refresh</button>
+    </Actions>
+    <ChildContent>
+        <AiError Message="@Error" />
+        @if (IsBusy && _items.Count == 0)
+        {
+            <AiThinking Label="Finding recommendations…" />
+        }
+        else if (_items.Count == 0)
+        {
+            <div class="bai-empty"><i class="bi bi-hand-thumbs-up" aria-hidden="true"></i>Interact with a few items to get recommendations.</div>
+        }
+        else
+        {
+            @foreach (var rec in _items)
+            {
+                <div class="bai-result">
+                    <div class="bai-result-head">
+                        <div class="bai-spacer">
+                            @if (ItemTemplate is not null) { @ItemTemplate(rec.Item) } else { <span class="bai-result-title">@rec.Text</span> }
+                        </div>
+                        <span class="bai-badge bai-badge-ai">@((rec.Score * 100).ToString("0"))% match</span>
+                    </div>
+                    @if (rec.Reason is not null)
+                    {
+                        <span class="bai-small bai-muted"><i class="bi bi-lightbulb" aria-hidden="true"></i> @rec.Reason</span>
+                    }
+                </div>
+            }
+        }
+    </ChildContent>
+</AiCard>
+
+@code {
+    private List<Recommendation> _items = [];
+    private string? _seedKey;
+
+    [Inject] private ISemanticMatcher Matcher { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Recommended for you";
+    [Parameter] public string? Subtitle { get; set; } = "Based on what you viewed";
+    [Parameter, EditorRequired] public IEnumerable<TItem> Items { get; set; } = [];
+
+    /// <summary>Items the user liked, viewed or bought. They are excluded from the results.</summary>
+    [Parameter, EditorRequired] public IEnumerable<TItem> Seeds { get; set; } = [];
+
+    [Parameter, EditorRequired] public Func<TItem, string> TextSelector { get; set; } = item => item?.ToString() ?? string.Empty;
+    [Parameter] public RenderFragment<TItem>? ItemTemplate { get; set; }
+    [Parameter] public int Count { get; set; } = 4;
+
+    /// <summary>Ask the model to explain each recommendation in one line.</summary>
+    [Parameter] public bool ExplainWithAI { get; set; } = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = string.Join('|', Seeds.Select(TextSelector));
+        if (key != _seedKey)
+        {
+            _seedKey = key;
+            await RecommendAsync();
+        }
+    }
+
+    private Task RecommendAsync()
+    {
+        var seeds = Seeds.Select(TextSelector).ToList();
+        if (seeds.Count == 0)
+        {
+            _items = [];
+            return Task.CompletedTask;
+        }
+
+        return RunAsync(async ct =>
+        {
+            var candidates = Items.Where(i => !seeds.Contains(TextSelector(i))).ToList();
+            var profile = string.Join(". ", seeds);
+            var matches = await Matcher.MatchAsync(profile, candidates, TextSelector, Count, 0, Provider, ct);
+            _items = matches.Select(m => new Recommendation(m.Item, m.Text, m.Score)).ToList();
+            StateHasChanged();
+
+            if (ExplainWithAI && _items.Count > 0)
+            {
+                var system = "For each numbered recommendation, give a reason of at most 12 words why it suits someone who liked the seed items. Reply as JSON: {\"1\": \"reason\", ...}.";
+                var user = "Seed items:\n" + string.Join('\n', seeds.Select(s => "- " + s)) + "\n\nRecommendations:\n" +
+                           string.Join('\n', _items.Select((r, i) => $"{i + 1}. {r.Text}"));
+                var reasons = LlmJson.ToStringMap(await Ai.GenerateJsonAsync(system, user, AiTasks.Generate, Provider, ct));
+                for (var i = 0; i < _items.Count; i++)
+                {
+                    if (reasons.TryGetValue((i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), out var reason))
+                    {
+                        _items[i].Reason = reason;
+                    }
+                }
+            }
+        });
+    }
+
+    private sealed class Recommendation(TItem item, string text, double score)
+    {
+        public TItem Item { get; } = item;
+        public string Text { get; } = text;
+        public double Score { get; } = score;
+        public string? Reason { get; set; }
+    }
+}

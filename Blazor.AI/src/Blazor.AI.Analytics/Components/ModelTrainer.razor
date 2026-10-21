@@ -1,0 +1,169 @@
+@namespace Blazor.AI.Analytics
+@inherits AnalyticsComponentBase
+@* Train a GraviLearn model: pick algorithm, hyperparameters and features; see metrics, feature importance, and try predictions. *@
+
+<AiCard Title="@Title" Subtitle="@($"{Data.Name} · predict {Data.Target ?? "(choose a target)"}")" Icon="bi-cpu" Class="@Class">
+    <Actions><DatasetPicker /></Actions>
+    <ChildContent>
+        @if (Data.Target is null || EffectiveTask is not (MlTask.Classification or MlTask.Regression))
+        {
+            <div class="bai-empty"><i class="bi bi-bullseye" aria-hidden="true"></i>Choose a target column and set the task to Classification or Regression.</div>
+        }
+        else
+        {
+            <div class="bai-grid-2" style="align-items:start">
+                <div class="bai-stack">
+                    <div>
+                        <label class="bai-label" for="@($"{_id}-alg")">Algorithm</label>
+                        <select id="@($"{_id}-alg")" class="bai-select" value="@_spec?.Name" @onchange="PickModel">
+                            @foreach (var spec in ModelZoo.For(EffectiveTask)) { <option>@spec.Name</option> }
+                        </select>
+                        <span class="bai-small bai-muted">@_spec?.Description</span>
+                    </div>
+                    @foreach (var p in _spec?.Parameters ?? [])
+                    {
+                        <div>
+                            <label class="bai-label" for="@($"{_id}-{p.Name}")">@p.Label: <span class="bai-num">@_values[p.Name].ToString("0.###", CultureInfo.InvariantCulture)</span></label>
+                            <input id="@($"{_id}-{p.Name}")" type="range" class="form-range" min="@p.Min.ToString(CultureInfo.InvariantCulture)" max="@p.Max.ToString(CultureInfo.InvariantCulture)" step="@p.Step.ToString(CultureInfo.InvariantCulture)"
+                                   value="@_values[p.Name].ToString(CultureInfo.InvariantCulture)" @oninput="e => SetParameter(p.Name, e)" />
+                        </div>
+                    }
+                    <div>
+                        <label class="bai-label" for="@($"{_id}-test")">Test set: @_testSize.ToString("P0", CultureInfo.InvariantCulture)</label>
+                        <input id="@($"{_id}-test")" type="range" class="form-range" min="0.1" max="0.5" step="0.05" value="@_testSize.ToString(CultureInfo.InvariantCulture)" @oninput="SetTestSize" />
+                    </div>
+                    <div>
+                        <span class="bai-label">Features</span>
+                        <div class="bai-chips">
+                            @foreach (var f in Data.FeatureColumns)
+                            {
+                                var on = _features.Contains(f);
+                                <button type="button" class="bai-chip @(on ? "is-active" : null)" aria-pressed="@on" @onclick="() => Toggle(f)">@f</button>
+                            }
+                        </div>
+                    </div>
+                    <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || _features.Count == 0)" @onclick="TrainAsync">
+                        @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-play-fill" aria-hidden="true"></i> }
+                        Train model
+                    </button>
+                    <AiError Message="@Error" />
+                </div>
+                <div class="bai-stack">
+                    @if (Result is { } r)
+                    {
+                        <div class="bai-stats">
+                            @foreach (var (name, value) in r.Metrics)
+                            {
+                                <div class="bai-stat"><div class="bai-stat-label">@name</div><div class="bai-stat-value" style="font-size:1.25rem">@(name.Contains('%') || value > 10 ? Fmt(value) : value.ToString("0.000", CultureInfo.InvariantCulture))</div></div>
+                            }
+                        </div>
+                        <span class="bai-small bai-muted">@r.Model · trained in @r.Duration.TotalMilliseconds.ToString("0") ms · @r.TestActual.Length test rows</span>
+                        @if (r.FeatureImportance.Count > 0)
+                        {
+                            <div>
+                                <span class="bai-label">Permutation importance</span>
+                                <AiScoreBars Values="@r.FeatureImportance.Select(f => KeyValuePair.Create(f.Feature, f.Importance))" AsPercent="false" />
+                            </div>
+                        }
+                        <details>
+                            <summary class="bai-small" style="cursor:pointer">Try a prediction</summary>
+                            <div class="bai-grid-2" style="margin-top:.5rem">
+                                @foreach (var f in r.Features)
+                                {
+                                    <div><label class="bai-label" for="@($"{_id}-p-{f}")">@f</label><input id="@($"{_id}-p-{f}")" type="number" class="bai-input" value="@_sample.GetValueOrDefault(f).ToString(CultureInfo.InvariantCulture)" @onchange="e => SetSample(f, e)" /></div>
+                                }
+                            </div>
+                            <div class="bai-row" style="margin-top:.5rem">
+                                <button type="button" class="bai-btn" @onclick="Predict">Predict</button>
+                                @if (_prediction is not null) { <strong class="bai-stat-value" style="font-size:1.2rem">@_prediction</strong> }
+                            </div>
+                        </details>
+                    }
+                    else
+                    {
+                        <div class="bai-empty"><i class="bi bi-graph-up" aria-hidden="true"></i>Train a model to see accuracy, error and which features matter.</div>
+                    }
+                </div>
+            </div>
+        }
+    </ChildContent>
+</AiCard>
+
+@code {
+    private readonly string _id = "bai-mt-" + Guid.NewGuid().ToString("N")[..6];
+    private readonly Dictionary<string, double> _values = [];
+    private readonly Dictionary<string, double> _sample = [];
+    private HashSet<string> _features = [];
+    private ModelSpec? _spec;
+    private double _testSize = 0.25;
+    private string? _prediction;
+
+    [Parameter] public string Title { get; set; } = "Model trainer";
+
+    /// <summary>Force a task; otherwise the dataset's task is used.</summary>
+    [Parameter] public MlTask? Task { get; set; }
+
+    [Parameter] public string? Algorithm { get; set; }
+    [Parameter] public EventCallback<TrainingResult> OnTrained { get; set; }
+
+    public TrainingResult? Result { get; private set; }
+
+    private MlTask EffectiveTask => Task ?? Data.Task;
+
+    protected override void OnDatasetChanged()
+    {
+        Result = null;
+        _prediction = null;
+        _features = Data.FeatureColumns.ToHashSet();
+        Select(ModelZoo.For(EffectiveTask).FirstOrDefault(s => s.Name == Algorithm) ?? ModelZoo.For(EffectiveTask).FirstOrDefault(s => s.Name.Contains("forest", StringComparison.OrdinalIgnoreCase)) ?? ModelZoo.For(EffectiveTask)[0]);
+        foreach (var f in Data.FeatureColumns)
+        {
+            _sample[f] = Data.Frame[f] is NumericSeries n ? Math.Round(n.Mean(), 2) : 0;
+        }
+    }
+
+    private void Select(ModelSpec spec)
+    {
+        _spec = spec;
+        _values.Clear();
+        foreach (var p in spec.Parameters)
+        {
+            _values[p.Name] = p.Default;
+        }
+    }
+
+    private void PickModel(ChangeEventArgs e) => Select(ModelZoo.For(EffectiveTask).First(s => s.Name == e.Value?.ToString()));
+
+    private void SetParameter(string name, ChangeEventArgs e) => _values[name] = double.Parse(e.Value!.ToString()!, CultureInfo.InvariantCulture);
+
+    private void SetTestSize(ChangeEventArgs e) => _testSize = double.Parse(e.Value!.ToString()!, CultureInfo.InvariantCulture);
+
+    private void SetSample(string feature, ChangeEventArgs e) =>
+        _sample[feature] = double.TryParse(e.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0;
+
+    private void Toggle(string feature)
+    {
+        if (!_features.Remove(feature))
+        {
+            _features.Add(feature);
+        }
+    }
+
+    private Task TrainAsync() => RunAsync(async ct =>
+    {
+        var spec = _spec! with { Task = EffectiveTask };
+        var features = Data.FeatureColumns.Where(_features.Contains).ToArray();
+        var data = Data with { Task = EffectiveTask };
+        Result = await Compute(() => MlTrainer.Train(data, spec, _values, features, _testSize), ct);
+        _prediction = null;
+        await OnTrained.InvokeAsync(Result);
+    });
+
+    private void Predict()
+    {
+        var value = MlTrainer.Predict(Result!, Result!.Features.Select(f => _sample.GetValueOrDefault(f)).ToArray());
+        _prediction = Result.Task == MlTask.Classification && Result.ClassLabels.Count > 0
+            ? Result.ClassLabels.ElementAtOrDefault((int)Math.Round(value)) ?? value.ToString(CultureInfo.InvariantCulture)
+            : Fmt(value);
+    }
+}

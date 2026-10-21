@@ -1,0 +1,95 @@
+@namespace Blazor.AI.Bio
+@inherits BioComponentBase
+@using Biotech.Net.SyntheticBiology.Codons
+@* Codon optimisation for heterologous expression: back-translates a protein (or recodes a CDS) for a host, reporting CAI and GC. *@
+
+<AiCard Title="@Title" Subtitle="CAI-guided recoding" Icon="bi-arrow-repeat" Class="@Class">
+    <div class="bai-stack">
+        <SequenceInput @bind-Value="Input" Label="Protein or coding DNA" Rows="4" Samples="@([("Insulin (protein)", BioSamples.Insulin), ("EGFP (CDS)", BioSamples.Egfp)])" />
+        <div class="bai-row">
+            <select class="bai-select" style="width:auto" @bind="_host" aria-label="Expression host">
+                @foreach (var t in CodonUsageTable.All) { <option value="@t.Name">@t.Organism</option> }
+            </select>
+            <select class="bai-select" style="width:auto" @bind="_method" aria-label="Method">
+                @foreach (var m in Enum.GetValues<CodonOptimizationMethod>()) { <option value="@m">@m</option> }
+            </select>
+            <button type="button" class="bai-btn bai-btn-ai" @onclick="OptimizeAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Optimise</button>
+        </div>
+        <AiError Message="@Error" />
+        @if (_r is { } r)
+        {
+            <div class="bai-stats">
+                <div class="bai-stat"><div class="bai-stat-label">CAI</div><div class="bai-stat-value">@r.Result.Cai.ToString("0.00", CultureInfo.InvariantCulture) @if (r.OriginalCai is { } o) { <span class="bai-small bai-muted">from @o.ToString("0.00", CultureInfo.InvariantCulture)</span> }</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">GC</div><div class="bai-stat-value">@r.Result.GcContent.ToString("P1", CultureInfo.InvariantCulture) <span class="bai-small bai-muted">host @r.Host.GcContent.ToString("P0", CultureInfo.InvariantCulture)</span></div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Codons changed</div><div class="bai-stat-value">@r.Result.CodonsChanged</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Length</div><div class="bai-stat-value">@r.Result.Dna.Length <span class="bai-small">bp</span></div></div>
+            </div>
+            @if (r.Result.RemainingViolations.Count > 0)
+            {
+                <p class="bai-small" style="color:var(--bai-danger); margin:0">@r.Result.RemainingViolations.Count constraint violation(s) remain: @string.Join("; ", r.Result.RemainingViolations.Take(5))</p>
+            }
+            <LineChart Title="Relative adaptiveness per codon (w)" Series="@r.Series" Height="200" XLabel="Codon" YMin="0" YMax="1" />
+            <AiCodeBlock Code="@($">optimised_{r.Host.Name}\n{BioInput.Wrap(r.Result.Dna)}")" />
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain with AI</button>
+            @if (Explanation is not null) { <AiOutput Text="@Explanation" IsBusy="@IsBusy" /> }
+        }
+    </div>
+</AiCard>
+
+@code {
+    private string _host = CodonUsageTable.EColiK12.Name;
+    private CodonOptimizationMethod _method = CodonOptimizationMethod.MostFrequent;
+    private Outcome? _r;
+
+    [Parameter] public string Title { get; set; } = "Codon optimizer";
+    [Parameter] public string? Input { get; set; } = BioSamples.Egfp;
+
+    private sealed record Outcome(CodonUsageTable Host, CodonOptimizationResult Result, double? OriginalCai, IReadOnlyList<ChartSeries> Series);
+
+    protected override Task OnInitializedAsync() => OptimizeAsync();
+
+    private async Task OptimizeAsync()
+    {
+        var (text, hostName, method) = (Input, _host, _method);
+        _r = await AnalyseAsync(() =>
+        {
+            var letters = new string((text ?? "").Split('\n').Where(l => !l.TrimStart().StartsWith('>')).SelectMany(l => l).Where(char.IsLetter).Select(char.ToUpperInvariant).ToArray());
+            if (letters.Length == 0)
+            {
+                throw new FormatException("Paste a protein or coding DNA sequence first.");
+            }
+
+            var host = CodonUsageTable.All.First(t => t.Name == hostName);
+            var options = new CodonOptimizationOptions { Target = host, Method = method, Seed = 7 };
+            var isDna = letters.All(c => c is 'A' or 'C' or 'G' or 'T' or 'U');
+            var cds = isDna ? letters.Replace('U', 'T') : null;
+            var result = isDna ? Biotech.Net.SyntheticBiology.Codons.CodonOptimizer.OptimizeCoding(cds!, options) : Biotech.Net.SyntheticBiology.Codons.CodonOptimizer.Optimize(letters.TrimEnd('*'), options);
+
+            List<ChartSeries> series = [Adaptiveness("Optimised", result.Dna, host)];
+            if (cds is not null)
+            {
+                series.Insert(0, Adaptiveness("Original", cds, host) with { Dashed = true });
+            }
+
+            return new Outcome(host, result, cds is null ? null : host.Cai(cds), series);
+        });
+        Explanation = null;
+    }
+
+    // Smoothed per-codon relative adaptiveness, so dips (rare codons) are visible.
+    private static ChartSeries Adaptiveness(string name, string cds, CodonUsageTable host)
+    {
+        var w = new double[cds.Length / 3];
+        for (var i = 0; i < w.Length; i++)
+        {
+            w[i] = host.RelativeAdaptiveness(cds.Substring(i * 3, 3));
+        }
+
+        var smooth = w.Select((_, i) => w.Skip(Math.Max(0, i - 2)).Take(5).Average()).ToArray();
+        return ChartSeries.FromValues(name, smooth);
+    }
+
+    private Task Explain() => ExplainAsync("codon optimisation for heterologous expression", string.Create(CultureInfo.InvariantCulture,
+        $"Host {_r!.Host.Organism}, method {_method}. CAI {_r.Result.Cai:0.00}{(_r.OriginalCai is { } o ? $" (original {o:0.00})" : "")}, GC {_r.Result.GcContent:P1} vs host genome {_r.Host.GcContent:P0}, {_r.Result.CodonsChanged} codons changed, " +
+        $"{_r.Result.RemainingViolations.Count} remaining constraint violations. Comment on expected expression and other factors (mRNA structure at the 5′ end, tags, solubility) to consider."));
+}

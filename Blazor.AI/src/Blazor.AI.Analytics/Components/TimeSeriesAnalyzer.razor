@@ -1,0 +1,59 @@
+@namespace Blazor.AI.Analytics
+@inherits AnalyticsComponentBase
+@* Understand a series before forecasting: moving averages, trend/seasonal/residual decomposition and autocorrelation. *@
+
+<AiCard Title="@Title" Subtitle="@Data.Name" Icon="bi-activity" Class="@Class">
+    <Actions><DatasetPicker ShowTarget="false" /></Actions>
+    <ChildContent>
+        <div class="bai-stack">
+            <div class="bai-row">
+                <select class="bai-select" style="width:auto" @bind="_column" aria-label="Series">@foreach (var c in Data.NumericColumns) { <option>@c</option> }</select>
+                <label class="bai-small">Season length <input type="number" min="2" max="52" class="bai-input" style="width:4.5rem" @bind="_period" /></label>
+                <label class="bai-small">Moving average <input type="number" min="2" max="60" class="bai-input" style="width:4.5rem" @bind="_window" /></label>
+            </div>
+            @if (Series.Length >= _period * 2)
+            {
+                var s = Series;
+                var d = TimeSeriesTools.Decompose(s, _period);
+                var acf = TimeSeriesTools.Autocorrelation(s, Math.Min(36, s.Length - 2));
+                var strength = 1 - Variance(d.Residual) / Math.Max(1e-12, Variance(d.Residual.Zip(d.Seasonal, (r, x) => r + x).ToArray()));
+                <LineChart Title="Series and moving average" Series="@([ChartSeries.FromValues(_column!, s), ChartSeries.FromValues($"MA({_window})", TimeSeriesTools.MovingAverage(s, _window)) with { Dashed = true }])" Height="220" />
+                <div class="bai-grid-2">
+                    <LineChart Title="Trend" Series="@([ChartSeries.FromValues("Trend", d.Trend)])" ShowLegend="false" Height="160" />
+                    <LineChart Title="@($"Seasonal (strength {Math.Clamp(strength, 0, 1):P0})")" Series="@([ChartSeries.FromValues("Seasonal", d.Seasonal) with { Color = SeriesColor(2) }])" ShowLegend="false" Height="160" />
+                    <LineChart Title="Residual" Series="@([ChartSeries.FromValues("Residual", d.Residual) with { Color = SeriesColor(3) }])" ShowLegend="false" Height="160" />
+                    <BarChart Title="Autocorrelation by lag" Values="@acf.Skip(1).Select((v, i) => new BarValue((i + 1).ToString(CultureInfo.InvariantCulture), Math.Round(v, 3)))" ColorBySign="true" ShowValues="false" Height="160" />
+                </div>
+                <p class="bai-small bai-muted" style="margin:0">Strongest repeating lag: @(acf.Skip(2).Select((v, i) => (v, i + 2)).MaxBy(x => x.v).Item2) periods. Bars above ~@((2 / Math.Sqrt(s.Length)).ToString("0.00", CultureInfo.InvariantCulture)) are significant.</p>
+            }
+            else
+            {
+                <div class="bai-empty"><i class="bi bi-activity" aria-hidden="true"></i>Needs at least two full seasons of data (@(_period * 2) points).</div>
+            }
+        </div>
+    </ChildContent>
+</AiCard>
+
+@code {
+    private string? _column;
+    private int _period = 12, _window = 6;
+
+    [Parameter] public string Title { get; set; } = "Time series analyzer";
+
+    private double[] Series => _column is not null && Data.Frame.HasColumn(_column) && Data.Frame[_column] is NumericSeries n ? n.FillMissingWithMean().Values : [];
+
+    protected override void OnDatasetChanged() =>
+        _column = Data.Target is { } t && Data.NumericColumns.Contains(t) ? t : Data.NumericColumns.LastOrDefault();
+
+    private static double Variance(double[] values)
+    {
+        var finite = values.Where(double.IsFinite).ToArray();
+        if (finite.Length < 2)
+        {
+            return 0;
+        }
+
+        var mean = finite.Average();
+        return finite.Sum(v => (v - mean) * (v - mean)) / (finite.Length - 1);
+    }
+}

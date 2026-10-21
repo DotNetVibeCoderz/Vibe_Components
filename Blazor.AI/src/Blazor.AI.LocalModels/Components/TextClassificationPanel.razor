@@ -1,0 +1,78 @@
+@namespace Blazor.AI.LocalModels
+@inherits HfComponentBase
+@*
+    Two ways to classify text: a fine-tuned model's own labels, or zero-shot with your labels
+    (embedding similarity locally, NLI on the hosted API).
+*@
+
+<AiCard Title="@Title" Subtitle="@(_mode == Modes[0] ? "Labels come from the model" : "Your labels, no training needed")" Icon="bi-tags" Class="@Class">
+    <div class="bai-stack">
+        <AiTabs Tabs="@Modes" @bind-Selected="_mode" />
+        <EngineSelector @bind-Engine="Engine" @bind-Model="_model" Suggestions="@(_mode == Modes[0] ? FineTuned : ZeroShotModels)" />
+        @if (_mode == Modes[1])
+        {
+            <input class="bai-input" @bind="_labels" placeholder="Comma-separated labels" aria-label="Labels" />
+        }
+        <textarea class="bai-textarea" rows="4" @bind="Text" aria-label="Text to classify"></textarea>
+        <div class="bai-row">
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(Text))" @onclick="ClassifyAsync">
+                @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-play-fill" aria-hidden="true"></i> }
+                Classify
+            </button>
+            @if (LoadStatus is not null) { <span class="bai-small bai-muted">@LoadStatus</span> }
+        </div>
+        <AiError Message="@Error" />
+        @if (_scores.Count > 0)
+        {
+            <div class="bai-output">
+                <AiScoreBars Values="@_scores.Select(s => KeyValuePair.Create(s.Label, s.Score))" Highlight="@_scores[0].Label" />
+                @if (_mode == Modes[1] && Engine == InferenceEngine.Local) { <span class="bai-small bai-muted">Scores are softmax-scaled cosine similarities between the text and each label.</span> }
+            </div>
+        }
+    </div>
+</AiCard>
+
+@code {
+    private static readonly string[] Modes = ["Fine-tuned model", "Zero-shot labels"];
+    private static readonly string[] FineTuned = ["SamLowe/roberta-base-go_emotions", "distilbert/distilbert-base-uncased-finetuned-sst-2-english", "mrm8488/bert-tiny-finetuned-sms-spam-detection", "papluca/xlm-roberta-base-language-detection"];
+    private static readonly string[] ZeroShotModels = ["sentence-transformers/all-MiniLM-L6-v2", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", "facebook/bart-large-mnli"];
+    private List<LabelScore> _scores = [];
+    private string _mode = Modes[1];
+    private string? _model;
+    private string _labels = "billing, technical problem, shipping, feature request, praise";
+
+    [Parameter] public string Title { get; set; } = "Text classification";
+    [Parameter] public string? Text { get; set; } = "I was charged twice for my subscription this month, please refund one of the payments.";
+    [Parameter] public EventCallback<IReadOnlyList<LabelScore>> OnClassified { get; set; }
+
+    protected override void OnParametersSet() => _model ??= Model ?? ModelOptions.EmbeddingModel;
+
+    private Task ClassifyAsync() => RunAsync(async ct =>
+    {
+        var labels = _labels.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (Engine == InferenceEngine.HostedApi)
+        {
+            _scores = (_mode == Modes[0] ? await HostedApi.ClassifyAsync(_model!, Text!, ct) : await HostedApi.ZeroShotAsync(_model!, Text!, labels, ct)).ToList();
+        }
+        else if (_mode == Modes[0])
+        {
+            var model = await EnsureLocalAsync(_model!, "text", Registry.TextModelAsync);
+            if (!model.HasClassificationHead)
+            {
+                Error = $"{_model} has no classification head. Pick a fine-tuned classifier, or use zero-shot labels.";
+                return;
+            }
+
+            _scores = (await Registry.RunAsync(_model!, "text", () => model.Predict(Text!, 10), ct)).Select(p => new LabelScore(p.Label, p.Score)).ToList();
+        }
+        else
+        {
+            var model = await EnsureLocalAsync(_model!, "text", Registry.TextModelAsync);
+            var similarities = await Registry.RunAsync(_model!, "text", () => labels.Select(l => model.Similarity(Text!, "This text is about " + l)).ToArray(), ct);
+            var exp = similarities.Select(s => Math.Exp(s * 20)).ToArray();
+            _scores = labels.Select((l, i) => new LabelScore(l, exp[i] / exp.Sum())).OrderByDescending(s => s.Score).ToList();
+        }
+
+        await OnClassified.InvokeAsync(_scores);
+    });
+}

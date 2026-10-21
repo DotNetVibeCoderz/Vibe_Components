@@ -1,0 +1,104 @@
+@namespace Blazor.AI.Visualization
+@inherits AiComponentBase
+@*
+    A dashboard shell: KPI tiles with sparklines, a 12-column grid for your charts (ChildContent),
+    and an "Explain" panel where the model writes insights from the metrics and any extra data you describe.
+*@
+
+<div class="@CssClass("bai-stack")" @attributes="AdditionalAttributes">
+    <div class="bai-row">
+        <div>
+            <h2 class="bai-card-title" style="font-size:1.35rem">@Title</h2>
+            @if (Subtitle is not null) { <p class="bai-card-subtitle">@Subtitle</p> }
+        </div>
+        <span class="bai-spacer"></span>
+        @HeaderContent
+        @if (EnableInsights)
+        {
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="ExplainAsync">
+                @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-stars" aria-hidden="true"></i> }
+                Explain this dashboard
+            </button>
+        }
+    </div>
+
+    @if (Metrics.Count > 0)
+    {
+        <div class="bai-stats">
+            @foreach (var metric in Metrics)
+            {
+                var good = metric.Change is { } c && (metric.LowerIsBetter ? c < 0 : c > 0);
+                <div class="bai-stat bai-glass">
+                    <div class="bai-row" style="justify-content:space-between">
+                        <span class="bai-stat-label">@if (metric.Icon is not null) { <i class="bi @metric.Icon" aria-hidden="true"></i> } @metric.Label</span>
+                        @if (metric.Trend is { Count: > 1 } trend) { <Sparkline Values="@trend" Color="@(good ? "var(--bai-nila)" : "var(--bai-soga)")" /> }
+                    </div>
+                    <div class="bai-stat-value">@metric.Value.ToString(metric.Format, CultureInfo.CurrentCulture)</div>
+                    @if (metric.Change is { } change)
+                    {
+                        <div class="bai-small @(good ? "bai-delta-up" : "bai-delta-down")">
+                            <i class="bi @(change >= 0 ? "bi-arrow-up-right" : "bi-arrow-down-right")" aria-hidden="true"></i>
+                            @(change >= 0 ? "+" : null)@change.ToString("0.#", CultureInfo.InvariantCulture)% <span class="bai-faint">vs previous</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @if (_insights is not null || Error is not null)
+    {
+        <AiCard Title="AI insights" Icon="bi-lightbulb" Subtitle="Generated from the numbers on this page. Verify before acting.">
+            <AiError Message="@Error" OnRetry="ExplainAsync" />
+            <AiOutput Text="@_insights" IsBusy="@IsBusy" />
+        </AiCard>
+    }
+
+    <div class="bai-dashboard">@ChildContent</div>
+</div>
+
+@code {
+    private string? _insights;
+
+    [Parameter] public string Title { get; set; } = "Dashboard";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public IReadOnlyList<DashboardMetric> Metrics { get; set; } = [];
+
+    /// <summary>Extra facts for the insight prompt (top products, regional numbers...), as plain text.</summary>
+    [Parameter] public string? DataSummary { get; set; }
+
+    [Parameter] public bool EnableInsights { get; set; } = true;
+    [Parameter] public string? Audience { get; set; } = "a business manager";
+    [Parameter] public RenderFragment? HeaderContent { get; set; }
+
+    /// <summary>Panels. Wrap each in a div with bai-span-4/6/8/12 to size it.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    public Task ExplainAsync() => RunAsync(async ct =>
+    {
+        var facts = new StringBuilder();
+        foreach (var m in Metrics)
+        {
+            facts.Append("- ").Append(m.Label).Append(": ").Append(m.Value.ToString(m.Format, CultureInfo.InvariantCulture));
+            if (m.Change is { } c) facts.Append(" (").Append(c >= 0 ? "+" : string.Empty).Append(c.ToString("0.#", CultureInfo.InvariantCulture)).Append("% vs previous period)");
+            if (m.LowerIsBetter) facts.Append(" [lower is better]");
+            facts.AppendLine();
+        }
+
+        if (!string.IsNullOrWhiteSpace(DataSummary))
+        {
+            facts.AppendLine().AppendLine(DataSummary);
+        }
+
+        var system = $"You are a data analyst briefing {Audience}. From the dashboard data, write: **Key insights** (3-5 bullets, cite numbers), " +
+                     "**Risks** (1-3 bullets), **Recommended actions** (2-3 bullets). Only use the numbers given; never invent data.";
+        var builder = new StringBuilder();
+        _insights = string.Empty;
+        await foreach (var token in Ai.StreamAsync(system, PromptTags.Wrap(PromptTags.Input, facts.ToString()), AiTasks.Insight, Provider, new ChatOptions { Temperature = 0.3f }, ct))
+        {
+            builder.Append(token);
+            _insights = builder.ToString();
+            RenderThrottled();
+        }
+    });
+}

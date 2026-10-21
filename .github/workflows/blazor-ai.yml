@@ -1,0 +1,90 @@
+name: Blazor.AI
+
+# CI for every change under Blazor.AI/, and NuGet publishing when a tag like blazor-ai-v1.0.0 is pushed
+# (or when started manually with "publish" ticked). Uses the NUGET_API_KEY repository secret.
+
+on:
+  push:
+    branches: [main]
+    paths: ["Blazor.AI/**", ".github/workflows/blazor-ai.yml"]
+    tags: ["blazor-ai-v*"]
+  pull_request:
+    paths: ["Blazor.AI/**", ".github/workflows/blazor-ai.yml"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish packages to NuGet"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blazor-ai-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: Blazor.AI
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: Blazor.AI/global.json
+
+      - name: Version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/blazor-ai-v* ]]; then
+            echo "args=-p:Version=${GITHUB_REF#refs/tags/blazor-ai-v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "args=-p:VersionSuffix=ci.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore
+        run: dotnet restore Blazor.AI.slnx
+
+      - name: Build
+        run: dotnet build Blazor.AI.slnx -c Release --no-restore ${{ steps.version.outputs.args }}
+
+      - name: Test
+        run: dotnet test tests/Blazor.AI.Tests -c Release --no-build --logger "trx;LogFileName=results.trx"
+
+      - name: Pack
+        run: dotnet pack Blazor.AI.slnx -c Release --no-build -o artifacts ${{ steps.version.outputs.args }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blazor-ai-packages
+          path: Blazor.AI/artifacts/*
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/blazor-ai-v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: blazor-ai-packages
+          path: packages
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Push to NuGet
+        working-directory: packages
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: dotnet nuget push "*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate

@@ -1,0 +1,39 @@
+@namespace Blazor.AI.Components
+@* A pair-programming chat tuned for code: language and framework aware, answers with runnable snippets. *@
+
+<AiChat Title="@Title" Subtitle="@($"{_language} · {_framework}")" Icon="bi-code-slash" Provider="@Provider" Height="@Height"
+        SystemPrompt="@SystemPrompt" Task="@AiTasks.Code" Suggestions="@Suggestions" Class="@Class"
+        Placeholder="Ask for code, paste an error, or describe a function…" EmptyTitle="What are we building?"
+        EmptyText="I write, explain and fix code. Paste errors or snippets for context." Options="@_options">
+    <HeaderActions>
+        <select class="bai-select" style="width:auto; padding:.3rem .6rem" @bind="_language" aria-label="Language">
+            @foreach (var language in Languages) { <option>@language</option> }
+        </select>
+        <input class="bai-input" style="width:9rem; padding:.3rem .6rem" @bind="_framework" aria-label="Framework" placeholder="Framework" />
+    </HeaderActions>
+</AiChat>
+
+@code {
+    private readonly ChatOptions _options = new() { Temperature = 0.2f };
+    private string _language = "C#";
+    private string _framework = ".NET 10 / Blazor";
+
+    [Parameter] public string Title { get; set; } = "Code assistant";
+    [Parameter] public string? Provider { get; set; }
+    [Parameter] public string? Height { get; set; } = "600px";
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public IReadOnlyList<string> Languages { get; set; } = ["C#", "Razor", "TypeScript", "JavaScript", "Python", "SQL", "Go", "Rust", "Java", "Kotlin", "Bash"];
+
+    [Parameter] public IReadOnlyList<string> Suggestions { get; set; } =
+    [
+        "Write a Blazor component that debounces an input",
+        "Explain async/await deadlocks with an example",
+        "Convert this LINQ query to a for loop for performance",
+        "Write xUnit tests for a Luhn checksum function",
+    ];
+
+    private string SystemPrompt =>
+        $"You are a senior {_language} engineer working with {_framework}. Answer with correct, idiomatic, production-quality code " +
+        $"in fenced ```{_language.ToLowerInvariant()} blocks. Explain briefly before the code and list edge cases after it. " +
+        "Prefer modern language features, async APIs, and memory-efficient patterns. If the request is ambiguous, state your assumption.";
+}

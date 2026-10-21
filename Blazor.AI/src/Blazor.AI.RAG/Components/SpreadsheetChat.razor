@@ -1,0 +1,158 @@
+@namespace Blazor.AI.RAG
+@inherits AiComponentBase
+@*
+    Ask questions about a CSV or Excel sheet. The model plans the query; GraviFrame computes the numbers exactly,
+    so totals and averages are never hallucinated. Grouped answers are charted.
+*@
+
+<AiCard Title="@Title" Subtitle="@(_frame is null ? "Upload a CSV or Excel file" : $"{_fileName} · {_frame.RowCount} rows × {_frame.ColumnCount} columns")" Icon="bi-table" Class="@Class">
+    <Actions>
+        @if (_frame is not null)
+        {
+            <button type="button" class="bai-icon-btn" title="Open another file" aria-label="Open another file" @onclick="() => _frame = null"><i class="bi bi-folder2-open"></i></button>
+        }
+    </Actions>
+    <ChildContent>
+        @if (_frame is null)
+        {
+            <label class="bai-empty" style="cursor:pointer; position:relative" for="@_inputId">
+                <i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i>
+                <span><strong>Choose a CSV or .xlsx file</strong></span>
+                <InputFile id="@_inputId" OnChange="UploadAsync" accept=".csv,.tsv,.xlsx" style="position:absolute; inset:0; opacity:0; cursor:pointer" />
+            </label>
+            @if (SampleCsv is not null)
+            {
+                <button type="button" class="bai-btn-ghost" style="margin-top:.6rem" @onclick="LoadSample"><i class="bi bi-table" aria-hidden="true"></i>Use the sample data</button>
+            }
+            <AiError Message="@Error" />
+        }
+        else
+        {
+            <div class="bai-stack">
+                <div class="bai-table-wrap" style="max-height:15rem; overflow:auto">
+                    <table class="bai-table">
+                        <thead><tr>@foreach (var c in _frame.ColumnNames) { <th>@c</th> }</tr></thead>
+                        <tbody>
+                            @for (var r = 0; r < Math.Min(PreviewRows, _frame.RowCount); r++)
+                            {
+                                var row = r;
+                                <tr>@foreach (var col in _frame.Columns) { <td class="@(col is NumericSeries ? "bai-num" : null)">@Cell(col, row)</td> }</tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <form class="bai-row" @onsubmit="AskAsync" @onsubmit:preventDefault="true">
+                    <input class="bai-input bai-spacer" @bind="_question" @bind:event="oninput" placeholder="e.g. Total revenue by region" aria-label="Question about the table" />
+                    <button type="submit" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(_question))">
+                        @if (IsBusy) { <AiThinking Label="@null" /> } else { <i class="bi bi-stars" aria-hidden="true"></i> }
+                        Ask
+                    </button>
+                </form>
+                <div class="bai-chips">
+                    @foreach (var s in Suggestions()) { <button type="button" class="bai-chip" @onclick="() => AskAsync(s)">@s</button> }
+                </div>
+                <AiError Message="@Error" />
+                @foreach (var answer in _answers.AsEnumerable().Reverse())
+                {
+                    <div class="bai-output">
+                        <div class="bai-row bai-small bai-muted" style="margin-bottom:.4rem">
+                            <strong style="color:var(--bai-ink)">@answer.Question</strong><span class="bai-spacer"></span>
+                            <code title="The query that was executed">@SpreadsheetAnalyst.Describe(answer.Query)</code>
+                        </div>
+                        @if (answer.Scalar is { } scalar)
+                        {
+                            <div class="bai-stat-value">@scalar.ToString("N2", CultureInfo.CurrentCulture)</div>
+                        }
+                        @if (answer.Rows.Count > 0)
+                        {
+                            <BarChart Values="@answer.Rows.Select(r => new BarValue(r.Key, r.Value))" Horizontal="true" />
+                        }
+                        <p style="margin:.5rem 0 0">@answer.Explanation</p>
+                    </div>
+                }
+            </div>
+        }
+    </ChildContent>
+</AiCard>
+
+@code {
+    private readonly string _inputId = "bai-sheet-" + Guid.NewGuid().ToString("N")[..6];
+    private readonly List<TableAnswer> _answers = [];
+    private DataFrame? _frame;
+    private string? _fileName;
+    private string? _question;
+
+    [Inject] private SpreadsheetAnalyst Analyst { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Spreadsheet chat";
+    [Parameter] public int PreviewRows { get; set; } = 8;
+    [Parameter] public int MaxFileSizeMb { get; set; } = 20;
+
+    /// <summary>Optional CSV offered as "Use the sample data".</summary>
+    [Parameter] public string? SampleCsv { get; set; }
+
+    /// <summary>Load a table directly instead of asking for an upload.</summary>
+    [Parameter] public DataFrame? Frame { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Frame is not null && _frame is null)
+        {
+            _frame = Frame;
+            _fileName = "data";
+        }
+    }
+
+    private async Task UploadAsync(InputFileChangeEventArgs e)
+    {
+        Error = null;
+        try
+        {
+            await using var stream = e.File.OpenReadStream(MaxFileSizeMb * 1024L * 1024L);
+            _frame = await DocumentLoader.LoadTableAsync(e.File.Name, stream);
+            _fileName = e.File.Name;
+            _answers.Clear();
+        }
+        catch (Exception ex)
+        {
+            Error = $"Could not read {e.File.Name}: {ex.Message}";
+        }
+    }
+
+    private void LoadSample()
+    {
+        _frame = DocumentLoader.ParseCsv(SampleCsv!);
+        _fileName = "sample.csv";
+        _answers.Clear();
+    }
+
+    private Task AskAsync() => AskAsync(_question);
+
+    private Task AskAsync(string? question) => string.IsNullOrWhiteSpace(question) ? Task.CompletedTask : RunAsync(async ct =>
+    {
+        _question = null;
+        _answers.Add(await Analyst.AskAsync(_frame!, question, Provider, ct));
+    });
+
+    private IEnumerable<string> Suggestions()
+    {
+        var numeric = _frame!.NumericColumns.Select(c => c.Name).FirstOrDefault();
+        var category = _frame.Columns.FirstOrDefault(c => c is not NumericSeries)?.Name;
+        if (numeric is null)
+        {
+            yield return "How many rows are there?";
+            yield break;
+        }
+
+        yield return $"What is the total {numeric}?";
+        yield return $"Average {numeric}";
+        if (category is not null)
+        {
+            yield return $"Total {numeric} by {category}";
+            yield return $"Top 5 {category} by {numeric}";
+        }
+    }
+
+    private static string Cell(Series column, int row) =>
+        column.IsMissing(row) ? "–" : column.GetValue(row) is double d ? d.ToString("0.##", CultureInfo.CurrentCulture) : Convert.ToString(column.GetValue(row), CultureInfo.CurrentCulture) ?? string.Empty;
+}

@@ -1,0 +1,87 @@
+@namespace Blazor.AI.Analytics
+@inherits AnalyticsComponentBase
+@* Pearson or Spearman correlation heatmap with the strongest pairs listed and a scatter of the selected pair. *@
+
+<AiCard Title="@Title" Subtitle="@Data.Name" Icon="bi-grid-3x3-gap" Class="@Class">
+    <Actions>
+        <AiTabs Tabs="@Methods" @bind-Selected="_method" />
+        <DatasetPicker ShowTarget="false" />
+    </Actions>
+    <ChildContent>
+        @if (Columns.Count < 2)
+        {
+            <div class="bai-empty"><i class="bi bi-grid" aria-hidden="true"></i>Needs at least two numeric columns.</div>
+        }
+        else
+        {
+            var matrix = Matrix();
+            <div class="bai-grid-2" style="align-items:start">
+                <Heatmap Values="@matrix" RowLabels="@Columns" ColumnLabels="@Columns" Colormap="coolwarm" Min="-1" Max="1" Width="560" />
+                <div class="bai-stack">
+                    <div>
+                        <span class="bai-label">Strongest relationships</span>
+                        @foreach (var (a, b, r) in Pairs(matrix).Take(6))
+                        {
+                            <button type="button" class="bai-result" style="width:100%; text-align:left; cursor:pointer" @onclick="() => (_x, _y) = (a, b)">
+                                <span class="bai-result-head"><span>@a ↔ @b</span><span class="bai-num" style="color:@(r >= 0 ? "var(--bai-nila)" : "var(--bai-danger)")">@r.ToString("+0.00;-0.00", CultureInfo.InvariantCulture)</span></span>
+                                <span class="bai-small bai-muted">@Strength(r)</span>
+                            </button>
+                        }
+                    </div>
+                    @if (_x is not null && _y is not null)
+                    {
+                        <ScatterChart Series="@([new ChartSeries($"{_x} vs {_y}", Data.Frame.Numeric(_x).Values.Zip(Data.Frame.Numeric(_y).Values, (x, y) => new ChartPoint(x, y)).ToArray())])"
+                                      XLabel="@_x" YLabel="@_y" TrendLine="true" Height="260" PointRadius="2.5" />
+                    }
+                </div>
+            </div>
+            <p class="bai-small bai-muted" style="margin:.5rem 0 0">Correlation is not causation: a strong value means two columns move together, not that one drives the other.</p>
+        }
+    </ChildContent>
+</AiCard>
+
+@code {
+    private static readonly string[] Methods = ["Pearson", "Spearman"];
+    private string _method = Methods[0];
+    private string? _x, _y;
+
+    [Parameter] public string Title { get; set; } = "Correlation matrix";
+
+    private IReadOnlyList<string> Columns => Data.NumericColumns;
+
+    protected override void OnDatasetChanged() => _x = _y = null;
+
+    private double[,] Matrix()
+    {
+        var series = Columns.Select(c => Gravicode.Science.GraviNum.NdArray.FromValues(Data.Frame.Numeric(c).FillMissingWithMean().Values)).ToArray();
+        var n = series.Length;
+        var matrix = new double[n, n];
+        for (var i = 0; i < n; i++)
+        {
+            matrix[i, i] = 1;
+            for (var j = i + 1; j < n; j++)
+            {
+                var r = _method == "Spearman"
+                    ? Gravicode.Science.GraviNum.Statistics.SpearmanCorrelation(series[i], series[j])
+                    : Gravicode.Science.GraviNum.Statistics.Correlation(series[i], series[j]);
+                matrix[i, j] = matrix[j, i] = double.IsFinite(r) ? r : 0;
+            }
+        }
+
+        return matrix;
+    }
+
+    private IEnumerable<(string A, string B, double R)> Pairs(double[,] m) =>
+        from i in Enumerable.Range(0, Columns.Count)
+        from j in Enumerable.Range(i + 1, Columns.Count - i - 1)
+        orderby Math.Abs(m[i, j]) descending
+        select (Columns[i], Columns[j], m[i, j]);
+
+    private static string Strength(double r) => Math.Abs(r) switch
+    {
+        >= 0.7 => r > 0 ? "Strong positive: they rise together" : "Strong negative: one rises as the other falls",
+        >= 0.4 => r > 0 ? "Moderate positive" : "Moderate negative",
+        >= 0.2 => "Weak",
+        _ => "Little or no linear relationship",
+    };
+}

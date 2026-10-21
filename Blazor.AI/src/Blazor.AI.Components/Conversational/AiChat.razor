@@ -1,0 +1,361 @@
+@namespace Blazor.AI.Components
+@inherits AiComponentBase
+@* Copilot-style chat: streaming markdown, tool calls, stop/regenerate, starter prompts. *@
+
+<div class="@CssClass("bai-glass bai-chat")" style="@(Height is null ? null : $"height:{Height}")" @attributes="AdditionalAttributes">
+    @if (ShowHeader)
+    {
+        <header class="bai-card-header">
+            <span class="bai-icon-tile" aria-hidden="true"><i class="bi @Icon"></i></span>
+            <div>
+                <h2 class="bai-card-title">@Title</h2>
+                @if (Subtitle is not null)
+                {
+                    <p class="bai-card-subtitle">@Subtitle</p>
+                }
+            </div>
+            <div class="bai-card-actions">
+                @HeaderActions
+                @if (_turns.Count > 0)
+                {
+                    <button type="button" class="bai-icon-btn" title="New conversation" aria-label="Start a new conversation" @onclick="ClearAsync">
+                        <i class="bi bi-plus-square"></i>
+                    </button>
+                }
+            </div>
+        </header>
+    }
+
+    <div class="bai-chat-log" @ref="_log" role="log" aria-live="polite">
+        @if (_turns.Count == 0)
+        {
+            @if (EmptyContent is not null)
+            {
+                @EmptyContent
+            }
+            else
+            {
+                <div class="bai-chat-empty">
+                    <h3>@EmptyTitle</h3>
+                    <p class="bai-muted bai-small">@EmptyText</p>
+                    @if (Suggestions is { Count: > 0 })
+                    {
+                        <div class="bai-chips">
+                            @foreach (var suggestion in Suggestions)
+                            {
+                                <button type="button" class="bai-chip" @onclick="() => SendAsync(suggestion)">@suggestion</button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        }
+
+        @for (var i = 0; i < _turns.Count; i++)
+        {
+            var turn = _turns[i];
+            var isLast = i == _turns.Count - 1;
+            <article class="bai-msg @(turn.IsUser ? "is-user" : "is-assistant")">
+                <span class="bai-msg-avatar" aria-hidden="true"><i class="bi @(turn.IsUser ? "bi-person" : "bi-stars")"></i></span>
+                <div class="bai-msg-body">
+                    <div class="bai-msg-meta">
+                        <strong>@(turn.IsUser ? UserName : turn.Author ?? AssistantName)</strong>
+                        <span>@turn.Timestamp.ToString("HH:mm")</span>
+                    </div>
+                    @foreach (var call in turn.ToolCalls)
+                    {
+                        <span class="bai-tool-call" title="@call.Arguments">
+                            <i class="bi bi-tools" aria-hidden="true"></i>@call.Name
+                            @if (call.Result is not null)
+                            {
+                                <span>→ @Shorten(call.Result)</span>
+                            }
+                        </span>
+                    }
+                    <div class="bai-msg-content">
+                        @if (turn.IsUser)
+                        {
+                            @turn.Text
+                        }
+                        else if (turn.IsError)
+                        {
+                            <AiError Message="@turn.Text" OnRetry="RegenerateAsync" />
+                        }
+                        else if (string.IsNullOrEmpty(turn.Text) && IsBusy && isLast)
+                        {
+                            <AiThinking />
+                        }
+                        else
+                        {
+                            <AiMarkdown Text="@turn.Text" />
+                        }
+                    </div>
+                    @if (!turn.IsUser && !turn.IsError && !(IsBusy && isLast))
+                    {
+                        <div class="bai-msg-tools">
+                            <button type="button" class="bai-icon-btn" title="Copy" aria-label="Copy message" @onclick="() => CopyAsync(turn.Text)"><i class="bi bi-clipboard"></i></button>
+                            @if (isLast)
+                            {
+                                <button type="button" class="bai-icon-btn" title="Regenerate" aria-label="Regenerate response" @onclick="RegenerateAsync"><i class="bi bi-arrow-repeat"></i></button>
+                            }
+                        </div>
+                    }
+                </div>
+            </article>
+        }
+    </div>
+
+    <div class="bai-chat-composer">
+        <div class="bai-composer-box">
+            <textarea @ref="_composer" rows="1" placeholder="@Placeholder" aria-label="Message" disabled="@Disabled"></textarea>
+            @if (IsBusy)
+            {
+                <button type="button" class="bai-btn" title="Stop" aria-label="Stop generating" @onclick="StopAsync"><i class="bi bi-stop-fill"></i></button>
+            }
+            else
+            {
+                <button type="button" class="bai-btn bai-btn-ai" title="Send" aria-label="Send message" @onclick="SendFromButtonAsync" disabled="@Disabled"><i class="bi bi-arrow-up"></i></button>
+            }
+        </div>
+        @if (ShowHint)
+        {
+            <div class="bai-chat-hint">Enter to send · Shift+Enter for a new line · AI can make mistakes, so check important facts.</div>
+        }
+    </div>
+</div>
+
+@code {
+    private readonly List<ChatTurn> _turns = [];
+    private readonly List<ChatMessage> _history = [];
+    private ElementReference _log;
+    private ElementReference _composer;
+    private DotNetObjectReference<AiChat>? _self;
+    private IChatClient? _client;
+    private string? _clientKey;
+    private bool _scroll;
+
+    [Parameter] public string Title { get; set; } = "Assistant";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public string Icon { get; set; } = "bi-stars";
+    [Parameter] public string? SystemPrompt { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Ask anything…";
+    [Parameter] public string AssistantName { get; set; } = "Assistant";
+    [Parameter] public string UserName { get; set; } = "You";
+    [Parameter] public string EmptyTitle { get; set; } = "How can I help?";
+    [Parameter] public string EmptyText { get; set; } = "Ask a question or pick a starting point.";
+    [Parameter] public IReadOnlyList<string>? Suggestions { get; set; }
+    [Parameter] public bool ShowHeader { get; set; } = true;
+    [Parameter] public bool ShowHint { get; set; } = true;
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>CSS height of the chat, e.g. <c>"560px"</c> or <c>"100%"</c>.</summary>
+    [Parameter] public string? Height { get; set; } = "560px";
+
+    /// <summary>Tools the model may call. Enables automatic function invocation.</summary>
+    [Parameter] public IList<AITool>? Tools { get; set; }
+
+    /// <summary>Base chat options (temperature, max tokens...).</summary>
+    [Parameter] public ChatOptions? Options { get; set; }
+
+    /// <summary>Task tag for guardrails and audit.</summary>
+    [Parameter] public string Task { get; set; } = AiTasks.Chat;
+
+    /// <summary>Called before each request to add fresh context (e.g. the record on screen) to the system prompt.</summary>
+    [Parameter] public Func<Task<string?>>? ContextProvider { get; set; }
+
+    /// <summary>Raised with the assistant's full reply.</summary>
+    [Parameter] public EventCallback<string> OnResponse { get; set; }
+
+    /// <summary>Raised for every tool call, after it ran.</summary>
+    [Parameter] public EventCallback<ToolCallInfo> OnToolCall { get; set; }
+
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
+    [Parameter] public RenderFragment? EmptyContent { get; set; }
+
+    /// <summary>The model-facing history (system prompt excluded).</summary>
+    public IReadOnlyList<ChatMessage> History => _history;
+
+    public IReadOnlyList<ChatTurn> Turns => _turns;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _self = DotNetObjectReference.Create(this);
+            await Js.AttachComposerAsync(_composer, _self);
+        }
+
+        if (_scroll)
+        {
+            _scroll = false;
+            await Js.ScrollToBottomAsync(_log);
+        }
+    }
+
+    [JSInvokable]
+    public Task SubmitFromComposer(string text) => InvokeAsync(() => SendAsync(text));
+
+    // The composer is uncontrolled (JS owns keystrokes for Enter-to-send), so the button reads its value from JS.
+    private async Task SendFromButtonAsync() => await SendAsync(await Js.GetValueAsync(_composer));
+
+    /// <summary>Sends a user message and streams the reply.</summary>
+    public async Task SendAsync(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text) || IsBusy || Disabled)
+        {
+            return;
+        }
+
+        await Js.ClearComposerAsync(_composer);
+        _turns.Add(new ChatTurn { Role = "user", Text = text.Trim() });
+        _history.Add(new ChatMessage(ChatRole.User, text.Trim()));
+        await RespondAsync();
+    }
+
+    /// <summary>Drops the last assistant reply and asks again.</summary>
+    public async Task RegenerateAsync()
+    {
+        if (IsBusy || _turns.Count == 0)
+        {
+            return;
+        }
+
+        if (!_turns[^1].IsUser)
+        {
+            _turns.RemoveAt(_turns.Count - 1);
+            while (_history.Count > 0 && _history[^1].Role != ChatRole.User)
+            {
+                _history.RemoveAt(_history.Count - 1);
+            }
+        }
+
+        await RespondAsync();
+    }
+
+    public Task ClearAsync()
+    {
+        CancelCurrent();
+        _turns.Clear();
+        _history.Clear();
+        StateHasChanged();
+        return System.Threading.Tasks.Task.CompletedTask;
+    }
+
+    private Task StopAsync()
+    {
+        CancelCurrent();
+        return System.Threading.Tasks.Task.CompletedTask;
+    }
+
+    private Task RespondAsync()
+    {
+        var turn = new ChatTurn { Role = "assistant", Author = AssistantName };
+        _turns.Add(turn);
+        _scroll = true;
+
+        return RunAsync(async ct =>
+        {
+            var messages = new List<ChatMessage>(_history.Count + 1);
+            var system = SystemPrompt;
+            if (ContextProvider is not null && await ContextProvider() is { Length: > 0 } context)
+            {
+                system = (system is null ? string.Empty : system + "\n\n") + "Current context:\n" + context;
+            }
+
+            if (!string.IsNullOrWhiteSpace(system))
+            {
+                messages.Add(new ChatMessage(ChatRole.System, system));
+            }
+
+            messages.AddRange(_history);
+            var options = (Options?.Clone() ?? new ChatOptions()).WithTask(Task);
+            if (Tools is { Count: > 0 })
+            {
+                options.Tools = [.. Tools];
+            }
+
+            var updates = new List<ChatResponseUpdate>();
+            var text = new StringBuilder();
+            try
+            {
+                await foreach (var update in GetClient().GetStreamingResponseAsync(messages, options, ct))
+                {
+                    updates.Add(update);
+                    foreach (var content in update.Contents)
+                    {
+                        switch (content)
+                        {
+                            case FunctionCallContent call:
+                                turn.ToolCalls.Add(new ToolCallInfo(call.CallId, call.Name, call.Arguments is null ? "{}" : JsonSerializer.Serialize(call.Arguments, AIJsonUtilities.DefaultOptions)));
+                                break;
+                            case FunctionResultContent result when turn.ToolCalls.FirstOrDefault(c => c.CallId == result.CallId) is { } info:
+                                info.Result = result.Result?.ToString();
+                                await OnToolCall.InvokeAsync(info);
+                                break;
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(update.Text))
+                    {
+                        text.Append(update.Text);
+                        turn.Text = text.ToString();
+                    }
+
+                    _scroll = true;
+                    RenderThrottled();
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                turn.Text = text.Length == 0 ? "_Stopped._" : text.Append("\n\n_Stopped._").ToString();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                turn.IsError = true;
+                turn.Text = Describe(ex);
+                return;
+            }
+
+            _history.AddMessages(updates);
+            _scroll = true;
+            await OnResponse.InvokeAsync(turn.Text);
+        });
+    }
+
+    private IChatClient GetClient()
+    {
+        var key = $"{Provider}|{Tools?.Count ?? 0}";
+        if (_client is null || _clientKey != key)
+        {
+            var client = ClientFactory.GetChatClient(Provider);
+            _client = Tools is { Count: > 0 }
+                ? new ChatClientBuilder(client).UseFunctionInvocation(configure: f => f.IncludeDetailedErrors = true).Build()
+                : client;
+            _clientKey = key;
+        }
+
+        return _client;
+    }
+
+    private async Task CopyAsync(string text) => await Js.CopyTextAsync(text);
+
+    private static string Shorten(string value) => value.Length <= 60 ? value : value[..57] + "…";
+
+    public override async ValueTask DisposeAsync()
+    {
+        await base.DisposeAsync();
+        try
+        {
+            await Js.DetachComposerAsync(_composer);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+            // Prerendering: no JS runtime.
+        }
+
+        _self?.Dispose();
+    }
+}

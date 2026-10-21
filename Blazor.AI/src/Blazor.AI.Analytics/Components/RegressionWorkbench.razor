@@ -1,0 +1,19 @@
+@namespace Blazor.AI.Analytics
+@* Regression end to end: train, then check actual vs predicted, residuals and error metrics. *@
+
+<div class="bai-stack @Class">
+    <ModelTrainer Title="@Title" Task="MlTask.Regression" Dataset="@Dataset" Provider="@Provider" OnTrained="r => _result = r" />
+    @if (_result is { } r)
+    {
+        <PredictionCharts Actual="@r.TestActual" Predicted="@r.TestPredicted" Subtitle="@($"{r.Model} on {r.TestActual.Length} held-out rows")" />
+    }
+</div>
+
+@code {
+    private TrainingResult? _result;
+
+    [Parameter] public string Title { get; set; } = "Regression workbench";
+    [Parameter] public AnalyticsDataset? Dataset { get; set; }
+    [Parameter] public string? Provider { get; set; }
+    [Parameter] public string? Class { get; set; }
+}
