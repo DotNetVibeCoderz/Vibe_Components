@@ -16,4 +16,7 @@
     <Project Path="src/Blazor.AI.Templates/Blazor.AI.Templates.csproj" />
     <Project Path="src/Blazor.AI.Visualization/Blazor.AI.Visualization.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Blazor.AI.Tests/Blazor.AI.Tests.csproj" />
+  </Folder>
 </Solution>
