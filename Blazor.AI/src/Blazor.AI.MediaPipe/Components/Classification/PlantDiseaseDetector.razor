@@ -1,0 +1,91 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Plant disease screening: leaf colour analysis + few-shot examples you label + an optional vision-model opinion. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="Colour analysis · your examples · AI opinion" Icon="bi-flower1">
+        <div class="bai-stack">
+            @if (_state.Health is { } hl)
+            {
+                <div class="baiv-big" style="font-size:1.6rem; color:@(hl.Severity < 0.15 ? "var(--bai-nila)" : hl.Severity < 0.4 ? "var(--bai-soga)" : "var(--bai-danger)")">@hl.Assessment</div>
+                <div class="baiv-meter"><span>Healthy green</span><div><span style="width:@Pct(hl.Green)%"></span></div><span class="bai-num">@hl.Green.ToString("P0", CultureInfo.InvariantCulture)</span></div>
+                <div class="baiv-meter"><span>Yellowing</span><div><span style="width:@Pct(hl.Yellow)%"></span></div><span class="bai-num">@hl.Yellow.ToString("P0", CultureInfo.InvariantCulture)</span></div>
+                <div class="baiv-meter"><span>Lesions</span><div><span style="width:@Pct(hl.Lesion)%; background:var(--bai-danger)"></span></div><span class="bai-num">@hl.Lesion.ToString("P1", CultureInfo.InvariantCulture)</span></div>
+            }
+            <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_showMask" @bind:after="Refresh" /> highlight lesion pixels</label>
+            <span class="bai-label">Your examples (few-shot)</span>
+            @if (_state.Match is { } m)
+            {
+                <span class="bai-small">Closest label: <b>@m.Label</b> · similarity @m.Similarity.ToString("0.00", CultureInfo.InvariantCulture) · vote @m.Confidence.ToString("P0", CultureInfo.InvariantCulture)</span>
+            }
+            <div class="bai-row">
+                <input class="bai-input bai-spacer" @bind="_label" placeholder="Label, e.g. Early blight or Healthy" aria-label="Example label" list="baiv-plant-labels" />
+                <datalist id="baiv-plant-labels">@foreach (var l in _gallery.Labels) { <option value="@l"></option> }</datalist>
+                <button type="button" class="bai-btn-ghost" disabled="@(string.IsNullOrWhiteSpace(_label) || _lastEmbedding is null)" @onclick="Teach">Add this view</button>
+            </div>
+            <div class="bai-chips">
+                @foreach (var g in _gallery.Examples.GroupBy(e => e.Label)) { <span class="bai-badge bai-badge-ai">@g.Key ×@g.Count()</span> }
+                @if (_gallery.Examples.Count == 0) { <span class="bai-small bai-muted">Add a few labelled photos of your crop's diseases to get a matched label.</span> }
+            </div>
+            <button type="button" class="bai-btn bai-btn-ai" style="width:fit-content" disabled="@IsBusy" @onclick="Opinion"><i class="bi bi-stars" aria-hidden="true"></i>Ask the agronomist</button>
+            <span class="bai-small bai-muted">Screening aid: colour shares and similar examples, not a laboratory diagnosis. Confirm with an extension officer before spraying.</span>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private sealed record State(LeafHealth? Health, GalleryMatch? Match);
+
+    private readonly ExampleGallery _gallery = new();
+    private State _state = new(null, null);
+    private bool _showMask = true;
+    private string? _label;
+    private float[]? _lastEmbedding;
+
+    [Parameter] public string Title { get; set; } = "Plant disease detector";
+
+    /// <summary>Crop name used in AI prompts (e.g. tomato, chilli, rice).</summary>
+    [Parameter] public string Crop { get; set; } = "tomato";
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.LeafDisease, VisionSamples.Fruit, VisionSamples.Livestock];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var health = LeafAnalysis.Analyse(new PixelBuffer(frame.Image));
+        var embedding = Tasks.Embed(frame.Image).Values.ToArray();
+        _lastEmbedding = embedding;
+        _state = new State(health, _gallery.Predict(embedding));
+        return new VisionOverlay
+        {
+            Mask = _showMask ? health.LesionMask : null,
+            Status = health.LeafCoverage < 0.05 ? "No leaf" : string.Create(CultureInfo.InvariantCulture, $"{health.Assessment} · lesions {health.Lesion:P1}"),
+        };
+    }
+
+    private static string Pct(double v) => Math.Min(100, v * 100).ToString("0", CultureInfo.InvariantCulture);
+
+    private void Teach()
+    {
+        if (_lastEmbedding is not null && !string.IsNullOrWhiteSpace(_label))
+        {
+            _gallery.Add(new LabelledExample(_label.Trim(), _lastEmbedding));
+            _state = _state with { Match = _gallery.Predict(_lastEmbedding) };
+        }
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+
+    private Task Opinion()
+    {
+        var s = _state;
+        var facts = s.Health is { } h
+            ? string.Create(CultureInfo.InvariantCulture, $"Crop: {Crop}. Leaf colour shares of the leaf area: green {h.Green:P0}, yellowing {h.Yellow:P0}, brown lesions {h.Lesion:P1}; heuristic assessment '{h.Assessment}'.") +
+              (s.Match is { } m ? string.Create(CultureInfo.InvariantCulture, $" Closest user-labelled example: {m.Label} (similarity {m.Similarity:0.00}).") : " No labelled examples yet.")
+            : $"Crop: {Crop}. No leaf measured.";
+        return AskAboutFrameAsync("an agronomist advising smallholder farmers in Indonesia",
+            "What disease or deficiency could this be (with likelihood), what should the farmer check to confirm, and what low-cost treatment or prevention fits?", facts);
+    }
+}

@@ -1,0 +1,86 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Food analytics: food items from object detection + ImageNet food classes, then an AI nutrition estimate (clearly an estimate). *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="Detected items + ImageNet food classes" Icon="bi-egg-fried">
+        <div class="bai-stack">
+            @if (_state.Items.Count > 0)
+            {
+                <span class="bai-label">On the plate</span>
+                <div class="bai-chips">
+                    @foreach (var (label, count, score) in _state.Items) { <span class="bai-badge">@(count > 1 ? $"{count}× " : "")@label <span class="bai-faint">@score.ToString("P0", CultureInfo.InvariantCulture)</span></span> }
+                </div>
+            }
+            else
+            {
+                <p class="bai-small bai-muted" style="margin:0">No food recognised. Try a top-down photo with good light.</p>
+            }
+            @if (_state.Dishes.Count > 0)
+            {
+                <span class="bai-label">Dish classes (ImageNet)</span>
+                @foreach (var (label, score) in _state.Dishes)
+                {
+                    <div class="baiv-meter"><span>@label</span><div><span style="width:@((score * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@score.ToString("P0", CultureInfo.InvariantCulture)</span></div>
+                }
+            }
+            <input class="bai-input" @bind="_note" placeholder="Add what the camera cannot know, e.g. nasi goreng with egg, large portion" aria-label="Meal description" />
+            <button type="button" class="bai-btn bai-btn-ai" style="width:fit-content" disabled="@IsBusy" @onclick="Estimate"><i class="bi bi-stars" aria-hidden="true"></i>Estimate nutrition</button>
+            <span class="bai-small bai-muted">Nutrition values are AI estimates from the recognised items and your note, not measurements. Not medical or dietary advice.</span>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private sealed record State(IReadOnlyList<(string Label, int Count, float Score)> Items, IReadOnlyList<(string Label, float Score)> Dishes);
+
+    /// <summary>COCO object classes that are food or drink containers.</summary>
+    public static readonly IReadOnlySet<string> FoodObjects = new HashSet<string> { "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "cup", "bowl", "wine glass", "bottle" };
+
+    /// <summary>ImageNet classes that are dishes, fruit or vegetables.</summary>
+    public static readonly IReadOnlySet<string> FoodClasses = new HashSet<string>
+    {
+        "plate", "guacamole", "consomme", "hot pot", "trifle", "ice cream", "ice lolly", "French loaf", "bagel", "pretzel", "cheeseburger", "hotdog",
+        "mashed potato", "head cabbage", "broccoli", "cauliflower", "zucchini", "spaghetti squash", "acorn squash", "butternut squash", "cucumber",
+        "artichoke", "bell pepper", "cardoon", "mushroom", "Granny Smith", "strawberry", "orange", "lemon", "fig", "pineapple", "banana", "jackfruit",
+        "custard apple", "pomegranate", "carbonara", "chocolate sauce", "dough", "meat loaf", "pizza", "potpie", "burrito", "red wine", "espresso",
+        "cup", "eggnog", "corn", "soup bowl", "frying pan", "wok",
+    };
+
+    private State _state = new([], []);
+    private string? _note;
+
+    [Parameter] public string Title { get; set; } = "Food recognition";
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Food, VisionSamples.Fruit];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var detections = Tasks.Objects(frame, 0.3f, 30, FoodObjects).Detections;
+        var dishes = Tasks.Classify(frame, 5, FoodClasses).Categories.Where(c => c.Score >= 0.05f).Select(c => (c.CategoryName ?? "?", c.Score)).ToList();
+        var items = detections.Where(d => d.TopCategory?.CategoryName is not ("cup" or "bowl" or "wine glass" or "bottle"))
+            .GroupBy(d => d.TopCategory?.CategoryName ?? "food")
+            .Select(g => (g.Key, g.Count(), g.Max(d => d.Score))).OrderByDescending(x => x.Item3).ToList();
+        _state = new State(items, dishes);
+        var overlay = new VisionOverlay();
+        foreach (var d in detections)
+        {
+            var container = d.TopCategory?.CategoryName is "cup" or "bowl" or "wine glass" or "bottle";
+            overlay.Boxes.Add(Overlay.Box(d, frame.Width, frame.Height, null, container ? Overlay.Tarum : Overlay.Soga));
+        }
+
+        overlay.Status = items.Count == 0 && dishes.Count == 0 ? "No food" : string.Join(" · ", items.Select(i => i.Item1).Concat(dishes.Take(1).Select(d => d.Item1)).Take(4));
+        return overlay;
+    }
+
+    private Task Estimate()
+    {
+        var s = _state;
+        var facts = $"Detected items: {string.Join(", ", s.Items.Select(i => $"{i.Count}× {i.Label}"))}. Dish classes: {string.Join(", ", s.Dishes.Select(d => string.Create(CultureInfo.InvariantCulture, $"{d.Label} {d.Score:P0}")))}. User note: {_note ?? "none"}.";
+        return AskAboutFrameAsync("a nutrition assistant",
+            "Estimate the meal's calories, protein, carbohydrate and fat as ranges, item by item, then one healthier swap. Label every number as an estimate.", facts);
+    }
+}

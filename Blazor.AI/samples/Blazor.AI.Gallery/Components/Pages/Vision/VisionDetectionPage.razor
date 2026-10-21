@@ -1,0 +1,152 @@
+@page "/vision/detection-copilot"
+<PageTitle>Detection, classification and vision copilot · Blazor.AI</PageTitle>
+
+<PageHeader Title="Detection, classification & copilot" Package="Blazor.AI.MediaPipe" Icon="bi-bounding-box"
+            Lead="Object detection (EfficientDet-Lite0, 80 COCO classes), image classification and embeddings (EfficientNet-Lite0, ImageNet) and vision copilots that ground every answer in local detections. Each component says how it measures, including where it relies on a heuristic." />
+
+<div class="bai-alert is-info" style="margin-bottom:1.5rem"><i class="bi bi-shield-check" aria-hidden="true"></i>Frames are analysed in memory on this server. AI buttons send the computed facts, and the frame when the model accepts images; offline mode answers from the facts.</div>
+
+<h2 class="g-section-title">Detection</h2>
+
+<DemoSection Title="Object detection" Component="ObjectDetectionPanel" Description="80 COCO classes with a score threshold, class filter chips, per-class counts and an optional IoU tracker for stable ids." Code="@ObjectCode">
+    <ObjectDetectionPanel />
+</DemoSection>
+
+<DemoSection Title="Smart retail shelf" Component="SmartRetailVision" Description="Shelf rows from edge profiles, empty gaps from low-texture runs, planogram compliance and AI restock suggestions." Code="@RetailCode">
+    <SmartRetailVision />
+</DemoSection>
+
+<DemoSection Title="Warehouse monitoring" Component="WarehouseVision" Description="People and vehicles (forklifts appear as trucks) per zone, a stock-fill estimate from texture, and person–vehicle proximity alerts." Code="@WarehouseCode">
+    <WarehouseVision />
+</DemoSection>
+
+<DemoSection Title="Safety helmet (PPE)" Component="SafetyHelmetDetector" Description="Per-person hard-hat and hi-vis checks from head and torso colour plus an ImageNet helmet classifier, with compliance % and a violation log." Code="@HelmetCode">
+    <SafetyHelmetDetector />
+</DemoSection>
+
+<DemoSection Title="Vehicle counting" Component="VehicleDetector" Description="Cars, buses, trucks, motorcycles and bicycles with a virtual counting line, direction from tracking, and counts over time." Code="@VehicleCode">
+    <VehicleDetector />
+</DemoSection>
+
+<h2 class="g-section-title">Classification</h2>
+
+<DemoSection Title="Image classification" Component="ImageClassifierPanel" Description="Top-k ImageNet classes with bars and a region of interest." Code="@ClassifierCode">
+    <ImageClassifierPanel />
+</DemoSection>
+
+<DemoSection Title="Food recognition" Component="FoodRecognition" Description="Dishes, fruit and vegetables from ImageNet and COCO, with an AI nutrition estimate clearly labelled as an estimate." Code="@FoodCode">
+    <FoodRecognition />
+</DemoSection>
+
+<DemoSection Title="Plant disease screening" Component="PlantDiseaseDetector" Description="Leaf colour analysis (healthy green, yellowing, brown lesions), few-shot matching against examples you label, and an agronomist opinion." Code="@PlantCode">
+    <PlantDiseaseDetector />
+</DemoSection>
+
+<DemoSection Title="Fish species" Component="FishSpeciesRecognizer" Description="ImageNet fish classes scanned over a 3×3 grid, plus a reference gallery you extend with local species." Code="@FishCode">
+    <FishSpeciesRecognizer />
+</DemoSection>
+
+<DemoSection Title="Medical image assistant" Component="MedicalImageAssistant" Description="For clinicians: contrast and zoom, calibrated measurements, annotations and a structured AI observation. Not a diagnosis; images are never stored." Code="@MedicalCode">
+    <MedicalImageAssistant />
+</DemoSection>
+
+<h2 class="g-section-title">Vision copilot</h2>
+
+<DemoSection Title="Vision copilot" Component="VisionCopilot" Description="Chat with the camera. Each question runs the local detectors on the latest frame and sends the facts with the frame." Code="@CopilotCode">
+    <VisionCopilot />
+</DemoSection>
+
+<DemoSection Title="Scene explainer" Component="SceneExplainer" Description="One click explains the current frame as a caption, a detailed description, alt text or a safety check." Code="@ExplainerCode">
+    <SceneExplainer />
+</DemoSection>
+
+<DemoSection Title="Visual question answering" Component="VisualQuestionAnswering" Description="Ask free-form questions about an uploaded or sample picture and keep the history." Code="@VqaCode">
+    <VisualQuestionAnswering />
+</DemoSection>
+
+<DemoSection Title="Video summarizer" Component="VideoSummarizer" Description="Sample a video or the camera every k seconds, build a timeline of detections, then summarise it." Code="@VideoCode">
+    <VideoSummarizer />
+</DemoSection>
+
+<AiCredit />
+
+@code {
+    private const string ObjectCode = """
+        <ObjectDetectionPanel Classes="@(new HashSet<string> { "person", "car", "dog" })"
+                              OnObjects="objects => latest = objects" />
+
+        // Or in your own VisionComponentBase:
+        var result = Tasks.Objects(frame, scoreThreshold: 0.4f, maxResults: 25);
+        overlay.Boxes.AddRange(result.Detections.Select(d => Overlay.Box(d, frame.Width, frame.Height)));
+        """;
+
+    private const string RetailCode = """
+        <SmartRetailVision Target="0.9" OnLowStock="e => Notify($"Restock row {e.Row + 1} ({e.Fill:P0} full)")" />
+        """;
+
+    private const string WarehouseCode = """
+        <WarehouseVision Zones="@(["Inbound", "Racking", "Dispatch"])"
+                         OnProximityAlert="pairs => nearMisses += pairs" StartWithCamera="true" />
+        """;
+
+    private const string HelmetCode = """
+        <SafetyHelmetDetector OnViolation="count => siren.Trigger(count)" Language="Bahasa Indonesia" />
+        """;
+
+    private const string VehicleCode = """
+        <VehicleDetector OnCrossing="e => log.Add($"{e.Class} {e.Direction}")" Fps="15" />
+        """;
+
+    private const string ClassifierCode = """
+        <ImageClassifierPanel OnClassified="top => label = top.FirstOrDefault().Label" />
+
+        // Direct use, with an allowlist and a region of interest:
+        var r = Tasks.Classify(frame, maxResults: 5, allow: null, region: new NormalizedRect(0.5f, 0.5f, 0.5f, 0.5f));
+        """;
+
+    private const string FoodCode = """
+        <FoodRecognition Samples="@([VisionSamples.Food, VisionSamples.Fruit])" Language="Bahasa Indonesia" />
+        """;
+
+    private const string PlantCode = """
+        <PlantDiseaseDetector Crop="cabai (chilli)" Language="Bahasa Indonesia" />
+
+        // The colour analysis is usable on its own:
+        var health = LeafAnalysis.Analyse(new PixelBuffer(frame.Image));
+        if (health.Lesion > 0.05) Warn(health.Assessment);
+        """;
+
+    private const string FishCode = """
+        <FishSpeciesRecognizer Samples="@([VisionSamples.Fish])" />
+
+        // Few-shot matching with embeddings:
+        var gallery = new ExampleGallery();
+        gallery.Add(new LabelledExample("Nila (tilapia)", Tasks.Embed(image).Values.ToArray()));
+        var match = gallery.Predict(Tasks.Embed(other).Values.ToArray());
+        """;
+
+    private const string MedicalCode = """
+        <MedicalImageAssistant Provider="openai" Modalities="@(["Dermoscopy", "Wound photo"])" />
+        """;
+
+    private const string CopilotCode = """
+        <VisionCopilot StartWithCamera="true"
+                       Suggestions="@(["What objects are visible?", "How many people are present?"])" />
+
+        // Grounded facts for your own prompts:
+        var facts = SceneFacts.From(Tasks, frame);
+        var context = facts.Describe();
+        """;
+
+    private const string ExplainerCode = """
+        <SceneExplainer Samples="VisionSamples.Scenes" />
+        """;
+
+    private const string VqaCode = """
+        <VisualQuestionAnswering OnAnswer="qa => history.Add(qa)" />
+        """;
+
+    private const string VideoCode = """
+        <VideoSummarizer AutoSummarise="true" OnTimeline="t => timeline = t" />
+        """;
+}

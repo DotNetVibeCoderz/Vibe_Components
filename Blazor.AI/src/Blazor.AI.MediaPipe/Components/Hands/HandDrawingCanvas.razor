@@ -1,0 +1,183 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Air drawing: point with the index finger to draw, make a fist or pinch to lift the pen, hold an open palm to clear. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{_strokes.Count} stroke(s) · pen {(_penDown ? "down" : "up")}")" Icon="bi-brush">
+        <div class="bai-stack">
+            <div class="bai-chips" role="radiogroup" aria-label="Pen colour">
+                @foreach (var c in Palette)
+                {
+                    <button type="button" role="radio" aria-checked="@(c == _color)" aria-label="@($"Colour {c}")" class="bai-chip @(c == _color ? "is-active" : null)" @onclick="() => _color = c"><span style="display:inline-block; width:.9rem; height:.9rem; border-radius:50%; background:@c"></span></button>
+                }
+            </div>
+            <label class="bai-small">Line width <input type="range" min="2" max="14" @bind="_width" style="width:100%" aria-label="Line width" /></label>
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="Undo">Undo</button>
+                <button type="button" class="bai-btn-ghost" @onclick="Clear">Clear</button>
+                <button type="button" class="bai-btn-ghost" disabled="@(_strokes.Count == 0)" @onclick="ExportAsync"><i class="bi bi-filetype-svg" aria-hidden="true"></i>SVG</button>
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || _strokes.Count == 0)" @onclick="Guess"><i class="bi bi-stars" aria-hidden="true"></i>What did I draw?</button>
+            </div>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+            <span class="bai-small bai-faint">Index finger only = draw · fist or pinch = pen up · open palm held for ~1 s = clear. Works best with the camera.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed record Stroke(string Color, float Width, float[] Points);
+
+    private static readonly string[] Palette = ["#d9964f", "#3cc4b1", "#7b8cff", "#e5534b", "#ffffff"];
+    private readonly object _gate = new();
+    private IReadOnlyList<Stroke> _strokes = [];
+    private List<float>? _active;
+    private string _color = Palette[0];
+    private float _width = 5;
+    private bool _penDown;
+    private int _palmFrames;
+    private double _aspect = 4 / 3.0;
+
+    [Parameter] public string Title { get; set; } = "Air drawing";
+
+    /// <summary>The strokes drawn so far (normalized coordinates).</summary>
+    public IReadOnlyList<Stroke> Strokes => _strokes;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Hands;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        _aspect = frame.Width / (double)frame.Height;
+        var result = Tasks.Hands(frame, 1);
+        var hand = result.Hands.FirstOrDefault();
+        var overlay = new VisionOverlay();
+        lock (_gate)
+        {
+            if (hand is null)
+            {
+                EndStroke();
+            }
+            else
+            {
+                var l = hand.Landmarks;
+                var e = VisionMath.ExtendedFingers(hand);
+                var pinch = VisionMath.Distance(l[4], l[8], _aspect) < VisionMath.Distance(l[5], l[9], _aspect) * 0.9;
+                var drawing = e[1] && !e[2] && !e[3] && !e[4] && !pinch;
+                _palmFrames = e.All(x => x) ? _palmFrames + 1 : 0;
+                if (_palmFrames >= (frame.IsLive ? 10 : int.MaxValue))
+                {
+                    _strokes = [];
+                    _active = null;
+                    _palmFrames = 0;
+                }
+
+                if (drawing && frame.IsLive)
+                {
+                    var tip = l[8];
+                    _active ??= [];
+                    var n = _active.Count;
+                    if (n < 2 || Math.Abs(_active[n - 2] - tip.X) + Math.Abs(_active[n - 1] - tip.Y) > 0.004)
+                    {
+                        _active.Add(tip.X);
+                        _active.Add(tip.Y);
+                    }
+                }
+                else
+                {
+                    EndStroke();
+                }
+
+                _penDown = drawing && frame.IsLive;
+                overlay.Landmarks.Add(Overlay.Hand(hand, highlight: [8]));
+                overlay.Status = drawing ? (frame.IsLive ? "✏ drawing" : "✏ (start the camera to draw)") : pinch ? "pen up (pinch)" : e.All(x => x) ? "✋ hold to clear" : "pen up";
+            }
+
+            foreach (var s in _strokes)
+            {
+                overlay.Paths.Add(new OverlayPath { Points = s.Points, Color = s.Color, Width = s.Width });
+            }
+
+            if (_active is { Count: >= 4 })
+            {
+                overlay.Paths.Add(new OverlayPath { Points = [.. _active], Color = _color, Width = _width });
+            }
+        }
+
+        return overlay;
+    }
+
+    private void EndStroke()
+    {
+        if (_active is { Count: >= 4 })
+        {
+            _strokes = [.. _strokes, new Stroke(_color, _width, [.. _active])];
+        }
+
+        _active = null;
+    }
+
+    private void Undo()
+    {
+        lock (_gate)
+        {
+            if (_strokes.Count > 0)
+            {
+                _strokes = _strokes.Take(_strokes.Count - 1).ToList();
+            }
+        }
+
+        _ = Camera?.ReprocessAsync();
+    }
+
+    private void Clear()
+    {
+        lock (_gate)
+        {
+            _strokes = [];
+            _active = null;
+        }
+
+        _ = Camera?.ReprocessAsync();
+    }
+
+    /// <summary>The drawing as SVG (no picture), sized to the camera aspect.</summary>
+    public string ToSvg()
+    {
+        var w = 800;
+        var h = (int)Math.Round(w / _aspect);
+        var sb = new StringBuilder($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {w} {h}\" width=\"{w}\" height=\"{h}\"><rect width=\"100%\" height=\"100%\" fill=\"#0b0f29\"/>");
+        foreach (var s in _strokes)
+        {
+            sb.Append("<polyline fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke=\"").Append(s.Color).Append("\" stroke-width=\"")
+              .Append((s.Width * 1.6).ToString("0.#", CultureInfo.InvariantCulture)).Append("\" points=\"");
+            for (var i = 0; i + 1 < s.Points.Length; i += 2)
+            {
+                sb.Append((s.Points[i] * w).ToString("0.#", CultureInfo.InvariantCulture)).Append(',').Append((s.Points[i + 1] * h).ToString("0.#", CultureInfo.InvariantCulture)).Append(' ');
+            }
+
+            sb.Append("\"/>");
+        }
+
+        return sb.Append("</svg>").ToString();
+    }
+
+    private async Task ExportAsync()
+    {
+        var url = "data:image/svg+xml;base64," + Convert.ToBase64String(Encoding.UTF8.GetBytes(ToSvg()));
+        await Camera!.DownloadAsync(url, $"air-drawing-{DateTime.Now:yyyyMMdd-HHmmss}.svg");
+    }
+
+    private Task Guess()
+    {
+        var desc = string.Join("; ", _strokes.Select((s, i) =>
+        {
+            var xs = s.Points.Where((_, k) => k % 2 == 0).ToArray();
+            var ys = s.Points.Where((_, k) => k % 2 == 1).ToArray();
+            return string.Create(CultureInfo.InvariantCulture, $"stroke {i + 1}: {xs.Length} points, box x {xs.Min():0.00}-{xs.Max():0.00}, y {ys.Min():0.00}-{ys.Max():0.00}, from ({xs[0]:0.00},{ys[0]:0.00}) to ({xs[^1]:0.00},{ys[^1]:0.00})");
+        }));
+        var svg = ToSvg();
+        return AskAboutFrameAsync("a playful drawing-guessing game host", "Guess what this air drawing shows (top 3 guesses with a short reason). Coordinates are normalized, y grows downward.",
+            desc + "\nSVG: " + (svg.Length > 6000 ? svg[..6000] : svg), attachImage: false);
+    }
+}

@@ -1,0 +1,191 @@
+@namespace Blazor.AI.MediaPipe
+@using Blazor.AI.ThreeD
+@inherits VisionComponentBase
+@* A 3-D gesture space: both hands as skeletons with their recognised gesture, and air drawing with the index finger. *@
+
+<div class="@CssClass("baiv-split")">
+    <div class="bai-grid-2" style="align-items:start">
+        <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+        <Scene3D Objects="@_objects" Options="@_options" Height="@Height" />
+    </div>
+    <AiCard Title="@Title" Subtitle="Gesture recognizer → 3-D hand space" Icon="bi-hand-index">
+        <div class="bai-stack">
+            @if (_hands.Count == 0)
+            {
+                <p class="bai-small bai-muted" style="margin:0">Show one or both hands.</p>
+            }
+            @foreach (var h in _hands)
+            {
+                <div class="bai-row" style="gap:.6rem"><span class="bai-chip is-active">@h.Side</span><b>@h.Gesture</b><span class="bai-small bai-muted">@h.Score.ToString("P0", CultureInfo.InvariantCulture) · @h.Fingers finger(s)</span></div>
+            }
+            <label class="bai-row bai-small"><input type="checkbox" @bind="_draw" /> Air drawing (point ☝ to draw, ✊ fist to clear)</label>
+            <div class="bai-row">
+                <span class="bai-small">@_strokes.Count stroke(s)</span>
+                <span class="bai-spacer"></span>
+                <button type="button" class="bai-btn-ghost" @onclick="Clear"><i class="bi bi-eraser" aria-hidden="true"></i>Clear</button>
+            </div>
+            <span class="bai-small bai-muted">Depth comes from MediaPipe's relative hand z, so moving towards the camera moves the hand forward in the space. Drawing needs a live camera.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private sealed record HandInfo(string Side, string Gesture, float Score, int Fingers);
+
+    private readonly SceneClock _clock = new();
+    private readonly Scene3DOptions _options = new()
+    {
+        Camera = new() { Position = [0, 1.4, 4.2], Target = [0, 1.2, 0], Fov = 45 },
+        Controls = new() { MinDistance = 1.5, MaxDistance = 10 },
+        Grid = new(6, 12, "#5b6bd6", 0.2),
+        Lights = "studio",
+        AriaLabel = "3-D hand gesture space",
+    };
+
+    private readonly object _gate = new();
+    private IReadOnlyList<Object3D> _objects = [];
+    private IReadOnlyList<HandInfo> _hands = [];
+    private IReadOnlyList<double[][]> _strokes = [];
+    private List<double[]>? _current;
+    private bool _draw = true;
+
+    [Parameter] public string Title { get; set; } = "Gesture space 3D";
+
+    /// <summary>Flip left/right like a mirror (natural for a front camera).</summary>
+    [Parameter] public bool Mirror { get; set; } = true;
+
+    [Parameter] public int MaxStrokes { get; set; } = 12;
+
+    /// <summary>Raised when a hand's gesture changes (canned names such as Pointing_Up).</summary>
+    [Parameter] public EventCallback<string> OnGesture { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Hands;
+
+    private string? _lastGesture;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.Gestures(frame, 2, 0.3f);
+        var aspect = frame.Width / (double)Math.Max(1, frame.Height);
+        var overlay = new VisionOverlay();
+        var hands = new List<HandInfo>();
+        var scene = new List<Object3D>();
+        var pointing = false;
+        double[]? tip = null;
+        for (var i = 0; i < result.Hands.Count; i++)
+        {
+            var rh = result.Hands[i];
+            var name = rh.TopGesture?.CategoryName ?? "None";
+            var score = rh.TopGesture?.Score ?? 0;
+            var side = rh.Hand.Handedness.CategoryName ?? "Hand";
+            hands.Add(new HandInfo(side, Pretty(name), score, VisionMath.CountFingers(rh.Hand)));
+            var color = side == "Left" ? ThreeDPalette.Nila : "#7b8cff";
+            scene.AddRange(Body3D.HandSkeleton($"h{i}-", rh.Hand.Landmarks, aspect, color, Mirror));
+            var wrist = Body3D.HandSpace(rh.Hand.Landmarks[0], aspect);
+            if (Mirror)
+            {
+                wrist[0] = -wrist[0];
+            }
+
+            scene.Add(Object3D.Text($"h{i}-label", [wrist[0], wrist[1] - 0.25, wrist[2]], $"{side}: {Pretty(name)}", "bai3d-label"));
+            overlay.Landmarks.Add(Overlay.Hand(rh.Hand, highlight: [8]));
+            if (name == "Pointing_Up" && score > 0.5)
+            {
+                pointing = true;
+                tip = Body3D.HandSpace(rh.Hand.Landmarks[8], aspect);
+                if (Mirror)
+                {
+                    tip[0] = -tip[0];
+                }
+            }
+
+            if (name == "Closed_Fist" && score > 0.6 && _draw)
+            {
+                Clear();
+            }
+
+            if (i == 0 && name != _lastGesture)
+            {
+                _lastGesture = name;
+                _ = InvokeAsync(() => OnGesture.InvokeAsync(name));
+            }
+        }
+
+        _hands = hands;
+        UpdateStrokes(frame.IsLive && _draw && pointing ? tip : null);
+        if (_clock.Due(frame))
+        {
+            IReadOnlyList<double[][]> strokes;
+            double[][]? current;
+            lock (_gate)
+            {
+                strokes = _strokes;
+                current = _current?.ToArray();
+            }
+
+            for (var s = 0; s < strokes.Count; s++)
+            {
+                scene.Add(Object3D.TubePath($"stroke{s}", strokes[s], 0.02, ThreeDPalette.Soga) with { Emissive = ThreeDPalette.Soga, EmissiveIntensity = 0.6, Pickable = false });
+            }
+
+            if (current is { Length: >= 2 })
+            {
+                scene.Add(Object3D.TubePath("stroke-live", current, 0.022, ThreeDPalette.Warning) with { Emissive = ThreeDPalette.Warning, EmissiveIntensity = 0.8, Pickable = false });
+            }
+
+            _objects = scene;
+            _ = InvokeAsync(StateHasChanged);
+        }
+
+        overlay.Status = hands.Count == 0 ? "No hand" : string.Join(" · ", hands.Select(h => h.Gesture));
+        return overlay;
+    }
+
+    private void UpdateStrokes(double[]? tip)
+    {
+        lock (_gate)
+        {
+            if (tip is not null)
+            {
+                _current ??= [];
+                if (_current.Count == 0 || Body3D.Length(_current[^1], tip) > 0.03)
+                {
+                    _current.Add(tip);
+                }
+
+                if (_current.Count < 400)
+                {
+                    return;
+                }
+            }
+
+            if (_current is { Count: >= 2 })
+            {
+                _strokes = [.. _strokes.TakeLast(MaxStrokes - 1), _current.ToArray()];
+            }
+
+            _current = null;
+        }
+    }
+
+    private void Clear()
+    {
+        lock (_gate)
+        {
+            _strokes = [];
+            _current = null;
+        }
+    }
+
+    private static string Pretty(string name) => name switch
+    {
+        "Thumb_Up" => "👍 Thumbs up",
+        "Thumb_Down" => "👎 Thumbs down",
+        "Open_Palm" => "✋ Open palm",
+        "Closed_Fist" => "✊ Fist",
+        "Pointing_Up" => "☝ Pointing",
+        "Victory" => "✌ Victory",
+        "ILoveYou" => "🤟 I love you",
+        _ => "–",
+    };
+}

@@ -1,0 +1,68 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Expression analysis: smile, angry, sad, surprised and neutral from the 52 face blendshapes, live and as a trend. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@(_hasFace ? $"Dominant: {_now.Dominant}" : "No face")" Icon="bi-emoji-smile">
+        <div class="bai-stack">
+            @for (var i = 0; i < FaceExpression.Names.Length; i++)
+            {
+                var v = _now[i];
+                <div class="baiv-meter"><span>@FaceExpression.Names[i]</span><div><span style="width:@((v * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@v.ToString("0.00", CultureInfo.InvariantCulture)</span></div>
+            }
+            @if (_history.Count > 1)
+            {
+                <LineChart Title="Last samples" Series="@Series" Height="170" YMin="0" YMax="1" ShowLegend="true" />
+            }
+            <details>
+                <summary class="bai-small">How expressions are computed</summary>
+                <p class="bai-small bai-muted" style="margin:.3rem 0 0">Smile = mean of mouthSmile L/R. Angry = 0.6·browDown + 0.2·mouthPress + 0.2·noseSneer. Sad = 0.6·mouthFrown + 0.4·browInnerUp·(1 − smile). Surprised = (browInnerUp + eyeWide + jawOpen)/3 × 1.4. Neutral = 1 − the strongest of the others. Values are relative signals for frontal faces.</p>
+            </details>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private FaceExpression _now = FaceExpression.Empty;
+    private IReadOnlyList<FaceExpression> _history = [];
+    private bool _hasFace;
+
+    [Parameter] public string Title { get; set; } = "Expression analyzer";
+
+    /// <summary>How many samples the trend keeps.</summary>
+    [Parameter] public int HistoryLength { get; set; } = 60;
+
+    /// <summary>Raised with each frame's expression (on the processing thread).</summary>
+    [Parameter] public Action<FaceExpression>? OnExpression { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Face, VisionSamples.ThumbsUp, VisionSamples.OpenPalms];
+
+    private IReadOnlyList<ChartSeries> Series => FaceExpression.Names.Select((n, i) =>
+        ChartSeries.FromValues(n, _history.Select(h => h[i])) with { Color = i switch { 0 => "#d9964f", 1 => "#e5534b", 2 => "#7b8cff", 3 => "#e8b84a", _ => "#3cc4b1" } }).ToList();
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.FaceLandmarks(frame, 1, blendshapes: true);
+        var face = result.Faces.FirstOrDefault();
+        _hasFace = face is not null;
+        if (face is null)
+        {
+            return new VisionOverlay { Status = "No face" };
+        }
+
+        var e = FaceExpressions.From(face);
+        _now = e;
+        _history = [.. _history.TakeLast(Math.Max(2, HistoryLength) - 1), e];
+        OnExpression?.Invoke(e);
+        var overlay = new VisionOverlay { Status = $"{e.Dominant} {e[Array.IndexOf(FaceExpression.Names, e.Dominant)]:P0}" };
+        foreach (var layer in Overlay.Face(face, allPoints: false, color: e.Dominant switch { "Smile" => Overlay.Soga, "Angry" => Overlay.Danger, "Sad" => Overlay.Tarum, "Surprised" => Overlay.Warning, _ => Overlay.Nila }))
+        {
+            overlay.Landmarks.Add(layer);
+        }
+
+        var (x, y, _, _) = Overlay.Bounds(face.Landmarks);
+        overlay.Texts.Add(Overlay.Label(x, Math.Max(0.02f, y - 0.05f), e.Dominant));
+        return overlay;
+    }
+}

@@ -1,0 +1,63 @@
+@namespace Blazor.AI.MediaPipe
+@* Shows a still image with an overlay you supply — for apps that run their own inference. No camera, no processing. *@
+
+<CameraViewer @ref="_viewer" OnFrame="Frame" Samples="@_noSamples" InitialImage="@Source" AllowCamera="false" AllowStreamUrl="false" ShowToolbar="false" Height="@Height" Class="@Class" />
+
+@code {
+    private static readonly IReadOnlyList<VisionSample> _noSamples = [];
+    private CameraViewer? _viewer;
+    private string? _shownSource;
+    private VisionOverlay? _shownOverlay;
+
+    /// <summary>Image URL (relative, absolute with CORS, or a data URL).</summary>
+    [Parameter] public string? ImageUrl { get; set; }
+
+    /// <summary>Encoded image bytes (JPEG/PNG); used when <see cref="ImageUrl"/> is null.</summary>
+    [Parameter] public byte[]? ImageBytes { get; set; }
+
+    [Parameter] public string ContentType { get; set; } = "image/jpeg";
+
+    /// <summary>What to draw over the image (normalized coordinates).</summary>
+    [Parameter] public VisionOverlay? Overlay { get; set; }
+
+    [Parameter] public string Height { get; set; } = "360px";
+    [Parameter] public string? Class { get; set; }
+
+    private string? Source => ImageUrl ?? (ImageBytes is { Length: > 0 } ? $"data:{ContentType};base64,{Convert.ToBase64String(ImageBytes)}" : null);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_viewer is null)
+        {
+            return;
+        }
+
+        var source = Source;
+        if (source != _shownSource)
+        {
+            _shownSource = source;
+            _shownOverlay = Overlay;
+            if (source is not null)
+            {
+                await _viewer.UseSampleAsync(source);
+            }
+        }
+        else if (!ReferenceEquals(Overlay, _shownOverlay))
+        {
+            _shownOverlay = Overlay;
+            await _viewer.SetOverlayAsync(Overlay);
+        }
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _shownSource = Source;
+            _shownOverlay = Overlay;
+        }
+    }
+
+    // The viewer asks for an overlay when the picture loads; answer with the caller's.
+    private Task<VisionOverlay?> Frame(VisionFrame frame) => Task.FromResult(Overlay);
+}

@@ -1,0 +1,120 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* Factory and site safety: people in restricted zones, hard-hat cue per worker, unsafe bending, violations log with snapshots. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{_people} people · {_noHelmet} without hard hat · {_inZone} in restricted zone")" Icon="bi-cone-striped">
+        <div class="bai-stack">
+            <div class="bai-row">
+                <div><div class="baiv-big" style="color:@(_compliance < 1 ? "var(--bai-danger)" : "var(--bai-nila)")">@_compliance.ToString("P0", CultureInfo.InvariantCulture)</div><span class="bai-small bai-muted">PPE compliance</span></div>
+                <div><div class="baiv-big">@_bending</div><span class="bai-small bai-muted">unsafe bends</span></div>
+            </div>
+            <label class="bai-small">Hard-hat sensitivity <input type="range" min="0.05" max="0.5" step="0.01" @bind="HelmetThreshold" @bind:after="Refresh" style="width:100%" aria-label="Hard-hat colour threshold" /></label>
+            <span class="bai-small bai-faint">Hard-hat detection is a colour heuristic on the head region (no PPE-specific model); verify alerts before acting.</span>
+            <span class="bai-label">Violations</span>
+            @EventLog()
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private int _people, _noHelmet, _inZone, _bending;
+    private double _compliance = 1;
+    private readonly HashSet<string> _active = [];
+
+    [Parameter] public string Title { get; set; } = "Factory safety monitor";
+
+    /// <summary>Restricted areas (normalized rectangles) where people must not stand.</summary>
+    [Parameter] public IReadOnlyList<(float X, float Y, float W, float H)> RestrictedZones { get; set; } = [(0.0f, 0.55f, 0.22f, 0.45f)];
+
+    /// <summary>Share of safety-coloured pixels in the head region that counts as a hard hat.</summary>
+    [Parameter] public double HelmetThreshold { get; set; } = 0.18;
+
+    /// <summary>Back angle (degrees from vertical) that counts as unsafe bending.</summary>
+    [Parameter] public double BendLimit { get; set; } = 45;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Construction, VisionSamples.Warehouse, VisionSamples.Street];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var overlay = new VisionOverlay();
+        foreach (var z in RestrictedZones)
+        {
+            overlay.Boxes.Add(VisionSolutions.ZoneBox(z, "Restricted", Overlay.Danger));
+        }
+
+        var people = Tasks.Objects(frame, 0.35f, 30, new HashSet<string> { "person" }).Detections;
+        var (rgb, w, h) = VisionSolutions.Pixels(frame.Image, 640);
+        var poses = Tasks.Pose(frame, PoseModel.Lite, 4).Poses;
+        var aspect = frame.Width / (double)frame.Height;
+        int noHelmet = 0, inZone = 0, bending = 0;
+        var violations = new HashSet<string>();
+        for (var i = 0; i < people.Count; i++)
+        {
+            var box = VisionSolutions.Norm(people[i], frame.Width, frame.Height);
+            // Head region: top 17% of the person box, central 60% of its width.
+            var helmet = VisionSolutions.HardHatScore(rgb, w, h, box.X + box.W * 0.2f, box.Y, box.W * 0.6f, box.H * 0.17f);
+            var hasHelmet = helmet >= HelmetThreshold;
+            var feet = (box.X + box.W / 2, box.Y + box.H);
+            var zone = RestrictedZones.Any(z => VisionSolutions.Inside(feet, z));
+            var pose = poses.FirstOrDefault(p => VisionSolutions.Inside(((p.Landmarks[23].X + p.Landmarks[24].X) / 2, (p.Landmarks[23].Y + p.Landmarks[24].Y) / 2), box));
+            var bent = false;
+            if (pose is not null)
+            {
+                var l = pose.Landmarks;
+                var back = Math.Abs(Math.Atan2(((l[11].X + l[12].X) / 2 - (l[23].X + l[24].X) / 2) * aspect, (l[23].Y + l[24].Y) / 2 - (l[11].Y + l[12].Y) / 2) * 180 / Math.PI);
+                bent = back > BendLimit && back < 135;
+            }
+
+            noHelmet += hasHelmet ? 0 : 1;
+            inZone += zone ? 1 : 0;
+            bending += bent ? 1 : 0;
+            var issues = new List<string>();
+            if (!hasHelmet)
+            {
+                issues.Add("no hard hat");
+                violations.Add($"helmet:{i}");
+            }
+
+            if (zone)
+            {
+                issues.Add("restricted zone");
+                violations.Add($"zone:{i}");
+            }
+
+            if (bent)
+            {
+                issues.Add("unsafe bend");
+                violations.Add($"bend:{i}");
+            }
+
+            overlay.Boxes.Add(new OverlayBox { X = box.X, Y = box.Y, W = box.W, H = box.H, Color = issues.Count == 0 ? Overlay.Nila : Overlay.Danger, Label = issues.Count == 0 ? "OK" : string.Join(", ", issues) });
+            overlay.Boxes.Add(new OverlayBox { X = box.X + box.W * 0.2f, Y = box.Y, W = box.W * 0.6f, H = box.H * 0.17f, Color = hasHelmet ? Overlay.Nila : Overlay.Warning, Dashed = true });
+        }
+
+        _people = people.Count;
+        _noHelmet = noHelmet;
+        _inZone = inZone;
+        _bending = bending;
+        _compliance = people.Count == 0 ? 1 : 1 - noHelmet / (double)people.Count;
+        // Publish each new kind of violation once while it persists.
+        var newKinds = violations.Select(v => v.Split(':')[0]).Distinct().Where(k => !_active.Contains(k)).ToList();
+        foreach (var k in newKinds)
+        {
+            var msg = k switch { "helmet" => $"{noHelmet} worker(s) without a hard hat", "zone" => $"{inZone} worker(s) inside a restricted zone", _ => $"{bending} worker(s) bending unsafely" };
+            Publish(k, msg, k == "zone" ? VisionEventSeverity.Alert : VisionEventSeverity.Warning, snapshot: true, counts: new Dictionary<string, int> { ["person"] = people.Count, [k] = k == "helmet" ? noHelmet : k == "zone" ? inZone : bending });
+        }
+
+        _active.Clear();
+        foreach (var v in violations)
+        {
+            _active.Add(v.Split(':')[0]);
+        }
+
+        overlay.Status = $"{people.Count} people · PPE {_compliance:P0}";
+        return overlay;
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+}

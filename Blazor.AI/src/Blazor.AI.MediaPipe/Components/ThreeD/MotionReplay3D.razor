@@ -1,0 +1,311 @@
+@namespace Blazor.AI.MediaPipe
+@using Blazor.AI.ThreeD
+@inherits VisionComponentBase
+@* Record a movement (or load a mocap JSON take) and replay it in 3-D with onion-skin ghosts, joint trails and variable speed. *@
+
+<div class="@CssClass("baiv-split")">
+    <div class="bai-grid-2" style="align-items:start">
+        <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+        <Scene3D Objects="@_objects" Options="@_options" Height="@Height" />
+    </div>
+    <AiCard Title="@Title" Subtitle="@($"{_take.Count} frames · {Duration.ToString("0.0", CultureInfo.InvariantCulture)} s")" Icon="bi-film">
+        <div class="bai-stack">
+            <div class="bai-row" style="flex-wrap:wrap">
+                @if (_recording)
+                {
+                    <button type="button" class="bai-btn" @onclick="StopRecording"><i class="bi bi-stop-fill" aria-hidden="true"></i>Stop (@_recorded.Count)</button>
+                }
+                else
+                {
+                    <button type="button" class="bai-btn" @onclick="StartRecording" disabled="@(!LastFrame.Live)"><i class="bi bi-record-circle" aria-hidden="true"></i>Record</button>
+                }
+                <button type="button" class="bai-btn-ghost" @onclick="TogglePlay" disabled="@(_take.Count < 2 || _recording)"><i class="bi @(_playing ? "bi-pause-fill" : "bi-play-fill")" aria-hidden="true"></i>@(_playing ? "Pause" : "Replay")</button>
+                <label class="bai-chip" style="position:relative; cursor:pointer"><i class="bi bi-folder2-open" aria-hidden="true"></i>Load JSON
+                    <InputFile OnChange="LoadAsync" accept=".json,application/json" style="position:absolute; inset:0; opacity:0; cursor:pointer" aria-label="Load a mocap JSON take" />
+                </label>
+            </div>
+            @if (!LastFrame.Live && !_recording && _take.Count == 0)
+            {
+                <div class="bai-alert is-info" role="status">Start the camera or play a video to record, or load a take exported by the motion capture studio.</div>
+            }
+            @if (_take.Count >= 2)
+            {
+                <label class="bai-small">Time @_time.ToString("0.00", CultureInfo.InvariantCulture) s
+                    <input type="range" min="0" max="@Duration.ToString(CultureInfo.InvariantCulture)" step="0.02" value="@_time.ToString(CultureInfo.InvariantCulture)" @oninput="Scrub" style="width:100%" aria-label="Replay time" />
+                </label>
+                <div class="bai-chips" role="radiogroup" aria-label="Replay speed">
+                    @foreach (var s in Speeds)
+                    {
+                        <button type="button" role="radio" aria-checked="@(s == _speed)" class="bai-chip @(s == _speed ? "is-active" : null)" @onclick="() => _speed = s">@s.ToString("0.##", CultureInfo.InvariantCulture)×</button>
+                    }
+                </div>
+                <label class="bai-row bai-small"><input type="checkbox" @bind="_ghosts" @bind:after="Render" /> Onion-skin ghosts</label>
+                <label class="bai-row bai-small"><input type="checkbox" @bind="_trails" @bind:after="Render" /> Hand and foot trails</label>
+                <label class="bai-row bai-small"><input type="checkbox" @bind="_loop" /> Loop</label>
+            }
+            @if (_loadError is not null)
+            {
+                <div class="bai-alert" role="alert">@_loadError</div>
+            }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly double[] Speeds = [0.25, 0.5, 1, 2];
+    private static readonly PoseLandmark[] Tracked = [PoseLandmark.LeftWrist, PoseLandmark.RightWrist, PoseLandmark.LeftAnkle, PoseLandmark.RightAnkle];
+
+    private readonly object _gate = new();
+    private readonly LandmarkFilter _filter = new(1.0, 0.03);
+    private readonly SceneClock _clock = new();
+    private readonly Scene3DOptions _options = Body3D.Stage("Motion replay", distance: 3.6);
+    private readonly List<MocapFrame> _recorded = [];
+    private IReadOnlyList<MocapFrame> _take = [];
+    private IReadOnlyList<Object3D> _objects = [];
+    private bool _recording, _playing, _ghosts = true, _trails = true, _loop = true;
+    private double _time, _speed = 1, _t0 = double.NaN;
+    private string? _loadError;
+    private CancellationTokenSource? _play;
+
+    [Parameter] public string Title { get; set; } = "Motion replay 3D";
+
+    /// <summary>Longest recording in seconds.</summary>
+    [Parameter] public double MaxSeconds { get; set; } = 30;
+
+    /// <summary>Raised when a take is recorded or loaded.</summary>
+    [Parameter] public EventCallback<IReadOnlyList<MocapFrame>> OnTake { get; set; }
+
+    private double Duration => _take.Count < 2 ? 0 : _take[^1].Time;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Bodies;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var pose = Tasks.Pose(frame, PoseModel.Full).Poses.FirstOrDefault();
+        var overlay = new VisionOverlay();
+        if (pose is null)
+        {
+            overlay.Status = _recording ? "● REC · no person" : "No person";
+            return overlay;
+        }
+
+        overlay.Landmarks.Add(Overlay.Pose(pose, _recording ? Overlay.Danger : Overlay.Nila));
+        var t = frame.TimestampMs / 1000.0;
+        if (_recording && frame.IsLive)
+        {
+            var world = _filter.Filter(pose.WorldLandmarks, t);
+            lock (_gate)
+            {
+                if (double.IsNaN(_t0))
+                {
+                    _t0 = t;
+                }
+
+                _recorded.Add(new MocapFrame(t - _t0, world, [.. pose.Landmarks]));
+                if (t - _t0 >= MaxSeconds)
+                {
+                    _ = InvokeAsync(StopRecording);
+                }
+            }
+
+            overlay.Status = $"● REC {t - _t0:0.0} s";
+        }
+
+        if (!_playing && _clock.Due(frame))
+        {
+            _objects = Body3D.Skeleton("live-", pose.WorldLandmarks, _recording ? ThreeDPalette.Danger : ThreeDPalette.Nila, tubes: true, visibility: pose.Landmarks);
+            _ = InvokeAsync(StateHasChanged);
+        }
+
+        return overlay;
+    }
+
+    private void StartRecording()
+    {
+        StopPlayback();
+        lock (_gate)
+        {
+            _recorded.Clear();
+            _t0 = double.NaN;
+        }
+
+        _filter.Reset();
+        _recording = true;
+    }
+
+    private async Task StopRecording()
+    {
+        if (!_recording)
+        {
+            return;
+        }
+
+        _recording = false;
+        lock (_gate)
+        {
+            _take = _recorded.ToArray();
+        }
+
+        _time = 0;
+        await OnTake.InvokeAsync(_take);
+        Render();
+        StateHasChanged();
+    }
+
+    private async Task LoadAsync(InputFileChangeEventArgs e)
+    {
+        _loadError = null;
+        try
+        {
+            await using var stream = e.File.OpenReadStream(20 * 1024 * 1024);
+            using var reader = new StreamReader(stream);
+            var frames = MocapExport.FromJson(await reader.ReadToEndAsync());
+            if (frames.Count < 2)
+            {
+                _loadError = "That file has no 33-landmark frames.";
+                return;
+            }
+
+            StopPlayback();
+            var start = frames[0].Time;
+            _take = frames.Select(f => f with { Time = f.Time - start }).ToArray();
+            _time = 0;
+            await OnTake.InvokeAsync(_take);
+            Render();
+        }
+        catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or InvalidOperationException or KeyNotFoundException or FormatException)
+        {
+            _loadError = $"Could not read the take: {ex.Message}";
+        }
+    }
+
+    private void TogglePlay()
+    {
+        if (_playing)
+        {
+            StopPlayback();
+            return;
+        }
+
+        if (_time >= Duration)
+        {
+            _time = 0;
+        }
+
+        _playing = true;
+        _play = new CancellationTokenSource();
+        _ = PlayAsync(_play.Token);
+    }
+
+    private async Task PlayAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                _time += 0.1 * _speed;
+                if (_time > Duration)
+                {
+                    if (!_loop)
+                    {
+                        _time = Duration;
+                        _playing = false;
+                        await InvokeAsync(() => { Render(); StateHasChanged(); });
+                        return;
+                    }
+
+                    _time = 0;
+                }
+
+                await InvokeAsync(() => { Render(); StateHasChanged(); });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void StopPlayback()
+    {
+        _play?.Cancel();
+        _play?.Dispose();
+        _play = null;
+        _playing = false;
+    }
+
+    private void Scrub(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var t))
+        {
+            _time = Math.Clamp(t, 0, Duration);
+            Render();
+        }
+    }
+
+    private int IndexAt(double t)
+    {
+        var take = _take;
+        int lo = 0, hi = take.Count - 1;
+        while (lo < hi)
+        {
+            var mid = (lo + hi + 1) / 2;
+            if (take[mid].Time <= t)
+            {
+                lo = mid;
+            }
+            else
+            {
+                hi = mid - 1;
+            }
+        }
+
+        return lo;
+    }
+
+    private void Render()
+    {
+        var take = _take;
+        if (take.Count < 2)
+        {
+            return;
+        }
+
+        var i = IndexAt(_time);
+        var list = Body3D.Skeleton("rp-", take[i].World, ThreeDPalette.Soga, tubes: true);
+        if (_ghosts)
+        {
+            for (var g = 1; g <= 3; g++)
+            {
+                var gi = IndexAt(_time - g * 0.25);
+                if (gi == i)
+                {
+                    break;
+                }
+
+                list.AddRange(Body3D.Skeleton($"g{g}-", take[gi].World, ThreeDPalette.Tarum).Select(o => o with { Opacity = 0.5 - g * 0.12 }));
+            }
+        }
+
+        if (_trails)
+        {
+            var from = IndexAt(_time - 1.5);
+            foreach (var joint in Tracked)
+            {
+                var pts = take.Skip(from).Take(i - from + 1).Select(f => Body3D.Joint(f.World, joint)).ToArray();
+                if (pts.Length >= 2)
+                {
+                    list.Add(Object3D.Line($"tr-{joint}", pts, ThreeDPalette.Warning));
+                }
+            }
+        }
+
+        _objects = list;
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        StopPlayback();
+        await base.DisposeAsync();
+    }
+}

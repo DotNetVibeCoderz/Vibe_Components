@@ -1,0 +1,200 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Movement analytics: joint-angle time series, limb speed, left/right symmetry and peak detection, with an AI analyst. *@
+
+<div class="@CssClass("baiv-split")">
+    <div class="bai-stack">
+        <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+        <LineChart Title="@($"{Pair} angle (°) over the last {WindowSeconds} s")" Series="@ChartSeries()" Height="200" XLabel="seconds" ShowLegend="true" Highlights="@PeakPoints()" />
+    </div>
+    <AiCard Title="@Title" Subtitle="@($"{_snap.Samples.Length} samples · {_snap.Duration:0.0} s")" Icon="bi-graph-up-arrow">
+        <div class="bai-stack">
+            <select class="bai-select" @bind="Pair" aria-label="Joint">
+                @foreach (var p in Pairs) { <option>@p</option> }
+            </select>
+            <span class="bai-label">Symmetry (left vs right)</span>
+            @foreach (var p in Pairs)
+            {
+                var s = Symmetry(p);
+                <div class="baiv-meter"><span>@p</span><div><span style="width:@((s * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@(double.IsNaN(s) ? "–" : s.ToString("P0", CultureInfo.InvariantCulture))</span></div>
+            }
+            <span class="bai-label">Peak speed (m/s, relative to hips)</span>
+            <div class="bai-row bai-small">
+                @foreach (var (name, v) in PeakSpeeds()) { <span>@name <b>@v.ToString("0.0", CultureInfo.InvariantCulture)</b></span> }
+            </div>
+            <span class="bai-small">Peaks in @Pair: <b>@Peaks().Count</b> @(Peaks().Count > 1 ? $"· cadence {Cadence():0.0} /min" : "")</span>
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="Clear">Clear</button>
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="Analyse"><i class="bi bi-stars" aria-hidden="true"></i>Analyse movement</button>
+            </div>
+            <span class="bai-small bai-muted">Use the camera or a video for time series; a still image gives one sample.</span>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    /// <summary>One analysed frame.</summary>
+    public sealed record MotionSample(double Time, IReadOnlyDictionary<string, double> Angles, IReadOnlyDictionary<string, double> Speeds);
+
+    private sealed record Snapshot(MotionSample[] Samples, double Duration);
+
+    private static readonly string[] Pairs = ["Elbow", "Shoulder", "Hip", "Knee"];
+    private static readonly (string Name, PoseLandmark Id)[] Limbs = [("L wrist", PoseLandmark.LeftWrist), ("R wrist", PoseLandmark.RightWrist), ("L ankle", PoseLandmark.LeftAnkle), ("R ankle", PoseLandmark.RightAnkle)];
+    private readonly List<MotionSample> _samples = [];
+    private Snapshot _snap = new([], 0);
+    private (double T, MediaPipeNet.Landmark[] W)? _previous;
+
+    [Parameter] public string Title { get; set; } = "Sports analyzer";
+
+    /// <summary>Elbow, Shoulder, Hip or Knee.</summary>
+    [Parameter] public string Pair { get; set; } = "Knee";
+
+    [Parameter] public int WindowSeconds { get; set; } = 15;
+
+    /// <summary>Sport or drill being analysed, given to the AI analyst.</summary>
+    [Parameter] public string Activity { get; set; } = "running drill";
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Bodies;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var pose = Tasks.Pose(frame).Poses.FirstOrDefault();
+        var overlay = new VisionOverlay();
+        if (pose is null)
+        {
+            overlay.Status = "No athlete";
+            return overlay;
+        }
+
+        var t = frame.IsLive ? frame.TimestampMs / 1000.0 : (_samples.Count == 0 ? 0 : _samples[^1].Time + 0.1);
+        var speeds = new Dictionary<string, double>();
+        var w = pose.WorldLandmarks.ToArray();
+        if (_previous is { } prev && t > prev.T)
+        {
+            foreach (var (name, id) in Limbs)
+            {
+                speeds[name] = System.Numerics.Vector3.Distance(PoseAnalytics.V(w[(int)id]), PoseAnalytics.V(prev.W[(int)id])) / (t - prev.T);
+            }
+        }
+
+        _previous = (t, w);
+        _samples.Add(new MotionSample(t, PoseAnalytics.Angles(pose), speeds));
+        _samples.RemoveAll(s => s.Time < t - WindowSeconds);
+        _snap = new Snapshot([.. _samples], _samples.Count > 1 ? _samples[^1].Time - _samples[0].Time : 0);
+
+        var fastest = speeds.Count > 0 ? speeds.MaxBy(kv => kv.Value) : default;
+        int[]? highlight = fastest.Key is null ? null : [(int)Limbs.First(l => l.Name == fastest.Key).Id];
+        overlay.Landmarks.Add(Overlay.Pose(pose, Overlay.Nila, highlight));
+        overlay.Status = fastest.Key is null ? "Tracking" : $"fastest: {fastest.Key} {fastest.Value:0.0} m/s";
+        return overlay;
+    }
+
+    private IReadOnlyList<ChartSeries> ChartSeries()
+    {
+        var s = _snap.Samples;
+        if (s.Length == 0)
+        {
+            return [];
+        }
+
+        var t0 = s[0].Time;
+        return
+        [
+            new($"Left {Pair.ToLowerInvariant()}", s.Select(x => new ChartPoint(x.Time - t0, x.Angles.GetValueOrDefault($"Left {Pair.ToLowerInvariant()}"))).ToArray()) { Color = "var(--bai-soga)" },
+            new($"Right {Pair.ToLowerInvariant()}", s.Select(x => new ChartPoint(x.Time - t0, x.Angles.GetValueOrDefault($"Right {Pair.ToLowerInvariant()}"))).ToArray()) { Color = "var(--bai-nila)" },
+        ];
+    }
+
+    private double[] Combined() => _snap.Samples.Select(x => (x.Angles.GetValueOrDefault($"Left {Pair.ToLowerInvariant()}") + x.Angles.GetValueOrDefault($"Right {Pair.ToLowerInvariant()}")) / 2).ToArray();
+
+    /// <summary>Indices of local maxima more than half a standard deviation above the mean, at least 0.3 s apart.</summary>
+    private List<int> Peaks()
+    {
+        var v = Combined();
+        if (v.Length < 5)
+        {
+            return [];
+        }
+
+        var mean = v.Average();
+        var sd = Math.Sqrt(v.Average(x => (x - mean) * (x - mean)));
+        var peaks = new List<int>();
+        for (var i = 2; i < v.Length - 2; i++)
+        {
+            if (v[i] > mean + sd * 0.5 && v[i] >= v[i - 1] && v[i] >= v[i + 1] && v[i] >= v[i - 2] && v[i] >= v[i + 2]
+                && (peaks.Count == 0 || _snap.Samples[i].Time - _snap.Samples[peaks[^1]].Time > 0.3))
+            {
+                peaks.Add(i);
+            }
+        }
+
+        return peaks;
+    }
+
+    private IReadOnlyList<ChartPoint> PeakPoints()
+    {
+        if (_snap.Samples.Length == 0)
+        {
+            return [];
+        }
+
+        var v = Combined();
+        var t0 = _snap.Samples[0].Time;
+        return Peaks().Select(i => new ChartPoint(_snap.Samples[i].Time - t0, v[i], "peak")).ToList();
+    }
+
+    private double Cadence()
+    {
+        var p = Peaks();
+        return p.Count < 2 ? 0 : (p.Count - 1) / (_snap.Samples[p[^1]].Time - _snap.Samples[p[0]].Time) * 60;
+    }
+
+    /// <summary>1 − mean |L − R| / mean (L + R)/2 over the window (1 = perfectly symmetric).</summary>
+    private double Symmetry(string pair)
+    {
+        var s = _snap.Samples;
+        if (s.Length == 0)
+        {
+            return double.NaN;
+        }
+
+        var l = s.Select(x => x.Angles.GetValueOrDefault($"Left {pair.ToLowerInvariant()}")).ToArray();
+        var r = s.Select(x => x.Angles.GetValueOrDefault($"Right {pair.ToLowerInvariant()}")).ToArray();
+        var diff = l.Zip(r, (a, b) => Math.Abs(a - b)).Average();
+        var mean = l.Zip(r, (a, b) => (a + b) / 2).Average();
+        return Math.Clamp(1 - diff / Math.Max(1, mean), 0, 1);
+    }
+
+    private IEnumerable<(string, double)> PeakSpeeds() =>
+        Limbs.Select(l => (l.Name, _snap.Samples.Select(s => s.Speeds.GetValueOrDefault(l.Name)).DefaultIfEmpty(0).Max()));
+
+    private void Clear()
+    {
+        _samples.Clear();
+        _previous = null;
+        _snap = new([], 0);
+    }
+
+    private void Changed(VisionSourceKind kind)
+    {
+        Clear();
+        HandleSourceChanged(kind);
+    }
+
+    private Task Analyse()
+    {
+        var facts = string.Create(CultureInfo.InvariantCulture,
+            $"Activity: {Activity}. Window {_snap.Duration:0.0} s, {_snap.Samples.Length} samples. ") +
+            string.Join("; ", Pairs.Select(p => string.Create(CultureInfo.InvariantCulture, $"{p} symmetry {Symmetry(p):P0}, left range {Range($"Left {p.ToLowerInvariant()}")}, right range {Range($"Right {p.ToLowerInvariant()}")}"))) +
+            string.Create(CultureInfo.InvariantCulture, $". Peak speeds: {string.Join(", ", PeakSpeeds().Select(x => $"{x.Item1} {x.Item2:0.0} m/s"))}. {Pair} peaks {Peaks().Count}, cadence {Cadence():0.0}/min.");
+        return AskAboutFrameAsync("a sports biomechanist", "What stands out in this movement and what should the athlete work on?", facts, attachImage: false);
+    }
+
+    private string Range(string joint)
+    {
+        var v = _snap.Samples.Select(s => s.Angles.GetValueOrDefault(joint)).ToArray();
+        return v.Length == 0 ? "n/a" : string.Create(CultureInfo.InvariantCulture, $"{v.Min():0}–{v.Max():0}°");
+    }
+}

@@ -1,0 +1,114 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@inject IFaceEmbedder Embedder
+@* 1:1 face verification: capture a reference, capture a probe, compare; a blink check gives a liveness hint. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="Reference → probe · cosine similarity" Icon="bi-person-badge">
+        <div class="bai-stack">
+            <div class="bai-grid-2">
+                <div class="bai-stack" style="gap:.3rem">
+                    <span class="bai-label">Reference</span>
+                    @if (_refThumb is not null) { <img class="bai3d-portrait" src="@_refThumb" alt="Reference face" /> }
+                    <button type="button" class="bai-btn-ghost" disabled="@(_current is null)" @onclick="CaptureReferenceAsync"><i class="bi bi-1-circle" aria-hidden="true"></i>Capture</button>
+                </div>
+                <div class="bai-stack" style="gap:.3rem">
+                    <span class="bai-label">Probe</span>
+                    @if (_probeThumb is not null) { <img class="bai3d-portrait" src="@_probeThumb" alt="Probe face" /> }
+                    <button type="button" class="bai-btn-ghost" disabled="@(_current is null || _reference is null)" @onclick="CaptureProbeAsync"><i class="bi bi-2-circle" aria-hidden="true"></i>Verify</button>
+                </div>
+            </div>
+            <label class="bai-small">Threshold @Threshold.ToString("0.00", CultureInfo.InvariantCulture)
+                <input type="range" min="0.5" max="0.98" step="0.01" @bind="Threshold" style="width:100%" aria-label="Verification threshold" />
+            </label>
+            @if (_similarity is { } s)
+            {
+                <div class="baiv-big" style="color:@(s >= Threshold ? "var(--bai-nila)" : "var(--bai-danger)")">@(s >= Threshold ? "Match" : "No match")</div>
+                <span class="bai-small">Similarity <b>@s.ToString("0.000", CultureInfo.InvariantCulture)</b> (threshold @Threshold.ToString("0.00", CultureInfo.InvariantCulture))</span>
+            }
+            <div class="bai-row bai-small">
+                <span class="bai-badge @(_blinks > 0 ? "bai-badge-local" : null)"><i class="bi bi-eye" aria-hidden="true"></i> @_blinks blink(s)</span>
+                <span class="bai-muted">Liveness hint: blink during live capture. Photos and video replays can still pass; use a proper anti-spoofing model for security decisions.</span>
+            </div>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private float[]? _current, _reference;
+    private string? _refThumb, _probeThumb;
+    private double? _similarity;
+    private int _blinks;
+    private bool _eyesClosed;
+
+    [Parameter] public string Title { get; set; } = "Face verification";
+
+    [Parameter] public double Threshold { get; set; } = 0.82;
+
+    /// <summary>Raised after each verification with (similarity, matched, blinks seen).</summary>
+    [Parameter] public EventCallback<(double Similarity, bool Matched, int Blinks)> OnVerified { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Face, VisionSamples.ThumbsUp, VisionSamples.OpenPalms];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.FaceLandmarks(frame, 1, blendshapes: false);
+        var face = result.Faces.FirstOrDefault();
+        if (face is null)
+        {
+            _current = null;
+            return new VisionOverlay { Status = "No face" };
+        }
+
+        _current = Embedder.Embed(frame, face, Tasks);
+        var (l, r) = VisionMath.EyeAspectRatio(face.Landmarks, frame.Width / (double)frame.Height);
+        var ear = (l + r) / 2;
+        if (frame.IsLive)
+        {
+            // Hysteresis: closed below 0.17, open again above 0.22.
+            if (!_eyesClosed && ear < 0.17)
+            {
+                _eyesClosed = true;
+            }
+            else if (_eyesClosed && ear > 0.22)
+            {
+                _eyesClosed = false;
+                _blinks++;
+            }
+        }
+
+        var (x, y, w, h) = Overlay.Bounds(face.Landmarks, 0.03f);
+        var overlay = new VisionOverlay { Status = $"eyes {(ear < 0.17 ? "closed" : "open")} · EAR {ear:0.00}" };
+        overlay.Boxes.Add(new OverlayBox { X = x, Y = y, W = w, H = h, Color = Overlay.Nila, Label = "face" });
+        return overlay;
+    }
+
+    protected override void HandleSourceChanged(VisionSourceKind kind)
+    {
+        base.HandleSourceChanged(kind);
+        _blinks = 0;
+    }
+
+    private async Task CaptureReferenceAsync()
+    {
+        _reference = _current;
+        _refThumb = Camera is null ? null : await Camera.SnapshotAsync(false);
+        _similarity = null;
+        _probeThumb = null;
+    }
+
+    private async Task CaptureProbeAsync()
+    {
+        if (_reference is null || _current is null)
+        {
+            return;
+        }
+
+        _probeThumb = Camera is null ? null : await Camera.SnapshotAsync(false);
+        _similarity = FaceGallery.Cosine(_reference, _current);
+        var matched = _similarity >= Threshold;
+        RecordEvent($"Face verification {(matched ? "matched" : "rejected")} ({_similarity:0.000})");
+        await OnVerified.InvokeAsync((_similarity.Value, matched, _blinks));
+    }
+}

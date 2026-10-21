@@ -1,0 +1,105 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* Fingerspelling practice: a target letter card, live match %, progress per letter, and personal reference shapes. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{_mastered.Count} of {SignAlphabet.Letters.Count} letters mastered")" Icon="bi-hand-index">
+        <div class="bai-stack">
+            <div class="bai-row" style="align-items:center">
+                <div class="baiv-big" style="font-size:3.6rem; width:4.5rem; text-align:center; border:1px solid var(--bai-line); border-radius:14px" aria-live="polite">@_target.Letter</div>
+                <div class="bai-stack" style="gap:.2rem">
+                    <span>@_target.Hint</span>
+                    <span class="bai-small bai-muted">Seen: <b>@(_seen ?? "–")</b></span>
+                </div>
+            </div>
+            <div class="baiv-meter"><span>Match</span><div><span style="width:@((_match * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@_match.ToString("P0", CultureInfo.InvariantCulture)</span></div>
+            <div class="bai-chips">
+                @foreach (var l in SignAlphabet.Letters)
+                {
+                    <button type="button" class="bai-chip @(l.Letter == _target.Letter ? "is-active" : null)" @onclick="() => SetTarget(l)" title="@l.Hint">
+                        @(_mastered.Contains(l.Letter) ? "✓ " : "")@l.Letter
+                    </button>
+                }
+            </div>
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="Next">Next letter</button>
+                <button type="button" class="bai-btn-ghost" disabled="@(_lastShape is null)" @onclick="Record" title="Save your current hand shape as a reference for this letter">Record my @_target.Letter</button>
+            </div>
+            <span class="bai-small bai-faint">Practice set of static letters; regional sign languages (BISINDO, SIBI, ASL) differ, so record your own references for your sign system.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private SignLetter _target = SignAlphabet.Letters[0];
+    private readonly HashSet<string> _mastered = [];
+    private readonly Dictionary<string, List<float[]>> _refs = [];
+    private double _match, _hold;
+    private string? _seen;
+    private float[]? _lastShape;
+    private long _lastT;
+
+    [Parameter] public string Title { get; set; } = "Sign language learning studio";
+
+    /// <summary>Seconds the target letter must be held at ≥ 75% to count as mastered.</summary>
+    [Parameter] public double HoldSeconds { get; set; } = 1.2;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.OpenPalms, VisionSamples.ThumbsUp, VisionSamples.Face];
+
+    private void SetTarget(SignLetter l)
+    {
+        _target = l;
+        _hold = 0;
+        _ = Camera?.ReprocessAsync();
+    }
+
+    private void Next() => SetTarget(SignAlphabet.Letters.FirstOrDefault(l => !_mastered.Contains(l.Letter) && l != _target) ?? SignAlphabet.Letters[(SignAlphabet.Letters.ToList().IndexOf(_target) + 1) % SignAlphabet.Letters.Count]);
+
+    private void Record()
+    {
+        if (_lastShape is null)
+        {
+            return;
+        }
+
+        if (!_refs.TryGetValue(_target.Letter, out var list))
+        {
+            _refs[_target.Letter] = list = [];
+        }
+
+        list.Add(_lastShape);
+    }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var hand = Tasks.Hands(frame, 1).Hands.FirstOrDefault();
+        var overlay = new VisionOverlay();
+        var t = frame.IsLive ? frame.TimestampMs : _lastT + 2000;
+        var dt = Math.Clamp((t - _lastT) / 1000.0, 0, 2);
+        _lastT = t;
+        if (hand is null)
+        {
+            _match = 0;
+            _seen = null;
+            overlay.Status = "Show one hand";
+            return overlay;
+        }
+
+        _lastShape = VisionSolutions.HandShape(hand);
+        _match = SignAlphabet.Match(hand, _target, _refs.GetValueOrDefault(_target.Letter));
+        var (best, score) = SignAlphabet.Recognize(hand, _refs);
+        _seen = $"{best.Letter} ({score:P0})";
+        _hold = _match >= 0.75 ? _hold + dt : 0;
+        if (_hold >= HoldSeconds && _mastered.Add(_target.Letter))
+        {
+            Publish("mastered", $"Letter {_target.Letter} mastered");
+        }
+
+        overlay.Landmarks.Add(Overlay.Hand(hand, _match >= 0.75 ? Overlay.Nila : Overlay.Soga));
+        var (x, y, _, _) = Overlay.Bounds(hand.Landmarks);
+        overlay.Texts.Add(Overlay.Label(x, Math.Max(0.02f, y - 0.05f), $"Target {_target.Letter}: {_match:P0}", Overlay.White, 16));
+        overlay.Status = $"Seen {_seen}";
+        return overlay;
+    }
+}

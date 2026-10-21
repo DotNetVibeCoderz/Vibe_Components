@@ -1,0 +1,175 @@
+@namespace Blazor.AI.MediaPipe
+@using Blazor.AI.ThreeD
+@inherits VisionComponentBase
+@* A full digital-twin avatar from the holistic landmarker: body, articulated hands, head pose and expression, with a state log and an AI narrator. *@
+
+<div class="@CssClass("baiv-split")">
+    <div class="bai-grid-2" style="align-items:start">
+        <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+        <Scene3D Objects="@_objects" Options="@_options" Height="@Height">
+            @if (_state is { } hud)
+            {
+                <div class="bai3d-hud-row"><span class="bai3d-kpi">@hud.Posture</span><span class="bai3d-kpi">@hud.Expression</span><span class="bai3d-kpi">@hud.Hands hand(s)</span></div>
+            }
+        </Scene3D>
+    </div>
+    <AiCard Title="@Title" Subtitle="Holistic landmarker · body + hands + face" Icon="bi-person-badge">
+        <div class="bai-stack">
+            @if (_state is { } s)
+            {
+                <div class="bai-row" style="gap:1.2rem; flex-wrap:wrap">
+                    <div><b>@s.Posture</b><span class="bai-small bai-muted"> posture</span></div>
+                    <div><b>@s.Expression</b><span class="bai-small bai-muted"> expression</span></div>
+                    <div><b>@s.HeadYaw.ToString("+0;-0;0", CultureInfo.InvariantCulture)°</b><span class="bai-small bai-muted"> head yaw</span></div>
+                </div>
+                <div class="baiv-meter"><span>Balance</span><div><span style="width:@((s.Metrics.Balance * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@s.Metrics.Balance.ToString("P0", CultureInfo.InvariantCulture)</span></div>
+                <div class="baiv-meter"><span>Activity</span><div><span style="width:@(Math.Clamp(s.Metrics.Activity / 2 * 100, 0, 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@s.Metrics.Activity.ToString("0.0", CultureInfo.InvariantCulture)</span></div>
+                <span class="bai-small">Hands: <b>@s.HandSummary</b></span>
+            }
+            else
+            {
+                <p class="bai-small bai-muted" style="margin:0">Step into view to start the twin.</p>
+            }
+            @if (_log.Count > 0)
+            {
+                <span class="bai-label">State changes</span>
+                <ul class="bai-small" style="margin:0; padding-left:1.1rem; max-height:7rem; overflow:auto">
+                    @foreach (var e in _log.AsEnumerable().Reverse())
+                    {
+                        <li><span class="bai-muted">@e.At.ToString("HH:mm:ss", CultureInfo.InvariantCulture)</span> @e.Text</li>
+                    }
+                </ul>
+            }
+            <button type="button" class="bai-btn bai-btn-ai" style="width:fit-content" disabled="@(IsBusy || _state is null)" @onclick="Narrate"><i class="bi bi-stars" aria-hidden="true"></i>Narrate the twin</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    /// <summary>The twin's current state.</summary>
+    public sealed record TwinState(string Posture, string Expression, double HeadYaw, int Hands, string HandSummary, HumanDigitalTwin.TwinMetrics Metrics);
+
+    private sealed record LogEntry(DateTime At, string Text);
+
+    private readonly LandmarkFilter _filter = new(1.0, 0.03);
+    private readonly SceneClock _clock = new();
+    private readonly Scene3DOptions _options = Body3D.Stage("Digital twin avatar", distance: 2.8);
+    private IReadOnlyList<Object3D> _objects = [];
+    private IReadOnlyList<LogEntry> _log = [];
+    private TwinState? _state;
+    private Landmark[]? _prev;
+    private double _prevT = double.NaN, _activity;
+
+    [Parameter] public string Title { get; set; } = "Digital twin avatar";
+    [Parameter] public string BodyColor { get; set; } = "#d9d4c4";
+    [Parameter] public bool Mirror { get; set; }
+
+    /// <summary>Raised when posture, expression or hand state changes.</summary>
+    [Parameter] public EventCallback<TwinState> OnStateChanged { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.ThumbsUp, VisionSamples.OpenPalms, VisionSamples.Yoga, VisionSamples.DeskPosture];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var r = Tasks.Holistic(frame, blendshapes: true);
+        var overlay = new VisionOverlay();
+        if (r.Pose is not { } pose)
+        {
+            overlay.Status = "No person";
+            return overlay;
+        }
+
+        var t = frame.TimestampMs / 1000.0;
+        var world = frame.IsLive ? _filter.Filter(pose.WorldLandmarks, t) : pose.WorldLandmarks.ToArray();
+        if (frame.IsLive && _prev is not null && t > _prevT)
+        {
+            var moved = world.Zip(_prev, (a, b) => System.Numerics.Vector3.Distance(PoseAnalytics.V(a), PoseAnalytics.V(b))).Average();
+            _activity = _activity * 0.8 + moved / (t - _prevT) * 0.2 * 10;
+        }
+
+        _prev = world;
+        _prevT = t;
+        var metrics = HumanDigitalTwin.Metrics(pose, _activity);
+        var expression = "–";
+        double yaw = 0;
+        var accent = ThreeDPalette.Nila;
+        if (r.Face is { } face)
+        {
+            yaw = VisionMath.HeadPose(face.Landmarks).Yaw;
+            if (face.Blendshapes is { Count: > 0 })
+            {
+                expression = ExpressionMood.From(face).Label;
+                accent = Body3D.ExpressionColor(expression);
+            }
+
+            overlay.Landmarks.AddRange(Overlay.Face(face, allPoints: false));
+        }
+
+        var hands = new List<(string Side, HandLandmarks Hand, PoseLandmark Wrist)>();
+        if (r.LeftHand is { } lh)
+        {
+            hands.Add(("left", lh, PoseLandmark.LeftWrist));
+        }
+
+        if (r.RightHand is { } rh)
+        {
+            hands.Add(("right", rh, PoseLandmark.RightWrist));
+        }
+
+        var handSummary = hands.Count == 0 ? "not visible" : string.Join(", ", hands.Select(h => $"{h.Side} {VisionMath.CountFingers(h.Hand)} finger(s) out"));
+        var state = new TwinState(metrics.Posture, expression, yaw, hands.Count, handSummary, metrics);
+        var before = _state;
+        _state = state;
+        if (before is null || before.Posture != state.Posture || before.Expression != state.Expression || before.Hands != state.Hands)
+        {
+            var text = $"{state.Posture} · {state.Expression} · {state.Hands} hand(s)";
+            _log = [.. _log.TakeLast(19), new LogEntry(DateTime.Now, text)];
+            _ = InvokeAsync(() => OnStateChanged.InvokeAsync(state));
+        }
+
+        if (_clock.Due(frame))
+        {
+            var scene = Body3D.Capsules("dt-", world, BodyColor, accent, Mirror);
+            foreach (var (side, hand, wrist) in hands)
+            {
+                scene.AddRange(Body3D.HandWorld($"dt-{side}-", hand.WorldLandmarks, Body3D.Joint(world, wrist, Mirror), accent, Mirror));
+            }
+
+            _objects = scene;
+            _ = InvokeAsync(StateHasChanged);
+        }
+
+        overlay.Landmarks.Add(Overlay.Pose(pose, Overlay.Tarum));
+        foreach (var (_, hand, _) in hands)
+        {
+            overlay.Landmarks.Add(Overlay.Hand(hand));
+        }
+
+        overlay.Status = $"{state.Posture} · {state.Expression}";
+        return overlay;
+    }
+
+    private Task Narrate()
+    {
+        if (_state is not { } s)
+        {
+            return Task.CompletedTask;
+        }
+
+        var m = s.Metrics;
+        var facts = string.Create(CultureInfo.InvariantCulture,
+            $"Posture: {s.Posture}; trunk lean {m.TrunkLean:0}°; balance {m.Balance:P0}; activity {m.Activity:0.0}; expression: {s.Expression}; head yaw {s.HeadYaw:0}°; hands: {s.HandSummary}; " +
+            $"estimated height {m.Height:0.00} m; joint angles: {string.Join(", ", m.Angles.Select(a => a.Name + " " + a.Degrees.ToString("0", CultureInfo.InvariantCulture) + "°"))}. Recent changes: {string.Join(" | ", _log.TakeLast(5).Select(e => e.Text))}.");
+        return AskAboutFrameAsync("a digital-twin operator describing a person's live body state", "Describe what this person is doing and how they seem, in two or three sentences.", facts);
+    }
+
+    private void Changed(VisionSourceKind kind)
+    {
+        _filter.Reset();
+        _prev = null;
+        _activity = 0;
+        HandleSourceChanged(kind);
+    }
+}

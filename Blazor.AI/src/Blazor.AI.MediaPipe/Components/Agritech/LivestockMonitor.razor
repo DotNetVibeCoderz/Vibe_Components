@@ -1,0 +1,91 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* Livestock counts per species, stable ids across frames and activity (moving vs resting) from box motion. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{_animals.Count} animals in view")" Icon="bi-piggy-bank">
+        <div class="bai-stack">
+            <div class="bai-chips">
+                @foreach (var g in _animals.GroupBy(a => a.Label).OrderByDescending(g => g.Count()))
+                {
+                    <span class="bai-badge">@g.Key × @g.Count()</span>
+                }
+                @if (_animals.Count == 0) { <span class="bai-small bai-muted">No animals detected.</span> }
+            </div>
+            @if (_animals.Count > 0)
+            {
+                <div class="bai-row bai-small">
+                    <span>Moving <b>@_animals.Count(a => a.Moving)</b></span>
+                    <span>Resting <b>@_animals.Count(a => !a.Moving)</b></span>
+                    <span>Max seen <b>@_maxSeen</b></span>
+                </div>
+            }
+            <span class="bai-small bai-faint">Species from the COCO detector: cow, sheep, horse, dog, cat, bird (goats usually register as sheep).</span>
+            <span class="bai-label">Events</span>
+            @EventLog(6)
+            <button type="button" class="bai-btn bai-btn-ai" style="width:fit-content" disabled="@IsBusy" @onclick="Ask"><i class="bi bi-stars" aria-hidden="true"></i>Herd check</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed record AnimalState(int Id, string Label, bool Moving);
+
+    private static readonly IReadOnlySet<string> Species = new HashSet<string> { "cow", "sheep", "horse", "dog", "cat", "bird", "elephant" };
+    private readonly IouTracker _tracker = new(0.2, 12);
+    private IReadOnlyList<AnimalState> _animals = [];
+    private int _maxSeen, _lastCount = -1;
+
+    [Parameter] public string Title { get; set; } = "Livestock monitor";
+
+    /// <summary>Expected herd size; fewer animals in view raises a "missing animals" warning.</summary>
+    [Parameter] public int? ExpectedCount { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Livestock, VisionSamples.Street, VisionSamples.Fruit];
+
+    private void Changed(VisionSourceKind kind)
+    {
+        HandleSourceChanged(kind);
+        _tracker.Reset();
+        _maxSeen = 0;
+    }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var dets = Tasks.Objects(frame, 0.3f, 40, Species).Detections;
+        var tracks = _tracker.Update(dets.Select(d => (VisionSolutions.Norm(d, frame.Width, frame.Height), d.TopCategory?.CategoryName ?? "animal")).ToList());
+        var overlay = new VisionOverlay();
+        var states = new List<AnimalState>();
+        foreach (var t in tracks)
+        {
+            var moving = frame.IsLive && t.Motion > 0.004;
+            states.Add(new AnimalState(t.Id, t.Label, moving));
+            overlay.Boxes.Add(new OverlayBox { X = t.Box.X, Y = t.Box.Y, W = t.Box.W, H = t.Box.H, Color = moving ? Overlay.Soga : Overlay.Nila, Label = $"#{t.Id} {t.Label}{(moving ? " · moving" : "")}" });
+            if (t.Trail.Count > 2)
+            {
+                overlay.Paths.Add(new OverlayPath { Points = t.Trail.SelectMany(p => new[] { p.X, p.Y }).ToArray(), Color = Overlay.Soga, Width = 2 });
+            }
+        }
+
+        _animals = states;
+        _maxSeen = Math.Max(_maxSeen, states.Count);
+        if (states.Count != _lastCount)
+        {
+            _lastCount = states.Count;
+            var counts = states.GroupBy(s => s.Label).ToDictionary(g => g.Key, g => g.Count());
+            var missing = ExpectedCount is { } exp && states.Count < exp;
+            Publish("count", $"{states.Count} animals: {string.Join(", ", counts.Select(c => $"{c.Value} {c.Key}"))}{(missing ? $" (expected {ExpectedCount})" : "")}",
+                missing ? VisionEventSeverity.Warning : VisionEventSeverity.Info, counts: counts);
+        }
+
+        overlay.Status = $"{states.Count} animals";
+        return overlay;
+    }
+
+    private Task Ask() => AskAboutFrameAsync("a livestock vet assistant",
+        "Do the animals look calm and healthy? Anything unusual about posture, grouping or the pasture?",
+        $"Detected: {string.Join(", ", _animals.GroupBy(a => a.Label).Select(g => $"{g.Count()} {g.Key}"))}; moving {_animals.Count(a => a.Moving)}, resting {_animals.Count(a => !a.Moving)}.");
+}

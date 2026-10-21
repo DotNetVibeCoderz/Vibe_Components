@@ -1,0 +1,206 @@
+@page "/vision/body"
+<PageTitle>Body, holistic &amp; 3D vision · Blazor.AI</PageTitle>
+
+<PageHeader Title="Body, holistic and 3-D vision" Package="Blazor.AI.MediaPipe" Icon="bi-person-arms-up"
+            Lead="Pose analytics (exercise, yoga, sports, ergonomics), holistic tracking and motion capture, segmentation studios and live 3-D twins on Blazor.AI.ThreeD. Landmarks and masks are computed on the server; numbers come from geometry, and the AI only explains them." />
+
+<div class="bai-alert is-info" style="margin-bottom:1.5rem"><i class="bi bi-shield-check" aria-hidden="true"></i>Frames are processed in memory and never stored unless you record a take. 3-D scenes update at most ten times a second.</div>
+
+<h2 class="g-section-title">Pose</h2>
+
+<DemoSection Title="Skeleton viewer" Component="SkeletonViewer" Description="Neon, bone or minimal skeletons for up to three people, with motion trails on wrists and ankles." Code="@SkeletonCode">
+    <SkeletonViewer />
+</DemoSection>
+
+<DemoSection Title="Exercise monitor" Component="ExerciseMonitor" Description="Counts squats, push-ups, jumping jacks, curls and lunges with hysteresis, tracks sets and tempo, and gives form cues." Code="@ExerciseCode">
+    <ExerciseMonitor />
+</DemoSection>
+
+<DemoSection Title="Yoga trainer" Component="YogaTrainer" Description="Scores six asanas joint by joint against target angles, highlights the worst joint and times your hold." Code="@YogaCode">
+    <YogaTrainer />
+</DemoSection>
+
+<DemoSection Title="Sports analyzer" Component="SportsAnalyzer" Description="Joint-angle curves, limb speeds, left/right symmetry and cadence, with an AI biomechanist." Code="@SportsCode">
+    <SportsAnalyzer />
+</DemoSection>
+
+<DemoSection Title="Ergonomic monitor" Component="ErgonomicMonitor" Description="RULA-style score from neck flexion, trunk lean, arm elevation and raised shoulders, with break reminders." Code="@ErgonomicCode">
+    <ErgonomicMonitor />
+</DemoSection>
+
+<h2 class="g-section-title">Holistic</h2>
+
+<DemoSection Title="Holistic tracker" Component="HolisticTracker" Description="Pose, face mesh and both hands in one pass, with an optional person mask." Code="@HolisticCode">
+    <HolisticTracker />
+</DemoSection>
+
+<DemoSection Title="Human digital twin" Component="HumanDigitalTwin" Description="A 3-D capsule body driven by metric world landmarks, with height, arm span, balance and posture." Code="@TwinCode">
+    <HumanDigitalTwin />
+</DemoSection>
+
+<DemoSection Title="Motion capture studio" Component="MotionCaptureStudio" Description="Record smoothed takes from a camera or video, scrub and replay them, and export JSON or BVH." Code="@MocapCode">
+    <MotionCaptureStudio />
+</DemoSection>
+
+<DemoSection Title="Avatar controller" Component="AvatarController" Description="Drive an avatar with body, head pose and facial expression." Code="@AvatarCode">
+    <AvatarController />
+</DemoSection>
+
+<h2 class="g-section-title">Segmentation</h2>
+
+<DemoSection Title="Green screen replacement" Component="GreenScreenReplacement" Description="Swap the background for a picture, a colour or your own upload, without a green screen." Code="@GreenCode">
+    <GreenScreenReplacement />
+</DemoSection>
+
+<DemoSection Title="Subject isolation" Component="SubjectIsolationViewer" Description="Hair, face skin, body skin, clothes and accessories as separate masks with coverage." Code="@IsolationCode">
+    <SubjectIsolationViewer />
+</DemoSection>
+
+<DemoSection Title="Object segmentation studio" Component="ObjectSegmentationStudio" Description="DeepLab v3 class masks with coverage, or point at any object to cut it out." Code="@ObjectSegCode">
+    <ObjectSegmentationStudio />
+</DemoSection>
+
+<h2 class="g-section-title">3-D</h2>
+
+<DemoSection Title="Face mesh 3D" Component="FaceMesh3D" Description="The 478-point mesh as an orbitable point cloud, coloured by depth or expression, with a gaze arrow." Code="@FaceMeshCode">
+    <FaceMesh3D />
+</DemoSection>
+
+<DemoSection Title="Avatar mirror 3D" Component="AvatarMirror3D" Description="Your avatar in front of a glass pane, and its reflection moving behind it." Code="@MirrorCode">
+    <AvatarMirror3D />
+</DemoSection>
+
+<DemoSection Title="Pose skeleton 3D" Component="PoseSkeleton3D" Description="Metric 3-D skeletons per person with live joint-angle labels." Code="@Skeleton3DCode">
+    <PoseSkeleton3D />
+</DemoSection>
+
+<DemoSection Title="Gesture space 3D" Component="GestureSpace3D" Description="Both hands in a 3-D space with their gestures. Point to draw in the air and make a fist to clear." Code="@GestureSpaceCode">
+    <GestureSpace3D />
+</DemoSection>
+
+<DemoSection Title="Motion replay 3D" Component="MotionReplay3D" Description="Replay a recorded or loaded take with onion-skin ghosts, joint trails and variable speed." Code="@ReplayCode">
+    <MotionReplay3D />
+</DemoSection>
+
+<DemoSection Title="Human body tracker 3D" Component="HumanBodyTracker3D" Description="Places the person in the room: distance from the camera, floor path, distance walked and speed." Code="@TrackerCode">
+    <HumanBodyTracker3D />
+</DemoSection>
+
+<DemoSection Title="Digital twin avatar" Component="DigitalTwinAvatar" Description="Body, articulated hands, head and expression in one twin, with a log of state changes and an AI narrator." Code="@TwinAvatarCode">
+    <DigitalTwinAvatar />
+</DemoSection>
+
+@code {
+    private const string SkeletonCode = """
+        <SkeletonViewer Style="Neon" People="2" Trails="true" TrailLength="24" StartWithCamera="true" />
+        """;
+
+    private const string ExerciseCode = """
+        <ExerciseMonitor ExerciseName="Squat" OnRep="reps => total = reps" />
+
+        // Reuse the counter on any metric:
+        var counter = new RepCounter(low: 100, high: 160);
+        if (counter.Update(PoseAnalytics.Angles(pose)["Left knee"], t)) Beep();
+        """;
+
+    private const string YogaCode = """
+        <YogaTrainer Asana="Warrior II" HoldThreshold="80" />
+        """;
+
+    private const string SportsCode = """
+        <SportsAnalyzer Activity="Tennis serve" Pair="Elbow" WindowSeconds="15" Provider="openai" />
+        """;
+
+    private const string ErgonomicCode = """
+        <ErgonomicMonitor BreakAfterMinutes="25" OnBreakReminder="Notify" />
+
+        @code {
+            void Notify(ErgonomicAssessment a) => toast.Show($"Time to stretch: posture risk {a.Risk}");
+        }
+
+        // Or score a pose yourself:
+        var rula = ErgonomicAssessment.From(pose);   // Score 1–7, Risk, Issues
+        """;
+
+    private const string HolisticCode = """
+        <HolisticTracker ShowPose="true" ShowFace="true" ShowHands="true" ShowMask="false"
+                         OnResult="r => hands = (r.LeftHand is null ? 0 : 1) + (r.RightHand is null ? 0 : 1)" />
+        """;
+
+    private const string TwinCode = """
+        <HumanDigitalTwin BodyColor="#d9d4c4" AccentColor="#3cc4b1" OnMetrics="m => height = m.Height" />
+        """;
+
+    private const string MocapCode = """
+        <MotionCaptureStudio MaxSeconds="60" Smooth="true" OnTake="SaveTake" />
+
+        @code {
+            async Task SaveTake(IReadOnlyList<MocapFrame> take)
+            {
+                await File.WriteAllTextAsync("take.bvh", MocapExport.ToBvh(take, fps: 30));
+                await File.WriteAllTextAsync("take.json", MocapExport.ToJson(take));
+            }
+        }
+        """;
+
+    private const string AvatarCode = """
+        <AvatarController Mirror="true" HeadGain="1.2" BodyColor="#3d4fb8" AccentColor="#d9964f" />
+        """;
+
+    private const string GreenCode = """
+        <GreenScreenReplacement BackgroundUrl="@ThreeDAssets.WorldConcept" StartWithCamera="true"
+                                Backgrounds="@(new GreenScreenReplacement.BackgroundChoice[]
+                                {
+                                    new("Office", "img/office.webp"),
+                                    new("Beach", "img/beach.webp"),
+                                })" />
+        """;
+
+    private const string IsolationCode = """
+        <SubjectIsolationViewer InitialParts="@(["hair"])" OnCoverage="c => hair = c.GetValueOrDefault("hair")" />
+        """;
+
+    private const string ObjectSegCode = """
+        <ObjectSegmentationStudio MinCoverage="0.005" OnClasses="classes => found = classes" />
+
+        // Point-prompted segmentation in your own component (still images):
+        var mask = Tasks.SegmentAt(frame, x: 0.42f, y: 0.6f).ConfidenceMask;
+        """;
+
+    private const string FaceMeshCode = """
+        <FaceMesh3D ColorMode="Depth" PointSize="0.035" TopBlendshapes="6" />
+        """;
+
+    private const string MirrorCode = """
+        <AvatarMirror3D BodyColor="#d9d4c4" AccentColor="#3cc4b1" StartWithCamera="true" />
+        """;
+
+    private const string Skeleton3DCode = """
+        <PoseSkeleton3D Height="460px" />
+
+        // Build the same objects for your own Scene3D:
+        var objects = Body3D.Skeleton("p0-", pose.WorldLandmarks, ThreeDPalette.Nila, tubes: true);
+        """;
+
+    private const string GestureSpaceCode = """
+        <GestureSpace3D Mirror="true" MaxStrokes="12" OnGesture="g => last = g" StartWithCamera="true" />
+        """;
+
+    private const string ReplayCode = """
+        <MotionReplay3D MaxSeconds="30" OnTake="take => frames = take.Count" />
+
+        // Load a take exported by MotionCaptureStudio:
+        var take = MocapExport.FromJson(await File.ReadAllTextAsync("take.json"));
+        """;
+
+    private const string TrackerCode = """
+        <HumanBodyTracker3D OnFix="fix => distance = fix.Distance" />
+
+        // Pinhole estimate on its own:
+        var fix = HumanBodyTracker3D.Locate(pose, aspect: 16 / 9.0, verticalFovDegrees: 55, time: t);
+        """;
+
+    private const string TwinAvatarCode = """
+        <DigitalTwinAvatar Provider="openai" Language="Bahasa Indonesia" OnStateChanged="s => log.Add(s.Posture)" />
+        """;
+}

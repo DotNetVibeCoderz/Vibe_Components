@@ -1,0 +1,162 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Pose correction: compares joint angles against an asana library (either side), scores each joint and times the hold. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{Current.Name} · {Current.Sanskrit}")" Icon="bi-flower1">
+        <div class="bai-stack">
+            <select class="bai-select" @bind="Asana" @bind:after="Changed2" aria-label="Pose">
+                @foreach (var a in Library) { <option value="@a.Name">@a.Name (@a.Sanskrit)</option> }
+            </select>
+            <div class="bai-row" style="align-items:flex-end; gap:1.2rem">
+                <div><div class="baiv-big" style="color:@ScoreColor(_r.Score)">@(_r.Seen ? _r.Score.ToString("0", CultureInfo.InvariantCulture) : "–")</div><span class="bai-small bai-muted">match / 100</span></div>
+                <div><b>@_r.Hold.ToString("0.0", CultureInfo.InvariantCulture)s</b><span class="bai-small bai-muted"> holding (best @_best.ToString("0.0", CultureInfo.InvariantCulture)s)</span></div>
+            </div>
+            @if (_r.Correction is { } c)
+            {
+                <span class="bai-small" style="color:var(--bai-soga)"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> @c</span>
+            }
+            @if (_r.BestGuess is { } g && g != Current.Name)
+            {
+                <span class="bai-small bai-muted">Looks closer to <b>@g</b>.</span>
+            }
+            @foreach (var j in _r.Joints)
+            {
+                <div class="baiv-meter"><span>@j.Name</span><div><span style="width:@((j.Score * 100).ToString("0", CultureInfo.InvariantCulture))%; background:@ScoreColor(j.Score * 100)"></span></div><span class="bai-num">@j.Angle.ToString("0", CultureInfo.InvariantCulture)°</span></div>
+            }
+            <span class="bai-small bai-muted">Targets: @string.Join(", ", Current.Targets.Select(t => $"{t.Key} {t.Value.Target:0}±{t.Value.Tolerance:0}°"))</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    /// <summary>An asana: target joint angles (degrees) with tolerances, written for the left-leading side.</summary>
+    public sealed record AsanaSpec(string Name, string Sanskrit, IReadOnlyDictionary<string, (double Target, double Tolerance)> Targets);
+
+    public sealed record JointScore(string Name, double Angle, double Target, double Score);
+
+    private sealed record Reading(bool Seen, double Score, double Hold, string? Correction, string? BestGuess, IReadOnlyList<JointScore> Joints);
+
+    private static Dictionary<string, (double, double)> T(params (string, double, double)[] t) => t.ToDictionary(x => x.Item1, x => (x.Item2, x.Item3));
+
+    /// <summary>The built-in pose library.</summary>
+    public static readonly IReadOnlyList<AsanaSpec> Library =
+    [
+        new("Warrior II", "Virabhadrasana II", T(("Left elbow", 175, 15), ("Right elbow", 175, 15), ("Left shoulder", 90, 15), ("Right shoulder", 90, 15), ("Left knee", 100, 15), ("Right knee", 175, 12), ("Left hip", 115, 25), ("Right hip", 140, 25))),
+        new("Tree", "Vrksasana", T(("Left knee", 175, 10), ("Right knee", 50, 25), ("Left hip", 175, 12), ("Right hip", 120, 25), ("Left shoulder", 165, 20), ("Right shoulder", 165, 20))),
+        new("Downward dog", "Adho Mukha Svanasana", T(("Left elbow", 175, 12), ("Right elbow", 175, 12), ("Left shoulder", 170, 15), ("Right shoulder", 170, 15), ("Left hip", 70, 20), ("Right hip", 70, 20), ("Left knee", 170, 15), ("Right knee", 170, 15))),
+        new("Plank", "Phalakasana", T(("Left elbow", 170, 15), ("Right elbow", 170, 15), ("Left shoulder", 85, 15), ("Right shoulder", 85, 15), ("Left hip", 175, 10), ("Right hip", 175, 10), ("Left knee", 175, 10), ("Right knee", 175, 10))),
+        new("Chair", "Utkatasana", T(("Left knee", 115, 20), ("Right knee", 115, 20), ("Left hip", 100, 20), ("Right hip", 100, 20), ("Left shoulder", 165, 20), ("Right shoulder", 165, 20), ("Left elbow", 170, 15), ("Right elbow", 170, 15))),
+        new("Triangle", "Trikonasana", T(("Left knee", 175, 10), ("Right knee", 175, 10), ("Left elbow", 175, 12), ("Right elbow", 175, 12), ("Left shoulder", 95, 20), ("Right shoulder", 95, 20), ("Left hip", 125, 25), ("Right hip", 150, 25))),
+    ];
+
+    private Reading _r = new(false, 0, 0, null, null, []);
+    private double _holdStart = double.NaN, _best;
+
+    [Parameter] public string Title { get; set; } = "Yoga trainer";
+
+    /// <summary>Name of the target pose from <see cref="Library"/>.</summary>
+    [Parameter] public string Asana { get; set; } = "Warrior II";
+
+    /// <summary>Score (0–100) at which the hold timer runs.</summary>
+    [Parameter] public double HoldThreshold { get; set; } = 80;
+
+    private AsanaSpec Current => Library.FirstOrDefault(a => a.Name == Asana) ?? Library[0];
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Yoga, .. VisionSamples.Bodies.Where(s => s != VisionSamples.Yoga)];
+
+    private static string Mirror(string joint) => joint.StartsWith("Left", StringComparison.Ordinal) ? "Right" + joint[4..] : joint.StartsWith("Right", StringComparison.Ordinal) ? "Left" + joint[5..] : joint;
+
+    private static double ScoreJoint(double angle, double target, double tol) => Math.Clamp(1 - Math.Max(0, Math.Abs(angle - target) - tol) / 40, 0, 1);
+
+    /// <summary>Scores a pose against an asana, trying both the written side and its mirror image.</summary>
+    public static (double Score, IReadOnlyList<JointScore> Joints) Score(IReadOnlyDictionary<string, double> angles, AsanaSpec spec)
+    {
+        (double, List<JointScore>) Eval(bool mirror)
+        {
+            var joints = spec.Targets.Select(t =>
+            {
+                var name = mirror ? Mirror(t.Key) : t.Key;
+                var a = angles.GetValueOrDefault(name, double.NaN);
+                return new JointScore(name, a, t.Value.Target, double.IsNaN(a) ? 0 : ScoreJoint(a, t.Value.Target, t.Value.Tolerance));
+            }).ToList();
+            return (joints.Average(j => j.Score) * 100, joints);
+        }
+
+        var a = Eval(false);
+        var b = Eval(true);
+        return a.Item1 >= b.Item1 ? (a.Item1, a.Item2) : (b.Item1, b.Item2);
+    }
+
+    private static string Advice(JointScore j)
+    {
+        var tooBig = j.Angle > j.Target;
+        var part = j.Name.ToLowerInvariant();
+        var verb = part.Contains("shoulder") ? (tooBig ? "lower your" : "raise your") + " " + part.Replace(" shoulder", " arm")
+            : part.Contains("hip") ? (tooBig ? "fold more at your" : "open your") + " " + part
+            : (tooBig ? "bend your" : "straighten your") + " " + part;
+        return string.Create(CultureInfo.InvariantCulture, $"{char.ToUpperInvariant(verb[0])}{verb[1..]} ({j.Angle:0}° → about {j.Target:0}°).");
+    }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var pose = Tasks.Pose(frame, PoseModel.Full).Poses.FirstOrDefault();
+        var overlay = new VisionOverlay();
+        if (pose is null)
+        {
+            _r = new Reading(false, 0, 0, "Step back so your whole body is in view.", null, []);
+            _holdStart = double.NaN;
+            overlay.Status = "No person";
+            return overlay;
+        }
+
+        var angles = PoseAnalytics.Angles(pose);
+        var (score, joints) = Score(angles, Current);
+        var guess = Library.Select(a => (a.Name, s: Score(angles, a).Score)).MaxBy(x => x.s);
+        var worst = joints.Where(j => j.Score < 0.9).OrderBy(j => j.Score).FirstOrDefault();
+        var t = frame.TimestampMs / 1000.0;
+        double hold = 0;
+        if (frame.IsLive && score >= HoldThreshold)
+        {
+            if (double.IsNaN(_holdStart))
+            {
+                _holdStart = t;
+            }
+
+            hold = t - _holdStart;
+            _best = Math.Max(_best, hold);
+        }
+        else
+        {
+            _holdStart = double.NaN;
+        }
+
+        _r = new Reading(true, score, hold, worst is null ? "Great alignment. Breathe and hold." : Advice(worst), guess.s > score + 10 ? guess.Name : null, joints);
+        int[]? highlight = null;
+        if (worst is not null && PoseAnalytics.Joints.FirstOrDefault(j => j.Name == worst.Name) is { Name: not null } jw)
+        {
+            highlight = [(int)jw.B];
+        }
+
+        overlay.Landmarks.Add(Overlay.Pose(pose, score >= HoldThreshold ? Overlay.Nila : Overlay.Soga, highlight));
+        overlay.Status = $"{Current.Name}: {score:0}/100";
+        return overlay;
+    }
+
+    private static string ScoreColor(double s) => s >= 80 ? "var(--bai-nila)" : s >= 55 ? "var(--bai-soga)" : "var(--bai-danger)";
+
+    private void Changed(VisionSourceKind kind)
+    {
+        _holdStart = double.NaN;
+        _best = 0;
+        HandleSourceChanged(kind);
+    }
+
+    private Task Changed2()
+    {
+        _best = 0;
+        _holdStart = double.NaN;
+        return Camera?.ReprocessAsync() ?? Task.CompletedTask;
+    }
+}

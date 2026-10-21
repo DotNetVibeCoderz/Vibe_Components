@@ -1,0 +1,74 @@
+@namespace Blazor.AI.MediaPipe
+@implements IDisposable
+@* A camera wall: 2–4 tiles (each with its own detector), totals across cameras and one event list. *@
+
+<div class="baiv @Class">
+    <div class="bai-row">
+        <div class="bai-stats" style="flex:1">
+            <div class="bai-stat"><div class="bai-stat-label">Cameras</div><div class="bai-stat-value">@Math.Min(4, Tiles.Count)</div></div>
+            <div class="bai-stat"><div class="bai-stat-label">People</div><div class="bai-stat-value">@Total(x => x.People)</div></div>
+            <div class="bai-stat"><div class="bai-stat-label">Vehicles</div><div class="bai-stat-value">@Total(x => x.Vehicles)</div></div>
+            <div class="bai-stat"><div class="bai-stat-label">Intrusions</div><div class="bai-stat-value" style="color:@(_events.Count(e => e.Kind == "intrusion") > 0 ? "var(--bai-danger)" : null)">@_events.Count(e => e.Kind == "intrusion")</div></div>
+        </div>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:.8rem">
+        @for (var i = 0; i < Math.Min(4, Tiles.Count); i++)
+        {
+            var tile = Tiles[i];
+            var index = i;
+            <SurveillanceTile @ref="_refs[index]" Name="@tile.Name" InitialImage="@tile.Url" GuardedArea="@tile.GuardedArea" Height="@TileHeight" Events="@_stream" SourceName="@tile.Name" Fps="@Fps" />
+        }
+    </div>
+    <AiCard Title="Events" Subtitle="All cameras, newest first" Icon="bi-bell">
+        <div class="baiv-log" style="max-height:200px" aria-live="polite">
+            @foreach (var e in _events.Where(e => e.Kind != "count").Take(20))
+            {
+                <div>
+                    <span class="bai-badge @(e.Severity == VisionEventSeverity.Alert ? "bai-badge-danger" : null)">@e.At.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)</span>
+                    <b>@e.Source</b> @e.Message
+                    @if (e.Snapshot is not null) { <img src="@e.Snapshot" alt="Event snapshot" style="height:36px; border-radius:4px; vertical-align:middle" /> }
+                </div>
+            }
+            @if (!_events.Any(e => e.Kind != "count")) { <span class="bai-small bai-muted">No alerts.</span> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed record CameraTile(string Name, string Url, (float X, float Y, float W, float H)? GuardedArea = null);
+
+    private readonly SurveillanceTile?[] _refs = new SurveillanceTile?[4];
+    private VisionEventStream _stream = new();
+    private List<VisionEvent> _events = [];
+
+    /// <summary>Up to four cameras (image, video or stream URLs; each tile can also switch to a webcam).</summary>
+    [Parameter] public IReadOnlyList<CameraTile> Tiles { get; set; } =
+    [
+        new("Gate", VisionSamples.Street.Url, (0.0f, 0.6f, 0.3f, 0.4f)),
+        new("Warehouse", VisionSamples.Warehouse.Url),
+        new("Site", VisionSamples.Construction.Url, (0.6f, 0.5f, 0.4f, 0.5f)),
+    ];
+
+    /// <summary>Optional shared stream to also publish into (e.g. for a VisionDashboard).</summary>
+    [Parameter] public VisionEventStream? Events { get; set; }
+
+    [Parameter] public string TileHeight { get; set; } = "220px";
+    [Parameter] public double Fps { get; set; } = 6;
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _stream.Published += OnPublished;
+    }
+
+    private int Total(Func<(int People, int Vehicles, bool Intrusion), int> f) => _refs.Where(r => r is not null).Sum(r => f(r!.Counts));
+
+    private void OnPublished(VisionEvent e)
+    {
+        Events?.Publish(e);
+        _events = [e, .. _events.Take(199)];
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => _stream.Published -= OnPublished;
+}

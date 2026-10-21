@@ -1,0 +1,100 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Chat with the camera: every answer is grounded in local detections (objects, faces, posture, scene classes) plus the frame itself. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="Grounded in on-device detections" Icon="bi-chat-square-dots">
+        <div class="bai-stack">
+            <div class="bai-chips">
+                @foreach (var (label, count) in _facts.Objects) { <span class="bai-badge">@count × @label</span> }
+                @if (_facts.Faces > 0) { <span class="bai-badge bai-badge-ai">@_facts.Faces face(s)</span> }
+                @if (_facts.Posture is { } p) { <span class="bai-badge bai-badge-ai">@p</span> }
+            </div>
+            <div style="max-height:320px; overflow:auto" role="log" aria-live="polite">
+                @foreach (var turn in _turns)
+                {
+                    <article class="bai-msg is-user"><span class="bai-msg-avatar" aria-hidden="true"><i class="bi bi-person"></i></span><div class="bai-msg-body"><div class="bai-msg-content">@turn.Question</div></div></article>
+                    <article class="bai-msg is-assistant"><span class="bai-msg-avatar" aria-hidden="true"><i class="bi bi-stars"></i></span><div class="bai-msg-body"><div class="bai-msg-content"><AiOutput Text="@turn.Answer" /></div></div></article>
+                }
+                @if (_pending is not null)
+                {
+                    <article class="bai-msg is-user"><span class="bai-msg-avatar" aria-hidden="true"><i class="bi bi-person"></i></span><div class="bai-msg-body"><div class="bai-msg-content">@_pending</div></div></article>
+                    <article class="bai-msg is-assistant"><span class="bai-msg-avatar" aria-hidden="true"><i class="bi bi-stars"></i></span><div class="bai-msg-body"><div class="bai-msg-content"><AiOutput Text="@Narration" IsBusy="@IsBusy" /></div></div></article>
+                }
+            </div>
+            <div class="bai-chips">
+                @foreach (var s in Suggestions) { <button type="button" class="bai-chip" disabled="@IsBusy" @onclick="() => AskAsync(s)">@s</button> }
+            </div>
+            <form class="bai-row" @onsubmit="() => AskAsync(_question)" @onsubmit:preventDefault>
+                <input class="bai-input bai-spacer" @bind="_question" placeholder="Ask about what the camera sees…" aria-label="Question" />
+                <button type="submit" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(_question))"><i class="bi bi-send" aria-hidden="true"></i>Ask</button>
+            </form>
+            <AiError Message="@Error" />
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private sealed record Turn(string Question, string Answer);
+
+    private readonly List<Turn> _turns = [];
+    private SceneFacts _facts = SceneFacts.Empty;
+    private long _lastFull = -1_000_000;
+    private string? _question, _pending;
+
+    [Parameter] public string Title { get; set; } = "Vision copilot";
+
+    /// <summary>Role given to the model.</summary>
+    [Parameter] public string Role { get; set; } = "a helpful visual assistant looking through the user's camera";
+
+    [Parameter] public IReadOnlyList<string> Suggestions { get; set; } =
+        ["What objects are visible?", "How many people are present?", "What activity is occurring?", "Is anything unsafe here?"];
+
+    /// <summary>Seconds between full analyses (faces, pose, classes) on live video; objects run every frame.</summary>
+    [Parameter] public double FullAnalysisSeconds { get; set; } = 1;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Scenes;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var full = !frame.IsLive || frame.TimestampMs - _lastFull >= FullAnalysisSeconds * 1000 || frame.TimestampMs < _lastFull;
+        var facts = SceneFacts.From(Tasks, frame, full);
+        if (full)
+        {
+            _lastFull = frame.TimestampMs;
+        }
+        else
+        {
+            facts = facts with { Faces = _facts.Faces, Posture = _facts.Posture, Classes = _facts.Classes };
+        }
+
+        _facts = facts;
+        var overlay = new VisionOverlay { Status = facts.Objects.Count == 0 ? "Nothing detected" : string.Join(" · ", facts.Objects.Take(3).Select(o => $"{o.Count} {o.Label}")) };
+        overlay.Boxes.AddRange(facts.Boxes);
+        return overlay;
+    }
+
+    private async Task AskAsync(string? question)
+    {
+        question = question?.Trim();
+        if (string.IsNullOrEmpty(question) || IsBusy)
+        {
+            return;
+        }
+
+        _pending = question;
+        _question = null;
+        var history = string.Join("\n", _turns.TakeLast(3).Select(t => $"Q: {t.Question}\nA: {t.Answer}"));
+        var facts = _facts.Describe() + (history.Length == 0 ? string.Empty : "\nConversation so far:\n" + history);
+        await AskAboutFrameAsync(Role, question, facts);
+        if (Error is null && !string.IsNullOrEmpty(Narration))
+        {
+            _turns.Add(new Turn(question, Narration));
+            RecordEvent($"Vision copilot answered: {question}");
+        }
+
+        _pending = null;
+        Narration = null;
+    }
+}

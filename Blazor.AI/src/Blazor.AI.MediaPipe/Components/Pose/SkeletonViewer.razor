@@ -1,0 +1,112 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Real-time skeleton rendering in three styles with optional motion trails for wrists and ankles. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="33-point skeleton · trails" Icon="bi-person-walking">
+        <div class="bai-stack">
+            <div class="bai-chips" role="radiogroup" aria-label="Skeleton style">
+                @foreach (var s in Styles)
+                {
+                    <button type="button" role="radio" aria-checked="@(s == Style)" class="bai-chip @(s == Style ? "is-active" : null)" @onclick="() => SetStyle(s)">@s</button>
+                }
+            </div>
+            <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="Trails" @bind:after="Refresh" /> motion trails (wrists and ankles)</label>
+            <label class="bai-small">Trail length <input type="range" min="5" max="60" @bind="TrailLength" style="width:100%" aria-label="Trail length in frames" /></label>
+            <span class="bai-small bai-muted">@(_people == 0 ? "No person in view." : $"{_people} person(s) · {_visible}/33 landmarks visible")</span>
+            <span class="bai-small bai-muted">Trails need a live source (camera or video); a still image shows a single pose.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly string[] Styles = ["Neon", "Bones", "Minimal"];
+    private static readonly PoseLandmark[] Tracked = [PoseLandmark.LeftWrist, PoseLandmark.RightWrist, PoseLandmark.LeftAnkle, PoseLandmark.RightAnkle];
+    private static readonly string[] TrailColors = [Overlay.Soga, Overlay.Nila, Overlay.Tarum, Overlay.Warning];
+    private readonly Queue<float[]>[] _trails = Tracked.Select(_ => new Queue<float[]>()).ToArray();
+    private int _people, _visible;
+
+    [Parameter] public string Title { get; set; } = "Skeleton viewer";
+
+    /// <summary>Neon, Bones or Minimal.</summary>
+    [Parameter] public string Style { get; set; } = "Neon";
+
+    [Parameter] public bool Trails { get; set; } = true;
+
+    [Parameter] public int TrailLength { get; set; } = 25;
+
+    /// <summary>Number of people to track (1–3).</summary>
+    [Parameter] public int People { get; set; } = 1;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Bodies;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.Pose(frame, PoseModel.Lite, Math.Clamp(People, 1, 3));
+        var overlay = new VisionOverlay();
+        _people = result.Poses.Count;
+        _visible = result.Poses.FirstOrDefault()?.Landmarks.Count(l => (l.Visibility ?? 1) > 0.5) ?? 0;
+        var colors = new[] { Overlay.Nila, Overlay.Soga, Overlay.Tarum };
+        for (var p = 0; p < result.Poses.Count; p++)
+        {
+            var pose = result.Poses[p];
+            var color = colors[p % colors.Length];
+            overlay.Landmarks.AddRange(Style switch
+            {
+                "Bones" => [new OverlayLandmarks { Points = Overlay.Points(pose.Landmarks), Connections = Overlay.Flatten(Connections.Pose), Color = "#f4efe2", PointColor = color, Radius = 4.5f, LineWidth = 7 }],
+                "Minimal" => [new OverlayLandmarks { Points = Overlay.Points(pose.Landmarks), Connections = Overlay.Flatten(Connections.Pose), Color = "rgba(255,255,255,0.85)", Radius = 0, LineWidth = 1.5f }],
+                _ =>
+                [
+                    // Neon: a wide translucent glow under a thin bright core.
+                    new OverlayLandmarks { Points = Overlay.Points(pose.Landmarks), Connections = Overlay.Flatten(Connections.Pose), Color = color + "55", Radius = 0, LineWidth = 10 },
+                    new OverlayLandmarks { Points = Overlay.Points(pose.Landmarks), Connections = Overlay.Flatten(Connections.Pose), Color = color, PointColor = Overlay.White, Radius = 3, LineWidth = 3 },
+                ],
+            });
+        }
+
+        if (Trails && frame.IsLive && result.Poses.FirstOrDefault() is { } first)
+        {
+            for (var i = 0; i < Tracked.Length; i++)
+            {
+                var l = first.Landmarks[(int)Tracked[i]];
+                if ((l.Visibility ?? 1) < 0.5)
+                {
+                    continue;
+                }
+
+                _trails[i].Enqueue([l.X, l.Y]);
+                while (_trails[i].Count > Math.Clamp(TrailLength, 2, 120))
+                {
+                    _trails[i].Dequeue();
+                }
+
+                if (_trails[i].Count > 1)
+                {
+                    overlay.Paths.Add(new OverlayPath { Points = _trails[i].SelectMany(x => x).ToArray(), Color = TrailColors[i], Width = 3 });
+                }
+            }
+        }
+
+        overlay.Status = _people == 0 ? "No person" : $"{_people} person(s)";
+        return overlay;
+    }
+
+    private void Changed(VisionSourceKind kind)
+    {
+        foreach (var t in _trails)
+        {
+            t.Clear();
+        }
+
+        HandleSourceChanged(kind);
+    }
+
+    private Task SetStyle(string s)
+    {
+        Style = s;
+        return Refresh();
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+}

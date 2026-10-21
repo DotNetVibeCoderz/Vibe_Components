@@ -1,0 +1,174 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Scene segmentation studio: DeepLab v3 class masks with coverage, plus point-prompted (MagicTouch) segmentation of any object in a still picture. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@(_pointMode ? "Interactive segmenter · object under the point" : "DeepLab v3 · 21 PASCAL VOC classes")" Icon="bi-bounding-box-circles">
+        <div class="bai-stack">
+            <div class="bai-chips" role="radiogroup" aria-label="Segmentation mode">
+                <button type="button" role="radio" aria-checked="@(!_pointMode)" class="bai-chip @(!_pointMode ? "is-active" : null)" @onclick="() => SetPointMode(false)">Classes</button>
+                <button type="button" role="radio" aria-checked="@_pointMode" class="bai-chip @(_pointMode ? "is-active" : null)" @onclick="() => SetPointMode(true)">Point to segment</button>
+            </div>
+            @if (_pointMode)
+            {
+                <label class="bai-small">X @_x.ToString("P0", CultureInfo.InvariantCulture) <input type="range" min="0" max="1" step="0.01" @bind="_x" @bind:event="oninput" @bind:after="Preview" style="width:100%" aria-label="Point X" /></label>
+                <label class="bai-small">Y @_y.ToString("P0", CultureInfo.InvariantCulture) <input type="range" min="0" max="1" step="0.01" @bind="_y" @bind:event="oninput" @bind:after="Preview" style="width:100%" aria-label="Point Y" /></label>
+                <div class="bai-row">
+                    <button type="button" class="bai-btn" @onclick="SegmentAtPointAsync" disabled="@LastFrame.Live"><i class="bi bi-magic" aria-hidden="true"></i>Segment here</button>
+                    @if (_pointCoverage is { } pc)
+                    {
+                        <span class="bai-small">Object covers <b>@pc.ToString("P1", CultureInfo.InvariantCulture)</b></span>
+                    }
+                </div>
+                @if (LastFrame.Live)
+                {
+                    <div class="bai-alert is-info" role="status">Point segmentation works on still pictures: pick a sample, upload a photo or stop the camera.</div>
+                }
+                <span class="bai-small bai-muted">Move the crosshair onto an object, then segment. The interactive model needs no class list, so it works on anything with a clear boundary.</span>
+            }
+            else
+            {
+                @if (_classes.Count == 0)
+                {
+                    <p class="bai-small bai-muted" style="margin:0">No VOC classes found in this frame.</p>
+                }
+                @foreach (var c in _classes)
+                {
+                    var on = !_hidden.Contains(c.Index);
+                    <div class="bai-row" style="gap:.6rem">
+                        <label class="bai-row bai-small" style="min-width:8rem">
+                            <input type="checkbox" checked="@on" @onchange="() => Toggle(c.Index)" aria-label="@($"Tint {c.Label}")" />@c.Label
+                        </label>
+                        <div class="baiv-meter bai-spacer"><span></span><div><span style="width:@((Math.Min(1, c.Coverage) * 100).ToString("0.0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@c.Coverage.ToString("P1", CultureInfo.InvariantCulture)</span></div>
+                    </div>
+                }
+                <div class="bai-row" role="radiogroup" aria-label="Tint colour" style="gap:.4rem">
+                    @foreach (var hex in Tints)
+                    {
+                        <button type="button" role="radio" aria-checked="@(hex == _tint)" aria-label="@($"Tint {hex}")" @onclick="() => SetTint(hex)"
+                                style="width:26px; height:26px; border-radius:50%; cursor:pointer; background:@hex; border:2px solid @(hex == _tint ? "var(--bai-text, #fff)" : "var(--bai-line)")"></button>
+                    }
+                </div>
+                <span class="bai-small bai-muted">Classes: @string.Join(", ", MediaPipeNet.Tasks.Vision.Processing.Labels.PascalVoc.Skip(1))</span>
+            }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    /// <summary>A class found in the frame.</summary>
+    public sealed record ClassCoverage(int Index, string Label, double Coverage);
+
+    private static readonly string[] Tints = [Overlay.Nila, Overlay.Soga, Overlay.Tarum, Overlay.Danger, Overlay.Warning];
+    private IReadOnlyList<ClassCoverage> _classes = [];
+    private HashSet<int> _hidden = [];
+    private string _tint = Overlay.Nila;
+    private bool _pointMode, _segmentPoint;
+    private double _x = 0.5, _y = 0.5;
+    private double? _pointCoverage;
+
+    [Parameter] public string Title { get; set; } = "Object segmentation studio";
+
+    /// <summary>Minimum fraction of the frame for a class to be listed.</summary>
+    [Parameter] public double MinCoverage { get; set; } = 0.003;
+
+    /// <summary>Raised with the classes found after each frame (on the processing thread).</summary>
+    [Parameter] public Action<IReadOnlyList<ClassCoverage>>? OnClasses { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Street, VisionSamples.Livestock, VisionSamples.Fruit, VisionSamples.Yoga, VisionSamples.Warehouse];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        return _pointMode ? ProcessPoint(frame) : ProcessClasses(frame);
+    }
+
+    private VisionOverlay ProcessClasses(VisionFrame frame)
+    {
+        var result = Tasks.Segment(frame, SegmenterModel.DeepLabV3, categoryMask: true);
+        var classes = SubjectIsolationViewer.Coverage(result)
+            .Select(kv => new ClassCoverage(IndexOf(result.Labels, kv.Key), kv.Key, kv.Value))
+            .Where(c => c.Index > 0 && c.Coverage >= MinCoverage)
+            .OrderByDescending(c => c.Coverage)
+            .ToList();
+        _classes = classes;
+        OnClasses?.Invoke(classes);
+        var overlay = new VisionOverlay { Status = classes.Count == 0 ? "No VOC classes" : string.Join(" · ", classes.Take(3).Select(c => $"{c.Label} {c.Coverage:P0}")) };
+        var shown = classes.Where(c => !_hidden.Contains(c.Index)).Select(c => c.Index).ToList();
+        if (result.CategoryMask is { } cm && shown.Count > 0)
+        {
+            var m = Overlay.CategoryTint(cm, shown, maxWidth: 320);
+            overlay.Mask = new OverlayMask { Width = m.Width, Height = m.Height, Data = m.Data, Mode = "tint", Color = _tint, Opacity = 0.5f };
+        }
+
+        return overlay;
+    }
+
+    private VisionOverlay ProcessPoint(VisionFrame frame)
+    {
+        var overlay = new VisionOverlay();
+        var (x, y) = ((float)_x, (float)_y);
+        if (_segmentPoint && !frame.IsLive)
+        {
+            _segmentPoint = false;
+            var mask = Tasks.SegmentAt(frame, x, y).ConfidenceMask;
+            _pointCoverage = mask.Coverage(0.5f);
+            overlay.Mask = Overlay.Mask(mask, "tint", Overlay.Soga, opacity: 0.6f);
+        }
+
+        // Crosshair at the prompt point.
+        const float r = 0.025f;
+        overlay.Paths.Add(new OverlayPath { Points = [x - r, y, x + r, y], Color = Overlay.White, Width = 2 });
+        overlay.Paths.Add(new OverlayPath { Points = [x, y - r * frame.Width / Math.Max(1, frame.Height), x, y + r * frame.Width / Math.Max(1, frame.Height)], Color = Overlay.White, Width = 2 });
+        overlay.Status = frame.IsLive ? "Point mode needs a still picture" : $"Point {x:P0}, {y:P0}";
+        return overlay;
+    }
+
+    private static int IndexOf(IReadOnlyList<string> labels, string label)
+    {
+        for (var i = 0; i < labels.Count; i++)
+        {
+            if (labels[i] == label)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private Task SetPointMode(bool on)
+    {
+        _pointMode = on;
+        _pointCoverage = null;
+        return Refresh();
+    }
+
+    private Task SegmentAtPointAsync()
+    {
+        _segmentPoint = true;
+        return Refresh();
+    }
+
+    private Task Preview() => Refresh();
+
+    private Task Toggle(int index)
+    {
+        var next = new HashSet<int>(_hidden);
+        if (!next.Remove(index))
+        {
+            next.Add(index);
+        }
+
+        _hidden = next;
+        return Refresh();
+    }
+
+    private Task SetTint(string hex)
+    {
+        _tint = hex;
+        return Refresh();
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+}

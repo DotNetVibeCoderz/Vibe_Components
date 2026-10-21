@@ -1,0 +1,126 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* Where activity happens: accumulates people, hand or body positions into a decaying heat grid drawn over the camera. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{_samples} positions accumulated")" Icon="bi-fire">
+        <div class="bai-stack">
+            <div class="bai-row" style="flex-wrap:wrap; gap:.4rem" role="group" aria-label="What to track">
+                @foreach (var m in Enum.GetValues<HeatSource>())
+                {
+                    var mode = m;
+                    <button type="button" class="bai-chip @(Source == mode ? "is-active" : null)" aria-pressed="@(Source == mode)" @onclick="() => SetSource(mode)">@mode</button>
+                }
+            </div>
+            <label class="bai-small">Decay per frame <input type="range" min="0.9" max="1" step="0.005" @bind="Decay" style="width:100%" aria-label="Decay per frame" /></label>
+            <span class="bai-label">Hottest cells</span>
+            @foreach (var (label, value) in _top)
+            {
+                <div class="baiv-meter"><span>@label</span><div><span style="width:@((value * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@value.ToString("P0", CultureInfo.InvariantCulture)</span></div>
+            }
+            <button type="button" class="bai-btn bai-btn-ghost" @onclick="Reset"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
+            <span class="bai-small bai-faint">Stills add one sample each; use a live camera or video to build up a heatmap over time.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public enum HeatSource { People, Hands, Body }
+
+    private float[] _grid = [];
+    private long _samples;
+    private IReadOnlyList<(string, double)> _top = [];
+
+    [Parameter] public string Title { get; set; } = "Activity heatmap";
+    [Parameter] public HeatSource Source { get; set; } = HeatSource.People;
+    [Parameter] public int Columns { get; set; } = 32;
+    [Parameter] public int Rows { get; set; } = 18;
+
+    /// <summary>Multiplier applied to the grid each frame (1 = never forget).</summary>
+    [Parameter] public double Decay { get; set; } = 0.995;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => Source == HeatSource.Hands ? VisionSamples.Hands : [VisionSamples.Street, VisionSamples.Warehouse, VisionSamples.Construction, VisionSamples.Yoga];
+
+    private void SetSource(HeatSource s)
+    {
+        Source = s;
+        Reset();
+    }
+
+    private void Reset()
+    {
+        _grid = [];
+        _samples = 0;
+        _top = [];
+        _ = Camera?.ReprocessAsync();
+    }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var points = new List<(float X, float Y)>();
+        switch (Source)
+        {
+            case HeatSource.People:
+                foreach (var d in Tasks.Objects(frame, 0.35f, 40, new HashSet<string> { "person" }).Detections)
+                {
+                    var b = VisionSolutions.Norm(d, frame.Width, frame.Height);
+                    points.Add((b.X + b.W / 2, b.Y + b.H * 0.95f)); // feet
+                }
+
+                break;
+            case HeatSource.Hands:
+                points.AddRange(Tasks.Hands(frame, 2).Hands.Select(h => (h.Landmarks[9].X, h.Landmarks[9].Y)));
+                break;
+            default:
+                foreach (var p in Tasks.Pose(frame, PoseModel.Lite, 4).Poses)
+                {
+                    points.AddRange(new[] { 0, 15, 16, 27, 28 }.Select(i => (p.Landmarks[i].X, p.Landmarks[i].Y)));
+                }
+
+                break;
+        }
+
+        var cols = Math.Max(4, Columns);
+        var rows = Math.Max(4, Rows);
+        var grid = _grid.Length == cols * rows ? (float[])_grid.Clone() : new float[cols * rows];
+        var decay = (float)Decay;
+        for (var i = 0; i < grid.Length; i++)
+        {
+            grid[i] *= decay;
+        }
+
+        foreach (var (x, y) in points)
+        {
+            // Splat into a 3×3 neighbourhood so sparse samples read as blobs.
+            var cx = (int)(Math.Clamp(x, 0, 0.999f) * cols);
+            var cy = (int)(Math.Clamp(y, 0, 0.999f) * rows);
+            for (var dy = -1; dy <= 1; dy++)
+            {
+                for (var dx = -1; dx <= 1; dx++)
+                {
+                    var gx = cx + dx;
+                    var gy = cy + dy;
+                    if (gx >= 0 && gy >= 0 && gx < cols && gy < rows)
+                    {
+                        grid[gy * cols + gx] += dx == 0 && dy == 0 ? 1f : 0.35f;
+                    }
+                }
+            }
+        }
+
+        _samples += points.Count;
+        _grid = grid;
+        var max = grid.Length == 0 ? 0 : grid.Max();
+        var norm = max <= 0 ? grid : grid.Select(v => v / max).ToArray();
+        _top = norm.Select((v, i) => (v, i)).OrderByDescending(t => t.v).Take(4).Where(t => t.v > 0)
+            .Select(t => (Describe(t.i % cols / (double)cols, t.i / cols / (double)rows), (double)t.v)).ToList();
+        var overlay = new VisionOverlay { Heat = new OverlayHeat { Cols = cols, Rows = rows, Values = norm, Opacity = 0.55f } };
+        overlay.Landmarks.Add(new OverlayLandmarks { Points = points.SelectMany(p => new[] { p.X, p.Y }).ToArray(), Color = Overlay.Soga, Radius = 4 });
+        overlay.Status = $"{points.Count} now · {_samples} total";
+        return overlay;
+    }
+
+    private static string Describe(double x, double y) =>
+        (y < 0.33 ? "top" : y < 0.66 ? "middle" : "bottom") + "-" + (x < 0.33 ? "left" : x < 0.66 ? "centre" : "right");
+}

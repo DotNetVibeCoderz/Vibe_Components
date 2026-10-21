@@ -1,0 +1,160 @@
+@page "/vision/face-hands"
+<PageTitle>Vision: face & hands · Blazor.AI</PageTitle>
+
+<PageHeader Title="Face & hands" Package="Blazor.AI.MediaPipe" Icon="bi-person-bounding-box"
+            Lead="Recording and model tools, face detection to attendance and verification, expression analytics, a 3D face mesh, and hand tracking, sign spelling, air drawing and finger counting. Use the samples, upload a picture, or press Camera." />
+
+<div class="bai-alert is-info" style="margin-bottom:1.5rem"><i class="bi bi-shield-check" aria-hidden="true"></i>Face data stays in this session's memory. Attendance and verification use a demo-grade embedder; get consent and plug in a face-recognition model before real use.</div>
+
+<DemoSection Title="Vision canvas" Component="VisionCanvas" Description="Draw your own inference results (boxes, landmarks, labels) over any image; no camera, no processing." Code="@CanvasCode">
+    <VisionCanvas ImageUrl="@VisionSamples.Street.Url" Overlay="@_canvasOverlay" />
+</DemoSection>
+
+<DemoSection Title="Vision recorder" Component="VisionRecorder" Description="Record clips with overlays, take screenshots, and keep evidence snapshots when the face count changes." Code="@RecorderCode">
+    <VisionRecorder />
+</DemoSection>
+
+<DemoSection Title="Model manager" Component="ModelManagerPanel" Description="What is on disk, sizes and licences, and pre-download for offline or edge sites." Code="@ModelsCode">
+    <ModelManagerPanel />
+</DemoSection>
+
+<DemoSection Title="Face detection" Component="FaceDetectionPanel" Description="Boxes, six keypoints and confidence with short- or full-range models; privacy blur hides faces." Code="@DetectCode">
+    <FaceDetectionPanel />
+</DemoSection>
+
+<DemoSection Title="3D face mesh" Component="FaceMeshViewer" Description="The 478-point mesh in 3D, coloured by depth, beside the camera." Code="@MeshCode">
+    <FaceMeshViewer />
+</DemoSection>
+
+<DemoSection Title="Expression analysis" Component="FaceBlendshapeAnalyzer" Description="Smile, angry, sad, surprised and neutral from 52 blendshapes, with a live trend." Code="@ExpressionCode">
+    <FaceBlendshapeAnalyzer />
+</DemoSection>
+
+<DemoSection Title="Face attendance" Component="FaceAttendance" Description="Enrol people from the camera; recognised faces are checked in once per window and exported as CSV." Code="@AttendanceCode">
+    <FaceAttendance />
+</DemoSection>
+
+<DemoSection Title="Face verification" Component="FaceVerification" Description="Capture a reference and a probe, compare them, and use blinks as a liveness hint." Code="@VerifyCode">
+    <FaceVerification />
+</DemoSection>
+
+<DemoSection Title="Face analytics" Component="FaceAnalyticsDashboard" Description="Audience size, mood and attention over time, with a slot for your own age/gender estimator." Code="@AnalyticsCode">
+    <FaceAnalyticsDashboard />
+</DemoSection>
+
+<DemoSection Title="Hand tracking" Component="HandTracker" Description="21 landmarks per hand with handedness, finger states and measurements in centimetres." Code="@HandCode">
+    <HandTracker />
+</DemoSection>
+
+<DemoSection Title="Sign spelling" Component="SignLanguageAssistant" Description="Hold a hand shape to add a letter; teach your own signs; AI turns the letters into a sentence." Code="@SignCode">
+    <SignLanguageAssistant />
+</DemoSection>
+
+<DemoSection Title="Air drawing" Component="HandDrawingCanvas" Description="Draw with your index finger in front of the camera, export SVG, and let AI guess the drawing." Code="@DrawCode">
+    <HandDrawingCanvas />
+</DemoSection>
+
+<DemoSection Title="Finger counter" Component="FingerCounter" Description="Counts extended fingers on one or two hands in real time." Code="@FingerCode">
+    <FingerCounter />
+</DemoSection>
+
+@code {
+    private readonly VisionOverlay _canvasOverlay = new()
+    {
+        Boxes =
+        [
+            new OverlayBox { X = 0.53f, Y = 0.51f, W = 0.2f, H = 0.19f, Label = "bus 0.78", Color = "#d9964f" },
+            new OverlayBox { X = 0.67f, Y = 0.62f, W = 0.17f, H = 0.15f, Label = "car 0.65", Color = "#3cc4b1" },
+            new OverlayBox { X = 0.02f, Y = 0.65f, W = 0.085f, H = 0.26f, Label = "person 0.76", Color = "#7b8cff" },
+        ],
+        Status = "3 objects (from your own model)",
+    };
+
+    private const string CanvasCode = """
+        <VisionCanvas ImageBytes="@jpeg" Overlay="@overlay" Height="360px" />
+
+        @code {
+            VisionOverlay overlay = new()
+            {
+                Boxes = [new OverlayBox { X = 0.53f, Y = 0.51f, W = 0.2f, H = 0.19f, Label = "bus 0.78" }],
+                Status = "From my YOLO model",
+            };
+        }
+        """;
+
+    private const string RecorderCode = """
+        <VisionRecorder SnapshotCooldownSeconds="5" OnEvidence="Store" />
+
+        @code {
+            Task Store(VisionRecorder.EvidenceSnapshot s) => evidence.SaveAsync(s.DataUrl, s.At, s.Reason);
+        }
+        """;
+
+    private const string ModelsCode = """
+        // Program.cs: pre-download at startup, or point to a copied folder on air-gapped devices
+        builder.Services.AddBlazorAIMediaPipe(o =>
+        {
+            o.PreloadModels = true;
+            // o.ModelDirectory = @"D:\models\mediapipe"; o.AllowModelDownload = false;
+            // o.Provider = ExecutionProvider.DirectML;
+        });
+
+        <ModelManagerPanel />
+        """;
+
+    private const string DetectCode = """
+        <FaceDetectionPanel PrivacyBlur="true" OnCountChanged="n => visitors = n" />
+        """;
+
+    private const string MeshCode = """
+        // Needs the 3D stylesheet: _content/Blazor.AI.ThreeD/blazor-ai-3d.css
+        <FaceMeshViewer SceneRate="8" StartWithCamera="true" />
+        """;
+
+    private const string ExpressionCode = """
+        <FaceBlendshapeAnalyzer HistoryLength="90" OnExpression="e => mood = e.Dominant" />
+
+        // Or compute it yourself from a FaceLandmarker result:
+        var expression = FaceExpressions.From(result.Faces[0]);
+        """;
+
+    private const string AttendanceCode = """
+        <FaceAttendance Threshold="0.85" DeduplicationWindow="@TimeSpan.FromHours(4)" OnCheckIn="Save" />
+
+        // Production: replace the demo-grade embedder with a face-recognition model
+        builder.Services.AddSingleton<IFaceEmbedder, MyArcFaceEmbedder>();
+        """;
+
+    private const string VerifyCode = """
+        <FaceVerification Threshold="0.86" OnVerified="r => approved = r.Matched && r.Blinks > 0" />
+        """;
+
+    private const string AnalyticsCode = """
+        <FaceAnalyticsDashboard Estimator="@estimator" AttentionDegrees="20" Language="Bahasa Indonesia" />
+
+        @code {
+            IFaceAttributeEstimator estimator = new MyAgeGenderModel(); // optional; none ships by default
+        }
+        """;
+
+    private const string HandCode = """
+        <HandTracker MaxHands="2" OnResult="r => hands = r.Hands.Count" />
+        """;
+
+    private const string SignCode = """
+        <SignLanguageAssistant StableFrames="10" OnSign="letter => log.Add(letter)" Language="Bahasa Indonesia" />
+        """;
+
+    private const string DrawCode = """
+        <HandDrawingCanvas @ref="canvas" StartWithCamera="true" />
+
+        @code {
+            HandDrawingCanvas? canvas;
+            string Svg() => canvas!.ToSvg();
+        }
+        """;
+
+    private const string FingerCode = """
+        <FingerCounter OnCount="n => answer = n" />
+        """;
+}

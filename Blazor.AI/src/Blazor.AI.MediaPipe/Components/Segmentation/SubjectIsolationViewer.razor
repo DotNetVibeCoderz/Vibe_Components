@@ -1,0 +1,143 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Per-part person segmentation (hair, skin, clothes) with the selfie multiclass model: toggle parts, see coverage, isolate or highlight them. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="Selfie multiclass · hair, skin and clothes" Icon="bi-layers">
+        <div class="bai-stack">
+            <div class="bai-chips" role="radiogroup" aria-label="Display mode">
+                @foreach (var (mode, label) in Modes)
+                {
+                    <button type="button" role="radio" aria-checked="@(mode == _mode)" class="bai-chip @(mode == _mode ? "is-active" : null)" @onclick="() => SetMode(mode)">@label</button>
+                }
+            </div>
+            @foreach (var part in Parts)
+            {
+                var on = _selected.Contains(part.Label);
+                var cov = _coverage.GetValueOrDefault(part.Label);
+                <div class="bai-row" style="gap:.6rem">
+                    <label class="bai-row bai-small" style="min-width:8.5rem">
+                        <input type="checkbox" checked="@on" @onchange="() => Toggle(part.Label)" aria-label="@($"Show {part.Name}")" />
+                        <span style="display:inline-block; width:.8rem; height:.8rem; border-radius:3px; background:@part.Color"></span>@part.Name
+                    </label>
+                    <div class="baiv-meter bai-spacer"><span></span><div><span style="width:@((cov * 100).ToString("0.0", CultureInfo.InvariantCulture))%; background:@part.Color"></span></div><span class="bai-num">@cov.ToString("P1", CultureInfo.InvariantCulture)</span></div>
+                </div>
+            }
+            <span class="bai-small">Selected parts cover <b>@_selectedCoverage.ToString("P1", CultureInfo.InvariantCulture)</b> of the frame.</span>
+            <span class="bai-small bai-muted">Coverage counts pixels whose most likely class is that part. Use it for virtual try-on, hair-colour previews or skin-region analysis.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    /// <summary>A body part of the multiclass model.</summary>
+    public sealed record PartInfo(string Label, string Name, string Color);
+
+    /// <summary>The selectable parts (labels as reported by the model).</summary>
+    public static readonly IReadOnlyList<PartInfo> Parts =
+    [
+        new("hair", "Hair", "#d9964f"),
+        new("face-skin", "Face skin", "#e8b84a"),
+        new("body-skin", "Body skin", "#e5534b"),
+        new("clothes", "Clothes", "#7b8cff"),
+        new("others", "Accessories", "#3cc4b1"),
+    ];
+
+    private static readonly (string Mode, string Label)[] Modes = [("tint", "Highlight"), ("cutout", "Isolate"), ("blur", "Blur the rest")];
+    private string _mode = "tint";
+    private HashSet<string> _selected = ["hair", "clothes"];
+    private IReadOnlyDictionary<string, double> _coverage = new Dictionary<string, double>();
+    private double _selectedCoverage;
+
+    [Parameter] public string Title { get; set; } = "Subject isolation";
+
+    /// <summary>Parts selected at start (model labels: hair, face-skin, body-skin, clothes, others).</summary>
+    [Parameter] public IReadOnlyList<string>? InitialParts { get; set; }
+
+    /// <summary>Raised with per-part coverage after each frame (on the processing thread).</summary>
+    [Parameter] public Action<IReadOnlyDictionary<string, double>>? OnCoverage { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (InitialParts is { Count: > 0 })
+        {
+            _selected = [.. InitialParts];
+        }
+    }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.Segment(frame, SegmenterModel.SelfieMulticlass, categoryMask: true);
+        var selected = _selected;
+        _coverage = Coverage(result);
+        OnCoverage?.Invoke(_coverage);
+
+        // Union of the selected parts' confidence masks keeps soft edges.
+        var masks = selected.Select(result.GetConfidenceMask).OfType<SegmentationMask>().ToList();
+        if (masks.Count == 0)
+        {
+            _selectedCoverage = 0;
+            return new VisionOverlay { Status = "No part selected" };
+        }
+
+        var union = new float[masks[0].Data.Length];
+        foreach (var m in masks)
+        {
+            for (var i = 0; i < union.Length; i++)
+            {
+                union[i] = Math.Max(union[i], m.Data[i]);
+            }
+        }
+
+        var mask = new SegmentationMask(masks[0].Width, masks[0].Height, union);
+        _selectedCoverage = selected.Sum(s => _coverage.GetValueOrDefault(s));
+        var color = selected.Count == 1 ? Parts.FirstOrDefault(p => p.Label == selected.First())?.Color ?? Overlay.Nila : Overlay.Soga;
+        var overlay = Overlay.Mask(BackgroundRemoval.Threshold(mask, 0.25f), _mode, color, opacity: 0.6f);
+        return new VisionOverlay { Mask = overlay, Status = $"{string.Join(" + ", selected)} · {_selectedCoverage:P0}" };
+    }
+
+    /// <summary>Fraction of pixels per class label, from the category (argmax) mask.</summary>
+    public static IReadOnlyDictionary<string, double> Coverage(SegmentationResult result)
+    {
+        var map = new Dictionary<string, double>();
+        if (result.CategoryMask is not { } cm || result.Labels.Count == 0)
+        {
+            return map;
+        }
+
+        var counts = new int[256];
+        var n = cm.Width * cm.Height;
+        for (var i = 0; i < n; i++)
+        {
+            counts[cm.Data[i]]++;
+        }
+
+        for (var c = 0; c < result.Labels.Count; c++)
+        {
+            map[result.Labels[c]] = counts[c] / (double)Math.Max(1, n);
+        }
+
+        return map;
+    }
+
+    private Task Toggle(string label)
+    {
+        var next = new HashSet<string>(_selected);
+        if (!next.Remove(label))
+        {
+            next.Add(label);
+        }
+
+        _selected = next;
+        return Refresh();
+    }
+
+    private Task SetMode(string mode)
+    {
+        _mode = mode;
+        return Refresh();
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+}

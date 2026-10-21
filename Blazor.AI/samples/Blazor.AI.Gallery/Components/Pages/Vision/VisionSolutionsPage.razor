@@ -1,0 +1,261 @@
+@page "/vision/solutions"
+<PageTitle>Vision solutions · Blazor.AI</PageTitle>
+
+<PageHeader Title="Vision solutions" Package="Blazor.AI.MediaPipe" Icon="bi-buildings"
+            Lead="Ready-made computer-vision solutions for healthcare, agriculture, education and industry, plus analytics blocks that read their events. Detection and measurement run on MediaPipe.NET on the server; the AI only explains what was measured." />
+
+<div class="bai-alert is-info" style="margin-bottom:1.5rem"><i class="bi bi-info-circle" aria-hidden="true"></i>These are heuristics on general-purpose models (COCO objects, ImageNet classes, pose, hands). Treat alerts as prompts for a person to check, not as diagnoses or safety certification. Every component on this page publishes into one event stream, shown in the Analytics section.</div>
+
+<h2 class="g-section-title" id="healthcare" style="margin-top:2rem">Healthcare</h2>
+
+<DemoSection Title="Fall detection" Component="ElderlyFallDetection" Description="Torso angle, hip height and a sudden drop flag a possible fall; it is confirmed when the person stays down, with a snapshot alert." Code="@FallCode">
+    <ElderlyFallDetection Events="@_events" Height="340px" />
+</DemoSection>
+
+<DemoSection Title="Patient movement" Component="PatientMovementMonitor" Description="Bed or chair safe zone, exit alerts, movement level and a repositioning reminder when the patient has been still too long." Code="@PatientCode">
+    <PatientMovementMonitor Events="@_events" PatientName="Bed 4" Height="340px" />
+</DemoSection>
+
+<DemoSection Title="Rehabilitation" Component="RehabilitationTracker" Description="Range of motion per exercise, repetition counting against a target angle, a progress chart and an AI session note." Code="@RehabCode">
+    <RehabilitationTracker Events="@_events" Height="340px" />
+</DemoSection>
+
+<DemoSection Title="Clinical skills practice" Component="MedicalSkillsTrainer" Description="Step-by-step hand hygiene and CPR posture practice from hand and body landmarks, with hold timers, a score and a debrief." Code="@SkillsCode">
+    <MedicalSkillsTrainer Events="@_events" Height="340px" />
+</DemoSection>
+
+<h2 class="g-section-title" id="agritech" style="margin-top:2rem">Agritech</h2>
+
+<DemoSection Title="Crop health" Component="CropVision" Description="Excess-green vegetation index per pixel: canopy cover, yellowing or browning share and a stress heatmap." Code="@CropCode">
+    <CropVision Events="@_events" Crop="Chili" Height="340px" />
+</DemoSection>
+
+<DemoSection Title="Fruit grading" Component="FruitQualityInspector" Description="Detects bananas, apples and oranges, then grades each by ripeness colour and dark-spot ratio." Code="@FruitCode">
+    <FruitQualityInspector Events="@_events" Height="340px" />
+</DemoSection>
+
+<DemoSection Title="Livestock" Component="LivestockMonitor" Description="Counts and tracks animals with ids and trails, separates moving from resting and warns when the herd is short." Code="@LivestockCode">
+    <LivestockMonitor Events="@_events" ExpectedCount="6" Height="340px" />
+</DemoSection>
+
+<DemoSection Title="Aquaculture" Component="AquacultureVision" Description="Water turbidity and green tint, surface activity, fish presence per tile and feeding response." Code="@AquaCode">
+    <AquacultureVision Events="@_events" PondName="Pond B" Height="340px" />
+</DemoSection>
+
+<h2 class="g-section-title" id="education" style="margin-top:2rem">Education</h2>
+
+<DemoSection Title="Science with your hands" Component="InteractiveScienceVision" Description="Measure angles with thumb and index finger, feel an inverse-square 'magnet' between two hands, count objects, then ask for an explanation." Code="@ScienceCode">
+    <InteractiveScienceVision Events="@_events" Height="340px" />
+</DemoSection>
+
+<DemoSection Title="Gesture game" Component="GestureLearningPlatform" Description="Show the requested gesture before the timer runs out; levels speed up every five correct answers." Code="@GameCode">
+    <GestureLearningPlatform Events="@_events" Height="340px" />
+</DemoSection>
+
+<DemoSection Title="Sign alphabet studio" Component="SignLanguageLearningStudio" Description="Practise hand-shape letters with a live match meter; record your own reference shapes for your sign language." Code="@SignCode">
+    <SignLanguageLearningStudio Events="@_events" Height="340px" />
+</DemoSection>
+
+<h2 class="g-section-title" id="industry" style="margin-top:2rem">Industry</h2>
+
+<DemoSection Title="Factory safety" Component="FactorySafetyMonitor" Description="Restricted zones, a hard-hat cue per worker and unsafe bending, with a violations log and snapshots." Code="@SafetyCode">
+    <FactorySafetyMonitor Events="@_events" Height="340px" />
+</DemoSection>
+
+<DemoSection Title="Worker tracking" Component="WorkerTrackingSystem" Description="Tracks people with stable ids and path trails; headcount and dwell time per zone." Code="@TrackingCode">
+    <WorkerTrackingSystem Events="@_events" Height="340px" />
+</DemoSection>
+
+<DemoSection Title="Surveillance wall" Component="SmartSurveillanceDashboard" Description="Several cameras, each with its own detector: people and vehicle counts, guarded-area intrusions and one event list." Code="@SurveillanceCode">
+    <SmartSurveillanceDashboard Events="@_events" />
+</DemoSection>
+
+<DemoSection Title="Assembly line" Component="AssemblyLineAnalytics" Description="Hands entering and leaving the work zone mark cycles; cycle time against takt, idle alerts and a trend chart." Code="@AssemblyCode">
+    <AssemblyLineAnalytics Events="@_events" TaktSeconds="10" Height="340px" />
+</DemoSection>
+
+<h2 class="g-section-title" id="analytics" style="margin-top:2rem">Analytics</h2>
+
+<DemoSection Title="Operations dashboard" Component="VisionDashboard" Description="KPIs, events per minute, events by kind, the latest counts per source and an AI shift summary, over everything published on this page." Code="@DashboardCode">
+    <VisionDashboard Events="@_events" />
+</DemoSection>
+
+<DemoSection Title="Event timeline" Component="EventTimeline" Description="Chronological events grouped by minute with snapshot thumbnails, severity, source and text filters." Code="@TimelineCode">
+    <EventTimeline Events="@_events" />
+</DemoSection>
+
+<DemoSection Title="Activity heatmap" Component="ActivityHeatmap" Description="Accumulates where people stand, hands work or bodies move into a decaying heat grid." Code="@HeatmapCode">
+    <ActivityHeatmap @ref="_heatmap" Events="@_events" Height="340px" />
+</DemoSection>
+
+<DemoSection Title="Detection statistics" Component="DetectionStatistics" Description="Counts per class in time windows: the current frame, per-window trends and average and peak per class." Code="@StatsCode">
+    <DetectionStatistics @ref="_statistics" Events="@_events" Height="340px" />
+</DemoSection>
+
+<DemoSection Title="Realtime metrics" Component="RealtimeMetrics" Description="Frames per second, latency (average and p95), errors and events across the server, broken down by component." Code="@MetricsCode">
+    <RealtimeMetrics Sources="@MetricSources()" />
+</DemoSection>
+
+<AiCredit />
+
+@code {
+    // One stream per page (per user circuit) so visitors never see each other's events.
+    private readonly VisionEventStream _events = new();
+    private ActivityHeatmap? _heatmap;
+    private DetectionStatistics? _statistics;
+
+    private IReadOnlyList<(string, Func<VisionStats?>)> MetricSources() =>
+    [
+        ("Activity heatmap", () => _heatmap?.CameraStats),
+        ("Detection statistics", () => _statistics?.CameraStats),
+    ];
+
+    private const string FallCode = """
+        <ElderlyFallDetection StartWithCamera="true" ConfirmSeconds="5" OnStateChanged="OnFall" OnEvent="Notify" />
+
+        @code {
+            void OnFall(ElderlyFallDetection.FallState state)
+            {
+                if (state == ElderlyFallDetection.FallState.Confirmed) pager.Page("Room 12: fall confirmed");
+            }
+
+            // VisionEvent carries the snapshot as a data URL.
+            Task Notify(VisionEvent e) => e.Severity == VisionEventSeverity.Alert ? alerts.SendAsync(e.Message, e.Snapshot) : Task.CompletedTask;
+        }
+        """;
+
+    private const string PatientCode = """
+        <PatientMovementMonitor PatientName="Bed 4"
+                                SafeZone="(0.2f, 0.25f, 0.6f, 0.7f)"
+                                RepositionMinutes="120"
+                                StartWithCamera="true" Fps="6" />
+        """;
+
+    private const string RehabCode = """
+        <RehabilitationTracker StartWithCamera="true" OnEvent="e => session.Add(e)" Language="Bahasa Indonesia" />
+
+        // Range of motion is measured from 3-D world landmarks, e.g. elbow flexion:
+        var angle = VisionMath.Angle3(w[(int)PoseLandmark.LeftShoulder], w[(int)PoseLandmark.LeftElbow], w[(int)PoseLandmark.LeftWrist]);
+        """;
+
+    private const string SkillsCode = """
+        @* Hand hygiene and CPR posture practice. A training aid, not a certification. *@
+        <MedicalSkillsTrainer StartWithCamera="true" Provider="openai" />
+        """;
+
+    private const string CropCode = """
+        <CropVision Crop="Rice" GridColumns="32" OnEvent="LogField" />
+
+        @code {
+            // Each event has Counts like { canopy = 64, stressed = 12 } (percent).
+            void LogField(VisionEvent e) => db.Add(new FieldReading(plot, e.At, e.Counts));
+        }
+        """;
+
+    private const string FruitCode = """
+        <FruitQualityInspector DefectLimitC="0.10" OnGraded="Sort" StartWithCamera="true" />
+
+        @code {
+            Task Sort(IReadOnlyList<FruitQualityInspector.FruitGrade> grades) =>
+                conveyor.RouteAsync(grades.Select(g => g.Grade == 'C' ? Lane.Reject : Lane.Pack));
+        }
+        """;
+
+    private const string LivestockCode = """
+        <LivestockMonitor ExpectedCount="24" StartWithCamera="true" Fps="4" OnEvent="Alert" />
+        """;
+
+    private const string AquaCode = """
+        <AquacultureVision PondName="Pond B" TileGrid="4" StartWithCamera="true" />
+        """;
+
+    private const string ScienceCode = """
+        <InteractiveScienceVision StartWithCamera="true" Language="Bahasa Indonesia" />
+        """;
+
+    private const string GameCode = """
+        <GestureLearningPlatform RoundSeconds="6" StartWithCamera="true" OnEvent="e => scores.Add(e)" />
+        """;
+
+    private const string SignCode = """
+        @* Letters ship with ASL-style hand shapes; record references for BISINDO or SIBI. *@
+        <SignLanguageLearningStudio HoldSeconds="1.5" StartWithCamera="true" />
+        """;
+
+    private const string SafetyCode = """
+        <FactorySafetyMonitor RestrictedZones="@zones" HelmetThreshold="0.2" BendLimit="50"
+                              Events="@plantEvents" SourceName="Line 2 · Press" StartWithCamera="true" />
+
+        @code {
+            IReadOnlyList<(float X, float Y, float W, float H)> zones = [(0.0f, 0.55f, 0.22f, 0.45f), (0.7f, 0.6f, 0.3f, 0.4f)];
+            VisionEventStream plantEvents = new();
+        }
+        """;
+
+    private const string TrackingCode = """
+        <WorkerTrackingSystem Zones="@zones" StartWithCamera="true" Fps="8" />
+
+        @code {
+            IReadOnlyList<WorkerTrackingSystem.WorkZone> zones =
+            [
+                new("Dock", 0.0f, 0.5f, 0.4f, 0.5f, "#d9964f"),
+                new("Picking", 0.4f, 0.5f, 0.6f, 0.5f, "#3cc4b1"),
+            ];
+        }
+        """;
+
+    private const string SurveillanceCode = """
+        <SmartSurveillanceDashboard Tiles="@cameras" Events="@siteEvents" Fps="5" />
+
+        @code {
+            IReadOnlyList<SmartSurveillanceDashboard.CameraTile> cameras =
+            [
+                new("Gate", "https://cams.example.com/gate.mjpg", GuardedArea: (0.0f, 0.6f, 0.3f, 0.4f)),
+                new("Yard", "https://cams.example.com/yard.mjpg"),
+                new("Dock", "https://cams.example.com/dock.mjpg"),
+            ];
+            VisionEventStream siteEvents = new();
+        }
+        """;
+
+    private const string AssemblyCode = """
+        <AssemblyLineAnalytics Station="A-3" TaktSeconds="12" IdleAlertSeconds="30"
+                               WorkZone="(0.25f, 0.35f, 0.5f, 0.6f)" StartWithCamera="true" />
+        """;
+
+    private const string DashboardCode = """
+        @* Give producers and views the same stream (per circuit), or register one as a scoped service. *@
+        <FactorySafetyMonitor Events="@events" />
+        <WorkerTrackingSystem Events="@events" />
+        <VisionDashboard Events="@events" WindowMinutes="30" Language="Bahasa Indonesia" />
+
+        @code {
+            VisionEventStream events = new();
+        }
+        """;
+
+    private const string TimelineCode = """
+        <EventTimeline Events="@events" MaxItems="500" MaxHeight="480px" />
+
+        // Producers publish through SolutionComponentBase, or directly:
+        events.Publish(new VisionEvent(DateTimeOffset.UtcNow, "Door 3", "open", "Door opened after hours", VisionEventSeverity.Warning));
+        """;
+
+    private const string HeatmapCode = """
+        <ActivityHeatmap Source="ActivityHeatmap.HeatSource.People" Columns="40" Rows="22" Decay="0.998" StartWithCamera="true" />
+        """;
+
+    private const string StatsCode = """
+        <DetectionStatistics Classes="@(new HashSet<string> { "person", "car", "truck" })" WindowSeconds="60" MaxWindows="60" />
+        """;
+
+    private const string MetricsCode = """
+        <FactorySafetyMonitor @ref="safety" />
+        <RealtimeMetrics Sources="@Sources()" LatencyBudgetMs="100" />
+
+        @code {
+            FactorySafetyMonitor? safety;
+            IReadOnlyList<(string, Func<VisionStats?>)> Sources() => [("Safety", () => safety?.CameraStats)];
+        }
+        """;
+}

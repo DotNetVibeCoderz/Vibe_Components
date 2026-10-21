@@ -1,0 +1,143 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Warehouse monitoring: people and vehicles per zone, person–vehicle safety distance, and a stock-fill estimate for racks. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{_state.People} people · {_state.Vehicles} vehicles · {_state.Alerts} proximity alert(s)")" Icon="bi-box-seam">
+        <div class="bai-stack">
+            <span class="bai-label">Zones (left to right)</span>
+            @foreach (var z in _state.Zones)
+            {
+                <div class="baiv-meter"><span>@z.Name</span><div><span style="width:@((z.StockFill * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@z.StockFill.ToString("P0", CultureInfo.InvariantCulture)</span></div>
+                <span class="bai-small bai-muted" style="margin:-.3rem 0 .2rem">@z.People people · @z.Vehicles vehicles</span>
+            }
+            <label class="bai-small">Safety distance <b>@_safety.ToString("0.0", CultureInfo.InvariantCulture)× body height</b>
+                <input type="range" min="0.5" max="3" step="0.1" @bind="_safety" @bind:event="oninput" @bind:after="Refresh" style="width:100%" aria-label="Safety distance" />
+            </label>
+            <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_heat" @bind:after="Refresh" /> show stock-fill heatmap</label>
+            <details class="bai-small"><summary>How it works</summary>
+                People and vehicles (forklifts usually register as trucks or cars) come from the COCO object detector. There is no box/pallet class in that model, so stock fill is estimated from image texture per grid cell: shelving full of cartons is highly textured, empty rack space is not. Use it for trends and alerts, not exact counts.
+            </details>
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Brief"><i class="bi bi-stars" aria-hidden="true"></i>Shift briefing</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed record ZoneStatus(string Name, int People, int Vehicles, double StockFill);
+
+    private sealed record State(int People, int Vehicles, int Alerts, IReadOnlyList<ZoneStatus> Zones);
+
+    private static readonly IReadOnlySet<string> Classes = new HashSet<string> { "person", "truck", "car", "motorcycle", "bicycle" };
+    private State _state = new(0, 0, 0, []);
+    private double _safety = 1.2;
+    private bool _heat = true;
+    private int _lastAlerts;
+
+    [Parameter] public string Title { get; set; } = "Warehouse vision";
+
+    /// <summary>Names of the vertical zones (aisles), left to right.</summary>
+    [Parameter] public IReadOnlyList<string> Zones { get; set; } = ["Aisle A", "Aisle B", "Aisle C"];
+
+    /// <summary>Raised when a person comes closer to a vehicle than the safety distance.</summary>
+    [Parameter] public EventCallback<int> OnProximityAlert { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Warehouse, VisionSamples.Construction, VisionSamples.Shelf];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var detections = Tasks.Objects(frame, 0.3f, 40, Classes).Detections;
+        var people = detections.Where(d => d.TopCategory?.CategoryName == "person").ToList();
+        var vehicles = detections.Where(d => d.TopCategory?.CategoryName != "person").ToList();
+        var px = new PixelBuffer(frame.Image);
+        var overlay = new VisionOverlay();
+
+        // Stock-fill heat grid from texture.
+        const int cols = 16, rows = 9;
+        var heat = new float[cols * rows];
+        for (var r = 0; r < rows; r++)
+        {
+            for (var c = 0; c < cols; c++)
+            {
+                heat[r * cols + c] = (float)Math.Clamp(px.Texture(c / (float)cols, r / (float)rows, 1f / cols, 1f / rows) / 0.18, 0, 1);
+            }
+        }
+
+        if (_heat)
+        {
+            overlay.Heat = new OverlayHeat { Cols = cols, Rows = rows, Values = heat, Opacity = 0.35f };
+        }
+
+        var zones = new List<ZoneStatus>();
+        for (var z = 0; z < Zones.Count; z++)
+        {
+            float x0 = z / (float)Zones.Count, x1 = (z + 1) / (float)Zones.Count;
+            bool In(Detection d) => (d.BoundingBox.X + d.BoundingBox.Width / 2) / frame.Width is var cx && cx >= x0 && cx < x1;
+            var fill = Enumerable.Range(0, rows).SelectMany(r => Enumerable.Range((int)(x0 * cols), Math.Max(1, (int)((x1 - x0) * cols))).Select(c => heat[r * cols + Math.Min(cols - 1, c)])).Average();
+            zones.Add(new ZoneStatus(Zones[z], people.Count(In), vehicles.Count(In), fill));
+            if (z > 0)
+            {
+                overlay.Paths.Add(new OverlayPath { Points = [x0, 0, x0, 1], Color = "rgba(123,140,255,0.5)", Width = 1.5f });
+            }
+
+            overlay.Texts.Add(Overlay.Label(x0 + 0.01f, 0.02f, Zones[z], Overlay.White, 12));
+        }
+
+        var alerts = 0;
+        foreach (var p in people)
+        {
+            var pc = Centre(p, frame);
+            var ph = p.BoundingBox.Height / frame.Height;
+            var near = vehicles.Select(v => (v, d: Dist(pc, Centre(v, frame), frame))).Where(x => x.d < _safety * ph).ToList();
+            alerts += near.Count;
+            overlay.Boxes.Add(Overlay.Box(p, frame.Width, frame.Height, near.Count > 0 ? "person · too close" : "person", near.Count > 0 ? Overlay.Danger : Overlay.Nila));
+            foreach (var (v, _) in near)
+            {
+                var vc = Centre(v, frame);
+                overlay.Paths.Add(new OverlayPath { Points = [pc.X, pc.Y, vc.X, vc.Y], Color = Overlay.Danger, Width = 3 });
+            }
+        }
+
+        foreach (var v in vehicles)
+        {
+            overlay.Boxes.Add(Overlay.Box(v, frame.Width, frame.Height, $"vehicle ({v.TopCategory?.CategoryName})", Overlay.Warning));
+        }
+
+        if (alerts > _lastAlerts)
+        {
+            RecordEvent($"Warehouse proximity alert: {alerts} person–vehicle pair(s) closer than {_safety:0.0}× body height");
+            var count = alerts;
+            _ = InvokeAsync(() => OnProximityAlert.InvokeAsync(count));
+        }
+
+        _lastAlerts = alerts;
+        _state = new State(people.Count, vehicles.Count, alerts, zones);
+        overlay.Status = alerts > 0 ? $"⚠ {alerts} proximity alert(s)" : $"{people.Count} people · {vehicles.Count} vehicles";
+        return overlay;
+    }
+
+    private static (float X, float Y) Centre(Detection d, VisionFrame f) =>
+        ((d.BoundingBox.X + d.BoundingBox.Width / 2) / f.Width, (d.BoundingBox.Y + d.BoundingBox.Height / 2) / f.Height);
+
+    // Distance in "height units" (aspect-corrected so horizontal and vertical are comparable).
+    private static double Dist((float X, float Y) a, (float X, float Y) b, VisionFrame f) =>
+        Math.Sqrt(Math.Pow((a.X - b.X) * f.Width / (double)f.Height, 2) + Math.Pow(a.Y - b.Y, 2));
+
+    private Task Refresh()
+    {
+        _lastAlerts = int.MaxValue;
+        return Camera?.ReprocessAsync() ?? Task.CompletedTask;
+    }
+
+    private Task Brief()
+    {
+        var s = _state;
+        var facts = string.Create(CultureInfo.InvariantCulture,
+            $"{s.People} people, {s.Vehicles} vehicles (forklifts/trucks), {s.Alerts} person–vehicle proximity alert(s) at a {_safety:0.0}× body-height threshold. " +
+            $"Zones: {string.Join("; ", s.Zones.Select(z => $"{z.Name}: {z.People} people, {z.Vehicles} vehicles, estimated rack fill {z.StockFill:P0}"))}. Fill is a texture estimate, not a box count.");
+        return AskAboutFrameAsync("a warehouse operations supervisor", "Give a short shift briefing: safety, congestion, and which zone to replenish first.", facts);
+    }
+}

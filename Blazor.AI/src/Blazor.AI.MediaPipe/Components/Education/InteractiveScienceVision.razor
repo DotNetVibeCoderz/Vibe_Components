@@ -1,0 +1,125 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* Hand-driven science activities: a finger protractor, a "magnet" whose force follows the inverse-square law, and an object counter. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@Activities.First(a => a.Key == _activity).Label" Icon="bi-lightbulb">
+        <div class="bai-stack">
+            <div class="bai-chips" role="radiogroup" aria-label="Activity">
+                @foreach (var (key, label) in Activities)
+                {
+                    <button type="button" role="radio" aria-checked="@(key == _activity)" class="bai-chip @(key == _activity ? "is-active" : null)" @onclick="() => SetActivity(key)">@label</button>
+                }
+            </div>
+            <div class="baiv-big" aria-live="polite">@_reading</div>
+            <span class="bai-small bai-muted">@_explain</span>
+            <button type="button" class="bai-btn bai-btn-ai" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain the science</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly (string Key, string Label)[] Activities =
+    [
+        ("protractor", "Finger protractor"),
+        ("magnet", "Magnet & inverse-square law"),
+        ("count", "Count the objects"),
+    ];
+
+    private string _activity = "protractor";
+    private string _reading = "–", _explain = "Spread your thumb and index finger; the angle between them is measured at the knuckle.";
+
+    [Parameter] public string Title { get; set; } = "Interactive science vision";
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.OpenPalms, VisionSamples.ThumbsUp, VisionSamples.Fruit, VisionSamples.Street];
+
+    private void SetActivity(string key)
+    {
+        _activity = key;
+        _explain = key switch
+        {
+            "protractor" => "Spread your thumb and index finger; the angle between them is measured at the knuckle.",
+            "magnet" => "Bring your two index fingers together: the force grows as 1/distance², like magnets and gravity.",
+            _ => "Hold objects in view: the detector counts them by class (fruit, cups, bottles, phones…).",
+        };
+        _ = Camera?.ReprocessAsync();
+    }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var overlay = new VisionOverlay();
+        var aspect = frame.Width / (double)frame.Height;
+        switch (_activity)
+        {
+            case "protractor":
+            {
+                var hand = Tasks.Hands(frame, 1).Hands.FirstOrDefault();
+                if (hand is null)
+                {
+                    _reading = "Show a hand";
+                    break;
+                }
+
+                var l = hand.Landmarks;
+                var angle = VisionMath.Angle(l[4], l[2], l[8], aspect);
+                _reading = $"{angle:0}°";
+                overlay.Landmarks.Add(Overlay.Hand(hand, Overlay.Tarum, [2, 4, 8]));
+                overlay.Paths.Add(new OverlayPath { Points = VisionMath.Flat(l[4], l[2], l[8]), Color = Overlay.Soga, Width = 5 });
+                overlay.Texts.Add(Overlay.Label(l[2].X + 0.02f, l[2].Y + 0.02f, $"{angle:0}° {(angle < 85 ? "acute" : angle < 95 ? "right" : "obtuse")}", Overlay.White, 16));
+                break;
+            }
+
+            case "magnet":
+            {
+                var hands = Tasks.Hands(frame, 2).Hands;
+                if (hands.Count < 2)
+                {
+                    _reading = "Show two hands";
+                    foreach (var h in hands)
+                    {
+                        overlay.Landmarks.Add(Overlay.Hand(h));
+                    }
+
+                    break;
+                }
+
+                var a = hands[0].Landmarks[8];
+                var b = hands[1].Landmarks[8];
+                var d = Math.Max(0.03, VisionMath.Distance(a, b, aspect));
+                var force = Math.Min(999, 1 / (d * d));
+                _reading = $"F ∝ 1/r² = {force:0}";
+                overlay.Paths.Add(new OverlayPath { Points = VisionMath.Flat(a, b), Color = force > 100 ? Overlay.Danger : Overlay.Nila, Width = (float)Math.Clamp(force / 20, 2, 14) });
+                overlay.Texts.Add(Overlay.Label((a.X + b.X) / 2, (a.Y + b.Y) / 2, $"r = {d:0.00}", Overlay.White, 15));
+                foreach (var h in hands)
+                {
+                    overlay.Landmarks.Add(Overlay.Hand(h));
+                }
+
+                break;
+            }
+
+            default:
+            {
+                var dets = Tasks.Objects(frame, 0.35f, 40).Detections.Where(x => x.TopCategory?.CategoryName != "person").ToList();
+                var groups = dets.GroupBy(x => x.TopCategory?.CategoryName ?? "object").OrderByDescending(g => g.Count()).ToList();
+                _reading = dets.Count == 0 ? "0 objects" : string.Join(" · ", groups.Select(g => $"{g.Count()} {g.Key}"));
+                foreach (var d in dets)
+                {
+                    overlay.Boxes.Add(Overlay.Box(d, frame.Width, frame.Height));
+                }
+
+                break;
+            }
+        }
+
+        overlay.Status = _reading;
+        return overlay;
+    }
+
+    private Task Explain() => AskAboutFrameAsync("a friendly secondary-school science teacher",
+        "Explain the science behind this activity in simple words, with one experiment the student can try next.",
+        $"Activity: {Activities.First(a => a.Key == _activity).Label}. Reading: {_reading}. {_explain}", attachImage: false);
+}

@@ -1,0 +1,246 @@
+@namespace Blazor.AI.MediaPipe
+@using System.Text
+@using Blazor.AI.ThreeD
+@inherits VisionComponentBase
+@* Markerless motion capture: record pose world landmarks, smooth them, scrub and replay over the picture and in 3-D, export JSON or BVH. *@
+
+<div class="@CssClass("baiv-split")">
+    <div class="bai-stack">
+        <div class="bai-grid-2" style="align-items:start">
+            <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+            <Scene3D Objects="@_objects" Options="@_options" Height="@Height" />
+        </div>
+        @if (_take.Count > 1)
+        {
+            <div class="bai-row">
+                <button type="button" class="bai-icon-btn" aria-label="@(_playing ? "Pause" : "Play")" @onclick="TogglePlay"><i class="bi @(_playing ? "bi-pause-fill" : "bi-play-fill")" aria-hidden="true"></i></button>
+                <input type="range" min="0" max="@(_take.Count - 1)" value="@_cursor" @oninput="Scrub" style="flex:1" aria-label="Timeline" />
+                <span class="bai-small bai-num">@(_take[_cursor].Time - _take[0].Time is var t ? t.ToString("0.00", CultureInfo.InvariantCulture) : "0")s / @Duration.ToString("0.00", CultureInfo.InvariantCulture)s</span>
+            </div>
+        }
+    </div>
+    <AiCard Title="@Title" Subtitle="@(_recording ? "● Recording" : $"{_take.Count} frames captured")" Icon="bi-record-circle">
+        <div class="bai-stack">
+            <div class="bai-row">
+                @if (_recording)
+                {
+                    <button type="button" class="bai-btn bai-btn-ai" @onclick="StopRecording"><i class="bi bi-stop-fill" aria-hidden="true"></i>Stop</button>
+                }
+                else
+                {
+                    <button type="button" class="bai-btn bai-btn-ai" @onclick="StartRecording"><i class="bi bi-record-fill" aria-hidden="true"></i>Record</button>
+                }
+                <button type="button" class="bai-btn-ghost" disabled="@(_take.Count == 0)" @onclick="ClearTake">Clear</button>
+            </div>
+            <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="Smooth" /> One-Euro smoothing while recording</label>
+            <span class="bai-small bai-muted">Record from the camera or a video. Up to @MaxSeconds s are kept.</span>
+            @if (_take.Count > 1)
+            {
+                <span class="bai-label">Export</span>
+                <div class="bai-row">
+                    <button type="button" class="bai-btn-ghost" @onclick="ExportJson"><i class="bi bi-filetype-json" aria-hidden="true"></i>JSON</button>
+                    <button type="button" class="bai-btn-ghost" @onclick="ExportBvh"><i class="bi bi-person-arms-up" aria-hidden="true"></i>BVH</button>
+                </div>
+                <span class="bai-small bai-muted">BVH: 15-joint hierarchy, Y up, centimetres, first frame as rest pose. Import into Blender with File › Import › Motion Capture (.bvh).</span>
+            }
+            @if (_message is not null) { <span class="bai-small">@_message</span> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private readonly List<MocapFrame> _take = [];
+    private readonly LandmarkFilter _filter = new();
+    private readonly Scene3DOptions _options = Body3D.Stage("Motion capture preview");
+    private IReadOnlyList<Object3D> _objects = [];
+    private bool _recording, _playing;
+    private int _cursor;
+    private string? _message;
+    private DateTime _lastScene;
+    private CancellationTokenSource? _play;
+
+    [Parameter] public string Title { get; set; } = "Motion capture studio";
+
+    [Parameter] public bool Smooth { get; set; } = true;
+
+    [Parameter] public int MaxSeconds { get; set; } = 60;
+
+    /// <summary>Raised when a take is finished (the frames recorded).</summary>
+    [Parameter] public EventCallback<IReadOnlyList<MocapFrame>> OnTake { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Bodies;
+
+    private double Duration => _take.Count < 2 ? 0 : _take[^1].Time - _take[0].Time;
+
+    private double CaptureFps => _take.Count < 2 ? 15 : (_take.Count - 1) / Math.Max(0.01, Duration);
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        if (_playing)
+        {
+            return null;
+        }
+
+        var pose = Tasks.Pose(frame, PoseModel.Full).Poses.FirstOrDefault();
+        var overlay = new VisionOverlay();
+        if (pose is null)
+        {
+            overlay.Status = _recording ? "● REC · no person" : "No person";
+            return overlay;
+        }
+
+        var t = frame.TimestampMs / 1000.0;
+        var world = Smooth && frame.IsLive ? _filter.Filter(pose.WorldLandmarks, t) : pose.WorldLandmarks.ToArray();
+        if (_recording && frame.IsLive)
+        {
+            lock (_take)
+            {
+                _take.Add(new MocapFrame(t, world, [.. pose.Landmarks]));
+                if (_take.Count > 1 && _take[^1].Time - _take[0].Time > MaxSeconds)
+                {
+                    _take.RemoveAt(0);
+                }
+            }
+        }
+
+        if (!frame.IsLive || (DateTime.UtcNow - _lastScene).TotalMilliseconds > 100)
+        {
+            _lastScene = DateTime.UtcNow;
+            _objects = Body3D.Skeleton("mc-", world, _recording ? ThreeDPalette.Danger : ThreeDPalette.Nila, tubes: true, visibility: pose.Landmarks);
+            _ = InvokeAsync(StateHasChanged);
+        }
+
+        overlay.Landmarks.Add(Overlay.Pose(pose, _recording ? Overlay.Danger : Overlay.Nila));
+        overlay.Status = _recording ? $"● REC {_take.Count} frames" : "Ready to record";
+        return overlay;
+    }
+
+    private void StartRecording()
+    {
+        if (Camera?.Source is VisionSourceKind.Image)
+        {
+            _message = "Switch to the camera or a video first: motion capture needs moving frames.";
+            return;
+        }
+
+        StopPlayback();
+        lock (_take)
+        {
+            _take.Clear();
+        }
+
+        _filter.Reset();
+        _message = null;
+        _recording = true;
+    }
+
+    private async Task StopRecording()
+    {
+        _recording = false;
+        _cursor = 0;
+        _message = _take.Count < 2 ? "Nothing captured: make sure your whole body is visible." : $"Captured {_take.Count} frames ({Duration:0.0} s at {CaptureFps:0} fps).";
+        RecordEvent($"Motion capture take: {_take.Count} frames, {Duration:0.0} s.");
+        await OnTake.InvokeAsync(_take.ToArray());
+    }
+
+    private void ClearTake()
+    {
+        StopPlayback();
+        lock (_take)
+        {
+            _take.Clear();
+        }
+
+        _cursor = 0;
+    }
+
+    private async Task Scrub(ChangeEventArgs e)
+    {
+        StopPlayback();
+        if (int.TryParse(e.Value?.ToString(), out var i))
+        {
+            await ShowFrame(Math.Clamp(i, 0, _take.Count - 1));
+        }
+    }
+
+    private async Task ShowFrame(int i)
+    {
+        if (_take.Count == 0)
+        {
+            return;
+        }
+
+        _cursor = i;
+        var f = _take[i];
+        _objects = Body3D.Skeleton("mc-", f.World, ThreeDPalette.Soga, tubes: true);
+        if (Camera is not null)
+        {
+            await Camera.SetOverlayAsync(new VisionOverlay
+            {
+                Landmarks = [new OverlayLandmarks { Points = Overlay.Points(f.Image), Connections = Overlay.Flatten(Connections.Pose), Color = Overlay.Soga, PointColor = Overlay.White, Radius = 3, LineWidth = 3 }],
+                Status = string.Create(CultureInfo.InvariantCulture, $"Replay {f.Time - _take[0].Time:0.00}s"),
+            });
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task TogglePlay()
+    {
+        if (_playing)
+        {
+            StopPlayback();
+            return;
+        }
+
+        if (Camera is not null)
+        {
+            await Camera.StopAsync();
+        }
+
+        _playing = true;
+        _play = new CancellationTokenSource();
+        var token = _play.Token;
+        try
+        {
+            var start = _cursor >= _take.Count - 1 ? 0 : _cursor;
+            for (var i = start; i < _take.Count && !token.IsCancellationRequested; i++)
+            {
+                await ShowFrame(i);
+                var next = i + 1 < _take.Count ? _take[i + 1].Time - _take[i].Time : 0;
+                await Task.Delay(TimeSpan.FromSeconds(Math.Clamp(next, 0.02, 0.5)), token);
+            }
+        }
+        catch (TaskCanceledException)
+        {
+        }
+
+        _playing = false;
+    }
+
+    private void StopPlayback()
+    {
+        _play?.Cancel();
+        _playing = false;
+    }
+
+    private Task ExportJson() => Download(MocapExport.ToJson(_take), "application/json", "mocap.json");
+
+    private Task ExportBvh() => Download(MocapExport.ToBvh(_take, CaptureFps), "text/plain", "mocap.bvh");
+
+    private Task Download(string content, string mime, string name) =>
+        Camera?.DownloadAsync($"data:{mime};base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(content))}", name) ?? Task.CompletedTask;
+
+    private void Changed(VisionSourceKind kind)
+    {
+        _recording = false;
+        _filter.Reset();
+        HandleSourceChanged(kind);
+    }
+
+    public override ValueTask DisposeAsync()
+    {
+        _play?.Cancel();
+        return base.DisposeAsync();
+    }
+}

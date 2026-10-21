@@ -1,0 +1,120 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Workplace posture: neck flexion, trunk lean, arm reach and shoulder elevation, a RULA-style risk score, time in risky posture and break reminders. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="RULA-style screening · not a medical assessment" Icon="bi-laptop">
+        <div class="bai-stack">
+            @if (_a is { } a)
+            {
+                <div class="bai-row" style="align-items:flex-end; gap:1.2rem">
+                    <div><div class="baiv-big" style="color:@RiskColor(a.Score)">@a.Score</div><span class="bai-small bai-muted">score / 7</span></div>
+                    <div><b style="color:@RiskColor(a.Score)">@a.Risk risk</b></div>
+                </div>
+                <div class="baiv-meter"><span>Neck flexion</span><div><span style="width:@(Pct(a.NeckFlexion, 45))%"></span></div><span class="bai-num">@a.NeckFlexion.ToString("0", CultureInfo.InvariantCulture)°</span></div>
+                <div class="baiv-meter"><span>Trunk lean</span><div><span style="width:@(Pct(a.TrunkLean, 60))%"></span></div><span class="bai-num">@a.TrunkLean.ToString("0", CultureInfo.InvariantCulture)°</span></div>
+                <div class="baiv-meter"><span>Upper arm</span><div><span style="width:@(Pct(a.UpperArm, 100))%"></span></div><span class="bai-num">@a.UpperArm.ToString("0", CultureInfo.InvariantCulture)°</span></div>
+                <span class="bai-small">Shoulders: <b>@(a.ShouldersRaised ? "raised" : "relaxed")</b></span>
+                @foreach (var i in a.Issues) { <span class="bai-small" style="color:var(--bai-soga)"><i class="bi bi-info-circle" aria-hidden="true"></i> @i</span> }
+            }
+            else
+            {
+                <p class="bai-small bai-muted" style="margin:0">Position the camera to the side so your head, shoulders and hips are visible.</p>
+            }
+            <span class="bai-small">Time in medium/high-risk posture: <b>@TimeSpan.FromSeconds(_badSeconds).ToString(@"mm\:ss", CultureInfo.InvariantCulture)</b> of @TimeSpan.FromSeconds(_totalSeconds).ToString(@"mm\:ss", CultureInfo.InvariantCulture)</span>
+            @if (_reminder)
+            {
+                <div class="bai-alert is-info" role="status"><i class="bi bi-cup-hot" aria-hidden="true"></i>Time for a micro-break: stand up, roll your shoulders and look away from the screen for 20 seconds.
+                    <button type="button" class="bai-btn-ghost" @onclick="Dismiss">Done</button></div>
+            }
+            <button type="button" class="bai-btn bai-btn-ai" style="width:fit-content" disabled="@IsBusy" @onclick="Advise"><i class="bi bi-stars" aria-hidden="true"></i>Workstation advice</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private ErgonomicAssessment? _a;
+    private double _badSeconds, _totalSeconds, _sinceBreak, _lastT = double.NaN;
+    private bool _reminder;
+
+    [Parameter] public string Title { get; set; } = "Ergonomic monitor";
+
+    /// <summary>Minutes of risky posture before a break reminder.</summary>
+    [Parameter] public double BreakAfterMinutes { get; set; } = 20;
+
+    /// <summary>Raised when a break reminder is shown.</summary>
+    [Parameter] public EventCallback<ErgonomicAssessment> OnBreakReminder { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.DeskPosture, .. VisionSamples.Bodies.Where(s => s != VisionSamples.DeskPosture)];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var pose = Tasks.Pose(frame, PoseModel.Full).Poses.FirstOrDefault();
+        var overlay = new VisionOverlay();
+        if (pose is null || !PoseAnalytics.Visible(pose, 0.3f, PoseLandmark.LeftShoulder, PoseLandmark.RightShoulder, PoseLandmark.LeftHip, PoseLandmark.RightHip))
+        {
+            _a = null;
+            overlay.Status = "Shoulders and hips not visible";
+            return overlay;
+        }
+
+        var a = ErgonomicAssessment.From(pose);
+        _a = a;
+        if (frame.IsLive)
+        {
+            var t = frame.TimestampMs / 1000.0;
+            var dt = double.IsNaN(_lastT) ? 0 : Math.Clamp(t - _lastT, 0, 2);
+            _lastT = t;
+            _totalSeconds += dt;
+            if (a.Score >= 3)
+            {
+                _badSeconds += dt;
+                _sinceBreak += dt;
+            }
+
+            if (!_reminder && _sinceBreak >= BreakAfterMinutes * 60)
+            {
+                _reminder = true;
+                RecordEvent($"Ergonomics: break reminder after {_sinceBreak / 60:0} min in risky posture (score {a.Score}).");
+                _ = InvokeAsync(() => OnBreakReminder.InvokeAsync(a));
+            }
+        }
+
+        var color = a.Score >= 5 ? Overlay.Danger : a.Score >= 3 ? Overlay.Warning : Overlay.Nila;
+        overlay.Landmarks.Add(Overlay.Pose(pose, color));
+        var ear = PoseAnalytics.N(pose, PoseLandmark.LeftEar);
+        var shoulder = PoseAnalytics.N(pose, PoseLandmark.LeftShoulder);
+        var hip = PoseAnalytics.N(pose, PoseLandmark.LeftHip);
+        overlay.Paths.Add(new OverlayPath { Points = VisionMath.Flat(ear, shoulder, hip), Color = color, Width = 5 });
+        overlay.Texts.Add(Overlay.Label(shoulder.X + 0.02f, shoulder.Y - 0.05f, $"neck {a.NeckFlexion:0}° · trunk {a.TrunkLean:0}°", Overlay.White, 13));
+        overlay.Status = $"{a.Risk} risk ({a.Score}/7)";
+        return overlay;
+    }
+
+    private static string Pct(double v, double max) => Math.Clamp(v / max * 100, 0, 100).ToString("0", CultureInfo.InvariantCulture);
+
+    private static string RiskColor(int score) => score >= 5 ? "var(--bai-danger)" : score >= 3 ? "var(--bai-soga)" : "var(--bai-nila)";
+
+    private void Dismiss()
+    {
+        _reminder = false;
+        _sinceBreak = 0;
+    }
+
+    private void Changed(VisionSourceKind kind)
+    {
+        _lastT = double.NaN;
+        HandleSourceChanged(kind);
+    }
+
+    private Task Advise()
+    {
+        var a = _a;
+        var facts = a is null ? "No posture measured yet." : string.Create(CultureInfo.InvariantCulture,
+            $"Neck flexion {a.NeckFlexion:0}°, trunk lean {a.TrunkLean:0}°, upper arm {a.UpperArm:0}°, shoulders {(a.ShouldersRaised ? "raised" : "relaxed")}; score {a.Score}/7 ({a.Risk}). Issues: {string.Join(" ", a.Issues)} Time in risky posture {_badSeconds / 60:0.0} of {_totalSeconds / 60:0.0} min.");
+        return AskAboutFrameAsync("an occupational ergonomist", "How should this person adjust their workstation and habits?", facts);
+    }
+}

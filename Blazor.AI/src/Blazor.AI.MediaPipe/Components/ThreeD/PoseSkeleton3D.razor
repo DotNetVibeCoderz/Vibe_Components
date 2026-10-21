@@ -1,0 +1,95 @@
+@namespace Blazor.AI.MediaPipe
+@using Blazor.AI.ThreeD
+@inherits VisionComponentBase
+@* Metric 3-D skeletons from pose world landmarks: one per person, with live joint-angle labels and low-visibility joints dimmed. *@
+
+<div class="@CssClass("baiv-split")">
+    <div class="bai-grid-2" style="align-items:start">
+        <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+        <Scene3D Objects="@_objects" Options="@_options" Height="@Height" />
+    </div>
+    <AiCard Title="@Title" Subtitle="@($"Pose landmarker (full) · {_people} {(_people == 1 ? "person" : "people")}")" Icon="bi-diagram-3">
+        <div class="bai-stack">
+            <label class="bai-row bai-small"><input type="checkbox" @bind="_labels" @bind:after="Refresh" /> Joint-angle labels</label>
+            <label class="bai-row bai-small"><input type="checkbox" @bind="_tubes" @bind:after="Refresh" /> Solid bones</label>
+            <label class="bai-small">People <input type="range" min="1" max="3" @bind="_maxPeople" @bind:after="Refresh" style="width:100%" aria-label="Maximum people" /></label>
+            @foreach (var (name, deg) in _angles)
+            {
+                <div class="baiv-meter"><span>@name</span><div><span style="width:@((deg / 180 * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@deg.ToString("0", CultureInfo.InvariantCulture)°</span></div>
+            }
+            <span class="bai-small bai-muted">World landmarks are metric and centred on the hips, so each skeleton is stood on the floor and spaced 0.9 m apart; true positions in the room are not recovered.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly string[] PersonColors = [ThreeDPalette.Nila, ThreeDPalette.Soga, "#7b8cff"];
+    private static readonly (string Name, PoseLandmark Joint)[] Labelled =
+    [
+        ("Left elbow", PoseLandmark.LeftElbow), ("Right elbow", PoseLandmark.RightElbow),
+        ("Left knee", PoseLandmark.LeftKnee), ("Right knee", PoseLandmark.RightKnee),
+        ("Left hip", PoseLandmark.LeftHip), ("Right hip", PoseLandmark.RightHip),
+    ];
+
+    private readonly SceneClock _clock = new();
+    private readonly Scene3DOptions _options = Body3D.Stage("3-D pose skeletons", distance: 3.6);
+    private IReadOnlyList<Object3D> _objects = [];
+    private IReadOnlyList<(string Name, double Degrees)> _angles = [];
+    private bool _labels = true, _tubes = true;
+    private int _maxPeople = 2, _people;
+
+    [Parameter] public string Title { get; set; } = "Pose skeleton 3D";
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Bodies;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var poses = Tasks.Pose(frame, PoseModel.Full, _maxPeople).Poses;
+        _people = poses.Count;
+        var overlay = new VisionOverlay { Status = poses.Count == 0 ? "No person" : $"{poses.Count} skeleton(s)" };
+        if (poses.Count > 0)
+        {
+            var angles = PoseAnalytics.Angles(poses[0]);
+            _angles = Labelled.Select(l => (l.Name, angles.GetValueOrDefault(l.Name))).ToList();
+        }
+
+        for (var i = 0; i < poses.Count; i++)
+        {
+            overlay.Landmarks.Add(Overlay.Pose(poses[i], PersonColors[i % PersonColors.Length]));
+        }
+
+        if (_clock.Due(frame))
+        {
+            _objects = Build(poses);
+            _ = InvokeAsync(StateHasChanged);
+        }
+
+        return overlay;
+    }
+
+    private List<Object3D> Build(IReadOnlyList<PoseLandmarks> poses)
+    {
+        var list = new List<Object3D>();
+        for (var i = 0; i < poses.Count; i++)
+        {
+            var pose = poses[i];
+            var x = (i - (poses.Count - 1) / 2.0) * 0.9;
+            double[] offset = [x, 0, 0];
+            var w = pose.WorldLandmarks;
+            list.AddRange(Body3D.Skeleton($"p{i}-", w, PersonColors[i % PersonColors.Length], offset: offset, tubes: _tubes, visibility: pose.Landmarks));
+            if (_labels)
+            {
+                var angles = PoseAnalytics.Angles(pose);
+                foreach (var (name, joint) in Labelled)
+                {
+                    var p = Body3D.Joint(w, joint, offset: offset);
+                    list.Add(Object3D.Text($"p{i}-a{(int)joint}", [p[0], p[1] + 0.07, p[2]], $"{angles.GetValueOrDefault(name):0}°", "bai3d-label"));
+                }
+            }
+        }
+
+        return list;
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+}

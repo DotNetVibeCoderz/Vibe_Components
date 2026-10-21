@@ -1,0 +1,108 @@
+@namespace Blazor.AI.MediaPipe
+@inherits StreamComponentBase
+@* Operations dashboard over a VisionEventStream: KPI tiles, events per minute, events by kind, latest counts per source, AI shift summary. *@
+
+<div class="@CssClass("baiv")">
+    <div class="bai-stats">
+        <div class="bai-stat"><div class="bai-stat-label">Events</div><div class="bai-stat-value">@_total</div></div>
+        <div class="bai-stat"><div class="bai-stat-label">Alerts</div><div class="bai-stat-value" style="color:@(_alerts > 0 ? "var(--bai-danger)" : null)">@_alerts</div></div>
+        <div class="bai-stat"><div class="bai-stat-label">Warnings</div><div class="bai-stat-value">@_warnings</div></div>
+        <div class="bai-stat"><div class="bai-stat-label">Sources</div><div class="bai-stat-value">@_latest.Count</div></div>
+        <div class="bai-stat"><div class="bai-stat-label">Last @WindowMinutes min</div><div class="bai-stat-value">@_recent <Sparkline Values="@_perMinute" /></div></div>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:.8rem; margin-top:.8rem">
+        <AiCard Title="Events per minute" Icon="bi-graph-up">
+            <LineChart Series="@_series" Height="200" XLabel="minutes ago" ShowLegend="true" ZeroBased="true" XFormatter="@MinutesAgo" />
+        </AiCard>
+        <AiCard Title="By kind" Icon="bi-bar-chart">
+            @if (_byKind.Count == 0) { <span class="bai-small bai-muted">No events yet.</span> }
+            else { <BarChart Values="@_byKind" Horizontal="true" Height="200" /> }
+        </AiCard>
+        <AiCard Title="Latest counts" Subtitle="Most recent reading per source" Icon="bi-123">
+            @if (_latest.Count == 0) { <span class="bai-small bai-muted">Waiting for sources that publish counts.</span> }
+            <div class="bai-table-wrap">
+                <table class="bai-table">
+                    <tbody>
+                        @foreach (var (src, e) in _latest.OrderBy(x => x.Key))
+                        {
+                            <tr><td>@src</td><td>@(e.Counts is null ? e.Message : string.Join(" · ", e.Counts.Select(c => $"{c.Key} {c.Value}")))</td>
+                                <td class="bai-small bai-faint">@e.At.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </AiCard>
+    </div>
+    <AiCard Title="Shift summary" Icon="bi-stars" Class="mt-3">
+        <div class="bai-stack">
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || _total == 0)" @onclick="SummarizeAsync"><i class="bi bi-stars"></i> Summarize events</button>
+            @if (_summary is not null) { <AiOutput Text="@_summary" IsBusy="@IsBusy" /> }
+            @if (Error is not null) { <div class="bai-small" style="color:var(--bai-danger)">@Error</div> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private int _total, _alerts, _warnings, _recent;
+    private List<double> _perMinute = [];
+    private List<ChartSeries> _series = [];
+    private List<BarValue> _byKind = [];
+    private Dictionary<string, VisionEvent> _latest = [];
+    private string? _summary;
+
+    [Parameter] public int WindowMinutes { get; set; } = 15;
+
+    /// <summary>Language for the AI summary; null follows the model's default.</summary>
+    [Parameter] public string? Language { get; set; }
+
+    protected override void OnEvents(IReadOnlyList<VisionEvent> events)
+    {
+        var now = DateTimeOffset.UtcNow;
+        _total = events.Count;
+        _alerts = events.Count(e => e.Severity == VisionEventSeverity.Alert);
+        _warnings = events.Count(e => e.Severity == VisionEventSeverity.Warning);
+        var recent = events.Where(e => (now - e.At).TotalMinutes < WindowMinutes).ToList();
+        _recent = recent.Count;
+        double[] Buckets(Func<VisionEvent, bool> f)
+        {
+            var b = new double[WindowMinutes];
+            foreach (var e in recent.Where(f))
+            {
+                b[Math.Clamp((int)(now - e.At).TotalMinutes, 0, WindowMinutes - 1)]++;
+            }
+
+            return b;
+        }
+
+        var all = Buckets(_ => true);
+        _perMinute = [.. all.Reverse()];
+        ChartPoint[] Points(double[] b) => b.Select((v, i) => new ChartPoint(-i, v)).Reverse().ToArray();
+        _series =
+        [
+            new ChartSeries("All", Points(all)) { Area = true },
+            new ChartSeries("Alerts", Points(Buckets(e => e.Severity == VisionEventSeverity.Alert))) { Color = "var(--bai-danger)" },
+        ];
+        _byKind = events.Where(e => e.Kind is not ("count" or "headcount")).GroupBy(e => e.Kind).OrderByDescending(g => g.Count()).Take(8)
+            .Select(g => new BarValue(g.Key, g.Count())).ToList();
+        _latest = events.Where(e => e.Counts is not null).GroupBy(e => e.Source).ToDictionary(g => g.Key, g => g.Last());
+    }
+
+    private static string MinutesAgo(double x) => x == 0 ? "now" : (-x).ToString("0", CultureInfo.InvariantCulture);
+
+    private Task SummarizeAsync() => RunAsync(async ct =>
+    {
+        var lines = Current.Where(e => e.Kind is not ("count" or "headcount")).TakeLast(80)
+            .Select(e => $"{e.At.ToLocalTime():HH:mm:ss} [{e.Severity}] {e.Source}: {e.Message}");
+        var facts = $"Events {_total}, alerts {_alerts}, warnings {_warnings}. Latest counts: " +
+                    string.Join("; ", _latest.Select(x => $"{x.Key} {string.Join(",", x.Value.Counts!.Select(c => $"{c.Key}={c.Value}"))}"));
+        var system = "You are an operations supervisor reading a computer-vision event log. Summarize what happened, highlight alerts and patterns, and suggest follow-ups. Do not invent events." +
+                     (Language is null ? string.Empty : $" Answer in {Language}.");
+        var user = PromptTags.Wrap(PromptTags.Input, "Summarize this shift.") + "\n" + PromptTags.Wrap(PromptTags.Context, facts + "\n" + string.Join("\n", lines));
+        _summary = string.Empty;
+        await foreach (var token in Ai.StreamAsync(system, user, AiTasks.Insight, Provider, cancellationToken: ct))
+        {
+            _summary += token;
+            RenderThrottled();
+        }
+    });
+}

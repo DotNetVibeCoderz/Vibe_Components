@@ -1,0 +1,116 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* Fruit grading: detects bananas, apples and oranges, then scores ripeness hue and dark-spot defects inside each box (grade A/B/C). *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{_fruits.Count} fruit · A {_fruits.Count(f => f.Grade == 'A')} · B {_fruits.Count(f => f.Grade == 'B')} · C {_fruits.Count(f => f.Grade == 'C')}")" Icon="bi-basket">
+        <div class="bai-stack">
+            @if (_fruits.Count > 0)
+            {
+                <div class="bai-table-wrap" style="max-height:240px; overflow:auto">
+                    <table class="bai-table">
+                        <thead><tr><th>#</th><th>Fruit</th><th>Ripeness</th><th>Defects</th><th>Grade</th></tr></thead>
+                        <tbody>
+                            @foreach (var (f, i) in _fruits.Select((f, i) => (f, i)))
+                            {
+                                <tr><td class="bai-num">@(i + 1)</td><td>@f.Kind</td><td>@f.Ripeness</td><td class="bai-num">@f.DefectRatio.ToString("P0", CultureInfo.InvariantCulture)</td>
+                                    <td><span class="bai-badge @(f.Grade == 'A' ? "bai-badge-local" : f.Grade == 'B' ? "bai-badge-ai" : "bai-badge-danger")">@f.Grade</span></td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <p class="bai-small bai-muted" style="margin:0">No banana, apple or orange detected. The detector knows COCO classes; for mangoes and other produce the whole frame is graded by colour.</p>
+            }
+            @if (_wholeFrame is { } wf)
+            {
+                <span class="bai-small">Whole frame: <b>@wf.Ripeness</b>, dark spots @wf.DefectRatio.ToString("P1", CultureInfo.InvariantCulture) → grade <b>@wf.Grade</b></span>
+            }
+            <label class="bai-small">Grade C above <b>@(DefectLimitC.ToString("P0", CultureInfo.InvariantCulture))</b> dark spots
+                <input type="range" min="0.02" max="0.3" step="0.01" @bind="DefectLimitC" @bind:after="Refresh" style="width:100%" aria-label="Defect limit for grade C" />
+            </label>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed record FruitGrade(string Kind, string Ripeness, double DefectRatio, char Grade);
+
+    private IReadOnlyList<FruitGrade> _fruits = [];
+    private FruitGrade? _wholeFrame;
+    private static readonly IReadOnlySet<string> FruitClasses = new HashSet<string> { "banana", "apple", "orange" };
+
+    [Parameter] public string Title { get; set; } = "Fruit quality inspector";
+
+    /// <summary>Dark-spot share above which a fruit is grade C (grade B is above half of it).</summary>
+    [Parameter] public double DefectLimitC { get; set; } = 0.12;
+
+    [Parameter] public EventCallback<IReadOnlyList<FruitGrade>> OnGraded { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Fruit, VisionSamples.Food, VisionSamples.Shelf];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var detections = Tasks.Objects(frame, 0.25f, 40, FruitClasses).Detections;
+        var (rgb, w, h) = VisionSolutions.Pixels(frame.Image, 480);
+        var overlay = new VisionOverlay();
+        var grades = new List<FruitGrade>();
+        foreach (var d in detections)
+        {
+            var (x, y, bw, bh) = VisionSolutions.Norm(d, frame.Width, frame.Height);
+            // Inner 70% of the box avoids background at the corners.
+            var g = Grade(d.TopCategory?.CategoryName ?? "fruit", VisionSolutions.Region(rgb, w, h, x + bw * 0.15f, y + bh * 0.15f, bw * 0.7f, bh * 0.7f));
+            grades.Add(g);
+            var color = g.Grade == 'A' ? Overlay.Nila : g.Grade == 'B' ? Overlay.Soga : Overlay.Danger;
+            overlay.Boxes.Add(new OverlayBox { X = x, Y = y, W = bw, H = bh, Color = color, Label = $"{g.Kind} {g.Grade} · {g.Ripeness}" });
+        }
+
+        _fruits = grades;
+        _wholeFrame = grades.Count == 0 ? Grade("produce", VisionSolutions.Region(rgb, w, h, 0.1f, 0.1f, 0.8f, 0.8f)) : null;
+        if (grades.Any(g => g.Grade == 'C'))
+        {
+            Publish("reject", $"{grades.Count(g => g.Grade == 'C')} fruit graded C (reject)", VisionEventSeverity.Warning, counts: grades.GroupBy(g => g.Kind).ToDictionary(x => x.Key, x => x.Count()));
+        }
+
+        _ = InvokeAsync(() => OnGraded.InvokeAsync(grades));
+        overlay.Status = grades.Count == 0 ? $"Whole frame grade {_wholeFrame?.Grade}" : $"{grades.Count} fruit graded";
+        return overlay;
+    }
+
+    private FruitGrade Grade(string kind, IEnumerable<(byte R, byte G, byte B)> pixels)
+    {
+        int n = 0, dark = 0, green = 0, ripe = 0;
+        foreach (var (r, g, b) in pixels)
+        {
+            var (hue, s, v) = VisionSolutions.Hsv(r, g, b);
+            if (s < 0.15 && v > 0.8)
+            {
+                continue; // specular highlight or background
+            }
+
+            n++;
+            if (v < 0.28 || (hue is > 10 and < 40 && v < 0.4))
+            {
+                dark++;
+            }
+            else if (hue is > 70 and < 160)
+            {
+                green++;
+            }
+            else if (hue < 70 || hue > 330)
+            {
+                ripe++;
+            }
+        }
+
+        var defect = n == 0 ? 0 : dark / (double)n;
+        var ripeness = n == 0 ? "unknown" : green > ripe * 1.5 ? "unripe" : ripe > green * 2 ? "ripe" : "turning";
+        var grade = defect > DefectLimitC ? 'C' : defect > DefectLimitC / 2 || ripeness == "unripe" ? 'B' : 'A';
+        return new FruitGrade(kind, ripeness, defect, grade);
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+}

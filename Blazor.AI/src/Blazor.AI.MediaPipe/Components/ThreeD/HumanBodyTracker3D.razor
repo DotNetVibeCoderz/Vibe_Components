@@ -1,0 +1,193 @@
+@namespace Blazor.AI.MediaPipe
+@using Blazor.AI.ThreeD
+@inherits VisionComponentBase
+@* Places the tracked body in the room: distance from the camera (pinhole estimate), floor path, walked distance and speed. *@
+
+<div class="@CssClass("baiv-split")">
+    <div class="bai-grid-2" style="align-items:start">
+        <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+        <Scene3D Objects="@_objects" Options="@_options" Height="@Height" />
+    </div>
+    <AiCard Title="@Title" Subtitle="Pose landmarker + pinhole camera model" Icon="bi-geo-alt">
+        <div class="bai-stack">
+            @if (_fix is { } f)
+            {
+                <div class="bai-row" style="gap:1.2rem">
+                    <div><b>@f.Distance.ToString("0.0", CultureInfo.InvariantCulture) m</b><span class="bai-small bai-muted"> from camera</span></div>
+                    <div><b>@f.Lateral.ToString("+0.0;-0.0;0.0", CultureInfo.InvariantCulture) m</b><span class="bai-small bai-muted"> left/right</span></div>
+                </div>
+                <div class="bai-row" style="gap:1.2rem">
+                    <div><b>@_walked.ToString("0.0", CultureInfo.InvariantCulture) m</b><span class="bai-small bai-muted"> walked</span></div>
+                    <div><b>@_speed.ToString("0.0", CultureInfo.InvariantCulture) m/s</b><span class="bai-small bai-muted"> speed</span></div>
+                </div>
+                <span class="bai-small">Zone: <b>@Zone(f.Distance)</b></span>
+            }
+            else
+            {
+                <p class="bai-small bai-muted" style="margin:0">Step into view to place the body in the room.</p>
+            }
+            <label class="bai-small">Camera field of view @_fov.ToString("0", CultureInfo.InvariantCulture)° <input type="range" min="40" max="100" step="1" @bind="_fov" @bind:after="Refresh" style="width:100%" aria-label="Camera vertical field of view" /></label>
+            <button type="button" class="bai-btn-ghost" @onclick="ResetPath"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>Reset path</button>
+            <span class="bai-small bai-muted">Distance assumes a vertical field of view of @_fov.ToString("0", CultureInfo.InvariantCulture)° (typical webcams 45–60°) and uses the metric torso length; expect ±20%.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    /// <summary>A position estimate: metres in front of the camera and to its right.</summary>
+    public sealed record BodyFix(double Distance, double Lateral, double Time);
+
+    private const double CameraZ = 4.5;
+    private readonly object _gate = new();
+    private readonly SceneClock _clock = new();
+    private readonly Scene3DOptions _options = new()
+    {
+        Camera = new() { Position = [4.5, 4.2, 6.5], Target = [0, 0.6, 1.5], Fov = 45 },
+        Controls = new() { MinDistance = 2, MaxDistance = 18 },
+        Grid = new(10, 10, "#5b6bd6", 0.25),
+        Lights = "studio",
+        AriaLabel = "Body position in the room",
+    };
+
+    private readonly List<double[]> _path = [];
+    private IReadOnlyList<Object3D> _objects = [];
+    private BodyFix? _fix;
+    private double _walked, _speed, _fov = 55;
+
+    [Parameter] public string Title { get; set; } = "Human body tracker 3D";
+
+    /// <summary>Raised with each position estimate (on the processing thread).</summary>
+    [Parameter] public Action<BodyFix>? OnFix { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Construction, VisionSamples.Yoga, VisionSamples.Fall, VisionSamples.Street];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var pose = Tasks.Pose(frame, PoseModel.Full).Poses.FirstOrDefault();
+        var overlay = new VisionOverlay();
+        if (pose is null)
+        {
+            overlay.Status = "No person";
+            return overlay;
+        }
+
+        var aspect = frame.Width / (double)Math.Max(1, frame.Height);
+        var raw = Locate(pose, aspect, _fov, frame.TimestampMs / 1000.0);
+        var prev = _fix;
+        var fix = prev is null || !frame.IsLive ? raw : new BodyFix(prev.Distance * 0.7 + raw.Distance * 0.3, prev.Lateral * 0.7 + raw.Lateral * 0.3, raw.Time);
+        if (frame.IsLive && prev is not null && fix.Time > prev.Time)
+        {
+            var step = Math.Sqrt(Math.Pow(fix.Distance - prev.Distance, 2) + Math.Pow(fix.Lateral - prev.Lateral, 2));
+            if (step > 0.02)
+            {
+                _walked += step;
+            }
+
+            _speed = _speed * 0.8 + step / (fix.Time - prev.Time) * 0.2;
+        }
+
+        _fix = fix;
+        OnFix?.Invoke(fix);
+        var floor = new[] { fix.Lateral, 0.02, CameraZ - fix.Distance };
+        lock (_gate)
+        {
+            if (!frame.IsLive)
+            {
+                _path.Clear();
+            }
+
+            if (_path.Count == 0 || Body3D.Length(_path[^1], floor) > 0.05)
+            {
+                _path.Add(floor);
+                if (_path.Count > 300)
+                {
+                    _path.RemoveAt(0);
+                }
+            }
+        }
+
+        if (_clock.Due(frame))
+        {
+            _objects = Build(pose, floor);
+            _ = InvokeAsync(StateHasChanged);
+        }
+
+        overlay.Landmarks.Add(Overlay.Pose(pose, Overlay.Nila));
+        overlay.Status = $"{fix.Distance:0.0} m away";
+        return overlay;
+    }
+
+    /// <summary>
+    /// Pinhole estimate: distance = f · L / l, with L the metric shoulder-to-hip length (world landmarks), l its length in the image
+    /// (in frame heights) and f = 1 / (2 tan(fov / 2)).
+    /// </summary>
+    public static BodyFix Locate(PoseLandmarks pose, double aspect, double verticalFovDegrees, double time)
+    {
+        var n = pose.Landmarks;
+        var focal = 1 / (2 * Math.Tan(verticalFovDegrees * Math.PI / 360));
+        var shoulderW = PoseAnalytics.Mid(pose, PoseLandmark.LeftShoulder, PoseLandmark.RightShoulder);
+        var hipW = PoseAnalytics.Mid(pose, PoseLandmark.LeftHip, PoseLandmark.RightHip);
+        var metric = System.Numerics.Vector3.Distance(shoulderW, hipW);
+        float Mx(PoseLandmark a, PoseLandmark b) => (n[(int)a].X + n[(int)b].X) / 2;
+        float My(PoseLandmark a, PoseLandmark b) => (n[(int)a].Y + n[(int)b].Y) / 2;
+        var dx = (Mx(PoseLandmark.LeftShoulder, PoseLandmark.RightShoulder) - Mx(PoseLandmark.LeftHip, PoseLandmark.RightHip)) * aspect;
+        var dy = My(PoseLandmark.LeftShoulder, PoseLandmark.RightShoulder) - My(PoseLandmark.LeftHip, PoseLandmark.RightHip);
+        var image = Math.Max(0.02, Math.Sqrt(dx * dx + dy * dy));
+        var distance = Math.Clamp(focal * metric / image, 0.3, 15);
+        var hipX = Mx(PoseLandmark.LeftHip, PoseLandmark.RightHip);
+        var lateral = (hipX - 0.5) * aspect * distance / focal;
+        return new BodyFix(distance, lateral, time);
+    }
+
+    private List<Object3D> Build(PoseLandmarks pose, double[] floor)
+    {
+        double[][] path;
+        lock (_gate)
+        {
+            path = [.. _path];
+        }
+
+        var list = new List<Object3D>
+        {
+            new() { Id = "cam", Kind = "box", Position = [0, 1.2, CameraZ], Size = [0.3, 0.2, 0.2], Color = "#2b2f6b", Tooltip = "Camera" },
+            new() { Id = "lens", Kind = "cylinder", Parent = "cam", Position = [0, 0, -0.13], Rotation = [Math.PI / 2, 0, 0], Radius = 0.06, Height = 0.08, Color = ThreeDPalette.Nila, Pickable = false },
+            Object3D.Text("cam-label", [0, 1.5, CameraZ], "Camera", "bai3d-label"),
+            new() { Id = "spot", Kind = "cylinder", Position = floor, Radius = 0.35, Height = 0.01, Color = ThreeDPalette.Soga, Opacity = 0.4, Pickable = false },
+            Object3D.Line("sight", [[0, 1.2, CameraZ], [floor[0], 1.0, floor[2]]], ThreeDPalette.Nila, dashed: true),
+        };
+        if (path.Length >= 2)
+        {
+            list.Add(Object3D.Line("path", path, ThreeDPalette.Warning));
+        }
+
+        list.AddRange(Body3D.Capsules("body-", pose.WorldLandmarks, "#d9d4c4", ThreeDPalette.Nila, offset: [floor[0], 0, floor[2]]));
+        return list;
+    }
+
+    private static string Zone(double d) => d switch
+    {
+        < 1.2 => "Intimate (< 1.2 m)",
+        < 3.0 => "Interaction (1.2–3 m)",
+        < 6.0 => "Room (3–6 m)",
+        _ => "Far (> 6 m)",
+    };
+
+    private void ResetPath()
+    {
+        lock (_gate)
+        {
+            _path.Clear();
+        }
+
+        _walked = 0;
+    }
+
+    private void Changed(VisionSourceKind kind)
+    {
+        ResetPath();
+        _fix = null;
+        HandleSourceChanged(kind);
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+}

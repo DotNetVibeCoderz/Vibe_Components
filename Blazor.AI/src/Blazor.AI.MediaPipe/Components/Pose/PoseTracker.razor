@@ -1,0 +1,95 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* 33-point body pose with joint angles, visibility and an optional person mask. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="BlazePose · 33 landmarks · world coordinates" Icon="bi-person-arms-up">
+        <div class="bai-stack">
+            <div class="bai-row bai-small">
+                <select class="bai-select" style="width:auto" @bind="_model" @bind:after="Refresh" aria-label="Pose model">
+                    <option value="@PoseModel.Lite">Lite (fast)</option>
+                    <option value="@PoseModel.Full">Full (accurate)</option>
+                </select>
+                <label><input type="checkbox" class="form-check-input" @bind="_mask" @bind:after="Refresh" /> person mask</label>
+            </div>
+            @if (_angles.Count > 0)
+            {
+                <span class="bai-label">Joint angles (3-D)</span>
+                @foreach (var (name, deg) in _angles)
+                {
+                    <div class="baiv-meter"><span>@name</span><div><span style="width:@((deg / 180 * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@deg.ToString("0", CultureInfo.InvariantCulture)°</span></div>
+                }
+                <span class="bai-small bai-muted">Visible landmarks: @_visible / 33</span>
+            }
+            else
+            {
+                <p class="bai-small bai-muted" style="margin:0">Step back so your whole body is in view.</p>
+            }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private PoseModel _model = PoseModel.Lite;
+    private bool _mask;
+    private int _visible;
+    private List<(string Name, double Degrees)> _angles = [];
+
+    /// <summary>Joint triplets (A, B, C) whose angle at B is reported.</summary>
+    public static readonly (string Name, PoseLandmark A, PoseLandmark B, PoseLandmark C)[] Joints =
+    [
+        ("Left elbow", PoseLandmark.LeftShoulder, PoseLandmark.LeftElbow, PoseLandmark.LeftWrist),
+        ("Right elbow", PoseLandmark.RightShoulder, PoseLandmark.RightElbow, PoseLandmark.RightWrist),
+        ("Left shoulder", PoseLandmark.LeftHip, PoseLandmark.LeftShoulder, PoseLandmark.LeftElbow),
+        ("Right shoulder", PoseLandmark.RightHip, PoseLandmark.RightShoulder, PoseLandmark.RightElbow),
+        ("Left hip", PoseLandmark.LeftShoulder, PoseLandmark.LeftHip, PoseLandmark.LeftKnee),
+        ("Right hip", PoseLandmark.RightShoulder, PoseLandmark.RightHip, PoseLandmark.RightKnee),
+        ("Left knee", PoseLandmark.LeftHip, PoseLandmark.LeftKnee, PoseLandmark.LeftAnkle),
+        ("Right knee", PoseLandmark.RightHip, PoseLandmark.RightKnee, PoseLandmark.RightAnkle),
+    ];
+
+    [Parameter] public string Title { get; set; } = "Pose tracker";
+
+    /// <summary>Raised with each detected pose (on the processing thread).</summary>
+    [Parameter] public Action<PoseLandmarks>? OnPose { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Yoga, VisionSamples.ThumbsUp, VisionSamples.Face];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.Pose(frame, _model, 1, _mask);
+        var overlay = new VisionOverlay();
+        var pose = result.Poses.FirstOrDefault();
+        if (pose is null)
+        {
+            _angles = [];
+            overlay.Status = "No person";
+            return overlay;
+        }
+
+        OnPose?.Invoke(pose);
+        if (_mask && pose.SegmentationMask is { } m)
+        {
+            overlay.Mask = Overlay.Mask(m, "tint", Overlay.Tarum, opacity: 0.35f);
+        }
+
+        overlay.Landmarks.Add(Overlay.Pose(pose));
+        var w = pose.WorldLandmarks;
+        _angles = Joints.Select(j => (j.Name, VisionMath.Angle3(w[(int)j.A], w[(int)j.B], w[(int)j.C]))).ToList();
+        _visible = pose.Landmarks.Count(l => (l.Visibility ?? 1) > 0.5);
+        foreach (var (name, a, b, c) in Joints.Where(j => j.Name.Contains("knee") || j.Name.Contains("elbow")))
+        {
+            var p = pose.Landmarks[(int)b];
+            if ((p.Visibility ?? 1) > 0.5)
+            {
+                overlay.Texts.Add(Overlay.Label(p.X + 0.015f, p.Y, $"{VisionMath.Angle3(w[(int)a], w[(int)b], w[(int)c]):0}°", Overlay.White, 12));
+            }
+        }
+
+        overlay.Status = $"{_visible}/33 visible";
+        return overlay;
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+}

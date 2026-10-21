@@ -1,0 +1,162 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* Fall detection from pose: rapid drop of the hip centre, horizontal body orientation and time on the floor. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="Pose-based fall detection · not a medical device" Icon="bi-person-down">
+        <div class="bai-stack">
+            <div class="baiv-big" style="color:@(_state switch { FallState.Confirmed => "var(--bai-danger)", FallState.Possible => "var(--bai-soga)", _ => "var(--bai-nila)" })" aria-live="assertive">@Label(_state)</div>
+            <div class="bai-row bai-small bai-muted">
+                <span>Body angle <b>@_angle.ToString("0", CultureInfo.InvariantCulture)°</b></span>
+                <span>Hip height <b>@_hipY.ToString("0.00", CultureInfo.InvariantCulture)</b></span>
+                <span>On floor <b>@_floorSeconds.ToString("0.0", CultureInfo.InvariantCulture) s</b></span>
+            </div>
+            <label class="bai-small">Confirm after <b>@ConfirmSeconds.ToString("0", CultureInfo.InvariantCulture) s</b> on the floor
+                <input type="range" min="1" max="20" @bind="ConfirmSeconds" @bind:event="oninput" style="width:100%" aria-label="Seconds before confirming a fall" />
+            </label>
+            @if (_state == FallState.Confirmed)
+            {
+                <button type="button" class="bai-btn bai-btn-ai" @onclick="Acknowledge"><i class="bi bi-check2" aria-hidden="true"></i>Acknowledge — help is on the way</button>
+            }
+            @if (Log.FirstOrDefault(e => e.Snapshot is not null) is { } shot)
+            {
+                <img src="@shot.Snapshot" alt="Snapshot of the detected fall" style="width:100%; border-radius:10px; border:1px solid var(--bai-line)" />
+            }
+            <span class="bai-label">Alerts</span>
+            @EventLog()
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public enum FallState { Normal, Possible, Confirmed }
+
+    private FallState _state;
+    private double _angle, _hipY, _floorSeconds;
+    private readonly Queue<(long T, double HipY)> _hips = new();
+    private long _floorSince = -1, _lastT;
+
+    [Parameter] public string Title { get; set; } = "Elderly fall detection";
+
+    /// <summary>Seconds a person must stay down before a fall is confirmed.</summary>
+    [Parameter] public double ConfirmSeconds { get; set; } = 4;
+
+    [Parameter] public EventCallback<FallState> OnStateChanged { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Fall, VisionSamples.Yoga, VisionSamples.DeskPosture];
+
+    private void Changed(VisionSourceKind kind)
+    {
+        HandleSourceChanged(kind);
+        _hips.Clear();
+        _floorSince = -1;
+        SetState(FallState.Normal);
+    }
+
+    /// <summary>Angle of the segment from <paramref name="a"/> to <paramref name="b"/> (pairs averaged) from vertical: 0° upright, 90° flat.</summary>
+    private static double Tilt(IReadOnlyList<NormalizedLandmark> l, int a1, int a2, int b1, int b2, double aspect)
+    {
+        var a = Math.Abs(Math.Atan2(((l[b1].X + l[b2].X) - (l[a1].X + l[a2].X)) / 2 * aspect, ((l[b1].Y + l[b2].Y) - (l[a1].Y + l[a2].Y)) / 2) * 180 / Math.PI);
+        return a > 90 ? 180 - a : a;
+    }
+
+    /// <summary>How horizontal the body is: the torso angle, raised when a reclined torso meets legs flat on the floor.</summary>
+    private static double BodyAngle(PoseLandmarks pose, double aspect)
+    {
+        var torso = Tilt(pose.Landmarks, 11, 12, 23, 24, aspect);
+        var legs = Tilt(pose.Landmarks, 23, 24, 27, 28, aspect);
+        return torso > 30 && legs > torso ? (torso + legs) / 2 : torso;
+    }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var aspect = frame.Width / (double)frame.Height;
+        // Track up to three people and watch the most horizontal one, so carers standing nearby don't mask a fall.
+        var pose = Tasks.Pose(frame, numPoses: 3).Poses.MaxBy(p => BodyAngle(p, aspect));
+        var overlay = new VisionOverlay();
+        if (pose is null)
+        {
+            overlay.Status = "No person";
+            return overlay;
+        }
+
+        var l = pose.Landmarks;
+        var sx = (l[11].X + l[12].X) / 2;
+        var sy = (l[11].Y + l[12].Y) / 2;
+        var hx = (l[23].X + l[24].X) / 2;
+        var hy = (l[23].Y + l[24].Y) / 2;
+        _angle = BodyAngle(pose, aspect);
+
+        _hipY = hy;
+        var t = frame.IsLive ? frame.TimestampMs : _lastT + 1000;
+        _lastT = t;
+        _hips.Enqueue((t, hy));
+        while (_hips.Count > 0 && t - _hips.Peek().T > 1500)
+        {
+            _hips.Dequeue();
+        }
+
+        var drop = _hips.Count > 1 ? hy - _hips.Min(h => h.HipY) : 0;
+        var (_, _, bw0, bh0) = Overlay.Bounds(l, 0);
+        var lying = _angle > 50;
+        var low = hy > 0.7 || bw0 * aspect > bh0;
+        if (lying && (low || drop > 0.15))
+        {
+            if (_floorSince < 0)
+            {
+                _floorSince = t;
+            }
+
+            // A still photo of someone on the floor confirms immediately.
+            _floorSeconds = frame.IsLive ? (t - _floorSince) / 1000.0 : ConfirmSeconds;
+            SetState(_floorSeconds >= ConfirmSeconds ? FallState.Confirmed : FallState.Possible);
+        }
+        else if (!lying)
+        {
+            _floorSince = -1;
+            _floorSeconds = 0;
+            if (_state != FallState.Confirmed)
+            {
+                SetState(FallState.Normal);
+            }
+        }
+
+        var color = _state switch { FallState.Confirmed => Overlay.Danger, FallState.Possible => Overlay.Soga, _ => Overlay.Nila };
+        overlay.Landmarks.Add(Overlay.Pose(pose, color));
+        overlay.Paths.Add(new OverlayPath { Points = [sx, sy, hx, hy], Color = Overlay.White, Width = 4 });
+        var (bx, by, bw, bh) = Overlay.Bounds(l, 0.03f);
+        overlay.Boxes.Add(new OverlayBox { X = bx, Y = by, W = bw, H = bh, Label = Label(_state), Color = color, Fill = _state != FallState.Normal });
+        overlay.Status = $"{_angle:0}° · {Label(_state)}";
+        return overlay;
+    }
+
+    private void SetState(FallState s)
+    {
+        if (s == _state)
+        {
+            return;
+        }
+
+        _state = s;
+        if (s == FallState.Possible)
+        {
+            Publish("possible-fall", "Possible fall: person is low and horizontal", VisionEventSeverity.Warning);
+        }
+        else if (s == FallState.Confirmed)
+        {
+            Publish("fall", $"Fall confirmed: on the floor for {ConfirmSeconds:0} s", VisionEventSeverity.Alert, snapshot: true);
+        }
+
+        _ = InvokeAsync(() => OnStateChanged.InvokeAsync(s));
+    }
+
+    private void Acknowledge()
+    {
+        Publish("acknowledged", "Fall acknowledged by staff");
+        _state = FallState.Normal;
+        _floorSince = -1;
+    }
+
+    private static string Label(FallState s) => s switch { FallState.Confirmed => "Fall detected", FallState.Possible => "Possible fall", _ => "Normal" };
+}

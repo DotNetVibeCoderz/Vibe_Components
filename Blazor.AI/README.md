@@ -22,7 +22,7 @@
 
 ### Why Blazor.AI
 
-- **157 ready-made components** across 12 NuGet packages, all styled by one theme (light and dark), including 48 Three.js components built on a reusable `Scene3D` engine.
+- **229 ready-made components** across 13 NuGet packages, all styled by one theme (light and dark), including 48 Three.js components built on a reusable `Scene3D` engine and 72 real-time computer-vision components on MediaPipe.NET.
 - **Any model**: OpenAI, Azure OpenAI, Anthropic Claude, Gemini, Mistral, Cohere, DeepSeek, Grok, Hugging Face, Ollama, llama.cpp, LocalGen, any OpenAI-compatible endpoint, ONNX and in-process Hugging Face transformers. Every component also runs on a built-in **offline simulated model**, so demos and tests need no keys.
 - **Computation stays deterministic.** Machine learning, statistics, rules, chemistry and sequence analysis run in .NET (GraviLearn, GraviFrame, RLNet, Biotech.Net). The LLM plans and explains; it does not invent the numbers.
 - **Guardrails built in**: PII redaction, content moderation, audit trail, AES-GCM encrypted prompt store and API-key vault, role-based access.
@@ -42,6 +42,7 @@
 | `Blazor.AI.LocalModels` | Hugging Face hub browser and downloader, local inference: sentiment, NER, embeddings, vision, OCR, speech |
 | `Blazor.AI.Bio` | DNA, restriction maps, alignment, phylogeny, proteins, molecules and ADMET, CRISPR, primers, codon optimisation, RNA-seq, bio copilot |
 | `Blazor.AI.ThreeD` | Three.js scenes in C#: talking avatar with lip sync, 3D charts and graphs, agent and decision visualisers, RL arenas, digital twins, anatomy, molecules and proteins, CAD/BIM copilots, education and game tools |
+| `Blazor.AI.MediaPipe` | Real-time computer vision (MediaPipe.NET on ONNX Runtime): face mesh, attendance and verification, hands, gestures and sign language, pose and exercise coaching, holistic and motion capture, background removal, object detection, classification, vision copilot, 3D views, healthcare, agritech, education, industry and analytics |
 | `Blazor.AI.Templates` | `dotnet new blazorai` project template |
 
 ### Quick start
@@ -131,6 +132,19 @@ dotnet run --project samples/Blazor.AI.Gallery    # http://localhost:5180
 | ![Executive analytics sphere](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/3d-executiveanalyticssphere.jpg) | ![3D molecule explorer](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/3d-moleculeexplorer3d.jpg) |
 | Executive KPI sphere | 3D molecules from SMILES |
 
+### Computer vision
+
+`Blazor.AI.MediaPipe` runs MediaPipe Tasks natively in .NET on the server: the browser streams camera, video, image or HTTP-stream frames and draws the returned landmarks, boxes and masks. Sample photos were generated with Nano Banana 2, so every demo works without a webcam.
+
+| | |
+|---|---|
+| ![Face landmarks](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/vision-core.jpg) | ![Gesture recognition](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/vision-gestures.jpg) |
+| Face landmarks and blendshapes | Gesture recognition |
+| ![Yoga trainer](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/vision-yoga.jpg) | ![Object detection](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/vision-detection.jpg) |
+| Yoga trainer | Object detection |
+| ![Vision copilot](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/vision-copilot.jpg) | ![Fall detection](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/vision-fall.jpg) |
+| Vision copilot grounded in detections | Elderly fall detection |
+
 ### Documentation
 
 - [Getting started](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/en/getting-started.md)
@@ -138,6 +152,7 @@ dotnet run --project samples/Blazor.AI.Gallery    # http://localhost:5180
 - [Component catalogue](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/en/components.md)
 - [Security and guardrails](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/en/security.md)
 - [3D components](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/en/threed.md)
+- [Computer vision](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/en/vision.md)
 
 ### Build and test
 
@@ -155,7 +170,7 @@ Requires the .NET 10 SDK. MIT licensed.
 
 ### Kenapa Blazor.AI
 
-- **157 komponen siap pakai** dalam 12 paket NuGet, dengan satu tema yang konsisten (terang dan gelap), termasuk 48 komponen Three.js di atas engine `Scene3D` yang bisa dipakai ulang.
+- **229 komponen siap pakai** dalam 13 paket NuGet, dengan satu tema yang konsisten (terang dan gelap), termasuk 48 komponen Three.js di atas engine `Scene3D` yang bisa dipakai ulang dan 72 komponen computer vision real-time di atas MediaPipe.NET.
 - **Model apa saja**: OpenAI, Azure OpenAI, Anthropic Claude, Gemini, Mistral, Cohere, DeepSeek, Grok, Hugging Face, Ollama, llama.cpp, LocalGen, endpoint kompatibel OpenAI, ONNX, dan transformer Hugging Face lokal. Semua komponen juga jalan dengan **model simulasi offline**, jadi demo dan tes tidak butuh API key.
 - **Perhitungan tetap deterministik.** Machine learning, statistik, aturan bisnis, kimia, dan analisis sekuens dihitung di .NET (GraviLearn, GraviFrame, RLNet, Biotech.Net). LLM merencanakan dan menjelaskan, bukan mengarang angka.
 - **Guardrail bawaan**: redaksi PII, moderasi konten, jejak audit, penyimpanan prompt dan brankas API key terenkripsi AES-GCM, serta kontrol akses berbasis peran.
@@ -175,6 +190,7 @@ Requires the .NET 10 SDK. MIT licensed.
 | `Blazor.AI.LocalModels` | Browser dan pengunduh Hugging Face Hub, inferensi lokal: sentimen, NER, embedding, visi, OCR, suara |
 | `Blazor.AI.Bio` | DNA, peta restriksi, alignment, filogeni, protein, molekul dan ADMET, CRISPR, primer, optimasi kodon, RNA-seq, bio copilot |
 | `Blazor.AI.ThreeD` | Scene Three.js dari C#: avatar bicara dengan lip sync, grafik dan graf 3D, visualisasi agen dan keputusan, arena RL, digital twin, anatomi, molekul dan protein, copilot CAD/BIM, alat edukasi dan game |
+| `Blazor.AI.MediaPipe` | Computer vision real-time (MediaPipe.NET di ONNX Runtime): face mesh, absensi dan verifikasi wajah, tangan, gesture dan bahasa isyarat, pose dan pelatih olahraga, holistic dan motion capture, hapus latar, deteksi objek, klasifikasi, vision copilot, tampilan 3D, kesehatan, agritech, edukasi, industri dan analitik |
 | `Blazor.AI.Templates` | Template proyek `dotnet new blazorai` |
 
 ### Mulai cepat
@@ -217,6 +233,19 @@ Aplikasi galeri menampilkan setiap komponen dengan pratinjau langsung dan contoh
 dotnet run --project samples/Blazor.AI.Gallery    # http://localhost:5180
 ```
 
+### Computer vision
+
+`Blazor.AI.MediaPipe` menjalankan MediaPipe Tasks secara native di .NET pada server: browser mengirim frame dari kamera, video, gambar atau stream HTTP lalu menggambar landmark, kotak dan mask yang dikembalikan. Foto contoh dibuat dengan Nano Banana 2, jadi setiap demo tetap jalan tanpa webcam.
+
+| | |
+|---|---|
+| ![Landmark wajah](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/vision-core.jpg) | ![Pengenalan gesture](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/vision-gestures.jpg) |
+| Landmark wajah dan blendshape | Pengenalan gesture |
+| ![Pelatih yoga](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/vision-yoga.jpg) | ![Deteksi objek](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/vision-detection.jpg) |
+| Pelatih yoga | Deteksi objek |
+| ![Vision copilot](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/vision-copilot.jpg) | ![Deteksi jatuh](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/vision-fall.jpg) |
+| Vision copilot berbasis deteksi | Deteksi lansia jatuh |
+
 ### Dokumentasi
 
 - [Memulai](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/id/getting-started.md)
@@ -224,6 +253,7 @@ dotnet run --project samples/Blazor.AI.Gallery    # http://localhost:5180
 - [Katalog komponen](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/id/components.md)
 - [Keamanan dan guardrail](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/id/security.md)
 - [Komponen 3D](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/id/threed.md)
+- [Computer vision](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/id/vision.md)
 
 ### Build dan tes
 

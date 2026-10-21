@@ -1,0 +1,128 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* General object detection (EfficientDet-Lite0, 80 COCO classes) with class filters, per-class counts and stable track ids. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="SourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"EfficientDet-Lite0 · {_state.Total} object(s)")" Icon="bi-bounding-box">
+        <div class="bai-stack">
+            <label class="bai-small">Minimum score <b>@_threshold.ToString("P0", CultureInfo.InvariantCulture)</b>
+                <input type="range" min="0.2" max="0.9" step="0.05" @bind="_threshold" @bind:event="oninput" @bind:after="Refresh" style="width:100%" aria-label="Minimum score" />
+            </label>
+            <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_track" @bind:after="Refresh" /> track objects (stable ids)</label>
+            @if (_state.Counts.Count > 0)
+            {
+                <span class="bai-label">Classes (click to show only)</span>
+                <div class="bai-chips">
+                    @foreach (var (label, count) in _state.Counts)
+                    {
+                        <button type="button" class="bai-chip @(_filter.Contains(label) ? "is-active" : null)" aria-pressed="@_filter.Contains(label)" @onclick="() => Toggle(label)">@label ×@count</button>
+                    }
+                    @if (_filter.Count > 0) { <button type="button" class="bai-chip" @onclick="ClearFilter">Show all</button> }
+                </div>
+            }
+            else
+            {
+                <p class="bai-small bai-muted" style="margin:0">Nothing above the threshold. Lower it, or point the camera at people, vehicles, animals or everyday objects.</p>
+            }
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Describe"><i class="bi bi-stars" aria-hidden="true"></i>Describe the scene</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private sealed record State(int Total, IReadOnlyList<(string Label, int Count)> Counts, IReadOnlyList<TrackedObject> Objects);
+
+    private readonly SimpleTracker _tracker = new();
+    private IReadOnlySet<string> _filter = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private State _state = new(0, [], []);
+    private double _threshold = 0.4;
+    private bool _track = true;
+
+    [Parameter] public string Title { get; set; } = "Object detection";
+
+    /// <summary>Only report these COCO classes (e.g. person, car, dog); null reports all 80.</summary>
+    [Parameter] public IReadOnlySet<string>? Classes { get; set; }
+
+    /// <summary>Raised with each frame's tracked objects (on the processing thread).</summary>
+    [Parameter] public Action<IReadOnlyList<TrackedObject>>? OnObjects { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Scenes;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.Objects(frame, (float)_threshold, 40, Classes);
+        var objects = _track && frame.IsLive
+            ? _tracker.Update(result.Detections, frame.Width, frame.Height)
+            : result.Detections.Select((d, i) => new TrackedObject(i + 1, d.TopCategory?.CategoryName ?? "object", d.Score,
+                d.BoundingBox.X / frame.Width, d.BoundingBox.Y / frame.Height, d.BoundingBox.Width / frame.Width, d.BoundingBox.Height / frame.Height)).ToList();
+        OnObjects?.Invoke(objects);
+        var counts = objects.GroupBy(o => o.Label).Select(g => (g.Key, g.Count())).OrderByDescending(x => x.Item2).ToList();
+        _state = new State(objects.Count, counts, objects);
+
+        var overlay = new VisionOverlay();
+        var filter = _filter; // immutable snapshot (replaced on change)
+        var shown = filter.Count == 0 ? objects : objects.Where(o => filter.Contains(o.Label)).ToList();
+        foreach (var o in shown)
+        {
+            var color = ColorFor(o.Label);
+            overlay.Boxes.Add(new OverlayBox
+            {
+                X = o.X, Y = o.Y, W = o.W, H = o.H, Color = color,
+                Label = $"{(_track && frame.IsLive ? $"#{o.Id} " : "")}{o.Label} {o.Score.ToString("P0", CultureInfo.InvariantCulture)}",
+            });
+        }
+
+        overlay.Status = counts.Count == 0 ? "No objects" : string.Join(" · ", counts.Take(4).Select(c => $"{c.Item2} {c.Item1}"));
+        return overlay;
+    }
+
+    /// <summary>A stable colour per class name.</summary>
+    internal static string ColorFor(string label)
+    {
+        string[] palette = ["#d9964f", "#3cc4b1", "#7b8cff", "#e5534b", "#c45ad6", "#e8b84a", "#5fae5a", "#2f86c9", "#f07aa8"];
+        var h = 0;
+        foreach (var c in label)
+        {
+            h = (h * 31 + c) & 0x7fffffff;
+        }
+
+        return palette[h % palette.Length];
+    }
+
+    private void SourceChanged(VisionSourceKind kind)
+    {
+        _tracker.Reset();
+        HandleSourceChanged(kind);
+    }
+
+    private Task Toggle(string label)
+    {
+        var next = new HashSet<string>(_filter, StringComparer.OrdinalIgnoreCase);
+        if (!next.Remove(label))
+        {
+            next.Add(label);
+        }
+
+        _filter = next;
+        return Refresh();
+    }
+
+    private Task ClearFilter()
+    {
+        _filter = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return Refresh();
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+
+    private Task Describe()
+    {
+        var s = _state;
+        var facts = s.Total == 0 ? "No objects detected." : "Detected: " + string.Join(", ", s.Counts.Select(c => $"{c.Count} {c.Label}")) +
+            ". Positions (x,y of centre, 0-1): " + string.Join("; ", s.Objects.Take(15).Select(o => string.Create(CultureInfo.InvariantCulture, $"{o.Label} ({o.CenterX:0.00},{o.CenterY:0.00})")));
+        return AskAboutFrameAsync("a computer-vision analyst", "Describe the scene and what the detected objects suggest is happening.", facts);
+    }
+}

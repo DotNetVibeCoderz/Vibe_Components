@@ -1,0 +1,139 @@
+@namespace Blazor.AI.MediaPipe
+@using System.Diagnostics.Metrics
+@implements IDisposable
+@* Live pipeline health: frames/s, latency (avg, p95), errors and events from VisionTelemetry, plus fps/latency per named camera. *@
+
+<div class="@(Class is null ? "baiv" : $"baiv {Class}")">
+    <AiCard Title="@Title" Subtitle="@($"Process-wide · sampled every {IntervalMs / 1000.0:0.#} s")" Icon="bi-speedometer2">
+        <div class="bai-stack">
+            <div class="bai-stats">
+                <div class="bai-stat"><div class="bai-stat-label">Frames/s</div><div class="bai-stat-value">@_fps.ToString("0.0", CultureInfo.InvariantCulture) <Sparkline Values="@_fpsHistory" Color="var(--bai-nila)" /></div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Latency avg</div><div class="bai-stat-value">@_avg.ToString("0", CultureInfo.InvariantCulture) ms <Sparkline Values="@_latencyHistory" /></div></div>
+                <div class="bai-stat"><div class="bai-stat-label">p95</div><div class="bai-stat-value" style="color:@(_p95 > LatencyBudgetMs ? "var(--bai-danger)" : null)">@_p95.ToString("0", CultureInfo.InvariantCulture) ms</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Frames</div><div class="bai-stat-value">@_frames</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Dropped / errors</div><div class="bai-stat-value" style="color:@(_errors > 0 ? "var(--bai-danger)" : null)">@_errors</div></div>
+                <div class="bai-stat"><div class="bai-stat-label">Events</div><div class="bai-stat-value">@_events</div></div>
+            </div>
+            @if (Sources is { Count: > 0 })
+            {
+                <div class="bai-table-wrap">
+                    <table class="bai-table">
+                        <thead><tr><th>Component</th><th>fps</th><th>Round trip</th><th>Frames</th><th>Size</th></tr></thead>
+                        <tbody>
+                            @foreach (var (name, stats) in _perSource)
+                            {
+                                <tr>
+                                    <td>@name</td>
+                                    @if (stats is null) { <td colspan="4" class="bai-small bai-muted">not started</td> }
+                                    else
+                                    {
+                                        <td class="bai-num">@stats.Fps.ToString("0.0", CultureInfo.InvariantCulture)</td>
+                                        <td class="bai-num" style="color:@(stats.LatencyMs > LatencyBudgetMs ? "var(--bai-danger)" : null)">@stats.LatencyMs.ToString("0", CultureInfo.InvariantCulture) ms</td>
+                                        <td class="bai-num">@stats.Frames</td>
+                                        <td class="bai-small">@(stats.Width > 0 ? $"{stats.Width}×{stats.Height}" : "–")</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            <span class="bai-small bai-faint">Totals cover every vision component in this server process (VisionTelemetry meters); latency is server-side processing time per frame.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private MeterListener? _listener;
+    private readonly object _gate = new();
+    private readonly List<double> _window = [];
+    private long _frames, _errors, _events, _lastFrames;
+    private double _fps, _avg, _p95;
+    private List<double> _fpsHistory = [], _latencyHistory = [];
+    private List<(string Name, VisionStats? Stats)> _perSource = [];
+    private Timer? _timer;
+    private long _lastTick;
+
+    [Parameter] public string Title { get; set; } = "Realtime metrics";
+
+    /// <summary>Named components to break down, e.g. <c>("Safety", () => safety?.CameraStats)</c>.</summary>
+    [Parameter] public IReadOnlyList<(string Name, Func<VisionStats?> Stats)>? Sources { get; set; }
+
+    [Parameter] public int IntervalMs { get; set; } = 1000;
+
+    /// <summary>Latency above this is highlighted.</summary>
+    [Parameter] public double LatencyBudgetMs { get; set; } = 120;
+
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _listener = new MeterListener
+        {
+            InstrumentPublished = (instrument, listener) =>
+            {
+                if (instrument.Meter.Name == VisionTelemetry.Name)
+                {
+                    listener.EnableMeasurementEvents(instrument);
+                }
+            },
+        };
+        _listener.SetMeasurementEventCallback<long>((instrument, value, _, _) =>
+        {
+            switch (instrument.Name)
+            {
+                case "blazorai.vision.frames": Interlocked.Add(ref _frames, value); break;
+                case "blazorai.vision.errors": Interlocked.Add(ref _errors, value); break;
+                case "blazorai.vision.events": Interlocked.Add(ref _events, value); break;
+            }
+        });
+        _listener.SetMeasurementEventCallback<double>((_, value, _, _) =>
+        {
+            lock (_gate)
+            {
+                _window.Add(value);
+            }
+        });
+        _listener.Start();
+        _lastTick = Environment.TickCount64;
+        _timer = new Timer(_ => _ = InvokeAsync(Tick), null, IntervalMs, IntervalMs);
+    }
+
+    private void Tick()
+    {
+        var now = Environment.TickCount64;
+        var seconds = Math.Max(0.001, (now - _lastTick) / 1000.0);
+        _lastTick = now;
+        var frames = Interlocked.Read(ref _frames);
+        _fps = (frames - _lastFrames) / seconds;
+        _lastFrames = frames;
+        double[] samples;
+        lock (_gate)
+        {
+            samples = [.. _window];
+            _window.Clear();
+        }
+
+        if (samples.Length > 0)
+        {
+            Array.Sort(samples);
+            _avg = samples.Average();
+            _p95 = samples[Math.Min(samples.Length - 1, (int)Math.Ceiling(samples.Length * 0.95) - 1)];
+        }
+        else
+        {
+            _avg = _p95 = 0;
+        }
+
+        _fpsHistory = [.. _fpsHistory.TakeLast(59), _fps];
+        _latencyHistory = [.. _latencyHistory.TakeLast(59), _avg];
+        _perSource = Sources?.Select(s => (s.Name, s.Stats())).ToList() ?? [];
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+        _listener?.Dispose();
+    }
+}

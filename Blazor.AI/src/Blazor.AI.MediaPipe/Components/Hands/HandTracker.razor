@@ -1,0 +1,69 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* 21-point hand tracking with handedness, fingertip highlights, finger states and metric (world) measurements. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{_hands.Count} hand(s) · 21 landmarks each")" Icon="bi-hand-index">
+        <div class="bai-stack">
+            <label class="bai-small">Max hands <input type="number" min="1" max="4" class="bai-input" style="width:4rem" @bind="MaxHands" @bind:after="Refresh" /></label>
+            @foreach (var h in _hands)
+            {
+                <div class="bai-stack" style="gap:.25rem; border-top:1px solid var(--bai-line); padding-top:.4rem">
+                    <strong>@h.Side hand <span class="bai-small bai-muted">· presence @h.Presence.ToString("P0", CultureInfo.InvariantCulture)</span></strong>
+                    <div class="bai-chips">
+                        @for (var i = 0; i < Fingers.Length; i++)
+                        {
+                            <span class="bai-badge @(h.Extended[i] ? "bai-badge-local" : null)">@Fingers[i] @(h.Extended[i] ? "up" : "down")</span>
+                        }
+                    </div>
+                    <span class="bai-small">Span thumb→pinky <b>@h.SpanCm.ToString("0.0", CultureInfo.InvariantCulture) cm</b> · wrist→middle tip <b>@h.LengthCm.ToString("0.0", CultureInfo.InvariantCulture) cm</b> · pinch <b>@h.PinchCm.ToString("0.0", CultureInfo.InvariantCulture) cm</b></span>
+                </div>
+            }
+            @if (_hands.Count == 0) { <p class="bai-small bai-muted" style="margin:0">Hold a hand up to the camera.</p> }
+            <span class="bai-small bai-faint">Measurements use MediaPipe world landmarks (metres, origin at the hand's centre); expect ±1 cm.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly string[] Fingers = ["Thumb", "Index", "Middle", "Ring", "Pinky"];
+    private static readonly int[] Tips = [4, 8, 12, 16, 20];
+
+    public sealed record HandReading(string Side, float Presence, bool[] Extended, double SpanCm, double LengthCm, double PinchCm);
+
+    private IReadOnlyList<HandReading> _hands = [];
+
+    [Parameter] public string Title { get; set; } = "Hand tracker";
+
+    [Parameter] public int MaxHands { get; set; } = 2;
+
+    /// <summary>Raised with each frame's hands (on the processing thread).</summary>
+    [Parameter] public Action<HandLandmarkResult>? OnResult { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Hands;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.Hands(frame, Math.Clamp(MaxHands, 1, 4));
+        OnResult?.Invoke(result);
+        var overlay = new VisionOverlay();
+        var readings = new List<HandReading>();
+        foreach (var hand in result.Hands)
+        {
+            overlay.Landmarks.Add(Overlay.Hand(hand, highlight: Tips));
+            var w = hand.WorldLandmarks;
+            double Cm(int a, int b) => w is { Count: > 20 } ? Math.Sqrt(Math.Pow(w[a].X - w[b].X, 2) + Math.Pow(w[a].Y - w[b].Y, 2) + Math.Pow(w[a].Z - w[b].Z, 2)) * 100 : 0;
+            var side = hand.Handedness?.CategoryName ?? "?";
+            readings.Add(new HandReading(side, hand.PresenceScore, VisionMath.ExtendedFingers(hand), Cm(4, 20), Cm(0, 12), Cm(4, 8)));
+            var wrist = hand.Landmarks[0];
+            overlay.Texts.Add(Overlay.Label(wrist.X, Math.Min(0.96f, wrist.Y + 0.03f), side, side == "Left" ? Overlay.Soga : Overlay.Nila, 12));
+        }
+
+        _hands = readings;
+        overlay.Status = $"{readings.Count} hand(s)";
+        return overlay;
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+}

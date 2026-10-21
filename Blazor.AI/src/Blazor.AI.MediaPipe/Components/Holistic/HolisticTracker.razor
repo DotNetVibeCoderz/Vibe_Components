@@ -1,0 +1,104 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Face + both hands + body in one pass (543 landmarks), with layer toggles. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="Holistic landmarker · pose 33 + face 478 + hands 2×21" Icon="bi-person-bounding-box">
+        <div class="bai-stack">
+            <div class="bai-row bai-small">
+                <label><input type="checkbox" class="form-check-input" @bind="ShowPose" @bind:after="Refresh" /> body</label>
+                <label><input type="checkbox" class="form-check-input" @bind="ShowFace" @bind:after="Refresh" /> face</label>
+                <label><input type="checkbox" class="form-check-input" @bind="ShowHands" @bind:after="Refresh" /> hands</label>
+                <label><input type="checkbox" class="form-check-input" @bind="ShowMask" @bind:after="Refresh" /> mask</label>
+            </div>
+            <div class="bai-row" style="gap:1.2rem">
+                <div><b>@(_s.Pose ? "yes" : "no")</b><span class="bai-small bai-muted"> body</span></div>
+                <div><b>@(_s.Face ? "yes" : "no")</b><span class="bai-small bai-muted"> face</span></div>
+                <div><b>@_s.Hands</b><span class="bai-small bai-muted"> hands</span></div>
+                <div><b>@_s.Landmarks</b><span class="bai-small bai-muted"> landmarks</span></div>
+            </div>
+            @if (_s.Expression is { } e)
+            {
+                <span class="bai-small">Expression: <b>@e</b></span>
+            }
+            <span class="bai-small bai-muted">Holistic tracking is the heaviest task (one model chain per part); lower the frame rate on slow servers.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private sealed record Summary(bool Pose, bool Face, int Hands, int Landmarks, string? Expression);
+
+    private Summary _s = new(false, false, 0, 0, null);
+
+    [Parameter] public string Title { get; set; } = "Holistic tracker";
+    [Parameter] public bool ShowPose { get; set; } = true;
+    [Parameter] public bool ShowFace { get; set; } = true;
+    [Parameter] public bool ShowHands { get; set; } = true;
+    [Parameter] public bool ShowMask { get; set; }
+
+    /// <summary>Raised with each result (on the processing thread).</summary>
+    [Parameter] public Action<HolisticResult>? OnResult { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.ThumbsUp, VisionSamples.OpenPalms, VisionSamples.Yoga];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var r = Tasks.Holistic(frame, blendshapes: true, mask: ShowMask);
+        OnResult?.Invoke(r);
+        var overlay = new VisionOverlay();
+        var count = 0;
+        if (r.Pose is { } pose)
+        {
+            count += pose.Landmarks.Count;
+            if (ShowMask && pose.SegmentationMask is { } m)
+            {
+                overlay.Mask = Overlay.Mask(m, "tint", Overlay.Tarum, opacity: 0.3f);
+            }
+
+            if (ShowPose)
+            {
+                overlay.Landmarks.Add(Overlay.Pose(pose, Overlay.Tarum));
+            }
+        }
+
+        string? expression = null;
+        if (r.Face is { } face)
+        {
+            count += face.Landmarks.Count;
+            if (ShowFace)
+            {
+                overlay.Landmarks.AddRange(Overlay.Face(face, allPoints: false));
+            }
+
+            if (face.Blendshapes is { Count: > 0 })
+            {
+                var (label, _) = ExpressionMood.From(face);
+                expression = label;
+            }
+        }
+
+        var hands = 0;
+        foreach (var hand in new[] { r.LeftHand, r.RightHand })
+        {
+            if (hand is null)
+            {
+                continue;
+            }
+
+            hands++;
+            count += hand.Landmarks.Count;
+            if (ShowHands)
+            {
+                overlay.Landmarks.Add(Overlay.Hand(hand));
+            }
+        }
+
+        _s = new Summary(r.Pose is not null, r.Face is not null, hands, count, expression);
+        overlay.Status = $"{count} landmarks";
+        return overlay;
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+}

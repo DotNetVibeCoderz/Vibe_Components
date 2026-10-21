@@ -1,0 +1,146 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* Pond and cage camera: water colour/turbidity index, surface activity by frame differencing, fish presence by tile classification, feeding response. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{PondName} · {(_feeding ? "feeding window" : "observation")}")" Icon="bi-water">
+        <div class="bai-stack">
+            <div class="baiv-meter"><span>Turbidity</span><div><span style="width:@((_turbidity * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@_turbidity.ToString("0.00", CultureInfo.InvariantCulture)</span></div>
+            <div class="baiv-meter"><span>Green tint</span><div><span style="width:@((_greenness * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@_greenness.ToString("0.00", CultureInfo.InvariantCulture)</span></div>
+            <div class="baiv-meter"><span>Surface activity</span><div><span style="width:@(Math.Min(100, _activity * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@_activity.ToString("0.00", CultureInfo.InvariantCulture)</span></div>
+            <span class="bai-small">Fish-like tiles: <b>@_fishTiles</b> of @(TileGrid * TileGrid) · @(_fishLabels.Count == 0 ? "none recognised" : string.Join(", ", _fishLabels))</span>
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="ToggleFeeding"><i class="bi @(_feeding ? "bi-stop-circle" : "bi-play-circle")" aria-hidden="true"></i>@(_feeding ? "End feeding" : "Start feeding")</button>
+                @if (_feedingScore is { } s) { <span class="bai-small">Feeding response <b>@s.ToString("0.0", CultureInfo.InvariantCulture)×</b> baseline</span> }
+            </div>
+            <span class="bai-small bai-faint">The COCO detector has no fish class; fish presence uses ImageNet fish categories on image tiles, so treat it as an estimate. Turbidity and colour are relative to this camera.</span>
+            @EventLog(5)
+            <button type="button" class="bai-btn bai-btn-ai" style="width:fit-content" disabled="@IsBusy" @onclick="Ask"><i class="bi bi-stars" aria-hidden="true"></i>Water & feeding advice</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly IReadOnlySet<string> FishClasses = new HashSet<string> { "tench", "goldfish", "great white shark", "tiger shark", "hammerhead", "electric ray", "stingray", "coho", "rock beauty", "anemone fish", "sturgeon", "gar", "lionfish", "puffer", "eel", "barracouta" };
+    private byte[]? _prev;
+    private double _turbidity, _greenness, _activity, _baselineActivity, _feedActivitySum;
+    private int _fishTiles, _feedFrames, _baselineFrames;
+    private IReadOnlyList<string> _fishLabels = [];
+    private bool _feeding;
+    private double? _feedingScore;
+
+    [Parameter] public string Title { get; set; } = "Aquaculture vision";
+    [Parameter] public string PondName { get; set; } = "Keramba 1";
+
+    /// <summary>Tiles per side for fish classification (TileGrid × TileGrid crops per frame).</summary>
+    [Parameter] public int TileGrid { get; set; } = 3;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Fish, VisionSamples.Livestock, VisionSamples.Food];
+
+    private void Changed(VisionSourceKind kind)
+    {
+        HandleSourceChanged(kind);
+        _prev = null;
+        _baselineActivity = 0;
+        _baselineFrames = 0;
+    }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var (rgb, w, h) = VisionSolutions.Pixels(frame.Image, 160);
+        double sat = 0, green = 0, diff = 0;
+        var n = w * h;
+        for (var i = 0; i < n; i++)
+        {
+            var (hue, s, v) = VisionSolutions.Hsv(rgb[3 * i], rgb[3 * i + 1], rgb[3 * i + 2]);
+            sat += s;
+            if (hue is > 70 and < 170 && s > 0.15)
+            {
+                green++;
+            }
+
+            if (_prev is not null && _prev.Length == rgb.Length)
+            {
+                diff += Math.Abs(rgb[3 * i + 1] - _prev[3 * i + 1]) > 18 ? 1 : 0;
+            }
+        }
+
+        // Murky water is low-saturation and greyish; clear water keeps colour contrast.
+        _turbidity = Math.Clamp(1 - sat / n * 2.2, 0, 1);
+        _greenness = green / n;
+        _activity = _prev is null ? 0 : _activity * 0.6 + diff / n * 4 * 0.4;
+        _prev = frame.IsLive ? rgb : null;
+
+        if (_feeding)
+        {
+            _feedActivitySum += _activity;
+            _feedFrames++;
+        }
+        else if (frame.IsLive)
+        {
+            _baselineActivity += _activity;
+            _baselineFrames++;
+        }
+
+        // Fish presence: classify a few tiles every 10th live frame (or every still image).
+        var overlay = new VisionOverlay();
+        if (!frame.IsLive || frame.Index % 10 == 0)
+        {
+            var labels = new List<string>();
+            var tiles = 0;
+            var g = Math.Clamp(TileGrid, 1, 4);
+            for (var ty = 0; ty < g; ty++)
+            {
+                for (var tx = 0; tx < g; tx++)
+                {
+                    var rect = new NormalizedRect((tx + 0.5f) / g, (ty + 0.5f) / g, 1f / g, 1f / g);
+                    var top = Tasks.Classify(frame, 3, null, rect).Categories.FirstOrDefault(c => c.CategoryName is { } nm && FishClasses.Contains(nm) && c.Score > 0.08);
+                    if (top is not null)
+                    {
+                        tiles++;
+                        labels.Add(top.CategoryName!);
+                        overlay.Boxes.Add(new OverlayBox { X = tx / (float)g, Y = ty / (float)g, W = 1f / g, H = 1f / g, Color = Overlay.Nila, Dashed = true, Label = $"{top.CategoryName} {top.Score:P0}" });
+                    }
+                }
+            }
+
+            _fishTiles = tiles;
+            _fishLabels = labels.Distinct().ToList();
+        }
+
+        if (_turbidity > 0.75 && frame.Index % 50 == 0)
+        {
+            Publish("turbidity", $"{PondName}: water looks murky (index {_turbidity:0.00})", VisionEventSeverity.Warning);
+        }
+
+        overlay.Status = $"turbidity {_turbidity:0.00} · activity {_activity:0.00}";
+        return overlay;
+    }
+
+    private void ToggleFeeding()
+    {
+        if (!_feeding)
+        {
+            _feeding = true;
+            _feedActivitySum = 0;
+            _feedFrames = 0;
+            Publish("feeding", $"{PondName}: feeding started");
+            return;
+        }
+
+        _feeding = false;
+        var baseline = _baselineFrames == 0 ? 0 : _baselineActivity / _baselineFrames;
+        var during = _feedFrames == 0 ? 0 : _feedActivitySum / _feedFrames;
+        _feedingScore = baseline < 1e-4 ? null : during / baseline;
+        Publish("feeding", _feedingScore is { } s
+            ? $"{PondName}: feeding response {s:0.0}× baseline ({(s < 1.3 ? "weak — consider reducing the ration" : "active")})"
+            : $"{PondName}: feeding ended (no live baseline to compare)", _feedingScore is < 1.3 ? VisionEventSeverity.Warning : VisionEventSeverity.Info);
+    }
+
+    private Task Ask() => AskAboutFrameAsync("an aquaculture technician for tilapia and catfish farms in Indonesia",
+        "Assess the water and feeding situation and suggest what to measure next (DO, pH, ammonia).",
+        string.Create(CultureInfo.InvariantCulture, $"Pond {PondName}. Turbidity index {_turbidity:0.00} (0 clear – 1 murky), green tint {_greenness:P0}, surface activity {_activity:0.00}, fish-like tiles {_fishTiles}, feeding response {(_feedingScore is { } s ? $"{s:0.0}× baseline" : "not measured")}. Camera-based estimates, not sensor readings."));
+}

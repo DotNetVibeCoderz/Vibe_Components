@@ -1,0 +1,72 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* One camera tile of a surveillance wall: counts people and vehicles and raises intrusion events for a guarded area. *@
+
+<div class="bai-stack" style="gap:.3rem">
+    <div class="bai-row bai-small">
+        <b>@Name</b>
+        <span class="bai-spacer"></span>
+        <span>👤 @_people</span><span>🚗 @_vehicles</span>
+        @if (_intrusion) { <span class="bai-badge bai-badge-danger">intrusion</span> }
+    </div>
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" InitialImage="@InitialImage" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" ShowToolbar="@ShowToolbar" AllowStreamUrl="true" />
+</div>
+
+@code {
+    private static readonly IReadOnlySet<string> Watched = new HashSet<string> { "person", "car", "truck", "bus", "motorcycle", "bicycle" };
+    private int _people, _vehicles;
+    private bool _intrusion;
+
+    [Parameter] public string Name { get; set; } = "Camera";
+
+    /// <summary>A sample or stream URL shown first.</summary>
+    [Parameter] public string? InitialImage { get; set; }
+
+    /// <summary>Guarded area (normalized); a person whose feet are inside raises an intrusion event.</summary>
+    [Parameter] public (float X, float Y, float W, float H)? GuardedArea { get; set; }
+
+    [Parameter] public bool ShowToolbar { get; set; }
+
+    /// <summary>Latest counts, read by the dashboard.</summary>
+    public (int People, int Vehicles, bool Intrusion) Counts => (_people, _vehicles, _intrusion);
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Scenes;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var dets = Tasks.Objects(frame, 0.35f, 40, Watched).Detections;
+        var overlay = new VisionOverlay();
+        int people = 0, vehicles = 0;
+        var intrusion = false;
+        if (GuardedArea is { } area)
+        {
+            overlay.Boxes.Add(VisionSolutions.ZoneBox(area, "Guarded", Overlay.Danger));
+        }
+
+        foreach (var d in dets)
+        {
+            var label = d.TopCategory?.CategoryName ?? "object";
+            var isPerson = label == "person";
+            people += isPerson ? 1 : 0;
+            vehicles += isPerson ? 0 : 1;
+            var b = VisionSolutions.Norm(d, frame.Width, frame.Height);
+            var inside = isPerson && GuardedArea is { } g && VisionSolutions.Inside((b.X + b.W / 2, b.Y + b.H), g);
+            intrusion |= inside;
+            overlay.Boxes.Add(new OverlayBox { X = b.X, Y = b.Y, W = b.W, H = b.H, Color = inside ? Overlay.Danger : isPerson ? Overlay.Nila : Overlay.Soga, Label = label });
+        }
+
+        if (intrusion && !_intrusion)
+        {
+            Publish("intrusion", $"{Name}: person inside the guarded area", VisionEventSeverity.Alert, snapshot: true);
+        }
+
+        if (people != _people || vehicles != _vehicles)
+        {
+            Publish("count", $"{Name}: {people} people, {vehicles} vehicles", counts: new Dictionary<string, int> { ["person"] = people, ["vehicle"] = vehicles });
+        }
+
+        (_people, _vehicles, _intrusion) = (people, vehicles, intrusion);
+        overlay.Status = Name;
+        return overlay;
+    }
+}

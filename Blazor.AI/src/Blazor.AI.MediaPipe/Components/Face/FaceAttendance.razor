@@ -1,0 +1,136 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@inject FaceGallery Gallery
+@inject IFaceEmbedder Embedder
+@* Attendance: enrol people from the camera, then check-ins are logged when an enrolled face is recognised. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{Gallery.People.Count} enrolled · {_log.Count} check-in(s) today")" Icon="bi-person-check">
+        <div class="bai-stack">
+            <form class="bai-row" @onsubmit="EnrolAsync" @onsubmit:preventDefault="true">
+                <input class="bai-input bai-spacer" @bind="_name" placeholder="Name to enrol, e.g. Sari Wulandari" aria-label="Name to enrol" />
+                <button type="submit" class="bai-btn bai-btn-ai" disabled="@(_faces.Count == 0 || string.IsNullOrWhiteSpace(_name))"><i class="bi bi-person-plus" aria-hidden="true"></i>Enrol</button>
+            </form>
+            <span class="bai-small bai-muted">Enrol uses the largest face in view; add 2–3 samples per person (slightly different angles) for better matching.</span>
+            <label class="bai-small">Match threshold @Threshold.ToString("0.00", CultureInfo.InvariantCulture)
+                <input type="range" min="0.5" max="0.98" step="0.01" @bind="Threshold" style="width:100%" aria-label="Match threshold" />
+            </label>
+            @if (Gallery.People.Count > 0)
+            {
+                <div class="bai-chips">
+                    @foreach (var p in Gallery.People)
+                    {
+                        <span class="bai-badge bai-badge-local">@p.Name ×@p.Samples.Count <button type="button" class="bai-icon-btn" style="width:1.2rem; height:1.2rem" aria-label="@($"Remove {p.Name}")" @onclick="() => Gallery.Remove(p.Name)">×</button></span>
+                    }
+                </div>
+            }
+            <div class="bai-row">
+                <span class="bai-label bai-spacer" style="margin:0">Check-ins</span>
+                <button type="button" class="bai-btn-ghost" disabled="@(_log.Count == 0)" @onclick="ExportAsync"><i class="bi bi-filetype-csv" aria-hidden="true"></i>CSV</button>
+            </div>
+            <div class="baiv-log" aria-live="polite">
+                @foreach (var c in _log.Reverse())
+                {
+                    <span><b>@c.Name</b> · @c.At.ToString("HH:mm:ss", CultureInfo.InvariantCulture) · similarity @c.Similarity.ToString("0.00", CultureInfo.InvariantCulture)</span>
+                }
+                @if (_log.Count == 0) { <span class="bai-muted">Nobody checked in yet.</span> }
+            </div>
+            <span class="bai-small bai-faint">The default face embedder (mesh geometry + generic image features) is demo-grade, not biometric-grade. For production, register an <code>IFaceEmbedder</code> backed by a face-recognition model and get consent.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed record CheckIn(string Name, DateTime At, double Similarity);
+
+    private IReadOnlyList<CheckIn> _log = [];
+    private IReadOnlyList<(float[] Embedding, float Area)> _faces = [];
+    private string? _name;
+
+    [Parameter] public string Title { get; set; } = "Face attendance";
+
+    /// <summary>Cosine similarity needed to count as the same person.</summary>
+    [Parameter] public double Threshold { get; set; } = 0.82;
+
+    /// <summary>A person is not checked in again within this window.</summary>
+    [Parameter] public TimeSpan DeduplicationWindow { get; set; } = TimeSpan.FromMinutes(30);
+
+    [Parameter] public EventCallback<CheckIn> OnCheckIn { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Face, VisionSamples.ThumbsUp, VisionSamples.OpenPalms];
+
+    protected override void OnInitialized() => Gallery.Changed += OnGalleryChanged;
+
+    private void OnGalleryChanged() => InvokeAsync(StateHasChanged);
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.FaceLandmarks(frame, 4, blendshapes: false);
+        var overlay = new VisionOverlay();
+        var faces = new List<(float[], float)>();
+        foreach (var face in result.Faces)
+        {
+            var embedding = Embedder.Embed(frame, face, Tasks);
+            var (x, y, w, h) = Overlay.Bounds(face.Landmarks, 0.03f);
+            faces.Add((embedding, w * h));
+            var (person, sim) = Gallery.Match(embedding);
+            var known = person is not null && sim >= Threshold;
+            overlay.Boxes.Add(new OverlayBox { X = x, Y = y, W = w, H = h, Color = known ? Overlay.Nila : Overlay.Warning, Label = known ? $"{person!.Name} {sim:0.00}" : $"unknown {Math.Max(0, sim):0.00}" });
+            if (known)
+            {
+                Register(person!.Name, sim);
+            }
+        }
+
+        _faces = faces;
+        overlay.Status = $"{result.Faces.Count} face(s)";
+        return overlay;
+    }
+
+    private void Register(string name, double similarity)
+    {
+        var now = DateTime.Now;
+        if (_log.Any(c => c.Name == name && now - c.At < DeduplicationWindow))
+        {
+            return;
+        }
+
+        var entry = new CheckIn(name, now, similarity);
+        _log = [.. _log, entry];
+        RecordEvent($"Check-in: {name}");
+        _ = InvokeAsync(() => OnCheckIn.InvokeAsync(entry));
+    }
+
+    private async Task EnrolAsync()
+    {
+        var largest = _faces.OrderByDescending(f => f.Area).FirstOrDefault();
+        if (largest.Embedding is null || string.IsNullOrWhiteSpace(_name))
+        {
+            return;
+        }
+
+        var thumb = Camera is null ? null : await Camera.SnapshotAsync(false);
+        Gallery.Enroll(_name.Trim(), largest.Embedding, thumb);
+        RecordEvent($"Enrolled: {_name.Trim()}");
+        _name = null;
+    }
+
+    private async Task ExportAsync()
+    {
+        var csv = new StringBuilder("name,time,similarity\n");
+        foreach (var c in _log)
+        {
+            csv.Append('"').Append(c.Name.Replace("\"", "\"\"")).Append("\",").Append(c.At.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)).Append(',').Append(c.Similarity.ToString("0.000", CultureInfo.InvariantCulture)).Append('\n');
+        }
+
+        var url = "data:text/csv;base64," + Convert.ToBase64String(Encoding.UTF8.GetBytes(csv.ToString()));
+        await Camera!.DownloadAsync(url, $"attendance-{DateTime.Now:yyyyMMdd}.csv");
+    }
+
+    public override ValueTask DisposeAsync()
+    {
+        Gallery.Changed -= OnGalleryChanged;
+        return base.DisposeAsync();
+    }
+}

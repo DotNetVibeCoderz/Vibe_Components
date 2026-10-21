@@ -16,6 +16,7 @@ This page lists every Razor component in Blazor.AI, grouped by NuGet package. Mo
 - [Blazor.AI.LocalModels](#blazorailocalmodels)
 - [Blazor.AI.Bio](#blazoraibio)
 - [Blazor.AI.ThreeD](#blazoraithreed)
+- [Blazor.AI.MediaPipe](#blazoraimediapipe)
 
 ## Common parameters
 
@@ -3291,4 +3292,1313 @@ Base: `ThreeDComponentBase`.
 
 ```razor
 <AutonomousOperationsDashboard Threshold="0.9" IntervalMs="3000" />
+```
+
+---
+
+## Blazor.AI.MediaPipe
+
+Package: `Blazor.AI.MediaPipe` · Namespace: `Blazor.AI.MediaPipe`
+
+```csharp
+builder.Services.AddBlazorAIMediaPipe(o => o.PreloadModels = true);
+```
+
+```html
+<link rel="stylesheet" href="_content/Blazor.AI.MediaPipe/blazor-ai-vision.css" />
+```
+
+`AddBlazorAIMediaPipe()` registers `VisionModelManager`, the per-user `FaceGallery` and `VisionEventStream`, the default `IFaceEmbedder`, a model preloader, and raises the Blazor Server hub message limit so JPEG frames fit. The components build on `AddBlazorAIComponents()`. Use Interactive Server render mode: inference runs on the server with MediaPipe.NET on ONNX Runtime, which does not run in browser WebAssembly. Components that show a 3D view (`FaceMeshViewer`, the avatar and motion components, and the 3D group) also need `_content/Blazor.AI.ThreeD/blazor-ai-3d.css`. See [Computer vision](vision.md) for how frames flow and how to build your own vision component.
+
+```razor
+@using Blazor.AI.MediaPipe
+```
+
+`MediaPipeVisionOptions`, set in the `AddBlazorAIMediaPipe` callback:
+
+| Option | Type | Default | Purpose |
+|---|---|---|---|
+| `Provider` | `ExecutionProvider` | `ExecutionProvider.Auto` | ONNX Runtime execution provider: `Auto`, `Cpu`, `Cuda`, `DirectML` or `CoreML`. |
+| `ModelDirectory` | `string?` | `null` | Folder with pre-downloaded models for offline and edge sites. `null` uses the MediaPipeNet cache. |
+| `AllowModelDownload` | `bool` | `true` | Downloads missing models on first use. Turn off for air-gapped sites. |
+| `PreloadModels` | `bool` | `false` | Downloads the common models at startup instead of on first use. |
+| `MaxFrameMessageBytes` | `long` | `2 * 1024 * 1024` | Largest frame message the hub accepts. Frames are usually 15–60 KB. |
+
+### Common vision parameters
+
+Most components inherit `VisionComponentBase`, which inherits `AiComponentBase`. They take the [common parameters](#common-parameters) (`Provider`, `Class`, `OnError`, unmatched attributes) plus:
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Height` | `string` | `"420px"` | CSS height of the camera view. |
+| `Samples` | `IReadOnlyList<VisionSample>?` | `null` | Sample pictures offered when no camera is used. `null` uses the component's own samples. |
+| `StartWithCamera` | `bool` | `false` | Starts the webcam instead of the first sample. |
+| `Fps` | `double` | `12` | Frames per second requested from live sources. |
+| `Language` | `string?` | `null` | Language of AI answers. `null` follows the model's default. |
+
+Each frame is processed off the circuit thread; live sources use MediaPipe VIDEO mode (tracking and smoothing) and stills use IMAGE mode. Detection, landmarks, angles and counts run in .NET; the model only explains computed facts, with the frame attached for vision-capable models and the facts alone for text-only models.
+
+Solution components (healthcare, agritech, education, industry and some analytics) inherit `SolutionComponentBase`, which inherits `VisionComponentBase` and adds:
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Events` | `VisionEventStream?` | `null` | Stream the component publishes events into. `null` uses the per-user stream registered by `AddBlazorAIMediaPipe()`. |
+| `OnEvent` | `EventCallback<VisionEvent>` | | Raised for every event the component publishes. |
+| `SourceName` | `string?` | `null` | Event source name. `null` uses the component type name. |
+
+It also exposes `CameraStats` (`VisionStats?`) for `RealtimeMetrics`. Warning and alert events are written to the guardrail audit trail.
+
+`EventTimeline` and `VisionDashboard` inherit `StreamComponentBase`, which inherits `AiComponentBase` and adds:
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Events` | `VisionEventStream?` | `null` | Stream to show. `null` uses the per-user stream registered by `AddBlazorAIMediaPipe()`. |
+| `RefreshMs` | `int` | `400` | Minimum time in milliseconds between re-renders while events arrive. |
+
+Pass the same `VisionEventStream` instance to producers and views to connect them on one page.
+
+### Helper types
+
+- `VisionSamples`: sample photos shipped in the package (`Face`, `ThumbsUp`, `Yoga`, `Street`, `Food`, `OpenPalms`, `DeskPosture`, `Fall`, `Construction`, `Warehouse`, `Shelf`, `LeafDisease`, `Fruit`, `Livestock`, `Fish`) and sets of them (`People`, `Hands`, `Bodies`, `Scenes`, `Agritech`, `All`). `VisionSample` is a `(Name, Url)` record.
+- `VisionMath`: joint angles in 2-D (`Angle`) and from 3-D world landmarks (`Angle3`), `Distance`, `ExtendedFingers`, `CountFingers`, `EyeAspectRatio` and a rough `HeadPose` (yaw, pitch).
+- `Overlay`: builds `VisionOverlay` parts from MediaPipe.NET results (`Hand`, `Pose`, `Face`, `Box`, `Mask`, `CategoryTint`, `Label`, `Bounds`) and holds the theme colours (`Nila`, `Soga`, `Tarum`, `Danger`, `Warning`, `White`). Overlay coordinates are normalized to 0–1.
+- `FaceGallery`: per-user (scoped) store of enrolled faces with `Enroll`, `Remove`, `Match` (best cosine similarity) and a `Changed` event. Used by `FaceAttendance`.
+- `IFaceEmbedder`: turns a detected face into an identity vector. The default `MeshFaceEmbedder` embeds an eye-aligned face crop with MobileNet; it is demo-grade, not biometric-grade. Register your own (for example an ArcFace ONNX model) to replace it.
+- `VisionModelManager`: model catalogue (`CommonModels`, `AllModels`), `FindLocal`, `EnsureAsync` for pre-download with progress, and `AvailableProviders`.
+- `VisionEventStream`: thread-safe in-memory stream of `VisionEvent` records (`Publish`, `Snapshot`, `Clear`, `Published` event, `Capacity` 2000). `VisionEventStream.Shared` is a process-wide instance for demos.
+
+### Core
+
+![Vision core components](../screenshots/vision-core.jpg)
+
+### CameraViewer
+
+The universal camera every vision component builds on: webcam or mobile camera, sample or uploaded images, video files and HTTP streams, with overlays, mirroring, snapshots and recording.
+
+No AI calls. Does not inherit a base class.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `OnFrame` | `Func<VisionFrame, Task<VisionOverlay?>>?` | `null` | Called for every frame; returns the overlay to draw, or `null`. Runs on the circuit, so offload heavy work. |
+| `OnSourceChanged` | `EventCallback<VisionSourceKind>` | | Raised when the source changes. Reset tracking state here. |
+| `Samples` | `IReadOnlyList<VisionSample>` | `VisionSamples.People` | Sample pictures in the toolbar. |
+| `InitialImage` | `string?` | `null` | First picture to show. `null` uses the first sample. |
+| `StartWithCamera` | `bool` | `false` | Starts the webcam immediately (some browsers need a user gesture). |
+| `AllowCamera` | `bool` | `true` | Shows the camera button. |
+| `AllowStreamUrl` | `bool` | `true` | Shows the URL button for streams, videos and images. |
+| `ShowToolbar` | `bool` | `true` | Shows the source toolbar. |
+| `FacingMode` | `string` | `"user"` | Camera facing mode for `getUserMedia`, for example `"environment"` for a rear camera. |
+| `Fps` | `double` | `12` | Frames per second requested from live sources. The actual rate is limited by processing time. |
+| `MaxWidth` | `int` | `640` | Frames are scaled to this width before upload. |
+| `Height` | `string` | `"420px"` | CSS height. |
+| `Class` | `string?` | `null` | Extra CSS classes for the root element. |
+| `ChildContent` | `RenderFragment?` | `null` | HTML overlay (HUD) drawn on top of the picture. |
+
+Properties: `Stats` (`VisionStats`: fps, latency, frames, width, height), `Source` (`VisionSourceKind`) and `LastJpeg` (the last frame received). Methods:
+
+- `StartAsync(VisionSourceKind source, string? url)`: switches source (`Image`, `Camera`, `Video` or `Stream`); returns `null` on success or a message.
+- `UseSampleAsync(string? url)`: shows a sample picture.
+- `ReprocessAsync()`: processes the current still image again after a setting changes.
+- `SnapshotAsync(bool withOverlay = true)`: JPEG data URL of the picture, with its overlay by default.
+- `StartRecordingAsync(int fps = 24)` and `StopRecordingAsync()`: records the picture with its overlay; stopping returns an object URL of the WebM clip.
+- `DownloadAsync(string url, string fileName)`: saves a snapshot or clip in the browser.
+- `SetOverlayAsync(VisionOverlay? overlay)`: draws an overlay directly (for replays), bypassing `OnFrame`.
+- `StopAsync()`: stops the current source.
+
+```razor
+@inherits VisionComponentBase
+
+<CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" />
+```
+
+### VisionCanvas
+
+Shows a still image with an overlay you supply, for apps that run their own inference. No camera and no processing.
+
+No AI calls. Does not inherit a base class.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `ImageUrl` | `string?` | `null` | Image URL: relative, absolute with CORS, or a data URL. |
+| `ImageBytes` | `byte[]?` | `null` | Encoded image bytes (JPEG or PNG), used when `ImageUrl` is `null`. |
+| `ContentType` | `string` | `"image/jpeg"` | Content type of `ImageBytes`. |
+| `Overlay` | `VisionOverlay?` | `null` | What to draw over the image, in normalized coordinates. |
+| `Height` | `string` | `"360px"` | CSS height. |
+| `Class` | `string?` | `null` | Extra CSS classes. |
+
+```razor
+<VisionCanvas ImageBytes="@jpeg" Overlay="@overlay" Height="360px" />
+```
+
+### VisionRecorder
+
+Records clips of the picture with its overlay, takes screenshots, and keeps evidence snapshots automatically when a trigger fires (for example when the face count changes).
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Vision recorder"` | Card title. |
+| `SnapshotCooldownSeconds` | `double` | `3` | Minimum seconds between automatic snapshots. |
+| `OnEvidence` | `EventCallback<EvidenceSnapshot>` | | Raised for each evidence snapshot (data URL, time and reason). |
+
+```razor
+<VisionRecorder SnapshotCooldownSeconds="5" OnEvidence="Store" />
+```
+
+### ModelManagerPanel
+
+The model catalogue for offline and edge deployments: what is on disk, sizes and licences, and pre-download with progress.
+
+No AI calls. Does not inherit a base class. Uses `VisionModelManager`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Vision models"` | Card title. |
+| `Class` | `string?` | `null` | Extra CSS classes. |
+
+```razor
+<ModelManagerPanel />
+```
+
+### Face
+
+![Face mesh](../screenshots/vision-facemesh.jpg)
+
+### FaceDetectionPanel
+
+Real-time face detection: boxes, six keypoints and confidence with short- or full-range models, and an optional privacy blur.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Face detection"` | Card title. |
+| `PrivacyBlur` | `bool` | `false` | Starts with faces blurred in the picture. |
+| `OnCountChanged` | `EventCallback<int>` | | Raised when the number of faces changes. |
+
+```razor
+<FaceDetectionPanel PrivacyBlur="true" OnCountChanged="n => visitors = n" />
+```
+
+### FaceLandmarkViewer
+
+The 478-point face mesh with contours, head pose, eye openness and the strongest of the 52 blendshapes.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Face landmarks"` | Card title. |
+| `OnResult` | `Action<FaceLandmarkResult>?` | `null` | Called with each frame's result, on the processing thread. |
+
+```razor
+<FaceLandmarkViewer StartWithCamera="true" OnResult="r => faces = r.Faces.Count" />
+```
+
+### FaceMeshViewer
+
+The 478-point face mesh rendered in 3D with Three.js, coloured by depth, beside the camera.
+
+Base: `VisionComponentBase`. Needs the Blazor.AI.ThreeD stylesheet.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"3D face mesh"` | Card title. |
+| `SceneRate` | `double` | `5` | Maximum 3D scene updates per second (the camera itself runs faster). |
+
+```razor
+<FaceMeshViewer SceneRate="8" StartWithCamera="true" />
+```
+
+### FaceBlendshapeAnalyzer
+
+Expression analysis: smile, angry, sad, surprised and neutral from the 52 face blendshapes, live and as a trend.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Expression analyzer"` | Card title. |
+| `HistoryLength` | `int` | `60` | Number of samples the trend keeps. |
+| `OnExpression` | `Action<FaceExpression>?` | `null` | Called with each frame's expression, on the processing thread. |
+
+```razor
+<FaceBlendshapeAnalyzer HistoryLength="90" OnExpression="e => mood = e.Dominant" />
+```
+
+### FaceAttendance
+
+Attendance: enrol people from the camera, then recognised faces are checked in once per window and can be exported as CSV.
+
+Base: `VisionComponentBase`. Uses `FaceGallery` and `IFaceEmbedder`, registered by `AddBlazorAIMediaPipe()`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Face attendance"` | Card title. |
+| `Threshold` | `double` | `0.82` | Cosine similarity needed to count as the same person. |
+| `DeduplicationWindow` | `TimeSpan` | `TimeSpan.FromMinutes(30)` | A person is not checked in again within this window. |
+| `OnCheckIn` | `EventCallback<CheckIn>` | | Raised for each check-in (name, time, similarity). |
+
+```razor
+<FaceAttendance Threshold="0.85" DeduplicationWindow="@TimeSpan.FromHours(4)" OnCheckIn="Save" />
+```
+
+### FaceVerification
+
+1:1 face verification: capture a reference and a probe, compare them, and use blinks as a liveness hint.
+
+Base: `VisionComponentBase`. Uses `IFaceEmbedder`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Face verification"` | Card title. |
+| `Threshold` | `double` | `0.82` | Cosine similarity needed for a match. |
+| `OnVerified` | `EventCallback<(double Similarity, bool Matched, int Blinks)>` | | Raised after each verification. |
+
+```razor
+<FaceVerification Threshold="0.86" OnVerified="r => approved = r.Matched && r.Blinks > 0" />
+```
+
+### FaceAnalyticsDashboard
+
+Audience analytics: face count over time, emotion trend, attention from head pose, and a slot for your own age/gender estimator.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Face analytics"` | Card title. |
+| `Estimator` | `IFaceAttributeEstimator?` | `null` | Optional age/gender estimator. None ships by default. |
+| `AttentionDegrees` | `double` | `22` | A face counts as attentive when yaw and pitch are both within this many degrees. |
+| `MaxFaces` | `int` | `6` | Maximum faces tracked per frame (clamped to 1–10). |
+| `HistoryLength` | `int` | `120` | Number of samples the trends keep. |
+
+```razor
+<FaceAnalyticsDashboard Estimator="@estimator" AttentionDegrees="20" Language="Bahasa Indonesia" />
+```
+
+### Hands
+
+![Gesture recognizer](../screenshots/vision-gestures.jpg)
+
+### HandTracker
+
+21-point hand tracking with handedness, fingertip highlights, finger states and measurements in centimetres from world landmarks.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Hand tracker"` | Card title. |
+| `MaxHands` | `int` | `2` | Maximum hands tracked. |
+| `OnResult` | `Action<HandLandmarkResult>?` | `null` | Called with each frame's hands, on the processing thread. |
+
+```razor
+<HandTracker MaxHands="2" OnResult="r => hands = r.Hands.Count" />
+```
+
+### GestureRecognizerPanel
+
+Gesture recognition (thumbs up and down, victory, pointing, open palm, fist, I love you) plus custom gestures you teach by example.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Gesture recognizer"` | Card title. |
+| `MinScore` | `float` | `0.55f` | Minimum confidence for a gesture to count. |
+| `OnGesture` | `EventCallback<string>` | | Raised when the recognised gesture changes, with a canned name such as `Thumb_Up` or a custom name. |
+
+```razor
+<GestureRecognizerPanel MinScore="0.6f" OnGesture="HandleGesture" />
+```
+
+### FingerCounter
+
+Counts extended fingers on one or two hands in real time.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Finger counter"` | Card title. |
+| `OnCount` | `EventCallback<int>` | | Raised when the total changes. |
+
+```razor
+<FingerCounter OnCount="n => answer = n" />
+```
+
+### HandDrawingCanvas
+
+Air drawing: point with the index finger to draw, make a fist or pinch to lift the pen, hold an open palm to clear. Exports SVG (`ToSvg()`) and lets AI guess the drawing.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Air drawing"` | Card title. |
+
+```razor
+<HandDrawingCanvas @ref="canvas" StartWithCamera="true" />
+```
+
+### SignLanguageAssistant
+
+Static hand shapes become letters (a built-in subset plus signs you teach); AI turns the letters into a sentence.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Sign language assistant"` | Card title. |
+| `StableFrames` | `int` | `8` | Consecutive live frames a sign must hold before it is added. |
+| `OnSign` | `EventCallback<string>` | | Raised when a letter or word is added. |
+
+```razor
+<SignLanguageAssistant StableFrames="10" OnSign="letter => log.Add(letter)" Language="Bahasa Indonesia" />
+```
+
+### Pose
+
+![Yoga trainer](../screenshots/vision-yoga.jpg)
+
+### PoseTracker
+
+33-point body pose with joint angles, visibility and an optional person mask.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Pose tracker"` | Card title. |
+| `OnPose` | `Action<PoseLandmarks>?` | `null` | Called with each detected pose, on the processing thread. |
+
+```razor
+<PoseTracker OnPose="pose => last = pose" Height="480px" />
+```
+
+### SkeletonViewer
+
+Real-time skeletons in three styles for up to three people, with optional motion trails on wrists and ankles.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Skeleton viewer"` | Card title. |
+| `Style` | `string` | `"Neon"` | `Neon`, `Bones` or `Minimal`. |
+| `Trails` | `bool` | `true` | Draws motion trails. |
+| `TrailLength` | `int` | `25` | Frames kept per trail. |
+| `People` | `int` | `1` | Number of people to track (1–3). |
+
+```razor
+<SkeletonViewer Style="Neon" People="2" Trails="true" TrailLength="24" StartWithCamera="true" />
+```
+
+### ExerciseMonitor
+
+Fitness analytics: rep counting with hysteresis for squats, push-ups, jumping jacks, curls and lunges, plus form cues and an AI coach.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Exercise monitor"` | Card title. |
+| `ExerciseName` | `string` | `"Squat"` | `Squat`, `Push-up`, `Jumping jack`, `Bicep curl` or `Lunge`. |
+| `OnRep` | `EventCallback<int>` | | Raised when a repetition completes, with the total reps. |
+
+```razor
+<ExerciseMonitor ExerciseName="Squat" OnRep="reps => total = reps" />
+```
+
+### YogaTrainer
+
+Pose correction: compares joint angles against an asana library (either side), scores each joint and times the hold.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Yoga trainer"` | Card title. |
+| `Asana` | `string` | `"Warrior II"` | Target pose from the built-in library. |
+| `HoldThreshold` | `double` | `80` | Score (0–100) at which the hold timer runs. |
+
+```razor
+<YogaTrainer Asana="Warrior II" HoldThreshold="80" />
+```
+
+### SportsAnalyzer
+
+Movement analytics: joint-angle time series, limb speed, left/right symmetry and peak detection, with an AI analyst.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Sports analyzer"` | Card title. |
+| `Pair` | `string` | `"Knee"` | Joint pair to chart: `Elbow`, `Shoulder`, `Hip` or `Knee`. |
+| `WindowSeconds` | `int` | `15` | Length of the time series window in seconds. |
+| `Activity` | `string` | `"running drill"` | Sport or drill being analysed, given to the AI analyst. |
+
+```razor
+<SportsAnalyzer Activity="Tennis serve" Pair="Elbow" WindowSeconds="15" />
+```
+
+### ErgonomicMonitor
+
+Workplace posture: neck flexion, trunk lean, arm reach and shoulder elevation, a RULA-style risk score, time in risky posture and break reminders.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Ergonomic monitor"` | Card title. |
+| `BreakAfterMinutes` | `double` | `20` | Minutes of risky posture before a break reminder. |
+| `OnBreakReminder` | `EventCallback<ErgonomicAssessment>` | | Raised when a break reminder is shown. |
+
+```razor
+<ErgonomicMonitor BreakAfterMinutes="25" OnBreakReminder="Notify" />
+```
+
+### Holistic
+
+### HolisticTracker
+
+Face, both hands and body in one pass (543 landmarks), with layer toggles and an optional person mask.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Holistic tracker"` | Card title. |
+| `ShowPose` | `bool` | `true` | Draws the body layer. |
+| `ShowFace` | `bool` | `true` | Draws the face mesh layer. |
+| `ShowHands` | `bool` | `true` | Draws the hand layers. |
+| `ShowMask` | `bool` | `false` | Draws the person mask. |
+| `OnResult` | `Action<HolisticResult>?` | `null` | Called with each result, on the processing thread. |
+
+```razor
+<HolisticTracker ShowPose="true" ShowFace="true" ShowHands="true" ShowMask="false" />
+```
+
+### HumanDigitalTwin
+
+A digital twin of a person's movement: a 3D capsule body driven by metric world landmarks, with height, arm span, balance and posture.
+
+Base: `VisionComponentBase`. Needs the Blazor.AI.ThreeD stylesheet.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Human digital twin"` | Card title. |
+| `BodyColor` | `string` | `"#d9d4c4"` | Body colour. |
+| `AccentColor` | `string` | `ThreeDPalette.Nila` | Accent colour. |
+| `OnMetrics` | `Action<TwinMetrics>?` | `null` | Called with each metrics update, on the processing thread. |
+
+```razor
+<HumanDigitalTwin BodyColor="#d9d4c4" AccentColor="#3cc4b1" OnMetrics="m => height = m.Height" />
+```
+
+### MotionCaptureStudio
+
+Markerless motion capture: record pose world landmarks, smooth them, scrub and replay over the picture and in 3D, and export JSON or BVH.
+
+Base: `VisionComponentBase`. Needs the Blazor.AI.ThreeD stylesheet.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Motion capture studio"` | Card title. |
+| `Smooth` | `bool` | `true` | Applies One-Euro smoothing to live recordings. |
+| `MaxSeconds` | `int` | `60` | Longest take in seconds. |
+| `OnTake` | `EventCallback<IReadOnlyList<MocapFrame>>` | | Raised when a take is finished, with the recorded frames. |
+
+```razor
+<MotionCaptureStudio MaxSeconds="60" Smooth="true" OnTake="SaveTake" />
+```
+
+### AvatarController
+
+Drives a 3D avatar from the camera: body from pose world landmarks, head turn and nod from the face mesh.
+
+Base: `VisionComponentBase`. Needs the Blazor.AI.ThreeD stylesheet.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Avatar controller"` | Card title. |
+| `Mirror` | `bool` | `true` | Flips left and right like a mirror. |
+| `Smooth` | `bool` | `true` | Applies One-Euro smoothing to live landmarks. |
+| `HeadGain` | `double` | `1.2` | Multiplier for head turn and nod. |
+| `BodyColor` | `string` | `"#d9d4c4"` | Body colour. |
+| `AccentColor` | `string` | `ThreeDPalette.Nila` | Accent colour. |
+
+```razor
+<AvatarController Mirror="true" HeadGain="1.2" BodyColor="#3d4fb8" AccentColor="#d9964f" />
+```
+
+### Segmentation
+
+![Background removal](../screenshots/vision-background.jpg)
+
+### BackgroundRemoval
+
+Real-time background removal: cut out, blur or tint the background with the selfie segmenter.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Background removal"` | Card title. |
+
+```razor
+<BackgroundRemoval StartWithCamera="true" Fps="15" />
+```
+
+### GreenScreenReplacement
+
+A virtual green screen: the selfie segmenter keeps the person and the browser puts a picture, a colour or your own upload behind them.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Green screen replacement"` | Card title. |
+| `Backgrounds` | `IReadOnlyList<BackgroundChoice>?` | `null` | Background pictures to offer. `null` uses `DefaultBackgrounds`. |
+| `BackgroundUrl` | `string?` | `null` | Initial background URL. `null` starts with a colour. |
+| `MaxUploadBytes` | `long` | `8 * 1024 * 1024` | Largest accepted upload in bytes. |
+
+```razor
+<GreenScreenReplacement BackgroundUrl="@ThreeDAssets.WorldConcept" StartWithCamera="true" />
+```
+
+### SubjectIsolationViewer
+
+Per-part person segmentation with the selfie multiclass model: hair, face skin, body skin, clothes and accessories as separate masks with coverage.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Subject isolation"` | Card title. |
+| `InitialParts` | `IReadOnlyList<string>?` | `null` | Parts selected at start, by model label: `hair`, `face-skin`, `body-skin`, `clothes`, `others`. |
+| `OnCoverage` | `Action<IReadOnlyDictionary<string, double>>?` | `null` | Called with per-part coverage after each frame, on the processing thread. |
+
+```razor
+<SubjectIsolationViewer InitialParts="@(["hair"])" OnCoverage="c => hair = c.GetValueOrDefault("hair")" />
+```
+
+### ObjectSegmentationStudio
+
+Scene segmentation: DeepLab v3 class masks with coverage, plus point-prompted (MagicTouch) segmentation of any object in a still picture.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Object segmentation studio"` | Card title. |
+| `MinCoverage` | `double` | `0.003` | Minimum fraction of the frame for a class to be listed. |
+| `OnClasses` | `Action<IReadOnlyList<ClassCoverage>>?` | `null` | Called with the classes found after each frame, on the processing thread. |
+
+```razor
+<ObjectSegmentationStudio MinCoverage="0.005" OnClasses="classes => found = classes" />
+```
+
+### 3D views
+
+![3D vision components](../screenshots/vision-3d.jpg)
+
+These components render with Three.js from Blazor.AI.ThreeD and need its stylesheet.
+
+### FaceMesh3D
+
+The 478-point face mesh as an orbitable 3D point cloud, coloured by depth or expression, with a gaze arrow and live blendshapes.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Face mesh 3D"` | Card title. |
+| `ColorMode` | `string` | `"Depth"` | `Depth`, `Expression` or `Mono`. |
+| `PointSize` | `double` | `0.035` | Point size in scene units. |
+| `TopBlendshapes` | `int` | `6` | Number of blendshapes listed in the panel. |
+
+```razor
+<FaceMesh3D ColorMode="Depth" PointSize="0.035" TopBlendshapes="6" />
+```
+
+### AvatarMirror3D
+
+A 3D magic mirror: your capsule avatar stands in front of a glass pane and its reflection moves behind it.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Avatar mirror 3D"` | Card title. |
+| `BodyColor` | `string` | `"#d9d4c4"` | Body colour. |
+| `AccentColor` | `string` | `ThreeDPalette.Nila` | Accent colour. |
+
+```razor
+<AvatarMirror3D BodyColor="#d9d4c4" AccentColor="#3cc4b1" StartWithCamera="true" />
+```
+
+### PoseSkeleton3D
+
+Metric 3D skeletons from pose world landmarks, one per person, with live joint-angle labels and low-visibility joints dimmed.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Pose skeleton 3D"` | Card title. |
+
+```razor
+<PoseSkeleton3D Height="460px" />
+```
+
+### GestureSpace3D
+
+Both hands as 3D skeletons with their recognised gesture; point to draw in the air and make a fist to clear.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Gesture space 3D"` | Card title. |
+| `Mirror` | `bool` | `true` | Flips left and right like a mirror (natural for a front camera). |
+| `MaxStrokes` | `int` | `12` | Maximum air-drawing strokes kept. |
+| `OnGesture` | `EventCallback<string>` | | Raised when a hand's gesture changes, with a canned name such as `Pointing_Up`. |
+
+```razor
+<GestureSpace3D Mirror="true" MaxStrokes="12" OnGesture="g => last = g" StartWithCamera="true" />
+```
+
+### MotionReplay3D
+
+Record a movement, or load a mocap JSON take, and replay it in 3D with onion-skin ghosts, joint trails and variable speed.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Motion replay 3D"` | Card title. |
+| `MaxSeconds` | `double` | `30` | Longest recording in seconds. |
+| `OnTake` | `EventCallback<IReadOnlyList<MocapFrame>>` | | Raised when a take is recorded or loaded. |
+
+```razor
+<MotionReplay3D MaxSeconds="30" OnTake="take => frames = take.Count" />
+```
+
+### HumanBodyTracker3D
+
+Places the tracked person in the room: distance from the camera (pinhole estimate), floor path, distance walked and speed.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Human body tracker 3D"` | Card title. |
+| `OnFix` | `Action<BodyFix>?` | `null` | Called with each position estimate, on the processing thread. |
+
+```razor
+<HumanBodyTracker3D OnFix="fix => distance = fix.Distance" />
+```
+
+### DigitalTwinAvatar
+
+A full digital-twin avatar from the holistic landmarker: body, articulated hands, head pose and expression, with a state log and an AI narrator.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Digital twin avatar"` | Card title. |
+| `BodyColor` | `string` | `"#d9d4c4"` | Body colour. |
+| `Mirror` | `bool` | `false` | Flips left and right like a mirror. |
+| `OnStateChanged` | `EventCallback<TwinState>` | | Raised when posture, expression or hand state changes. |
+
+```razor
+<DigitalTwinAvatar Language="Bahasa Indonesia" OnStateChanged="s => log.Add(s.Posture)" />
+```
+
+### Detection
+
+![Object detection](../screenshots/vision-detection.jpg)
+
+### ObjectDetectionPanel
+
+General object detection (EfficientDet-Lite0, 80 COCO classes) with class filters, per-class counts and stable track ids.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Object detection"` | Card title. |
+| `Classes` | `IReadOnlySet<string>?` | `null` | Only report these COCO classes, for example `person`, `car`, `dog`. `null` reports all 80. |
+| `OnObjects` | `Action<IReadOnlyList<TrackedObject>>?` | `null` | Called with each frame's tracked objects, on the processing thread. |
+
+```razor
+<ObjectDetectionPanel Classes="@(new HashSet<string> { "person", "car", "dog" })" OnObjects="objects => latest = objects" />
+```
+
+### SmartRetailVision
+
+Shelf analytics: shelf rows, empty gaps, fill against a planogram target and detected products, with AI restock suggestions.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Smart retail vision"` | Card title. |
+| `Target` | `double` | `0.85` | Shelf fill below this ratio is flagged. |
+| `OnLowStock` | `EventCallback<(int Row, double Fill)>` | | Raised when a shelf row falls below `Target`, with the 1-based row and its fill. |
+
+```razor
+<SmartRetailVision Target="0.9" OnLowStock="e => Notify(e.Row, e.Fill)" />
+```
+
+### WarehouseVision
+
+Warehouse monitoring: people and vehicles per zone, person–vehicle safety distance, and a stock-fill estimate for racks.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Warehouse vision"` | Card title. |
+| `Zones` | `IReadOnlyList<string>` | `["Aisle A", "Aisle B", "Aisle C"]` | Names of the vertical zones (aisles), left to right. |
+| `OnProximityAlert` | `EventCallback<int>` | | Raised when a person comes closer to a vehicle than the safety distance. |
+
+```razor
+<WarehouseVision Zones="@(["Inbound", "Racking", "Dispatch"])" OnProximityAlert="pairs => nearMisses += pairs" />
+```
+
+### SafetyHelmetDetector
+
+PPE compliance: people are detected, then each head (and optionally torso) region is checked for a hard hat and a hi-vis vest, with compliance and a violation log.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Safety helmet detector"` | Card title. |
+| `OnViolation` | `EventCallback<int>` | | Raised when the number of people without PPE goes up. |
+
+```razor
+<SafetyHelmetDetector OnViolation="count => siren.Trigger(count)" Language="Bahasa Indonesia" />
+```
+
+### VehicleDetector
+
+Transport analytics: vehicle counts by class, a virtual counting line with direction from tracking, and counts over time.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Vehicle detector"` | Card title. |
+| `OnCrossing` | `EventCallback<(string Class, string Direction)>` | | Raised when a vehicle crosses the counting line, with its class and direction (`"in"` or `"out"`). |
+
+```razor
+<VehicleDetector OnCrossing="e => log.Add($"{e.Class} {e.Direction}")" Fps="15" />
+```
+
+### Classification
+
+### ImageClassifierPanel
+
+Generic image classification (EfficientNet-Lite0, 1,000 ImageNet classes) with top-k bars and an optional region of interest.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Image classifier"` | Card title. |
+| `Allowlist` | `IReadOnlySet<string>?` | `null` | Restricts results to these ImageNet labels. |
+| `OnClassified` | `Action<IReadOnlyList<(string Label, float Score)>>?` | `null` | Called with each result, on the processing thread. |
+
+```razor
+<ImageClassifierPanel OnClassified="top => label = top.FirstOrDefault().Label" />
+```
+
+### FoodRecognition
+
+Food items from object detection and ImageNet food classes, then an AI nutrition estimate labelled as an estimate.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Food recognition"` | Card title. |
+
+```razor
+<FoodRecognition Samples="@([VisionSamples.Food, VisionSamples.Fruit])" Language="Bahasa Indonesia" />
+```
+
+### PlantDiseaseDetector
+
+Plant disease screening: leaf colour analysis (healthy green, yellowing, brown lesions), few-shot matching against examples you label, and an optional vision-model opinion.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Plant disease detector"` | Card title. |
+| `Crop` | `string` | `"tomato"` | Crop name used in AI prompts, for example `tomato`, `chilli` or `rice`. |
+
+```razor
+<PlantDiseaseDetector Crop="cabai (chilli)" Language="Bahasa Indonesia" />
+```
+
+### FishSpeciesRecognizer
+
+Fish species: ImageNet fish classes scanned over a 3×3 grid, plus a reference gallery you extend with your own labelled species.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Fish species recognizer"` | Card title. |
+
+```razor
+<FishSpeciesRecognizer Samples="@([VisionSamples.Fish])" />
+```
+
+### MedicalImageAssistant
+
+A clinical image workflow helper: view with contrast and zoom, measure, annotate, then ask a vision model for a structured observation. Not a diagnosis; images stay in memory only.
+
+Base: `AiComponentBase`. Works on uploaded images; no camera.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Medical image assistant"` | Card title. |
+| `Height` | `string` | `"520px"` | Maximum CSS height of the viewer. |
+| `BaseWidth` | `double` | `560` | Display width at zoom 1, in CSS pixels. The viewer scrolls when zoomed. |
+| `MaxBytes` | `long` | `12 * 1024 * 1024` | Largest accepted upload in bytes. |
+| `Modalities` | `IReadOnlyList<string>` | `["Dermoscopy", "Clinical skin photo", "Chest X-ray", "Other X-ray", "Wound photo", "Ophthalmic photo", "Other"]` | Image types offered. |
+| `Language` | `string?` | `null` | Language of answers. `null` follows the model's default. |
+
+```razor
+<MedicalImageAssistant Provider="openai" Modalities="@(["Dermoscopy", "Wound photo"])" />
+```
+
+### Copilot
+
+![Vision copilot](../screenshots/vision-copilot.jpg)
+
+### VisionCopilot
+
+Chat with the camera: each answer is grounded in local detections (objects, faces, posture, scene classes) plus the frame itself.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Vision copilot"` | Card title. |
+| `Role` | `string` | `"a helpful visual assistant looking through the user's camera"` | Role given to the model. |
+| `Suggestions` | `IReadOnlyList<string>` | four starter questions | Suggested questions shown as chips. |
+| `FullAnalysisSeconds` | `double` | `1` | Seconds between full analyses (faces, pose, classes) on live video; objects run every frame. |
+
+```razor
+<VisionCopilot StartWithCamera="true" Suggestions="@(["What objects are visible?", "How many people are present?"])" />
+```
+
+### SceneExplainer
+
+One click explains the current frame as a caption, a detailed description, alt text or a safety check, with the detected items it is based on.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Scene explainer"` | Card title. |
+
+```razor
+<SceneExplainer Samples="VisionSamples.Scenes" />
+```
+
+### VisualQuestionAnswering
+
+Ask free-form questions about an uploaded or sample picture and keep the history of questions and answers.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Visual question answering"` | Card title. |
+| `OnAnswer` | `EventCallback<(string Question, string Answer)>` | | Raised after each answer. |
+
+```razor
+<VisualQuestionAnswering OnAnswer="qa => history.Add(qa)" />
+```
+
+### VideoSummarizer
+
+Samples a video, stream or the camera every k seconds, keeps a timeline of detections and classes, then summarises it.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Video summarizer"` | Card title. |
+| `OnTimeline` | `EventCallback<IReadOnlyList<TimelineEntry>>` | | Raised with the finished timeline when sampling stops. |
+| `AutoSummarise` | `bool` | `true` | Summarises automatically when sampling stops. |
+
+```razor
+<VideoSummarizer AutoSummarise="true" OnTimeline="t => timeline = t" />
+```
+
+### Healthcare
+
+![Fall detection](../screenshots/vision-fall.jpg)
+
+### ElderlyFallDetection
+
+Fall detection from pose: a rapid drop of the hip centre and a horizontal torso flag a possible fall, confirmed when the person stays down, with a snapshot alert.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Elderly fall detection"` | Card title. |
+| `ConfirmSeconds` | `double` | `4` | Seconds a person must stay down before a fall is confirmed. |
+| `OnStateChanged` | `EventCallback<FallState>` | | Raised when the state changes: `Normal`, `Possible` or `Confirmed`. |
+
+```razor
+<ElderlyFallDetection StartWithCamera="true" ConfirmSeconds="5" OnStateChanged="OnFall" OnEvent="Notify" />
+```
+
+### PatientMovementMonitor
+
+Bed or chair monitoring: safe-zone exit alerts, movement level, and a repositioning reminder when the patient has been still too long.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Patient movement monitor"` | Card title. |
+| `PatientName` | `string` | `"Bed 4"` | Patient or bed label used in events. |
+| `SafeZone` | `(float X, float Y, float W, float H)` | `(0.08f, 0.35f, 0.84f, 0.6f)` | Bed or chair area (normalized). Leaving it raises an out-of-bed alert. |
+| `RepositionMinutes` | `double` | `2` | Minutes without meaningful movement before a repositioning reminder. |
+
+```razor
+<PatientMovementMonitor PatientName="Bed 4" SafeZone="(0.2f, 0.25f, 0.6f, 0.7f)" RepositionMinutes="120" StartWithCamera="true" />
+```
+
+### RehabilitationTracker
+
+Range-of-motion rehabilitation: counts reps, measures the peak angle of each rep against a target and writes an AI session note.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Rehabilitation tracker"` | Card title. |
+
+```razor
+<RehabilitationTracker StartWithCamera="true" OnEvent="e => session.Add(e)" Language="Bahasa Indonesia" />
+```
+
+### MedicalSkillsTrainer
+
+Skills practice from hand and pose landmarks: WHO hand-hygiene steps or CPR hand position, with hold timers, a checklist, a score and a debrief. A training aid, not a certification.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Medical skills trainer"` | Card title. |
+
+```razor
+<MedicalSkillsTrainer StartWithCamera="true" />
+```
+
+### Agritech
+
+### CropVision
+
+Field and canopy analysis from RGB: excess-green vegetation index, canopy cover, stress zones (yellowing or browning) as a heat map, and AI agronomy notes.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Crop vision"` | Card title. |
+| `Crop` | `string` | `"tomato"` | Crop name used in AI prompts. |
+| `GridColumns` | `int` | `24` | Heat grid resolution (columns). |
+
+```razor
+<CropVision Crop="Rice" GridColumns="32" OnEvent="LogField" />
+```
+
+### FruitQualityInspector
+
+Fruit grading: detects bananas, apples and oranges, then scores ripeness hue and dark-spot defects inside each box (grade A, B or C).
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Fruit quality inspector"` | Card title. |
+| `DefectLimitC` | `double` | `0.12` | Dark-spot share above which a fruit is grade C; grade B starts at half of it. |
+| `OnGraded` | `EventCallback<IReadOnlyList<FruitGrade>>` | | Raised with the grades of each processed frame. |
+
+```razor
+<FruitQualityInspector DefectLimitC="0.10" OnGraded="Sort" StartWithCamera="true" />
+```
+
+### LivestockMonitor
+
+Livestock counts per species, stable ids and trails across frames, and activity (moving or resting) from box motion.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Livestock monitor"` | Card title. |
+| `ExpectedCount` | `int?` | `null` | Expected herd size. Fewer animals in view raises a missing-animals warning. |
+
+```razor
+<LivestockMonitor ExpectedCount="24" StartWithCamera="true" Fps="4" OnEvent="Alert" />
+```
+
+### AquacultureVision
+
+Pond and cage camera: water colour and turbidity index, surface activity by frame differencing, fish presence per tile and feeding response.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Aquaculture vision"` | Card title. |
+| `PondName` | `string` | `"Keramba 1"` | Pond or cage label used in events. |
+| `TileGrid` | `int` | `3` | Tiles per side for fish classification (`TileGrid` × `TileGrid` crops per frame). |
+
+```razor
+<AquacultureVision PondName="Pond B" TileGrid="4" StartWithCamera="true" />
+```
+
+### Education
+
+### InteractiveScienceVision
+
+Hand-driven science activities: a finger protractor, a "magnet" whose force follows the inverse-square law, and an object counter, with an AI explanation.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Interactive science vision"` | Card title. |
+
+```razor
+<InteractiveScienceVision StartWithCamera="true" Language="Bahasa Indonesia" />
+```
+
+### GestureLearningPlatform
+
+Gamified gesture lessons: show the target gesture before the timer runs out, build streaks and level up.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Gesture learning platform"` | Card title. |
+| `RoundSeconds` | `double` | `8` | Seconds per round at level 1. |
+
+```razor
+<GestureLearningPlatform RoundSeconds="6" StartWithCamera="true" OnEvent="e => scores.Add(e)" />
+```
+
+### SignLanguageLearningStudio
+
+Fingerspelling practice: a target letter card, a live match meter, progress per letter, and reference shapes you record for your own sign language.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Sign language learning studio"` | Card title. |
+| `HoldSeconds` | `double` | `1.2` | Seconds the target letter must be held at 75% match or more to count as mastered. |
+
+```razor
+<SignLanguageLearningStudio HoldSeconds="1.5" StartWithCamera="true" />
+```
+
+### Industry
+
+![Factory safety](../screenshots/vision-safety.jpg)
+
+### FactorySafetyMonitor
+
+Factory and site safety: people in restricted zones, a hard-hat cue per worker and unsafe bending, with a violations log and snapshots.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Factory safety monitor"` | Card title. |
+| `RestrictedZones` | `IReadOnlyList<(float X, float Y, float W, float H)>` | `[(0.0f, 0.55f, 0.22f, 0.45f)]` | Restricted areas (normalized rectangles) where people must not stand. |
+| `HelmetThreshold` | `double` | `0.18` | Share of safety-coloured pixels in the head region that counts as a hard hat. |
+| `BendLimit` | `double` | `45` | Back angle in degrees from vertical that counts as unsafe bending. |
+
+```razor
+<FactorySafetyMonitor RestrictedZones="@zones" HelmetThreshold="0.2" BendLimit="50" Events="@plantEvents" SourceName="Line 2 · Press" />
+```
+
+### WorkerTrackingSystem
+
+Multi-person tracking with stable ids and path trails; headcount and dwell time per zone.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Worker tracking"` | Card title. |
+| `Zones` | `IReadOnlyList<WorkZone>` | `Loading dock`, `Assembly`, `Storage` | Zones as `WorkZone(Name, X, Y, W, H, Color)` in normalized coordinates. |
+
+```razor
+<WorkerTrackingSystem Zones="@zones" StartWithCamera="true" Fps="8" />
+```
+
+### AssemblyLineAnalytics
+
+Manual assembly analytics: hands entering and leaving the work zone mark cycles; cycle time against takt, idle alerts and a trend chart.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Assembly line analytics"` | Card title. |
+| `Station` | `string` | `"A-3"` | Station label used in events. |
+| `TaktSeconds` | `double` | `12` | Target cycle time in seconds. |
+| `ExitSeconds` | `double` | `0.8` | Seconds hands must stay out of the work zone to end a cycle. |
+| `IdleAlertSeconds` | `double` | `20` | Idle seconds before a warning event is published. |
+| `WorkZone` | `(float X, float Y, float W, float H)` | `(0.25f, 0.35f, 0.5f, 0.6f)` | Work area on the bench (normalized). |
+
+```razor
+<AssemblyLineAnalytics Station="A-3" TaktSeconds="12" IdleAlertSeconds="30" WorkZone="(0.25f, 0.35f, 0.5f, 0.6f)" />
+```
+
+### SmartSurveillanceDashboard
+
+A camera wall: two to four tiles, each with its own detector, people and vehicle totals across cameras, guarded-area intrusions and one event list.
+
+No AI calls. Does not inherit a base class. Each tile is a `SurveillanceTile`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Tiles` | `IReadOnlyList<CameraTile>` | `Gate`, `Warehouse`, `Site` samples | Up to four cameras as `CameraTile(Name, Url, GuardedArea)`; image, video or stream URLs. Each tile can also switch to a webcam. |
+| `Events` | `VisionEventStream?` | `null` | Optional shared stream to also publish into, for example for a `VisionDashboard`. |
+| `TileHeight` | `string` | `"220px"` | CSS height of each tile. |
+| `Fps` | `double` | `6` | Frames per second requested per tile. |
+| `Class` | `string?` | `null` | Extra CSS classes. |
+
+```razor
+<SmartSurveillanceDashboard Tiles="@cameras" Events="@siteEvents" Fps="5" />
+```
+
+### SurveillanceTile
+
+One camera tile of a surveillance wall: counts people and vehicles and raises intrusion events for a guarded area. Exposes `Counts` (people, vehicles, intrusion).
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Name` | `string` | `"Camera"` | Camera name, also shown on the tile. |
+| `InitialImage` | `string?` | `null` | Sample or stream URL shown first. |
+| `GuardedArea` | `(float X, float Y, float W, float H)?` | `null` | Guarded area (normalized). A person whose feet are inside raises an intrusion event. |
+| `ShowToolbar` | `bool` | `false` | Shows the camera source toolbar. |
+
+```razor
+<SurveillanceTile Name="Gate" InitialImage="@VisionSamples.Street.Url" GuardedArea="(0.0f, 0.6f, 0.3f, 0.4f)" />
+```
+
+### Analytics
+
+### VisionDashboard
+
+An operations dashboard over a `VisionEventStream`: KPI tiles, events per minute, events by kind, the latest counts per source and an AI shift summary.
+
+Base: `StreamComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `WindowMinutes` | `int` | `15` | Window in minutes for the recent-events tile and the per-minute chart. |
+| `Language` | `string?` | `null` | Language of the AI summary. `null` follows the model's default. |
+
+```razor
+<VisionDashboard Events="@events" WindowMinutes="30" Language="Bahasa Indonesia" />
+```
+
+### EventTimeline
+
+Chronological vision events with snapshot thumbnails, grouped by minute, filterable by severity, source and text.
+
+Base: `StreamComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Event timeline"` | Card title. |
+| `MaxItems` | `int` | `200` | Maximum events shown. |
+| `ShowSnapshots` | `bool` | `true` | Shows snapshot thumbnails. |
+| `AllowClear` | `bool` | `true` | Shows a button that clears the stream. |
+| `MaxHeight` | `string` | `"360px"` | CSS maximum height of the list. |
+
+```razor
+<EventTimeline Events="@events" MaxItems="500" MaxHeight="480px" />
+```
+
+### ActivityHeatmap
+
+Where activity happens: accumulates people, hand or body positions into a decaying heat grid drawn over the camera.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Activity heatmap"` | Card title. |
+| `Source` | `HeatSource` | `HeatSource.People` | What to accumulate: `People`, `Hands` or `Body`. |
+| `Columns` | `int` | `32` | Heat grid columns. |
+| `Rows` | `int` | `18` | Heat grid rows. |
+| `Decay` | `double` | `0.995` | Multiplier applied to the grid each frame (`1` never forgets). |
+
+```razor
+<ActivityHeatmap Source="ActivityHeatmap.HeatSource.People" Columns="40" Rows="22" Decay="0.998" StartWithCamera="true" />
+```
+
+### DetectionStatistics
+
+Object counts per class over time windows: a bar chart of the current frame, per-window trend lines and a summary table with average and peak.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Detection statistics"` | Card title. |
+| `Classes` | `IReadOnlySet<string>?` | `null` | COCO classes to count. `null` counts every class. |
+| `WindowSeconds` | `double` | `10` | Length of one time window in seconds. |
+| `MaxWindows` | `int` | `30` | Number of windows kept. |
+| `ScoreThreshold` | `float` | `0.35f` | Minimum detection score. |
+
+```razor
+<DetectionStatistics Classes="@(new HashSet<string> { "person", "car", "truck" })" WindowSeconds="60" MaxWindows="60" />
+```
+
+### RealtimeMetrics
+
+Live pipeline health from `VisionTelemetry`: frames per second, latency (average and p95), errors and events, plus fps and latency per named camera.
+
+No AI calls. Does not inherit a base class.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Realtime metrics"` | Card title. |
+| `Sources` | `IReadOnlyList<(string Name, Func<VisionStats?> Stats)>?` | `null` | Named components to break down, for example `("Safety", () => safety?.CameraStats)`. |
+| `IntervalMs` | `int` | `1000` | Sampling interval in milliseconds. |
+| `LatencyBudgetMs` | `double` | `120` | Latency above this is highlighted. |
+| `Class` | `string?` | `null` | Extra CSS classes. |
+
+```razor
+<RealtimeMetrics Sources="@Sources()" LatencyBudgetMs="100" />
 ```

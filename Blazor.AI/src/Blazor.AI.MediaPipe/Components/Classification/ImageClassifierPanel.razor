@@ -1,0 +1,82 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Generic image classification (EfficientNet-Lite0, 1000 ImageNet classes) with top-k bars and an optional region of interest. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="EfficientNet-Lite0 · ImageNet 1000 classes" Icon="bi-tags">
+        <div class="bai-stack">
+            @if (_state.Count > 0)
+            {
+                @foreach (var (label, score) in _state)
+                {
+                    <div class="baiv-meter"><span title="@label" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">@label</span><div><span style="width:@((score * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@score.ToString("P0", CultureInfo.InvariantCulture)</span></div>
+                }
+            }
+            else
+            {
+                <p class="bai-small bai-muted" style="margin:0">No confident class yet.</p>
+            }
+            <label class="bai-small">Top <input type="number" min="1" max="10" class="bai-input" style="width:4rem" @bind="_topK" @bind:after="Refresh" /> classes</label>
+            <span class="bai-label">Region of interest</span>
+            <div class="bai-chips" role="radiogroup" aria-label="Region of interest">
+                @foreach (var (key, label) in Regions)
+                {
+                    <button type="button" role="radio" aria-checked="@(key == _region)" class="bai-chip @(key == _region ? "is-active" : null)" @onclick="() => SetRegion(key)">@label</button>
+                }
+            </div>
+            <span class="bai-small bai-muted">ImageNet covers everyday objects, animals, food and scenes; use a region to classify one item in a busy picture.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly (string Key, string Label)[] Regions = [("full", "Whole frame"), ("center", "Centre 50%"), ("left", "Left half"), ("right", "Right half"), ("top", "Top half"), ("bottom", "Bottom half")];
+    private IReadOnlyList<(string Label, float Score)> _state = [];
+    private int _topK = 5;
+    private string _region = "full";
+
+    [Parameter] public string Title { get; set; } = "Image classifier";
+
+    /// <summary>Restrict results to these ImageNet labels (e.g. a domain allowlist).</summary>
+    [Parameter] public IReadOnlySet<string>? Allowlist { get; set; }
+
+    /// <summary>Raised with each result (on the processing thread).</summary>
+    [Parameter] public Action<IReadOnlyList<(string Label, float Score)>>? OnClassified { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Food, VisionSamples.Fruit, VisionSamples.Livestock, VisionSamples.Street];
+
+    /// <summary>The normalized rectangle for a named region (null = whole frame).</summary>
+    internal static NormalizedRect? Rect(string region) => region switch
+    {
+        "center" => new NormalizedRect(0.5f, 0.5f, 0.5f, 0.5f),
+        "left" => new NormalizedRect(0.25f, 0.5f, 0.5f, 1f),
+        "right" => new NormalizedRect(0.75f, 0.5f, 0.5f, 1f),
+        "top" => new NormalizedRect(0.5f, 0.25f, 1f, 0.5f),
+        "bottom" => new NormalizedRect(0.5f, 0.75f, 1f, 0.5f),
+        _ => null,
+    };
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var rect = Rect(_region);
+        var result = Tasks.Classify(frame, Math.Clamp(_topK, 1, 10), Allowlist, rect);
+        _state = result.Categories.Select(c => (c.CategoryName ?? "?", c.Score)).ToList();
+        OnClassified?.Invoke(_state);
+        var overlay = new VisionOverlay { Status = _state.Count > 0 ? $"{_state[0].Label} {_state[0].Score:P0}" : "–" };
+        if (rect is { } r)
+        {
+            overlay.Boxes.Add(new OverlayBox { X = r.XCenter - r.Width / 2, Y = r.YCenter - r.Height / 2, W = r.Width, H = r.Height, Color = Overlay.Soga, Dashed = true, Label = _state.Count > 0 ? _state[0].Label : null });
+        }
+
+        return overlay;
+    }
+
+    private Task SetRegion(string key)
+    {
+        _region = key;
+        return Refresh();
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+}

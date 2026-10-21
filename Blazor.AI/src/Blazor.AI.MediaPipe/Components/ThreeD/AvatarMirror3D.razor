@@ -1,0 +1,108 @@
+@namespace Blazor.AI.MediaPipe
+@using Blazor.AI.ThreeD
+@inherits VisionComponentBase
+@* A 3-D magic mirror: your capsule avatar stands in front of a glass pane and its reflection moves behind it. *@
+
+<div class="@CssClass("baiv-split")">
+    <div class="bai-grid-2" style="align-items:start">
+        <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+        <Scene3D Objects="@_objects" Options="@_options" Height="@Height" />
+    </div>
+    <AiCard Title="@Title" Subtitle="Holistic landmarker → avatar + reflection" Icon="bi-symmetry-vertical">
+        <div class="bai-stack">
+            <label class="bai-row bai-small"><input type="checkbox" @bind="_showReflection" /> Show reflection</label>
+            <label class="bai-row bai-small"><input type="checkbox" @bind="_skeletonReflection" /> Reflection as skeleton</label>
+            <label class="bai-small">Mirror distance @_gap.ToString("0.0", CultureInfo.InvariantCulture) m <input type="range" min="0.4" max="2" step="0.1" @bind="_gap" style="width:100%" aria-label="Mirror distance" /></label>
+            <span class="bai-small">Expression <b>@_expression</b> · head yaw @_head.Yaw.ToString("+0;-0;0", CultureInfo.InvariantCulture)°</span>
+            <span class="bai-small bai-muted">The avatar faces the mirror; the reflection is the same pose flipped through the glass plane, so raising your right hand raises the reflection's right hand on the same side, like a real mirror.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private readonly LandmarkFilter _filter = new(1.0, 0.03);
+    private readonly SceneClock _clock = new();
+    private readonly Scene3DOptions _options = new()
+    {
+        Camera = new() { Position = [2.4, 1.7, 3.2], Target = [0, 0.95, 0], Fov = 42 },
+        Controls = new() { MinDistance = 1, MaxDistance = 9 },
+        Grid = new(6, 12, "#5b6bd6", 0.25),
+        Lights = "studio",
+        AriaLabel = "Avatar in front of a mirror",
+    };
+
+    private IReadOnlyList<Object3D> _objects = [];
+    private (double Yaw, double Pitch) _head;
+    private string _expression = "–";
+    private bool _showReflection = true, _skeletonReflection;
+    private double _gap = 0.9;
+
+    [Parameter] public string Title { get; set; } = "Avatar mirror 3D";
+    [Parameter] public string BodyColor { get; set; } = "#d9d4c4";
+    [Parameter] public string AccentColor { get; set; } = ThreeDPalette.Nila;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Yoga, VisionSamples.ThumbsUp, VisionSamples.OpenPalms];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var r = Tasks.Holistic(frame, blendshapes: true);
+        var overlay = new VisionOverlay();
+        if (r.Pose is not { } pose)
+        {
+            overlay.Status = "No person";
+            return overlay;
+        }
+
+        var world = frame.IsLive ? _filter.Filter(pose.WorldLandmarks, frame.TimestampMs / 1000.0) : pose.WorldLandmarks.ToArray();
+        var accent = AccentColor;
+        if (r.Face is { } face)
+        {
+            _head = VisionMath.HeadPose(face.Landmarks);
+            if (face.Blendshapes is { Count: > 0 })
+            {
+                _expression = ExpressionMood.From(face).Label;
+                accent = Body3D.ExpressionColor(_expression);
+            }
+        }
+
+        if (_clock.Due(frame))
+        {
+            _objects = Build(world, accent);
+            _ = InvokeAsync(StateHasChanged);
+        }
+
+        overlay.Landmarks.Add(Overlay.Pose(pose, Overlay.Nila));
+        overlay.Status = _expression;
+        return overlay;
+    }
+
+    private List<Object3D> Build(Landmark[] world, string accent)
+    {
+        var gap = _gap;
+        var list = new List<Object3D>
+        {
+            new() { Id = "glass", Kind = "box", Position = [0, 1.1, 0], Size = [2.2, 2.2, 0.02], Color = "#9fd8ff", Opacity = 0.18, Metalness = 0.9, Roughness = 0.05, Pickable = false },
+            new() { Id = "frame", Kind = "box", Position = [0, 2.22, 0], Size = [2.3, 0.05, 0.06], Color = ThreeDPalette.Soga, Pickable = false },
+        };
+
+        // The avatar stands at +z with its back to the viewer, facing the glass (world turned 180° about Y).
+        var facingGlass = world.Select(l => l with { X = -l.X, Z = -l.Z }).ToArray();
+        list.AddRange(Body3D.Capsules("me-", facingGlass, BodyColor, accent, offset: [0, 0, gap]));
+        if (_showReflection)
+        {
+            // Reflection through z = 0 of the turned body: only x flips back, so it faces the viewer behind the glass.
+            var reflected = world.Select(l => l with { X = -l.X }).ToArray();
+            list.AddRange(_skeletonReflection
+                ? Body3D.Skeleton("rf-", reflected, ThreeDPalette.Tarum, offset: [0, 0, -gap], tubes: true)
+                : Body3D.Capsules("rf-", reflected, "#b9c3ff", ThreeDPalette.Tarum, offset: [0, 0, -gap]).Select(o => o with { Opacity = 0.75 }));
+        }
+
+        return list;
+    }
+
+    private void Changed(VisionSourceKind kind)
+    {
+        _filter.Reset();
+        HandleSourceChanged(kind);
+    }
+}

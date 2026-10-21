@@ -1,0 +1,114 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Audience analytics: face count over time, emotion trend, attention from head pose, and pluggable age/gender estimation. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{_samples.Count} samples")" Icon="bi-people">
+        <div class="bai-stack">
+            <div class="bai-row" style="gap:1.2rem">
+                <div><div class="baiv-big">@_now.Faces</div><span class="bai-small bai-muted">faces now</span></div>
+                <div><div class="baiv-big">@(_samples.Count == 0 ? "–" : _samples.Max(s => s.Faces).ToString(CultureInfo.InvariantCulture))</div><span class="bai-small bai-muted">peak</span></div>
+                <div><div class="baiv-big">@_now.Attention.ToString("P0", CultureInfo.InvariantCulture)</div><span class="bai-small bai-muted">attentive</span></div>
+            </div>
+            @if (_samples.Count > 1)
+            {
+                <LineChart Title="Faces, smile and attention" Series="@Series" Height="170" ShowLegend="true" YMin="0" />
+            }
+            <span class="bai-label">Demographics</span>
+            @if (Estimator is null)
+            {
+                <span class="bai-small bai-muted">Age and gender estimation is not configured. Pass an <code>IFaceAttributeEstimator</code> (MediaPipe has no such model) and check local rules on demographic inference.</span>
+            }
+            else if (_now.Attributes.Count == 0)
+            {
+                <span class="bai-small bai-muted">No estimates yet.</span>
+            }
+            else
+            {
+                <div class="bai-chips">
+                    @foreach (var a in _now.Attributes) { <span class="bai-badge">@(a.Gender ?? "?") · @(a.AgeRange ?? "?") (@a.Confidence.ToString("P0", CultureInfo.InvariantCulture))</span> }
+                </div>
+            }
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@(IsBusy || _samples.Count == 0)" @onclick="Summarise"><i class="bi bi-stars" aria-hidden="true"></i>Summarise the audience</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed record AudienceSample(DateTime At, int Faces, double Smile, double Attention, IReadOnlyList<FaceAttributes> Attributes);
+
+    private AudienceSample _now = new(DateTime.Now, 0, 0, 0, []);
+    private IReadOnlyList<AudienceSample> _samples = [];
+
+    [Parameter] public string Title { get; set; } = "Face analytics";
+
+    /// <summary>Optional age/gender estimator; none ships by default.</summary>
+    [Parameter] public IFaceAttributeEstimator? Estimator { get; set; }
+
+    /// <summary>A face counts as attentive when |yaw| and |pitch| are within this many degrees.</summary>
+    [Parameter] public double AttentionDegrees { get; set; } = 22;
+
+    [Parameter] public int MaxFaces { get; set; } = 6;
+
+    [Parameter] public int HistoryLength { get; set; } = 120;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Face, VisionSamples.ThumbsUp, VisionSamples.Construction, VisionSamples.Street];
+
+    private IReadOnlyList<ChartSeries> Series =>
+    [
+        ChartSeries.FromValues("Faces", _samples.Select(s => (double)s.Faces)) with { Color = "#7b8cff" },
+        ChartSeries.FromValues("Smile", _samples.Select(s => s.Smile)) with { Color = "#d9964f" },
+        ChartSeries.FromValues("Attention", _samples.Select(s => s.Attention)) with { Color = "#3cc4b1" },
+    ];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.FaceLandmarks(frame, Math.Clamp(MaxFaces, 1, 10), blendshapes: true);
+        var overlay = new VisionOverlay();
+        double smile = 0, attentive = 0;
+        var attributes = new List<FaceAttributes>();
+        foreach (var face in result.Faces)
+        {
+            var e = FaceExpressions.From(face);
+            var (yaw, pitch) = VisionMath.HeadPose(face.Landmarks);
+            var looking = Math.Abs(yaw) <= AttentionDegrees && Math.Abs(pitch) <= AttentionDegrees;
+            smile += e.Smile;
+            attentive += looking ? 1 : 0;
+            FaceAttributes? attr = null;
+            if (Estimator is not null)
+            {
+                try
+                {
+                    attr = Estimator.Estimate(frame, face);
+                }
+                catch
+                {
+                    attr = null;
+                }
+
+                if (attr is not null)
+                {
+                    attributes.Add(attr);
+                }
+            }
+
+            var (x, y, w, h) = Overlay.Bounds(face.Landmarks, 0.03f);
+            var label = $"{e.Dominant}{(looking ? " · looking" : " · away")}" + (attr is null ? string.Empty : $" · {attr.Gender} {attr.AgeRange}");
+            overlay.Boxes.Add(new OverlayBox { X = x, Y = y, W = w, H = h, Color = looking ? Overlay.Nila : Overlay.Warning, Label = label });
+        }
+
+        var n = result.Faces.Count;
+        _now = new AudienceSample(DateTime.Now, n, n == 0 ? 0 : smile / n, n == 0 ? 0 : attentive / n, attributes);
+        _samples = [.. _samples.TakeLast(Math.Max(2, HistoryLength) - 1), _now];
+        overlay.Status = $"{n} face(s) · {_now.Attention:P0} attentive";
+        return overlay;
+    }
+
+    private Task Summarise() => AskAboutFrameAsync("an audience-analytics assistant", "Summarise how many people are present, their engagement and mood, and one suggestion for the presenter.",
+        string.Create(CultureInfo.InvariantCulture,
+            $"Samples {_samples.Count}; current faces {_now.Faces}, peak {_samples.Max(s => s.Faces)}, average faces {_samples.Average(s => s.Faces):0.0}; " +
+            $"average smile {_samples.Average(s => s.Smile):0.00}; average attention {_samples.Average(s => s.Attention):P0}; latest attention {_now.Attention:P0}."));
+}

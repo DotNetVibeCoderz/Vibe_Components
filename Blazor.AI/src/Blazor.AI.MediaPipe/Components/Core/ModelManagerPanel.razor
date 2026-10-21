@@ -1,0 +1,129 @@
+@namespace Blazor.AI.MediaPipe
+@using MediaPipeNet.Inference
+@using MediaPipeNet.Inference.Models
+@implements IDisposable
+@inject VisionModelManager Models
+@* Model catalogue for offline and edge deployments: what is on disk, licences, and pre-download with progress. *@
+
+<AiCard Title="@Title" Subtitle="@($"{_present.Count(p => p)} of {_models.Count} models on disk · {Mb(_models.Sum(m => m.SizeBytes))} total")" Icon="bi-hdd-stack" Class="@Class">
+    <div class="bai-stack">
+        <div class="bai-row">
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@_busy" @onclick="() => DownloadAsync(VisionModelManager.CommonModels)"><i class="bi bi-cloud-download" aria-hidden="true"></i>Download common models</button>
+            <button type="button" class="bai-btn-ghost" disabled="@_busy" @onclick="() => DownloadAsync(VisionModelManager.AllModels)">Download all</button>
+            @if (_busy) { <button type="button" class="bai-btn-ghost" @onclick="Cancel">Cancel</button> }
+        </div>
+        @if (_status is not null)
+        {
+            <div class="bai-small" role="status">@_status</div>
+            @if (_fraction is { } f)
+            {
+                <div class="baiv-meter"><span>@_current</span><div><span style="width:@((f * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@f.ToString("P0", CultureInfo.InvariantCulture)</span></div>
+            }
+        }
+        <AiError Message="@_error" />
+        <div class="bai-small bai-muted">Execution providers available: <b>@string.Join(", ", _providers)</b></div>
+        <div class="bai-table-wrap" style="max-height:340px; overflow:auto">
+            <table class="bai-table">
+                <thead><tr><th>Model</th><th>Size</th><th>Licence</th><th>On disk</th></tr></thead>
+                <tbody>
+                    @for (var i = 0; i < _models.Count; i++)
+                    {
+                        var m = _models[i];
+                        <tr>
+                            <td title="@m.Attribution"><b>@m.Title</b><br /><code class="bai-small">@m.FileName</code></td>
+                            <td class="bai-num">@Mb(m.SizeBytes)</td>
+                            <td class="bai-small">@(m.License ?? "–")</td>
+                            <td>@if (_present[i]) { <span class="bai-badge bai-badge-local">yes</span> } else { <span class="bai-badge">download on use</span> }</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <span class="bai-small bai-muted">For air-gapped sites, download here (or at startup with <code>PreloadModels</code>), copy the model folder to the edge device and set <code>ModelDirectory</code> with <code>AllowModelDownload = false</code>.</span>
+    </div>
+</AiCard>
+
+@code {
+    private readonly IReadOnlyList<ModelDescriptor> _models = VisionModelManager.AllModels;
+    private bool[] _present = [];
+    private string[] _providers = [];
+    private bool _busy;
+    private string? _status, _error, _current;
+    private double? _fraction;
+    private CancellationTokenSource? _cts;
+
+    [Parameter] public string Title { get; set; } = "Vision models";
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Refresh();
+        try
+        {
+            _providers = Models.AvailableProviders().Select(p => p.ToString()).ToArray();
+        }
+        catch (Exception ex)
+        {
+            _providers = ["unknown: " + ex.Message];
+        }
+    }
+
+    private void Refresh() => _present = _models.Select(m => SafeFind(m) is not null).ToArray();
+
+    private string? SafeFind(ModelDescriptor m)
+    {
+        try
+        {
+            return Models.FindLocal(m);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task DownloadAsync(IReadOnlyList<ModelDescriptor> models)
+    {
+        _busy = true;
+        _error = null;
+        _status = $"Preparing {models.Count} models…";
+        _cts = new CancellationTokenSource();
+        var progress = new Progress<ModelDownloadProgress>(p => InvokeAsync(() =>
+        {
+            _current = p.Model.Title;
+            _fraction = p.Fraction;
+            _status = $"{p.Stage}: {p.Model.Title} ({Mb(p.BytesReceived)}{(p.TotalBytes is { } t ? " of " + Mb(t) : string.Empty)})";
+            StateHasChanged();
+        }));
+        try
+        {
+            await Task.Run(() => Models.EnsureAsync(models, progress, _cts.Token));
+            _status = "All selected models are on disk.";
+        }
+        catch (OperationCanceledException)
+        {
+            _status = "Download cancelled.";
+        }
+        catch (Exception ex)
+        {
+            _error = "Download failed: " + ex.Message;
+            _status = null;
+        }
+        finally
+        {
+            _busy = false;
+            _fraction = null;
+            Refresh();
+        }
+    }
+
+    private void Cancel() => _cts?.Cancel();
+
+    private static string Mb(long bytes) => (bytes / 1024d / 1024d).ToString("0.0", CultureInfo.InvariantCulture) + " MB";
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

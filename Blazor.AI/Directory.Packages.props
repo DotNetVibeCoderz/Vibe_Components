@@ -27,6 +27,7 @@
     <PackageVersion Include="Gravicode.HFNet.GraviHub" Version="0.11.1" />
     <PackageVersion Include="Gravicode.HFNet.GraviTransformers" Version="0.11.1" />
     <PackageVersion Include="Gravicode.HFNet.GraviTransformers.Vision" Version="0.11.1" />
+    <PackageVersion Include="Gravicode.MediaPipeNet.Tasks.Vision" Version="1.0.0" />
     <!-- ImageSharp 3.x (no license key; 4.x requires one for Release builds). Known advisories are suppressed in
          Blazor.AI.LocalModels.csproj and mitigated with upload size limits; see docs/en/security.md. -->
     <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />

@@ -42,6 +42,8 @@ Blazor.AI gives Blazor developers ready-made AI components that work with any mo
 
 ## v1.2: reach
 
+- ✅ Computer vision: `Blazor.AI.MediaPipe` (72 components on MediaPipe.NET) shipped in 1.2.0. Next: GPU benchmarks, an ArcFace embedder package, RTSP bridge sample, per-tenant face gallery store.
+
 - 3D: WebXR (VR/AR) mode for Scene3D, instanced rendering for large twins, glTF export of generated CAD/worlds, more rigged characters (Rodin + Blender pipeline in `tools/blender`).
 
 - WebAssembly-friendly server proxy package so WASM apps can use cloud models without exposing keys.

@@ -16,6 +16,7 @@ Halaman ini berisi daftar semua Razor component di Blazor.AI, dikelompokkan per 
 - [Blazor.AI.LocalModels](#blazorailocalmodels)
 - [Blazor.AI.Bio](#blazoraibio)
 - [Blazor.AI.ThreeD](#blazoraithreed)
+- [Blazor.AI.MediaPipe](#blazoraimediapipe)
 
 ## Parameter umum
 
@@ -3291,4 +3292,1313 @@ Base: `ThreeDComponentBase`.
 
 ```razor
 <AutonomousOperationsDashboard Threshold="0.9" IntervalMs="3000" />
+```
+
+---
+
+## Blazor.AI.MediaPipe
+
+Paket: `Blazor.AI.MediaPipe` · Namespace: `Blazor.AI.MediaPipe`
+
+```csharp
+builder.Services.AddBlazorAIMediaPipe(o => o.PreloadModels = true);
+```
+
+```html
+<link rel="stylesheet" href="_content/Blazor.AI.MediaPipe/blazor-ai-vision.css" />
+```
+
+`AddBlazorAIMediaPipe()` mendaftarkan `VisionModelManager`, `FaceGallery` dan `VisionEventStream` per pengguna, `IFaceEmbedder` default, preloader model, serta menaikkan batas ukuran pesan hub Blazor Server agar frame JPEG muat. Component-component ini dibangun di atas `AddBlazorAIComponents()`. Pakai render mode Interactive Server: inferensi berjalan di server dengan MediaPipe.NET di atas ONNX Runtime, yang tidak bisa berjalan di WebAssembly browser. Component yang menampilkan tampilan 3D (`FaceMeshViewer`, component avatar dan motion, serta grup 3D) juga membutuhkan `_content/Blazor.AI.ThreeD/blazor-ai-3d.css`. Lihat [Computer vision](vision.md) untuk alur frame dan cara membuat component vision sendiri.
+
+```razor
+@using Blazor.AI.MediaPipe
+```
+
+`MediaPipeVisionOptions`, diatur di callback `AddBlazorAIMediaPipe`:
+
+| Opsi | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Provider` | `ExecutionProvider` | `ExecutionProvider.Auto` | Execution provider ONNX Runtime: `Auto`, `Cpu`, `Cuda`, `DirectML`, atau `CoreML`. |
+| `ModelDirectory` | `string?` | `null` | Folder berisi model yang sudah diunduh untuk lokasi offline dan edge. `null` memakai cache MediaPipeNet. |
+| `AllowModelDownload` | `bool` | `true` | Mengunduh model yang belum ada saat pertama dipakai. Matikan untuk lokasi air-gapped. |
+| `PreloadModels` | `bool` | `false` | Mengunduh model-model umum saat startup, bukan saat pertama dipakai. |
+| `MaxFrameMessageBytes` | `long` | `2 * 1024 * 1024` | Ukuran pesan frame terbesar yang diterima hub. Frame biasanya 15–60 KB. |
+
+### Parameter umum vision
+
+Sebagian besar component mewarisi `VisionComponentBase`, yang mewarisi `AiComponentBase`. Component tersebut menerima [parameter umum](#parameter-umum) (`Provider`, `Class`, `OnError`, atribut yang tidak cocok) ditambah:
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Height` | `string` | `"420px"` | Tinggi CSS tampilan kamera. |
+| `Samples` | `IReadOnlyList<VisionSample>?` | `null` | Gambar contoh yang ditawarkan saat kamera tidak dipakai. `null` memakai contoh bawaan component. |
+| `StartWithCamera` | `bool` | `false` | Memulai webcam, bukan contoh pertama. |
+| `Fps` | `double` | `12` | Frame per detik yang diminta dari sumber live. |
+| `Language` | `string?` | `null` | Bahasa jawaban AI. `null` mengikuti default model. |
+
+Setiap frame diproses di luar thread circuit; sumber live memakai mode VIDEO MediaPipe (tracking dan smoothing), sedangkan gambar diam memakai mode IMAGE. Deteksi, landmark, sudut, dan hitungan dijalankan di .NET; model hanya menjelaskan fakta hasil perhitungan, dengan frame dilampirkan untuk model yang mendukung vision dan fakta saja untuk model teks.
+
+Component solusi (kesehatan, agritech, pendidikan, industri, dan sebagian analitik) mewarisi `SolutionComponentBase`, yang mewarisi `VisionComponentBase` dan menambahkan:
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Events` | `VisionEventStream?` | `null` | Stream tempat component menerbitkan event. `null` memakai stream per pengguna yang didaftarkan oleh `AddBlazorAIMediaPipe()`. |
+| `OnEvent` | `EventCallback<VisionEvent>` | | Dipicu untuk setiap event yang diterbitkan component. |
+| `SourceName` | `string?` | `null` | Nama sumber event. `null` memakai nama tipe component. |
+
+Base ini juga menyediakan `CameraStats` (`VisionStats?`) untuk `RealtimeMetrics`. Event peringatan dan alert ditulis ke audit trail guardrail.
+
+`EventTimeline` dan `VisionDashboard` mewarisi `StreamComponentBase`, yang mewarisi `AiComponentBase` dan menambahkan:
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Events` | `VisionEventStream?` | `null` | Stream yang ditampilkan. `null` memakai stream per pengguna yang didaftarkan oleh `AddBlazorAIMediaPipe()`. |
+| `RefreshMs` | `int` | `400` | Jeda minimum dalam milidetik antar-render ulang selama event berdatangan. |
+
+Berikan instance `VisionEventStream` yang sama ke component penerbit dan component tampilan agar keduanya terhubung dalam satu halaman.
+
+### Tipe pembantu
+
+- `VisionSamples`: foto contoh yang dibundel di paket (`Face`, `ThumbsUp`, `Yoga`, `Street`, `Food`, `OpenPalms`, `DeskPosture`, `Fall`, `Construction`, `Warehouse`, `Shelf`, `LeafDisease`, `Fruit`, `Livestock`, `Fish`) beserta kelompoknya (`People`, `Hands`, `Bodies`, `Scenes`, `Agritech`, `All`). `VisionSample` adalah record `(Name, Url)`.
+- `VisionMath`: sudut sendi 2-D (`Angle`) dan dari world landmark 3-D (`Angle3`), `Distance`, `ExtendedFingers`, `CountFingers`, `EyeAspectRatio`, serta perkiraan kasar `HeadPose` (yaw, pitch).
+- `Overlay`: menyusun bagian `VisionOverlay` dari hasil MediaPipe.NET (`Hand`, `Pose`, `Face`, `Box`, `Mask`, `CategoryTint`, `Label`, `Bounds`) dan menyimpan warna tema (`Nila`, `Soga`, `Tarum`, `Danger`, `Warning`, `White`). Koordinat overlay dinormalisasi ke 0–1.
+- `FaceGallery`: penyimpanan wajah terdaftar per pengguna (scoped) dengan `Enroll`, `Remove`, `Match` (cosine similarity terbaik), dan event `Changed`. Dipakai oleh `FaceAttendance`.
+- `IFaceEmbedder`: mengubah wajah yang terdeteksi menjadi vektor identitas. `MeshFaceEmbedder` default meng-embed potongan wajah yang diluruskan berdasarkan posisi mata dengan MobileNet; kualitasnya setara demo, bukan setara biometrik. Daftarkan embedder sendiri (misalnya model ArcFace ONNX) untuk menggantikannya.
+- `VisionModelManager`: katalog model (`CommonModels`, `AllModels`), `FindLocal`, `EnsureAsync` untuk mengunduh lebih dulu dengan progres, dan `AvailableProviders`.
+- `VisionEventStream`: stream `VisionEvent` di memori yang thread-safe (`Publish`, `Snapshot`, `Clear`, event `Published`, `Capacity` 2000). `VisionEventStream.Shared` adalah instance tingkat proses untuk demo.
+
+### Inti
+
+![Vision core components](../screenshots/vision-core.jpg)
+
+### CameraViewer
+
+Kamera universal yang menjadi dasar semua component vision: webcam atau kamera ponsel, gambar contoh atau unggahan, file video, dan stream HTTP, lengkap dengan overlay, mirror, snapshot, dan perekaman.
+
+Tanpa panggilan AI. Tidak mewarisi base class.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `OnFrame` | `Func<VisionFrame, Task<VisionOverlay?>>?` | `null` | Dipanggil untuk setiap frame; mengembalikan overlay yang digambar, atau `null`. Berjalan di circuit, jadi pindahkan pekerjaan berat ke thread lain. |
+| `OnSourceChanged` | `EventCallback<VisionSourceKind>` | | Dipicu saat sumber berganti. Reset state tracking di sini. |
+| `Samples` | `IReadOnlyList<VisionSample>` | `VisionSamples.People` | Gambar contoh di toolbar. |
+| `InitialImage` | `string?` | `null` | Gambar pertama yang ditampilkan. `null` memakai contoh pertama. |
+| `StartWithCamera` | `bool` | `false` | Langsung memulai webcam (sebagian browser butuh gestur pengguna). |
+| `AllowCamera` | `bool` | `true` | Menampilkan tombol kamera. |
+| `AllowStreamUrl` | `bool` | `true` | Menampilkan tombol URL untuk stream, video, dan gambar. |
+| `ShowToolbar` | `bool` | `true` | Menampilkan toolbar sumber. |
+| `FacingMode` | `string` | `"user"` | Facing mode kamera untuk `getUserMedia`, misalnya `"environment"` untuk kamera belakang. |
+| `Fps` | `double` | `12` | Frame per detik yang diminta dari sumber live. Laju sebenarnya dibatasi waktu pemrosesan. |
+| `MaxWidth` | `int` | `640` | Frame diskalakan ke lebar ini sebelum diunggah. |
+| `Height` | `string` | `"420px"` | Tinggi CSS. |
+| `Class` | `string?` | `null` | Kelas CSS tambahan untuk elemen root. |
+| `ChildContent` | `RenderFragment?` | `null` | Overlay HTML (HUD) yang digambar di atas gambar. |
+
+Properti: `Stats` (`VisionStats`: fps, latensi, jumlah frame, lebar, tinggi), `Source` (`VisionSourceKind`), dan `LastJpeg` (frame terakhir yang diterima). Method:
+
+- `StartAsync(VisionSourceKind source, string? url)`: berganti sumber (`Image`, `Camera`, `Video`, atau `Stream`); mengembalikan `null` jika berhasil, atau sebuah pesan.
+- `UseSampleAsync(string? url)`: menampilkan gambar contoh.
+- `ReprocessAsync()`: memproses ulang gambar diam saat ini setelah pengaturan berubah.
+- `SnapshotAsync(bool withOverlay = true)`: data URL JPEG dari gambar, secara default beserta overlay-nya.
+- `StartRecordingAsync(int fps = 24)` dan `StopRecordingAsync()`: merekam gambar beserta overlay-nya; saat dihentikan mengembalikan object URL klip WebM.
+- `DownloadAsync(string url, string fileName)`: menyimpan snapshot atau klip di browser.
+- `SetOverlayAsync(VisionOverlay? overlay)`: menggambar overlay secara langsung (untuk replay), tanpa melalui `OnFrame`.
+- `StopAsync()`: menghentikan sumber saat ini.
+
+```razor
+@inherits VisionComponentBase
+
+<CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" />
+```
+
+### VisionCanvas
+
+Menampilkan gambar diam dengan overlay yang kamu sediakan, untuk aplikasi yang menjalankan inferensinya sendiri. Tanpa kamera dan tanpa pemrosesan.
+
+Tanpa panggilan AI. Tidak mewarisi base class.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `ImageUrl` | `string?` | `null` | URL gambar: relatif, absolut dengan CORS, atau data URL. |
+| `ImageBytes` | `byte[]?` | `null` | Byte gambar ter-encode (JPEG atau PNG), dipakai saat `ImageUrl` bernilai `null`. |
+| `ContentType` | `string` | `"image/jpeg"` | Content type `ImageBytes`. |
+| `Overlay` | `VisionOverlay?` | `null` | Apa yang digambar di atas gambar, dalam koordinat ternormalisasi. |
+| `Height` | `string` | `"360px"` | Tinggi CSS. |
+| `Class` | `string?` | `null` | Kelas CSS tambahan. |
+
+```razor
+<VisionCanvas ImageBytes="@jpeg" Overlay="@overlay" Height="360px" />
+```
+
+### VisionRecorder
+
+Merekam klip gambar beserta overlay-nya, mengambil screenshot, dan menyimpan snapshot bukti secara otomatis saat pemicu terpenuhi (misalnya saat jumlah wajah berubah).
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Vision recorder"` | Judul kartu. |
+| `SnapshotCooldownSeconds` | `double` | `3` | Jeda minimum dalam detik antar-snapshot otomatis. |
+| `OnEvidence` | `EventCallback<EvidenceSnapshot>` | | Dipicu untuk setiap snapshot bukti (data URL, waktu, dan alasan). |
+
+```razor
+<VisionRecorder SnapshotCooldownSeconds="5" OnEvidence="Store" />
+```
+
+### ModelManagerPanel
+
+Katalog model untuk deployment offline dan edge: model yang sudah ada di disk, ukuran dan lisensinya, serta unduhan lebih dulu dengan progres.
+
+Tanpa panggilan AI. Tidak mewarisi base class. Memakai `VisionModelManager`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Vision models"` | Judul kartu. |
+| `Class` | `string?` | `null` | Kelas CSS tambahan. |
+
+```razor
+<ModelManagerPanel />
+```
+
+### Wajah
+
+![Face mesh](../screenshots/vision-facemesh.jpg)
+
+### FaceDetectionPanel
+
+Deteksi wajah real-time: kotak, enam keypoint, dan confidence dengan model short-range atau full-range, serta privacy blur opsional.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Face detection"` | Judul kartu. |
+| `PrivacyBlur` | `bool` | `false` | Memulai dengan wajah di-blur pada gambar. |
+| `OnCountChanged` | `EventCallback<int>` | | Dipicu saat jumlah wajah berubah. |
+
+```razor
+<FaceDetectionPanel PrivacyBlur="true" OnCountChanged="n => visitors = n" />
+```
+
+### FaceLandmarkViewer
+
+Face mesh 478 titik dengan kontur, pose kepala, tingkat keterbukaan mata, dan blendshape terkuat dari 52 blendshape.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Face landmarks"` | Judul kartu. |
+| `OnResult` | `Action<FaceLandmarkResult>?` | `null` | Dipanggil dengan hasil setiap frame, di thread pemrosesan. |
+
+```razor
+<FaceLandmarkViewer StartWithCamera="true" OnResult="r => faces = r.Faces.Count" />
+```
+
+### FaceMeshViewer
+
+Face mesh 478 titik yang di-render dalam 3D dengan Three.js, diwarnai berdasarkan kedalaman, di samping kamera.
+
+Base: `VisionComponentBase`. Membutuhkan stylesheet Blazor.AI.ThreeD.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"3D face mesh"` | Judul kartu. |
+| `SceneRate` | `double` | `5` | Jumlah maksimum pembaruan scene 3D per detik (kamera sendiri berjalan lebih cepat). |
+
+```razor
+<FaceMeshViewer SceneRate="8" StartWithCamera="true" />
+```
+
+### FaceBlendshapeAnalyzer
+
+Analisis ekspresi: senyum, marah, sedih, terkejut, dan netral dari 52 blendshape wajah, secara live dan sebagai tren.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Expression analyzer"` | Judul kartu. |
+| `HistoryLength` | `int` | `60` | Jumlah sampel yang disimpan tren. |
+| `OnExpression` | `Action<FaceExpression>?` | `null` | Dipanggil dengan ekspresi setiap frame, di thread pemrosesan. |
+
+```razor
+<FaceBlendshapeAnalyzer HistoryLength="90" OnExpression="e => mood = e.Dominant" />
+```
+
+### FaceAttendance
+
+Presensi: daftarkan orang dari kamera, lalu wajah yang dikenali dicatat hadir sekali per jendela waktu dan bisa diekspor sebagai CSV.
+
+Base: `VisionComponentBase`. Memakai `FaceGallery` dan `IFaceEmbedder`, yang didaftarkan oleh `AddBlazorAIMediaPipe()`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Face attendance"` | Judul kartu. |
+| `Threshold` | `double` | `0.82` | Cosine similarity yang dibutuhkan agar dianggap orang yang sama. |
+| `DeduplicationWindow` | `TimeSpan` | `TimeSpan.FromMinutes(30)` | Seseorang tidak dicatat hadir lagi dalam jendela waktu ini. |
+| `OnCheckIn` | `EventCallback<CheckIn>` | | Dipicu untuk setiap check-in (nama, waktu, similarity). |
+
+```razor
+<FaceAttendance Threshold="0.85" DeduplicationWindow="@TimeSpan.FromHours(4)" OnCheckIn="Save" />
+```
+
+### FaceVerification
+
+Verifikasi wajah 1:1: ambil wajah referensi dan wajah uji, bandingkan keduanya, dan pakai kedipan sebagai petunjuk liveness.
+
+Base: `VisionComponentBase`. Memakai `IFaceEmbedder`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Face verification"` | Judul kartu. |
+| `Threshold` | `double` | `0.82` | Cosine similarity yang dibutuhkan agar dianggap cocok. |
+| `OnVerified` | `EventCallback<(double Similarity, bool Matched, int Blinks)>` | | Dipicu setelah setiap verifikasi. |
+
+```razor
+<FaceVerification Threshold="0.86" OnVerified="r => approved = r.Matched && r.Blinks > 0" />
+```
+
+### FaceAnalyticsDashboard
+
+Analitik audiens: jumlah wajah dari waktu ke waktu, tren emosi, perhatian dari pose kepala, dan slot untuk estimator usia/gender milikmu sendiri.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Face analytics"` | Judul kartu. |
+| `Estimator` | `IFaceAttributeEstimator?` | `null` | Estimator usia/gender opsional. Tidak ada yang dibundel secara default. |
+| `AttentionDegrees` | `double` | `22` | Wajah dianggap memperhatikan saat yaw dan pitch sama-sama berada dalam rentang derajat ini. |
+| `MaxFaces` | `int` | `6` | Jumlah maksimum wajah yang dilacak per frame (dibatasi ke 1–10). |
+| `HistoryLength` | `int` | `120` | Jumlah sampel yang disimpan tren. |
+
+```razor
+<FaceAnalyticsDashboard Estimator="@estimator" AttentionDegrees="20" Language="Bahasa Indonesia" />
+```
+
+### Tangan
+
+![Gesture recognizer](../screenshots/vision-gestures.jpg)
+
+### HandTracker
+
+Tracking tangan 21 titik dengan handedness, sorotan ujung jari, status jari, dan ukuran dalam sentimeter dari world landmark.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Hand tracker"` | Judul kartu. |
+| `MaxHands` | `int` | `2` | Jumlah maksimum tangan yang dilacak. |
+| `OnResult` | `Action<HandLandmarkResult>?` | `null` | Dipanggil dengan tangan di setiap frame, di thread pemrosesan. |
+
+```razor
+<HandTracker MaxHands="2" OnResult="r => hands = r.Hands.Count" />
+```
+
+### GestureRecognizerPanel
+
+Pengenalan gestur (jempol ke atas dan ke bawah, victory, menunjuk, telapak terbuka, kepalan, I love you) ditambah gestur kustom yang kamu ajarkan lewat contoh.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Gesture recognizer"` | Judul kartu. |
+| `MinScore` | `float` | `0.55f` | Confidence minimum agar sebuah gestur dihitung. |
+| `OnGesture` | `EventCallback<string>` | | Dipicu saat gestur yang dikenali berubah, dengan nama bawaan seperti `Thumb_Up` atau nama kustom. |
+
+```razor
+<GestureRecognizerPanel MinScore="0.6f" OnGesture="HandleGesture" />
+```
+
+### FingerCounter
+
+Menghitung jari yang terbuka pada satu atau dua tangan secara real-time.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Finger counter"` | Judul kartu. |
+| `OnCount` | `EventCallback<int>` | | Dipicu saat total berubah. |
+
+```razor
+<FingerCounter OnCount="n => answer = n" />
+```
+
+### HandDrawingCanvas
+
+Menggambar di udara: tunjuk dengan jari telunjuk untuk menggambar, kepalkan tangan atau cubit untuk mengangkat pena, tahan telapak terbuka untuk menghapus. Bisa diekspor ke SVG (`ToSvg()`) dan AI bisa menebak gambarnya.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Air drawing"` | Judul kartu. |
+
+```razor
+<HandDrawingCanvas @ref="canvas" StartWithCamera="true" />
+```
+
+### SignLanguageAssistant
+
+Bentuk tangan statis menjadi huruf (sebagian huruf bawaan ditambah isyarat yang kamu ajarkan); AI merangkai huruf-huruf itu menjadi kalimat.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Sign language assistant"` | Judul kartu. |
+| `StableFrames` | `int` | `8` | Jumlah frame live berturut-turut yang harus ditahan sebelum isyarat ditambahkan. |
+| `OnSign` | `EventCallback<string>` | | Dipicu saat huruf atau kata ditambahkan. |
+
+```razor
+<SignLanguageAssistant StableFrames="10" OnSign="letter => log.Add(letter)" Language="Bahasa Indonesia" />
+```
+
+### Pose tubuh
+
+![Yoga trainer](../screenshots/vision-yoga.jpg)
+
+### PoseTracker
+
+Pose tubuh 33 titik dengan sudut sendi, visibilitas, dan mask orang opsional.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Pose tracker"` | Judul kartu. |
+| `OnPose` | `Action<PoseLandmarks>?` | `null` | Dipanggil dengan setiap pose yang terdeteksi, di thread pemrosesan. |
+
+```razor
+<PoseTracker OnPose="pose => last = pose" Height="480px" />
+```
+
+### SkeletonViewer
+
+Rendering kerangka real-time dalam tiga gaya untuk hingga tiga orang, dengan jejak gerak opsional pada pergelangan tangan dan kaki.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Skeleton viewer"` | Judul kartu. |
+| `Style` | `string` | `"Neon"` | `Neon`, `Bones`, atau `Minimal`. |
+| `Trails` | `bool` | `true` | Menggambar jejak gerak. |
+| `TrailLength` | `int` | `25` | Jumlah frame yang disimpan per jejak. |
+| `People` | `int` | `1` | Jumlah orang yang dilacak (1–3). |
+
+```razor
+<SkeletonViewer Style="Neon" People="2" Trails="true" TrailLength="24" StartWithCamera="true" />
+```
+
+### ExerciseMonitor
+
+Analitik kebugaran: menghitung repetisi dengan hysteresis untuk squat, push-up, jumping jack, curl, dan lunge, ditambah petunjuk form dan pelatih AI.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Exercise monitor"` | Judul kartu. |
+| `ExerciseName` | `string` | `"Squat"` | `Squat`, `Push-up`, `Jumping jack`, `Bicep curl`, atau `Lunge`. |
+| `OnRep` | `EventCallback<int>` | | Dipicu saat satu repetisi selesai, dengan total repetisi. |
+
+```razor
+<ExerciseMonitor ExerciseName="Squat" OnRep="reps => total = reps" />
+```
+
+### YogaTrainer
+
+Koreksi pose: membandingkan sudut sendi dengan pustaka asana (sisi kiri atau kanan), memberi skor setiap sendi, dan mengukur lama menahan pose.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Yoga trainer"` | Judul kartu. |
+| `Asana` | `string` | `"Warrior II"` | Pose target dari pustaka bawaan. |
+| `HoldThreshold` | `double` | `80` | Skor (0–100) saat timer menahan pose mulai berjalan. |
+
+```razor
+<YogaTrainer Asana="Warrior II" HoldThreshold="80" />
+```
+
+### SportsAnalyzer
+
+Analitik gerak: deret waktu sudut sendi, kecepatan anggota tubuh, simetri kiri/kanan, dan deteksi puncak, dengan analis AI.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Sports analyzer"` | Judul kartu. |
+| `Pair` | `string` | `"Knee"` | Pasangan sendi yang digrafikkan: `Elbow`, `Shoulder`, `Hip`, atau `Knee`. |
+| `WindowSeconds` | `int` | `15` | Panjang jendela deret waktu dalam detik. |
+| `Activity` | `string` | `"running drill"` | Olahraga atau latihan yang dianalisis, diberikan ke analis AI. |
+
+```razor
+<SportsAnalyzer Activity="Tennis serve" Pair="Elbow" WindowSeconds="15" />
+```
+
+### ErgonomicMonitor
+
+Postur kerja: fleksi leher, kemiringan badan, jangkauan lengan, dan bahu terangkat, skor risiko ala RULA, waktu dalam postur berisiko, dan pengingat istirahat.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Ergonomic monitor"` | Judul kartu. |
+| `BreakAfterMinutes` | `double` | `20` | Menit dalam postur berisiko sebelum pengingat istirahat muncul. |
+| `OnBreakReminder` | `EventCallback<ErgonomicAssessment>` | | Dipicu saat pengingat istirahat ditampilkan. |
+
+```razor
+<ErgonomicMonitor BreakAfterMinutes="25" OnBreakReminder="Notify" />
+```
+
+### Holistik
+
+### HolisticTracker
+
+Wajah, kedua tangan, dan tubuh dalam satu kali proses (543 landmark), dengan toggle layer dan mask orang opsional.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Holistic tracker"` | Judul kartu. |
+| `ShowPose` | `bool` | `true` | Menggambar layer tubuh. |
+| `ShowFace` | `bool` | `true` | Menggambar layer face mesh. |
+| `ShowHands` | `bool` | `true` | Menggambar layer tangan. |
+| `ShowMask` | `bool` | `false` | Menggambar mask orang. |
+| `OnResult` | `Action<HolisticResult>?` | `null` | Dipanggil dengan setiap hasil, di thread pemrosesan. |
+
+```razor
+<HolisticTracker ShowPose="true" ShowFace="true" ShowHands="true" ShowMask="false" />
+```
+
+### HumanDigitalTwin
+
+Digital twin gerakan seseorang: tubuh kapsul 3D yang digerakkan oleh world landmark metrik, dengan tinggi badan, rentang lengan, keseimbangan, dan postur.
+
+Base: `VisionComponentBase`. Membutuhkan stylesheet Blazor.AI.ThreeD.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Human digital twin"` | Judul kartu. |
+| `BodyColor` | `string` | `"#d9d4c4"` | Warna tubuh. |
+| `AccentColor` | `string` | `ThreeDPalette.Nila` | Warna aksen. |
+| `OnMetrics` | `Action<TwinMetrics>?` | `null` | Dipanggil dengan setiap pembaruan metrik, di thread pemrosesan. |
+
+```razor
+<HumanDigitalTwin BodyColor="#d9d4c4" AccentColor="#3cc4b1" OnMetrics="m => height = m.Height" />
+```
+
+### MotionCaptureStudio
+
+Motion capture tanpa marker: rekam world landmark pose, haluskan, scrub dan putar ulang di atas gambar maupun dalam 3D, lalu ekspor ke JSON atau BVH.
+
+Base: `VisionComponentBase`. Membutuhkan stylesheet Blazor.AI.ThreeD.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Motion capture studio"` | Judul kartu. |
+| `Smooth` | `bool` | `true` | Menerapkan smoothing One-Euro pada rekaman live. |
+| `MaxSeconds` | `int` | `60` | Durasi take terpanjang dalam detik. |
+| `OnTake` | `EventCallback<IReadOnlyList<MocapFrame>>` | | Dipicu saat take selesai, dengan frame-frame yang direkam. |
+
+```razor
+<MotionCaptureStudio MaxSeconds="60" Smooth="true" OnTake="SaveTake" />
+```
+
+### AvatarController
+
+Menggerakkan avatar 3D dari kamera: tubuh dari world landmark pose, tolehan dan anggukan kepala dari face mesh.
+
+Base: `VisionComponentBase`. Membutuhkan stylesheet Blazor.AI.ThreeD.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Avatar controller"` | Judul kartu. |
+| `Mirror` | `bool` | `true` | Membalik kiri dan kanan seperti cermin. |
+| `Smooth` | `bool` | `true` | Menerapkan smoothing One-Euro pada landmark live. |
+| `HeadGain` | `double` | `1.2` | Pengali untuk tolehan dan anggukan kepala. |
+| `BodyColor` | `string` | `"#d9d4c4"` | Warna tubuh. |
+| `AccentColor` | `string` | `ThreeDPalette.Nila` | Warna aksen. |
+
+```razor
+<AvatarController Mirror="true" HeadGain="1.2" BodyColor="#3d4fb8" AccentColor="#d9964f" />
+```
+
+### Segmentasi
+
+![Background removal](../screenshots/vision-background.jpg)
+
+### BackgroundRemoval
+
+Penghapusan background real-time: potong, blur, atau beri warna background dengan selfie segmenter.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Background removal"` | Judul kartu. |
+
+```razor
+<BackgroundRemoval StartWithCamera="true" Fps="15" />
+```
+
+### GreenScreenReplacement
+
+Green screen virtual: selfie segmenter mempertahankan orangnya, lalu browser memasang gambar, warna, atau unggahanmu sendiri di belakangnya.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Green screen replacement"` | Judul kartu. |
+| `Backgrounds` | `IReadOnlyList<BackgroundChoice>?` | `null` | Gambar background yang ditawarkan. `null` memakai `DefaultBackgrounds`. |
+| `BackgroundUrl` | `string?` | `null` | URL background awal. `null` dimulai dengan warna. |
+| `MaxUploadBytes` | `long` | `8 * 1024 * 1024` | Ukuran unggahan terbesar yang diterima, dalam byte. |
+
+```razor
+<GreenScreenReplacement BackgroundUrl="@ThreeDAssets.WorldConcept" StartWithCamera="true" />
+```
+
+### SubjectIsolationViewer
+
+Segmentasi orang per bagian dengan model selfie multiclass: rambut, kulit wajah, kulit tubuh, pakaian, dan aksesori sebagai mask terpisah beserta cakupannya.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Subject isolation"` | Judul kartu. |
+| `InitialParts` | `IReadOnlyList<string>?` | `null` | Bagian yang dipilih di awal, berdasarkan label model: `hair`, `face-skin`, `body-skin`, `clothes`, `others`. |
+| `OnCoverage` | `Action<IReadOnlyDictionary<string, double>>?` | `null` | Dipanggil dengan cakupan per bagian setelah setiap frame, di thread pemrosesan. |
+
+```razor
+<SubjectIsolationViewer InitialParts="@(["hair"])" OnCoverage="c => hair = c.GetValueOrDefault("hair")" />
+```
+
+### ObjectSegmentationStudio
+
+Segmentasi scene: mask kelas DeepLab v3 beserta cakupannya, ditambah segmentasi berbasis titik (MagicTouch) untuk objek apa pun pada gambar diam.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Object segmentation studio"` | Judul kartu. |
+| `MinCoverage` | `double` | `0.003` | Porsi minimum frame agar sebuah kelas ditampilkan. |
+| `OnClasses` | `Action<IReadOnlyList<ClassCoverage>>?` | `null` | Dipanggil dengan kelas yang ditemukan setelah setiap frame, di thread pemrosesan. |
+
+```razor
+<ObjectSegmentationStudio MinCoverage="0.005" OnClasses="classes => found = classes" />
+```
+
+### Tampilan 3D
+
+![3D vision components](../screenshots/vision-3d.jpg)
+
+Component-component ini di-render dengan Three.js dari Blazor.AI.ThreeD dan membutuhkan stylesheet-nya.
+
+### FaceMesh3D
+
+Face mesh 478 titik sebagai point cloud 3D yang bisa diorbit, diwarnai berdasarkan kedalaman atau ekspresi, dengan panah arah pandang dan blendshape live.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Face mesh 3D"` | Judul kartu. |
+| `ColorMode` | `string` | `"Depth"` | `Depth`, `Expression`, atau `Mono`. |
+| `PointSize` | `double` | `0.035` | Ukuran titik dalam satuan scene. |
+| `TopBlendshapes` | `int` | `6` | Jumlah blendshape yang ditampilkan di panel. |
+
+```razor
+<FaceMesh3D ColorMode="Depth" PointSize="0.035" TopBlendshapes="6" />
+```
+
+### AvatarMirror3D
+
+Cermin ajaib 3D: avatar kapsulmu berdiri di depan panel kaca dan pantulannya bergerak di belakangnya.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Avatar mirror 3D"` | Judul kartu. |
+| `BodyColor` | `string` | `"#d9d4c4"` | Warna tubuh. |
+| `AccentColor` | `string` | `ThreeDPalette.Nila` | Warna aksen. |
+
+```razor
+<AvatarMirror3D BodyColor="#d9d4c4" AccentColor="#3cc4b1" StartWithCamera="true" />
+```
+
+### PoseSkeleton3D
+
+Kerangka 3D metrik dari world landmark pose, satu per orang, dengan label sudut sendi live dan sendi dengan visibilitas rendah ditampilkan redup.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Pose skeleton 3D"` | Judul kartu. |
+
+```razor
+<PoseSkeleton3D Height="460px" />
+```
+
+### GestureSpace3D
+
+Kedua tangan sebagai kerangka 3D beserta gestur yang dikenali; tunjuk untuk menggambar di udara dan kepalkan tangan untuk menghapus.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Gesture space 3D"` | Judul kartu. |
+| `Mirror` | `bool` | `true` | Membalik kiri dan kanan seperti cermin (wajar untuk kamera depan). |
+| `MaxStrokes` | `int` | `12` | Jumlah maksimum goresan gambar udara yang disimpan. |
+| `OnGesture` | `EventCallback<string>` | | Dipicu saat gestur sebuah tangan berubah, dengan nama bawaan seperti `Pointing_Up`. |
+
+```razor
+<GestureSpace3D Mirror="true" MaxStrokes="12" OnGesture="g => last = g" StartWithCamera="true" />
+```
+
+### MotionReplay3D
+
+Rekam sebuah gerakan, atau muat take mocap JSON, lalu putar ulang dalam 3D dengan onion-skin ghost, jejak sendi, dan kecepatan yang bisa diatur.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Motion replay 3D"` | Judul kartu. |
+| `MaxSeconds` | `double` | `30` | Durasi rekaman terpanjang dalam detik. |
+| `OnTake` | `EventCallback<IReadOnlyList<MocapFrame>>` | | Dipicu saat take direkam atau dimuat. |
+
+```razor
+<MotionReplay3D MaxSeconds="30" OnTake="take => frames = take.Count" />
+```
+
+### HumanBodyTracker3D
+
+Menempatkan orang yang dilacak di dalam ruangan: jarak dari kamera (perkiraan pinhole), jalur di lantai, jarak tempuh, dan kecepatan.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Human body tracker 3D"` | Judul kartu. |
+| `OnFix` | `Action<BodyFix>?` | `null` | Dipanggil dengan setiap perkiraan posisi, di thread pemrosesan. |
+
+```razor
+<HumanBodyTracker3D OnFix="fix => distance = fix.Distance" />
+```
+
+### DigitalTwinAvatar
+
+Avatar digital twin lengkap dari holistic landmarker: tubuh, tangan berartikulasi, pose kepala, dan ekspresi, dengan log state dan narator AI.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Digital twin avatar"` | Judul kartu. |
+| `BodyColor` | `string` | `"#d9d4c4"` | Warna tubuh. |
+| `Mirror` | `bool` | `false` | Membalik kiri dan kanan seperti cermin. |
+| `OnStateChanged` | `EventCallback<TwinState>` | | Dipicu saat postur, ekspresi, atau status tangan berubah. |
+
+```razor
+<DigitalTwinAvatar Language="Bahasa Indonesia" OnStateChanged="s => log.Add(s.Posture)" />
+```
+
+### Deteksi
+
+![Object detection](../screenshots/vision-detection.jpg)
+
+### ObjectDetectionPanel
+
+Deteksi objek umum (EfficientDet-Lite0, 80 kelas COCO) dengan filter kelas, hitungan per kelas, dan id track yang stabil.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Object detection"` | Judul kartu. |
+| `Classes` | `IReadOnlySet<string>?` | `null` | Hanya melaporkan kelas COCO ini, misalnya `person`, `car`, `dog`. `null` melaporkan semua 80 kelas. |
+| `OnObjects` | `Action<IReadOnlyList<TrackedObject>>?` | `null` | Dipanggil dengan objek yang dilacak di setiap frame, di thread pemrosesan. |
+
+```razor
+<ObjectDetectionPanel Classes="@(new HashSet<string> { "person", "car", "dog" })" OnObjects="objects => latest = objects" />
+```
+
+### SmartRetailVision
+
+Analitik rak: baris rak, celah kosong, tingkat keterisian terhadap target planogram, dan produk yang terdeteksi, dengan saran restock dari AI.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Smart retail vision"` | Judul kartu. |
+| `Target` | `double` | `0.85` | Keterisian rak di bawah rasio ini akan ditandai. |
+| `OnLowStock` | `EventCallback<(int Row, double Fill)>` | | Dipicu saat sebuah baris rak turun di bawah `Target`, dengan nomor baris (mulai dari 1) dan keterisiannya. |
+
+```razor
+<SmartRetailVision Target="0.9" OnLowStock="e => Notify(e.Row, e.Fill)" />
+```
+
+### WarehouseVision
+
+Pemantauan gudang: orang dan kendaraan per zona, jarak aman orang–kendaraan, dan perkiraan keterisian stok di rak.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Warehouse vision"` | Judul kartu. |
+| `Zones` | `IReadOnlyList<string>` | `["Aisle A", "Aisle B", "Aisle C"]` | Nama zona vertikal (lorong), dari kiri ke kanan. |
+| `OnProximityAlert` | `EventCallback<int>` | | Dipicu saat seseorang berada lebih dekat ke kendaraan daripada jarak aman. |
+
+```razor
+<WarehouseVision Zones="@(["Inbound", "Racking", "Dispatch"])" OnProximityAlert="pairs => nearMisses += pairs" />
+```
+
+### SafetyHelmetDetector
+
+Kepatuhan APD: orang dideteksi, lalu area kepala (dan opsional badan) setiap orang diperiksa untuk helm proyek dan rompi hi-vis, dengan persentase kepatuhan dan log pelanggaran.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Safety helmet detector"` | Judul kartu. |
+| `OnViolation` | `EventCallback<int>` | | Dipicu saat jumlah orang tanpa APD bertambah. |
+
+```razor
+<SafetyHelmetDetector OnViolation="count => siren.Trigger(count)" Language="Bahasa Indonesia" />
+```
+
+### VehicleDetector
+
+Analitik transportasi: hitungan kendaraan per kelas, garis hitung virtual dengan arah dari tracking, dan hitungan dari waktu ke waktu.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Vehicle detector"` | Judul kartu. |
+| `OnCrossing` | `EventCallback<(string Class, string Direction)>` | | Dipicu saat kendaraan melewati garis hitung, dengan kelas dan arahnya (`"in"` atau `"out"`). |
+
+```razor
+<VehicleDetector OnCrossing="e => log.Add($"{e.Class} {e.Direction}")" Fps="15" />
+```
+
+### Klasifikasi
+
+### ImageClassifierPanel
+
+Klasifikasi gambar umum (EfficientNet-Lite0, 1.000 kelas ImageNet) dengan bar top-k dan region of interest opsional.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Image classifier"` | Judul kartu. |
+| `Allowlist` | `IReadOnlySet<string>?` | `null` | Membatasi hasil ke label ImageNet ini. |
+| `OnClassified` | `Action<IReadOnlyList<(string Label, float Score)>>?` | `null` | Dipanggil dengan setiap hasil, di thread pemrosesan. |
+
+```razor
+<ImageClassifierPanel OnClassified="top => label = top.FirstOrDefault().Label" />
+```
+
+### FoodRecognition
+
+Item makanan dari deteksi objek dan kelas makanan ImageNet, lalu perkiraan gizi dari AI yang diberi label jelas sebagai perkiraan.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Food recognition"` | Judul kartu. |
+
+```razor
+<FoodRecognition Samples="@([VisionSamples.Food, VisionSamples.Fruit])" Language="Bahasa Indonesia" />
+```
+
+### PlantDiseaseDetector
+
+Skrining penyakit tanaman: analisis warna daun (hijau sehat, menguning, lesi cokelat), pencocokan few-shot terhadap contoh yang kamu beri label, dan pendapat opsional dari model vision.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Plant disease detector"` | Judul kartu. |
+| `Crop` | `string` | `"tomato"` | Nama tanaman yang dipakai di prompt AI, misalnya `tomato`, `chilli`, atau `rice`. |
+
+```razor
+<PlantDiseaseDetector Crop="cabai (chilli)" Language="Bahasa Indonesia" />
+```
+
+### FishSpeciesRecognizer
+
+Spesies ikan: kelas ikan ImageNet dipindai pada grid 3×3, ditambah galeri referensi yang bisa kamu perluas dengan spesies berlabel milikmu sendiri.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Fish species recognizer"` | Judul kartu. |
+
+```razor
+<FishSpeciesRecognizer Samples="@([VisionSamples.Fish])" />
+```
+
+### MedicalImageAssistant
+
+Pembantu alur kerja citra klinis: lihat dengan kontras dan zoom, ukur, beri anotasi, lalu minta observasi terstruktur dari model vision. Bukan diagnosis; gambar hanya disimpan di memori.
+
+Base: `AiComponentBase`. Bekerja dengan gambar unggahan; tanpa kamera.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Medical image assistant"` | Judul kartu. |
+| `Height` | `string` | `"520px"` | Tinggi CSS maksimum viewer. |
+| `BaseWidth` | `double` | `560` | Lebar tampilan pada zoom 1, dalam piksel CSS. Viewer bisa di-scroll saat di-zoom. |
+| `MaxBytes` | `long` | `12 * 1024 * 1024` | Ukuran unggahan terbesar yang diterima, dalam byte. |
+| `Modalities` | `IReadOnlyList<string>` | `["Dermoscopy", "Clinical skin photo", "Chest X-ray", "Other X-ray", "Wound photo", "Ophthalmic photo", "Other"]` | Jenis citra yang ditawarkan. |
+| `Language` | `string?` | `null` | Bahasa jawaban. `null` mengikuti default model. |
+
+```razor
+<MedicalImageAssistant Provider="openai" Modalities="@(["Dermoscopy", "Wound photo"])" />
+```
+
+### Copilot
+
+![Vision copilot](../screenshots/vision-copilot.jpg)
+
+### VisionCopilot
+
+Mengobrol dengan kamera: setiap jawaban berpijak pada deteksi lokal (objek, wajah, postur, kelas scene) ditambah frame itu sendiri.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Vision copilot"` | Judul kartu. |
+| `Role` | `string` | `"a helpful visual assistant looking through the user's camera"` | Peran yang diberikan ke model. |
+| `Suggestions` | `IReadOnlyList<string>` | empat pertanyaan pembuka | Saran pertanyaan yang tampil sebagai chip. |
+| `FullAnalysisSeconds` | `double` | `1` | Jeda dalam detik antar-analisis lengkap (wajah, pose, kelas) pada video live; deteksi objek berjalan di setiap frame. |
+
+```razor
+<VisionCopilot StartWithCamera="true" Suggestions="@(["What objects are visible?", "How many people are present?"])" />
+```
+
+### SceneExplainer
+
+Sekali klik menjelaskan frame saat ini sebagai caption, deskripsi detail, alt text, atau pemeriksaan keselamatan, beserta item terdeteksi yang menjadi dasarnya.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Scene explainer"` | Judul kartu. |
+
+```razor
+<SceneExplainer Samples="VisionSamples.Scenes" />
+```
+
+### VisualQuestionAnswering
+
+Ajukan pertanyaan bebas tentang gambar unggahan atau contoh, dan simpan riwayat tanya jawabnya.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Visual question answering"` | Judul kartu. |
+| `OnAnswer` | `EventCallback<(string Question, string Answer)>` | | Dipicu setelah setiap jawaban. |
+
+```razor
+<VisualQuestionAnswering OnAnswer="qa => history.Add(qa)" />
+```
+
+### VideoSummarizer
+
+Mengambil sampel dari video, stream, atau kamera setiap k detik, menyimpan timeline deteksi dan kelas, lalu merangkumnya.
+
+Base: `VisionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Video summarizer"` | Judul kartu. |
+| `OnTimeline` | `EventCallback<IReadOnlyList<TimelineEntry>>` | | Dipicu dengan timeline yang sudah selesai saat pengambilan sampel berhenti. |
+| `AutoSummarise` | `bool` | `true` | Merangkum otomatis saat pengambilan sampel berhenti. |
+
+```razor
+<VideoSummarizer AutoSummarise="true" OnTimeline="t => timeline = t" />
+```
+
+### Kesehatan
+
+![Fall detection](../screenshots/vision-fall.jpg)
+
+### ElderlyFallDetection
+
+Deteksi jatuh dari pose: penurunan cepat titik tengah pinggul dan badan yang horizontal menandai kemungkinan jatuh, yang dikonfirmasi saat orang tetap di bawah, dengan alert beserta snapshot.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Elderly fall detection"` | Judul kartu. |
+| `ConfirmSeconds` | `double` | `4` | Detik seseorang harus tetap di bawah sebelum jatuh dikonfirmasi. |
+| `OnStateChanged` | `EventCallback<FallState>` | | Dipicu saat state berubah: `Normal`, `Possible`, atau `Confirmed`. |
+
+```razor
+<ElderlyFallDetection StartWithCamera="true" ConfirmSeconds="5" OnStateChanged="OnFall" OnEvent="Notify" />
+```
+
+### PatientMovementMonitor
+
+Pemantauan tempat tidur atau kursi: alert keluar dari zona aman, tingkat gerakan, dan pengingat reposisi saat pasien terlalu lama diam.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Patient movement monitor"` | Judul kartu. |
+| `PatientName` | `string` | `"Bed 4"` | Label pasien atau tempat tidur yang dipakai di event. |
+| `SafeZone` | `(float X, float Y, float W, float H)` | `(0.08f, 0.35f, 0.84f, 0.6f)` | Area tempat tidur atau kursi (ternormalisasi). Keluar dari area ini memicu alert keluar dari tempat tidur. |
+| `RepositionMinutes` | `double` | `2` | Menit tanpa gerakan berarti sebelum pengingat reposisi. |
+
+```razor
+<PatientMovementMonitor PatientName="Bed 4" SafeZone="(0.2f, 0.25f, 0.6f, 0.7f)" RepositionMinutes="120" StartWithCamera="true" />
+```
+
+### RehabilitationTracker
+
+Rehabilitasi rentang gerak: menghitung repetisi, mengukur sudut puncak setiap repetisi terhadap target, dan menulis catatan sesi dengan AI.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Rehabilitation tracker"` | Judul kartu. |
+
+```razor
+<RehabilitationTracker StartWithCamera="true" OnEvent="e => session.Add(e)" Language="Bahasa Indonesia" />
+```
+
+### MedicalSkillsTrainer
+
+Latihan keterampilan dari landmark tangan dan pose: langkah cuci tangan WHO atau posisi tangan CPR, dengan timer tahan, checklist, skor, dan debrief. Alat bantu latihan, bukan sertifikasi.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Medical skills trainer"` | Judul kartu. |
+
+```razor
+<MedicalSkillsTrainer StartWithCamera="true" />
+```
+
+### Agritech
+
+### CropVision
+
+Analisis lahan dan kanopi dari RGB: indeks vegetasi excess-green, tutupan kanopi, zona stres (menguning atau mencokelat) sebagai heat map, dan catatan agronomi dari AI.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Crop vision"` | Judul kartu. |
+| `Crop` | `string` | `"tomato"` | Nama tanaman yang dipakai di prompt AI. |
+| `GridColumns` | `int` | `24` | Resolusi heat grid (kolom). |
+
+```razor
+<CropVision Crop="Rice" GridColumns="32" OnEvent="LogField" />
+```
+
+### FruitQualityInspector
+
+Grading buah: mendeteksi pisang, apel, dan jeruk, lalu menilai rona kematangan dan cacat bintik gelap di dalam setiap kotak (grade A, B, atau C).
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Fruit quality inspector"` | Judul kartu. |
+| `DefectLimitC` | `double` | `0.12` | Porsi bintik gelap di atas nilai ini membuat buah masuk grade C; grade B dimulai dari setengahnya. |
+| `OnGraded` | `EventCallback<IReadOnlyList<FruitGrade>>` | | Dipicu dengan grade dari setiap frame yang diproses. |
+
+```razor
+<FruitQualityInspector DefectLimitC="0.10" OnGraded="Sort" StartWithCamera="true" />
+```
+
+### LivestockMonitor
+
+Hitungan ternak per spesies, id dan jejak yang stabil antar-frame, serta aktivitas (bergerak atau istirahat) dari gerakan kotak.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Livestock monitor"` | Judul kartu. |
+| `ExpectedCount` | `int?` | `null` | Jumlah ternak yang diharapkan. Jika yang terlihat lebih sedikit, muncul peringatan ternak hilang. |
+
+```razor
+<LivestockMonitor ExpectedCount="24" StartWithCamera="true" Fps="4" OnEvent="Alert" />
+```
+
+### AquacultureVision
+
+Kamera kolam dan keramba: indeks warna dan kekeruhan air, aktivitas permukaan dari selisih frame, keberadaan ikan per tile, dan respons makan.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Aquaculture vision"` | Judul kartu. |
+| `PondName` | `string` | `"Keramba 1"` | Label kolam atau keramba yang dipakai di event. |
+| `TileGrid` | `int` | `3` | Jumlah tile per sisi untuk klasifikasi ikan (`TileGrid` × `TileGrid` potongan per frame). |
+
+```razor
+<AquacultureVision PondName="Pond B" TileGrid="4" StartWithCamera="true" />
+```
+
+### Pendidikan
+
+### InteractiveScienceVision
+
+Aktivitas sains yang digerakkan tangan: busur derajat dari jari, "magnet" yang gayanya mengikuti hukum kuadrat terbalik, dan penghitung objek, dengan penjelasan dari AI.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Interactive science vision"` | Judul kartu. |
+
+```razor
+<InteractiveScienceVision StartWithCamera="true" Language="Bahasa Indonesia" />
+```
+
+### GestureLearningPlatform
+
+Pelajaran gestur ala game: tunjukkan gestur target sebelum timer habis, kumpulkan streak, dan naik level.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Gesture learning platform"` | Judul kartu. |
+| `RoundSeconds` | `double` | `8` | Detik per ronde di level 1. |
+
+```razor
+<GestureLearningPlatform RoundSeconds="6" StartWithCamera="true" OnEvent="e => scores.Add(e)" />
+```
+
+### SignLanguageLearningStudio
+
+Latihan mengeja dengan jari: kartu huruf target, meter kecocokan live, progres per huruf, dan bentuk referensi yang kamu rekam untuk bahasa isyaratmu sendiri.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Sign language learning studio"` | Judul kartu. |
+| `HoldSeconds` | `double` | `1.2` | Detik huruf target harus ditahan dengan kecocokan minimal 75% agar dianggap dikuasai. |
+
+```razor
+<SignLanguageLearningStudio HoldSeconds="1.5" StartWithCamera="true" />
+```
+
+### Industri
+
+![Factory safety](../screenshots/vision-safety.jpg)
+
+### FactorySafetyMonitor
+
+Keselamatan pabrik dan lokasi kerja: orang di zona terlarang, petunjuk helm proyek per pekerja, dan posisi membungkuk yang tidak aman, dengan log pelanggaran dan snapshot.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Factory safety monitor"` | Judul kartu. |
+| `RestrictedZones` | `IReadOnlyList<(float X, float Y, float W, float H)>` | `[(0.0f, 0.55f, 0.22f, 0.45f)]` | Area terlarang (persegi panjang ternormalisasi) tempat orang tidak boleh berdiri. |
+| `HelmetThreshold` | `double` | `0.18` | Porsi piksel berwarna keselamatan di area kepala yang dianggap sebagai helm proyek. |
+| `BendLimit` | `double` | `45` | Sudut punggung dalam derajat dari vertikal yang dianggap membungkuk tidak aman. |
+
+```razor
+<FactorySafetyMonitor RestrictedZones="@zones" HelmetThreshold="0.2" BendLimit="50" Events="@plantEvents" SourceName="Line 2 · Press" />
+```
+
+### WorkerTrackingSystem
+
+Tracking banyak orang dengan id stabil dan jejak jalur; jumlah orang dan dwell time per zona.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Worker tracking"` | Judul kartu. |
+| `Zones` | `IReadOnlyList<WorkZone>` | `Loading dock`, `Assembly`, `Storage` | Zona sebagai `WorkZone(Name, X, Y, W, H, Color)` dalam koordinat ternormalisasi. |
+
+```razor
+<WorkerTrackingSystem Zones="@zones" StartWithCamera="true" Fps="8" />
+```
+
+### AssemblyLineAnalytics
+
+Analitik perakitan manual: tangan yang masuk dan keluar zona kerja menandai siklus; waktu siklus dibandingkan takt, alert saat diam, dan grafik tren.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Assembly line analytics"` | Judul kartu. |
+| `Station` | `string` | `"A-3"` | Label stasiun yang dipakai di event. |
+| `TaktSeconds` | `double` | `12` | Target waktu siklus dalam detik. |
+| `ExitSeconds` | `double` | `0.8` | Detik tangan harus berada di luar zona kerja untuk mengakhiri siklus. |
+| `IdleAlertSeconds` | `double` | `20` | Detik diam sebelum event peringatan diterbitkan. |
+| `WorkZone` | `(float X, float Y, float W, float H)` | `(0.25f, 0.35f, 0.5f, 0.6f)` | Area kerja di meja (ternormalisasi). |
+
+```razor
+<AssemblyLineAnalytics Station="A-3" TaktSeconds="12" IdleAlertSeconds="30" WorkZone="(0.25f, 0.35f, 0.5f, 0.6f)" />
+```
+
+### SmartSurveillanceDashboard
+
+Dinding kamera: dua sampai empat tile, masing-masing dengan detektornya sendiri, total orang dan kendaraan dari semua kamera, intrusi area terjaga, dan satu daftar event.
+
+Tanpa panggilan AI. Tidak mewarisi base class. Setiap tile adalah `SurveillanceTile`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Tiles` | `IReadOnlyList<CameraTile>` | contoh `Gate`, `Warehouse`, `Site` | Hingga empat kamera sebagai `CameraTile(Name, Url, GuardedArea)`; URL gambar, video, atau stream. Setiap tile juga bisa beralih ke webcam. |
+| `Events` | `VisionEventStream?` | `null` | Stream bersama opsional untuk ikut diterbitkan, misalnya untuk `VisionDashboard`. |
+| `TileHeight` | `string` | `"220px"` | Tinggi CSS setiap tile. |
+| `Fps` | `double` | `6` | Frame per detik yang diminta per tile. |
+| `Class` | `string?` | `null` | Kelas CSS tambahan. |
+
+```razor
+<SmartSurveillanceDashboard Tiles="@cameras" Events="@siteEvents" Fps="5" />
+```
+
+### SurveillanceTile
+
+Satu tile kamera dari dinding pengawasan: menghitung orang dan kendaraan serta menerbitkan event intrusi untuk area terjaga. Menyediakan `Counts` (orang, kendaraan, intrusi).
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Name` | `string` | `"Camera"` | Nama kamera, juga tampil di tile. |
+| `InitialImage` | `string?` | `null` | URL contoh atau stream yang ditampilkan pertama kali. |
+| `GuardedArea` | `(float X, float Y, float W, float H)?` | `null` | Area terjaga (ternormalisasi). Orang yang kakinya berada di dalamnya memicu event intrusi. |
+| `ShowToolbar` | `bool` | `false` | Menampilkan toolbar sumber kamera. |
+
+```razor
+<SurveillanceTile Name="Gate" InitialImage="@VisionSamples.Street.Url" GuardedArea="(0.0f, 0.6f, 0.3f, 0.4f)" />
+```
+
+### Analitik
+
+### VisionDashboard
+
+Dashboard operasional di atas `VisionEventStream`: tile KPI, event per menit, event per jenis, hitungan terbaru per sumber, dan ringkasan shift dari AI.
+
+Base: `StreamComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `WindowMinutes` | `int` | `15` | Jendela waktu dalam menit untuk tile event terbaru dan grafik per menit. |
+| `Language` | `string?` | `null` | Bahasa ringkasan AI. `null` mengikuti default model. |
+
+```razor
+<VisionDashboard Events="@events" WindowMinutes="30" Language="Bahasa Indonesia" />
+```
+
+### EventTimeline
+
+Event vision secara kronologis dengan thumbnail snapshot, dikelompokkan per menit, dan bisa difilter berdasarkan tingkat keparahan, sumber, dan teks.
+
+Base: `StreamComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Event timeline"` | Judul kartu. |
+| `MaxItems` | `int` | `200` | Jumlah maksimum event yang ditampilkan. |
+| `ShowSnapshots` | `bool` | `true` | Menampilkan thumbnail snapshot. |
+| `AllowClear` | `bool` | `true` | Menampilkan tombol untuk mengosongkan stream. |
+| `MaxHeight` | `string` | `"360px"` | Tinggi CSS maksimum daftar. |
+
+```razor
+<EventTimeline Events="@events" MaxItems="500" MaxHeight="480px" />
+```
+
+### ActivityHeatmap
+
+Di mana aktivitas terjadi: mengakumulasi posisi orang, tangan, atau tubuh ke dalam heat grid yang meluruh, digambar di atas kamera.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Activity heatmap"` | Judul kartu. |
+| `Source` | `HeatSource` | `HeatSource.People` | Apa yang diakumulasi: `People`, `Hands`, atau `Body`. |
+| `Columns` | `int` | `32` | Jumlah kolom heat grid. |
+| `Rows` | `int` | `18` | Jumlah baris heat grid. |
+| `Decay` | `double` | `0.995` | Pengali yang diterapkan ke grid di setiap frame (`1` berarti tidak pernah lupa). |
+
+```razor
+<ActivityHeatmap Source="ActivityHeatmap.HeatSource.People" Columns="40" Rows="22" Decay="0.998" StartWithCamera="true" />
+```
+
+### DetectionStatistics
+
+Hitungan objek per kelas dalam jendela waktu: bar chart frame saat ini, garis tren per jendela, dan tabel ringkasan dengan rata-rata dan puncak.
+
+Base: `SolutionComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Detection statistics"` | Judul kartu. |
+| `Classes` | `IReadOnlySet<string>?` | `null` | Kelas COCO yang dihitung. `null` menghitung semua kelas. |
+| `WindowSeconds` | `double` | `10` | Panjang satu jendela waktu dalam detik. |
+| `MaxWindows` | `int` | `30` | Jumlah jendela yang disimpan. |
+| `ScoreThreshold` | `float` | `0.35f` | Skor deteksi minimum. |
+
+```razor
+<DetectionStatistics Classes="@(new HashSet<string> { "person", "car", "truck" })" WindowSeconds="60" MaxWindows="60" />
+```
+
+### RealtimeMetrics
+
+Kesehatan pipeline secara live dari `VisionTelemetry`: frame per detik, latensi (rata-rata dan p95), error, dan event, ditambah fps dan latensi per kamera bernama.
+
+Tanpa panggilan AI. Tidak mewarisi base class.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Realtime metrics"` | Judul kartu. |
+| `Sources` | `IReadOnlyList<(string Name, Func<VisionStats?> Stats)>?` | `null` | Component bernama yang dirinci, misalnya `("Safety", () => safety?.CameraStats)`. |
+| `IntervalMs` | `int` | `1000` | Interval sampling dalam milidetik. |
+| `LatencyBudgetMs` | `double` | `120` | Latensi di atas nilai ini akan disorot. |
+| `Class` | `string?` | `null` | Kelas CSS tambahan. |
+
+```razor
+<RealtimeMetrics Sources="@Sources()" LatencyBudgetMs="100" />
 ```

@@ -1,0 +1,91 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Visual question answering on an uploaded or sample picture, with a history of questions and answers. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="Upload a picture and ask anything" Icon="bi-question-square">
+        <div class="bai-stack">
+            <form class="bai-row" @onsubmit="AskAsync" @onsubmit:preventDefault>
+                <input class="bai-input bai-spacer" @bind="_question" placeholder="e.g. What colour is the bus? Is the road wet?" aria-label="Question about the picture" />
+                <button type="submit" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(_question))"><i class="bi bi-stars" aria-hidden="true"></i>Answer</button>
+            </form>
+            <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_attach" /> send the picture to the model (otherwise only detected facts)</label>
+            <AiError Message="@Error" />
+            @if (_pending is not null)
+            {
+                <div class="bai-glass" style="padding:.6rem .8rem"><b class="bai-small">@_pending</b><AiOutput Text="@Narration" IsBusy="@IsBusy" /></div>
+            }
+            @foreach (var h in Enumerable.Reverse(_history))
+            {
+                <details class="bai-glass" style="padding:.6rem .8rem" open="@(h == _history[^1])">
+                    <summary class="bai-small"><b>@h.Question</b> <span class="bai-muted">· @h.Source · @h.At.ToString("HH:mm:ss", CultureInfo.InvariantCulture)</span></summary>
+                    <AiOutput Text="@h.Answer" />
+                </details>
+            }
+            @if (_history.Count > 0)
+            {
+                <button type="button" class="bai-btn-ghost" style="width:fit-content" @onclick="() => _history.Clear()"><i class="bi bi-trash" aria-hidden="true"></i>Clear history</button>
+            }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private sealed record Entry(string Question, string Answer, string Source, DateTime At);
+
+    private readonly List<Entry> _history = [];
+    private SceneFacts _facts = SceneFacts.Empty;
+    private long _lastFull = -1_000_000;
+    private string? _question, _pending;
+    private bool _attach = true;
+
+    [Parameter] public string Title { get; set; } = "Visual question answering";
+
+    /// <summary>Raised with (question, answer) after each answer.</summary>
+    [Parameter] public EventCallback<(string Question, string Answer)> OnAnswer { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Scenes;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var full = !frame.IsLive || frame.TimestampMs - _lastFull >= 1500 || frame.TimestampMs < _lastFull;
+        var facts = SceneFacts.From(Tasks, frame, full);
+        if (full)
+        {
+            _lastFull = frame.TimestampMs;
+        }
+        else
+        {
+            facts = facts with { Faces = _facts.Faces, Posture = _facts.Posture, Classes = _facts.Classes };
+        }
+
+        _facts = facts;
+        var overlay = new VisionOverlay();
+        overlay.Boxes.AddRange(facts.Boxes);
+        return overlay;
+    }
+
+    private async Task AskAsync()
+    {
+        var question = _question?.Trim();
+        if (string.IsNullOrEmpty(question) || IsBusy)
+        {
+            return;
+        }
+
+        _pending = question;
+        _question = null;
+        await AskAboutFrameAsync("a visual question answering assistant; answer the question directly first, then justify briefly",
+            question, _facts.Describe(), _attach);
+        if (Error is null && !string.IsNullOrEmpty(Narration))
+        {
+            var answer = Narration;
+            _history.Add(new Entry(question, answer, _attach ? "image + facts" : "facts only", DateTime.Now));
+            await OnAnswer.InvokeAsync((question, answer));
+        }
+
+        _pending = null;
+        Narration = null;
+    }
+}

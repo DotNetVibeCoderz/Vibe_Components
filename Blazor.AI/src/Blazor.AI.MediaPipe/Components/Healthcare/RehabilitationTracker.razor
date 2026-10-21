@@ -1,0 +1,137 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* Range-of-motion rehab: counts reps, measures the peak angle of each rep against a target and writes a session report. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{Current.Name} · target {Current.Target:0}°")" Icon="bi-activity">
+        <div class="bai-stack">
+            <div class="bai-chips" role="radiogroup" aria-label="Exercise">
+                @foreach (var ex in Exercises)
+                {
+                    <button type="button" role="radio" aria-checked="@(ex.Name == _exercise)" class="bai-chip @(ex.Name == _exercise ? "is-active" : null)" @onclick="() => Select(ex.Name)">@ex.Name</button>
+                }
+            </div>
+            <div class="bai-row">
+                <div><div class="baiv-big">@_reps.Count</div><span class="bai-small bai-muted">reps</span></div>
+                <div><div class="baiv-big">@_angle.ToString("0", CultureInfo.InvariantCulture)°</div><span class="bai-small bai-muted">now</span></div>
+                <div><div class="baiv-big">@(_reps.Count == 0 ? "–" : _reps.Max().ToString("0", CultureInfo.InvariantCulture) + "°")</div><span class="bai-small bai-muted">best</span></div>
+            </div>
+            <div class="baiv-meter"><span>Toward target</span><div><span style="width:@(Math.Min(100, Progress(_angle) * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@((Progress(_angle) * 100).ToString("0", CultureInfo.InvariantCulture))%</span></div>
+            @if (_reps.Count > 0)
+            {
+                <LineChart Series="@([new ChartSeries("Peak ROM", _reps.Select((r, i) => new ChartPoint(i + 1, r)).ToArray()), new ChartSeries("Target", [new ChartPoint(1, Current.Target), new ChartPoint(Math.Max(2, _reps.Count), Current.Target)]) { Dashed = true }])" Height="150" XLabel="Rep" ShowLegend="false" />
+            }
+            <div class="bai-row">
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || _reps.Count == 0)" @onclick="Report"><i class="bi bi-stars" aria-hidden="true"></i>Session report</button>
+                <button type="button" class="bai-btn-ghost" @onclick="Reset">Reset</button>
+            </div>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed record RomExercise(string Name, PoseLandmark A, PoseLandmark B, PoseLandmark C, double Rest, double Target, bool Increasing);
+
+    public static readonly RomExercise[] Exercises =
+    [
+        // Shoulder abduction: angle hip–shoulder–elbow grows from ~20° to 160°+.
+        new("Shoulder abduction", PoseLandmark.RightHip, PoseLandmark.RightShoulder, PoseLandmark.RightElbow, 30, 150, true),
+        // Elbow flexion: angle shoulder–elbow–wrist shrinks from ~170° to ~40°.
+        new("Elbow flexion", PoseLandmark.RightShoulder, PoseLandmark.RightElbow, PoseLandmark.RightWrist, 160, 45, false),
+        // Knee extension (seated): angle hip–knee–ankle grows from ~90° to ~175°.
+        new("Knee extension", PoseLandmark.RightHip, PoseLandmark.RightKnee, PoseLandmark.RightAnkle, 100, 170, true),
+    ];
+
+    private string _exercise = Exercises[0].Name;
+    private readonly List<double> _reps = [];
+    private double _angle, _peak;
+    private bool _inRep;
+
+    [Parameter] public string Title { get; set; } = "Rehabilitation tracker";
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Yoga, VisionSamples.DeskPosture, VisionSamples.ThumbsUp];
+
+    private RomExercise Current => Exercises.First(e => e.Name == _exercise);
+
+    private double Progress(double angle)
+    {
+        var e = Current;
+        var p = (angle - e.Rest) / (e.Target - e.Rest);
+        return Math.Clamp(p, 0, 1.2);
+    }
+
+    private void Select(string name)
+    {
+        _exercise = name;
+        Reset();
+        _ = Camera?.ReprocessAsync();
+    }
+
+    private void Changed(VisionSourceKind kind)
+    {
+        HandleSourceChanged(kind);
+        _inRep = false;
+    }
+
+    private void Reset()
+    {
+        _reps.Clear();
+        _inRep = false;
+        _peak = 0;
+        Narration = null;
+    }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var overlay = new VisionOverlay();
+        var pose = Tasks.Pose(frame).Poses.FirstOrDefault();
+        if (pose is null)
+        {
+            overlay.Status = "Step into view";
+            return overlay;
+        }
+
+        var e = Current;
+        var w = pose.WorldLandmarks;
+        _angle = VisionMath.Angle3(w[(int)e.A], w[(int)e.B], w[(int)e.C]);
+        var p = Progress(_angle);
+        if (!_inRep && p > 0.35)
+        {
+            _inRep = true;
+            _peak = _angle;
+        }
+        else if (_inRep)
+        {
+            _peak = e.Increasing ? Math.Max(_peak, _angle) : Math.Min(_peak, _angle);
+            if (p < 0.15)
+            {
+                _inRep = false;
+                _reps.Add(_peak);
+                var reached = Progress(_peak) >= 0.95;
+                Publish("rep", $"{e.Name} rep {_reps.Count}: {_peak:0}° ({(reached ? "target reached" : $"{Progress(_peak):P0} of target")})");
+            }
+        }
+
+        // Still images: report the pose as a single measurement.
+        if (!frame.IsLive && _reps.Count == 0 && p > 0.35)
+        {
+            _reps.Add(_angle);
+        }
+
+        var color = p >= 0.95 ? Overlay.Nila : p > 0.35 ? Overlay.Soga : Overlay.Tarum;
+        overlay.Landmarks.Add(Overlay.Pose(pose, Overlay.Tarum, [(int)e.A, (int)e.B, (int)e.C]));
+        var l = pose.Landmarks;
+        overlay.Paths.Add(new OverlayPath { Points = VisionMath.Flat(l[(int)e.A], l[(int)e.B], l[(int)e.C]), Color = color, Width = 6 });
+        overlay.Texts.Add(Overlay.Label(l[(int)e.B].X + 0.02f, l[(int)e.B].Y, $"{_angle:0}° / {e.Target:0}°", Overlay.White, 15));
+        overlay.Status = $"{e.Name} · reps {_reps.Count}";
+        return overlay;
+    }
+
+    private Task Report() => AskAboutFrameAsync("a physiotherapist writing a short session note for the patient",
+        "Summarise this range-of-motion session and suggest the next goal.",
+        string.Create(CultureInfo.InvariantCulture, $"Exercise {Current.Name}, target {Current.Target:0}° from rest {Current.Rest:0}°. Peak angle per rep: {string.Join(", ", _reps.Select(r => r.ToString("0", CultureInfo.InvariantCulture)))}. Reps reaching target: {_reps.Count(r => Progress(r) >= 0.95)} of {_reps.Count}."),
+        attachImage: false);
+}

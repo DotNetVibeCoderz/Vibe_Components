@@ -1,0 +1,95 @@
+@namespace Blazor.AI.MediaPipe
+@using Blazor.AI.ThreeD
+@inherits VisionComponentBase
+@* Drives a 3-D avatar from the camera: body from pose world landmarks, head turn and nod from the face mesh. *@
+
+<div class="@CssClass("baiv-split")">
+    <div class="bai-grid-2" style="align-items:start">
+        <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+        <Scene3D Objects="@_objects" Options="@_options" Height="@Height" />
+    </div>
+    <AiCard Title="@Title" Subtitle="Pose + face → avatar rig" Icon="bi-joystick">
+        <div class="bai-stack">
+            <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="Mirror" /> mirror (move like a reflection)</label>
+            <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="Smooth" /> smoothing</label>
+            <label class="bai-small">Head sensitivity <input type="range" min="0.5" max="2" step="0.1" @bind="HeadGain" style="width:100%" aria-label="Head sensitivity" /></label>
+            <div class="bai-row bai-small">
+                @foreach (var c in Colors)
+                {
+                    <button type="button" class="bai-chip @(c == BodyColor ? "is-active" : null)" style="border-left:14px solid @c" @onclick="() => BodyColor = c" aria-label="@($"Body colour {c}")">&nbsp;</button>
+                }
+            </div>
+            <div class="bai-row" style="gap:1.2rem">
+                <div><b>@_head.Yaw.ToString("+0;-0", CultureInfo.InvariantCulture)°</b><span class="bai-small bai-muted"> yaw</span></div>
+                <div><b>@_head.Pitch.ToString("+0;-0", CultureInfo.InvariantCulture)°</b><span class="bai-small bai-muted"> pitch</span></div>
+                <div><b>@_expression</b><span class="bai-small bai-muted"> face</span></div>
+            </div>
+            <span class="bai-small bai-muted">The avatar is procedural (capsules). Driving the rigged GuideBot needs per-bone rotation support in the 3-D engine.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly string[] Colors = ["#d9d4c4", "#3d4fb8", "#d9964f", "#3cc4b1", "#c45ad6"];
+    private readonly LandmarkFilter _filter = new(1.0, 0.03);
+    private readonly Scene3DOptions _options = Body3D.Stage("Avatar driven by the camera");
+    private IReadOnlyList<Object3D> _objects = [];
+    private (double Yaw, double Pitch) _head;
+    private string _expression = "–";
+    private DateTime _lastScene;
+
+    [Parameter] public string Title { get; set; } = "Avatar controller";
+    [Parameter] public bool Mirror { get; set; } = true;
+    [Parameter] public bool Smooth { get; set; } = true;
+    [Parameter] public double HeadGain { get; set; } = 1.2;
+    [Parameter] public string BodyColor { get; set; } = "#d9d4c4";
+    [Parameter] public string AccentColor { get; set; } = ThreeDPalette.Nila;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.ThumbsUp, VisionSamples.Yoga, VisionSamples.OpenPalms];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var r = Tasks.Holistic(frame, blendshapes: true);
+        var overlay = new VisionOverlay();
+        if (r.Pose is not { } pose)
+        {
+            overlay.Status = "No person";
+            return overlay;
+        }
+
+        var world = Smooth && frame.IsLive ? _filter.Filter(pose.WorldLandmarks, frame.TimestampMs / 1000.0) : pose.WorldLandmarks.ToArray();
+        (double Yaw, double Pitch)? head = null;
+        var accent = AccentColor;
+        if (r.Face is { } face)
+        {
+            var (yaw, pitch) = VisionMath.HeadPose(face.Landmarks);
+            _head = (yaw * HeadGain, pitch * HeadGain);
+            head = _head;
+            if (face.Blendshapes is { Count: > 0 })
+            {
+                var (label, _) = ExpressionMood.From(face);
+                _expression = label;
+                accent = Body3D.ExpressionColor(label);
+            }
+
+            overlay.Landmarks.AddRange(Overlay.Face(face, allPoints: false));
+        }
+
+        if (!frame.IsLive || (DateTime.UtcNow - _lastScene).TotalMilliseconds > 100)
+        {
+            _lastScene = DateTime.UtcNow;
+            _objects = Body3D.Capsules("av-", world, BodyColor, accent, Mirror, headYawPitch: head);
+            _ = InvokeAsync(StateHasChanged);
+        }
+
+        overlay.Landmarks.Add(Overlay.Pose(pose, Overlay.Tarum));
+        overlay.Status = $"yaw {_head.Yaw:+0;-0}° · {_expression}";
+        return overlay;
+    }
+
+    private void Changed(VisionSourceKind kind)
+    {
+        _filter.Reset();
+        HandleSourceChanged(kind);
+    }
+}

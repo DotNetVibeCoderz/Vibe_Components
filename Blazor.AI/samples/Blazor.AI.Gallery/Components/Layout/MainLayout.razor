@@ -20,6 +20,14 @@
                     @if (s.Components > 0) { <span class="g-count">@s.Components</span> }
                 </NavLink>
             }
+            <div class="g-nav-group">Vision</div>
+            @foreach (var s in GalleryNavigation.VisionSections)
+            {
+                <NavLink class="g-nav" href="@s.Href" Match="NavLinkMatch.All" @onclick="Close">
+                    <i class="bi @s.Icon" aria-hidden="true"></i><span class="bai-spacer">@s.Title</span>
+                    @if (s.Components > 0) { <span class="g-count">@s.Components</span> }
+                </NavLink>
+            }
             <div class="g-nav-group">3D</div>
             @foreach (var s in GalleryNavigation.ThreeDSections)
             {

@@ -1,0 +1,106 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* Multi-person tracking with stable ids, path trails, headcount and dwell time per zone. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"Headcount {_headcount} · {_tracksSeen} tracked since start")" Icon="bi-people">
+        <div class="bai-stack">
+            <div class="bai-table-wrap">
+                <table class="bai-table">
+                    <thead><tr><th>Zone</th><th>Now</th><th>Total dwell</th></tr></thead>
+                    <tbody>
+                        @foreach (var z in Zones)
+                        {
+                            <tr><td><i style="display:inline-block; width:.6rem; height:.6rem; border-radius:2px; background:@z.Color"></i> @z.Name</td>
+                                <td class="bai-num">@(_occupancy.GetValueOrDefault(z.Name))</td>
+                                <td class="bai-num">@TimeSpan.FromSeconds(_dwell.GetValueOrDefault(z.Name)).ToString(@"mm\:ss")</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_trails" /> path trails</label>
+            <span class="bai-small bai-faint">Tracking associates boxes between frames by overlap (IoU). Ids are not identities and reset when people leave the view.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed record WorkZone(string Name, float X, float Y, float W, float H, string Color);
+
+    private readonly IouTracker _tracker = new(0.25, 10);
+    private readonly Dictionary<string, double> _dwell = [];
+    private Dictionary<string, int> _occupancy = [];
+    private int _headcount, _tracksSeen;
+    private bool _trails = true;
+    private long _lastT;
+    private readonly HashSet<int> _seen = [];
+
+    [Parameter] public string Title { get; set; } = "Worker tracking";
+
+    [Parameter] public IReadOnlyList<WorkZone> Zones { get; set; } =
+    [
+        new("Loading dock", 0.0f, 0.5f, 0.35f, 0.5f, "#d9964f"),
+        new("Assembly", 0.35f, 0.5f, 0.3f, 0.5f, "#3cc4b1"),
+        new("Storage", 0.65f, 0.5f, 0.35f, 0.5f, "#7b8cff"),
+    ];
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Warehouse, VisionSamples.Construction, VisionSamples.Street];
+
+    private void Changed(VisionSourceKind kind)
+    {
+        HandleSourceChanged(kind);
+        _tracker.Reset();
+        _seen.Clear();
+        _dwell.Clear();
+    }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var dets = Tasks.Objects(frame, 0.35f, 40, new HashSet<string> { "person" }).Detections;
+        var tracks = _tracker.Update(dets.Select(d => (VisionSolutions.Norm(d, frame.Width, frame.Height), "person")).ToList());
+        var t = frame.IsLive ? frame.TimestampMs : _lastT + 1000;
+        var dt = Math.Clamp((t - _lastT) / 1000.0, 0, 2);
+        _lastT = t;
+        var overlay = new VisionOverlay();
+        foreach (var z in Zones)
+        {
+            overlay.Boxes.Add(new OverlayBox { X = z.X, Y = z.Y, W = z.W, H = z.H, Color = z.Color, Dashed = true, Fill = true, Label = z.Name });
+        }
+
+        var occupancy = Zones.ToDictionary(z => z.Name, _ => 0);
+        foreach (var tr in tracks)
+        {
+            if (_seen.Add(tr.Id))
+            {
+                _tracksSeen++;
+            }
+
+            var feet = (tr.Box.X + tr.Box.W / 2, tr.Box.Y + tr.Box.H);
+            var zone = Zones.FirstOrDefault(z => VisionSolutions.Inside(feet, (z.X, z.Y, z.W, z.H)));
+            if (zone is not null)
+            {
+                occupancy[zone.Name]++;
+                _dwell[zone.Name] = _dwell.GetValueOrDefault(zone.Name) + dt;
+            }
+
+            var color = zone?.Color ?? Overlay.White;
+            overlay.Boxes.Add(new OverlayBox { X = tr.Box.X, Y = tr.Box.Y, W = tr.Box.W, H = tr.Box.H, Color = color, Label = $"#{tr.Id}{(zone is null ? "" : " · " + zone.Name)}" });
+            if (_trails && tr.Trail.Count > 1)
+            {
+                overlay.Paths.Add(new OverlayPath { Points = tr.Trail.SelectMany(p => new[] { p.X, p.Y }).ToArray(), Color = color, Width = 2.5f });
+            }
+        }
+
+        if (tracks.Count != _headcount)
+        {
+            Publish("headcount", $"Headcount {tracks.Count}", counts: new Dictionary<string, int> { ["person"] = tracks.Count },
+                position: tracks.Count == 0 ? null : (tracks.Average(x => x.Box.X + x.Box.W / 2), tracks.Average(x => x.Box.Y + x.Box.H)));
+        }
+
+        _headcount = tracks.Count;
+        _occupancy = occupancy;
+        overlay.Status = $"{tracks.Count} people";
+        return overlay;
+    }
+}

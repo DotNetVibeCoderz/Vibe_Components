@@ -1,0 +1,76 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Real-time background removal: cut out, blur or tint the background using the selfie segmenter. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"Selfie segmenter · subject covers {_coverage:P0} of the frame")" Icon="bi-person-bounding-box">
+        <div class="bai-stack">
+            <div class="bai-chips" role="radiogroup" aria-label="Background mode">
+                @foreach (var (mode, label) in Modes)
+                {
+                    <button type="button" role="radio" aria-checked="@(mode == _mode)" class="bai-chip @(mode == _mode ? "is-active" : null)" @onclick="() => SetMode(mode)">@label</button>
+                }
+            </div>
+            @if (_mode == "blur")
+            {
+                <label class="bai-small">Blur <input type="range" min="2" max="30" @bind="_blur" @bind:after="Refresh" style="width:100%" aria-label="Blur strength" /></label>
+            }
+            <label class="bai-small">Edge threshold <input type="range" min="0" max="0.9" step="0.05" @bind="_threshold" @bind:after="Refresh" style="width:100%" aria-label="Edge threshold" /></label>
+            <span class="bai-small bai-muted">Frames are segmented on the server; compositing happens in the browser, so the full-resolution picture never leaves it after upload.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly (string Mode, string Label)[] Modes = [("cutout", "Remove"), ("blur", "Blur"), ("tint", "Highlight subject")];
+    private string _mode = "cutout";
+    private int _blur = 12;
+    private double _threshold = 0.3, _coverage;
+
+    [Parameter] public string Title { get; set; } = "Background removal";
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.Segment(frame, SegmenterModel.Selfie);
+        var mask = result.ConfidenceMask;
+        if (mask is null)
+        {
+            return VisionOverlay.Empty;
+        }
+
+        _coverage = mask.Coverage(0.5f);
+        var thresholded = Threshold(mask, (float)_threshold);
+        var m = Overlay.Mask(thresholded, _mode, Overlay.Nila, opacity: 0.5f);
+        return new VisionOverlay
+        {
+            Mask = new OverlayMask { Width = m.Width, Height = m.Height, Data = m.Data, Mode = m.Mode, Color = m.Color, Opacity = m.Opacity, BlurPx = _blur },
+            Status = $"{_coverage:P0} subject",
+        };
+    }
+
+    /// <summary>Soft threshold: values below <paramref name="t"/> fade out, keeping anti-aliased edges.</summary>
+    internal static SegmentationMask Threshold(SegmentationMask mask, float t)
+    {
+        if (t <= 0)
+        {
+            return mask;
+        }
+
+        var d = new float[mask.Data.Length];
+        for (var i = 0; i < d.Length; i++)
+        {
+            d[i] = Math.Clamp((mask.Data[i] - t) / Math.Max(1e-3f, 1 - t), 0, 1);
+        }
+
+        return new SegmentationMask(mask.Width, mask.Height, d);
+    }
+
+    private Task SetMode(string mode)
+    {
+        _mode = mode;
+        return Refresh();
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+}

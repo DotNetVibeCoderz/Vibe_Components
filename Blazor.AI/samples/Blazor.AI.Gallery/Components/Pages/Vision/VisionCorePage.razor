@@ -1,0 +1,58 @@
+@page "/vision"
+<PageTitle>Vision · Blazor.AI</PageTitle>
+
+<PageHeader Title="Computer vision" Package="Blazor.AI.MediaPipe" Icon="bi-camera-video"
+            Lead="Face, hand, pose and segmentation on MediaPipe.NET: native .NET MediaPipe Tasks on ONNX Runtime, running on the server. Use the samples, upload a photo or video, or press Camera; frames are processed live and drawn over the picture." />
+
+<div class="bai-alert is-info" style="margin-bottom:1.5rem"><i class="bi bi-shield-check" aria-hidden="true"></i>Camera frames are processed in memory on this server and are not stored unless a component records them. Models download once from NuGet on first use.</div>
+
+<DemoSection Title="Face mesh" Component="FaceLandmarkViewer" Description="478 landmarks with contours, head pose, eye openness and the strongest of 52 blendshapes." Code="@FaceCode">
+    <FaceLandmarkViewer />
+</DemoSection>
+
+<DemoSection Title="Gestures" Component="GestureRecognizerPanel" Description="Thumbs up and down, victory, pointing, open palm, fist and I-love-you, plus gestures you teach by example." Code="@GestureCode">
+    <GestureRecognizerPanel />
+</DemoSection>
+
+<DemoSection Title="Body pose" Component="PoseTracker" Description="33 landmarks with 3-D joint angles and an optional person mask." Code="@PoseCode">
+    <PoseTracker />
+</DemoSection>
+
+<DemoSection Title="Background removal" Component="BackgroundRemoval" Description="Remove, blur or highlight the background in real time." Code="@BackgroundCode">
+    <BackgroundRemoval />
+</DemoSection>
+
+@code {
+    private const string FaceCode = """
+        // Program.cs (Interactive Server render mode)
+        builder.Services.AddBlazorAIComponents();
+        builder.Services.AddBlazorAIMediaPipe(o => o.PreloadModels = true);
+
+        <link rel="stylesheet" href="_content/Blazor.AI.MediaPipe/blazor-ai-vision.css" />
+
+        <FaceLandmarkViewer StartWithCamera="true" OnResult="r => faces = r.Faces.Count" />
+        """;
+
+    private const string GestureCode = """
+        <GestureRecognizerPanel MinScore="0.6f" OnGesture="HandleGesture" />
+
+        @code {
+            void HandleGesture(string gesture)
+            {
+                if (gesture == "Thumb_Up") Approve();
+            }
+        }
+        """;
+
+    private const string PoseCode = """
+        <PoseTracker OnPose="pose => last = pose" Height="480px" />
+
+        // Or use the tasks directly in your own component:
+        var result = Tasks.Pose(frame, PoseModel.Full);
+        var knee = VisionMath.Angle3(w[(int)PoseLandmark.LeftHip], w[(int)PoseLandmark.LeftKnee], w[(int)PoseLandmark.LeftAnkle]);
+        """;
+
+    private const string BackgroundCode = """
+        <BackgroundRemoval StartWithCamera="true" Fps="15" />
+        """;
+}

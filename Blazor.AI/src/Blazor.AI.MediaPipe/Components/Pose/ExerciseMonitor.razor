@@ -1,0 +1,183 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Fitness analytics: rep counting with hysteresis for squats, push-ups, jumping jacks, curls and lunges, plus form cues and an AI coach. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{Current.Name} · {Current.Hint}")" Icon="bi-activity">
+        <div class="bai-stack">
+            <select class="bai-select" @bind="ExerciseName" @bind:after="Reset" aria-label="Exercise">
+                @foreach (var e in Exercises) { <option value="@e.Name">@e.Name</option> }
+            </select>
+            <div class="bai-row" style="align-items:flex-end; gap:1.4rem">
+                <div><div class="baiv-big" aria-live="polite">@_state.Reps</div><span class="bai-small bai-muted">reps</span></div>
+                <div><b>@_state.Sets</b><span class="bai-small bai-muted"> sets</span></div>
+                <div><b>@(_state.Tempo > 0 ? $"{_state.Tempo:0.0}s" : "–")</b><span class="bai-small bai-muted"> per rep</span></div>
+                <div><b>@(double.IsNaN(_state.Depth) ? "–" : $"{_state.Depth:0}°")</b><span class="bai-small bai-muted"> last depth</span></div>
+            </div>
+            <div class="baiv-meter"><span>@Current.MetricLabel</span><div><span style="width:@(Math.Clamp(_state.Metric / 180 * 100, 0, 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@(double.IsNaN(_state.Metric) ? "–" : _state.Metric.ToString("0", CultureInfo.InvariantCulture))°</span></div>
+            <span class="bai-small">Phase: <b>@(_state.Down ? "down / in" : "up / out")</b> · counts below @Current.Low° then above @Current.High°</span>
+            @if (_state.Cues.Count > 0)
+            {
+                <div class="bai-stack" style="gap:.2rem">
+                    @foreach (var c in _state.Cues) { <span class="bai-small" style="color:var(--bai-warning, #e8b84a)"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> @c</span> }
+                </div>
+            }
+            else if (_state.Seen)
+            {
+                <span class="bai-small" style="color:var(--bai-nila)"><i class="bi bi-check2-circle" aria-hidden="true"></i> Form looks good.</span>
+            }
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="Reset">Reset</button>
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="Coach"><i class="bi bi-stars" aria-hidden="true"></i>Coach me</button>
+            </div>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    /// <summary>An exercise: a metric from the pose, hysteresis thresholds and form checks.</summary>
+    public sealed record ExerciseSpec(string Name, string MetricLabel, double Low, double High, string Hint,
+        Func<PoseLandmarks, double> Metric, Func<PoseLandmarks, VisionFrame, List<string>> Form);
+
+    private sealed record State(int Reps, int Sets, double Tempo, double Depth, double Metric, bool Down, IReadOnlyList<string> Cues, bool Seen);
+
+    private static double Avg(PoseLandmarks p, PoseLandmark a1, PoseLandmark b1, PoseLandmark c1, PoseLandmark a2, PoseLandmark b2, PoseLandmark c2) =>
+        (PoseAnalytics.Angle(p, a1, b1, c1) + PoseAnalytics.Angle(p, a2, b2, c2)) / 2;
+
+    private static double Knees(PoseLandmarks p) => Avg(p, PoseLandmark.LeftHip, PoseLandmark.LeftKnee, PoseLandmark.LeftAnkle, PoseLandmark.RightHip, PoseLandmark.RightKnee, PoseLandmark.RightAnkle);
+
+    private static double Elbows(PoseLandmarks p) => Avg(p, PoseLandmark.LeftShoulder, PoseLandmark.LeftElbow, PoseLandmark.LeftWrist, PoseLandmark.RightShoulder, PoseLandmark.RightElbow, PoseLandmark.RightWrist);
+
+    private static double BodyLine(PoseLandmarks p) => Avg(p, PoseLandmark.LeftShoulder, PoseLandmark.LeftHip, PoseLandmark.LeftAnkle, PoseLandmark.RightShoulder, PoseLandmark.RightHip, PoseLandmark.RightAnkle);
+
+    /// <summary>The built-in exercises.</summary>
+    public static readonly IReadOnlyList<ExerciseSpec> Exercises =
+    [
+        new("Squat", "Knee angle", 100, 160, "hips back, knees over toes", Knees, (p, f) =>
+        {
+            var cues = new List<string>();
+            if (PoseAnalytics.TrunkLean(p) > 45) cues.Add("Chest up: your torso leans forward too much.");
+            var knees = Math.Abs(PoseAnalytics.N(p, PoseLandmark.LeftKnee).X - PoseAnalytics.N(p, PoseLandmark.RightKnee).X);
+            var ankles = Math.Abs(PoseAnalytics.N(p, PoseLandmark.LeftAnkle).X - PoseAnalytics.N(p, PoseLandmark.RightAnkle).X);
+            if (Knees(p) < 130 && knees < ankles * 0.75) cues.Add("Knees cave in: push them out over your toes.");
+            return cues;
+        }),
+        new("Push-up", "Elbow angle", 95, 155, "body in one straight line", Elbows, (p, f) =>
+        {
+            var cues = new List<string>();
+            var line = BodyLine(p);
+            if (line < 155) cues.Add("Keep your body straight: hips are sagging or piking.");
+            return cues;
+        }),
+        new("Jumping jack", "Arms down (180 − shoulder angle)", 45, 135, "arms overhead, feet wide", p => 180 - Math.Max(
+            PoseAnalytics.Angle(p, PoseLandmark.LeftHip, PoseLandmark.LeftShoulder, PoseLandmark.LeftElbow),
+            PoseAnalytics.Angle(p, PoseLandmark.RightHip, PoseLandmark.RightShoulder, PoseLandmark.RightElbow)), (p, f) =>
+        {
+            var cues = new List<string>();
+            var arms = Math.Max(PoseAnalytics.Angle(p, PoseLandmark.LeftHip, PoseLandmark.LeftShoulder, PoseLandmark.LeftElbow), PoseAnalytics.Angle(p, PoseLandmark.RightHip, PoseLandmark.RightShoulder, PoseLandmark.RightElbow));
+            var shoulders = PoseAnalytics.Spread(p, PoseLandmark.LeftShoulder, PoseLandmark.RightShoulder);
+            if (arms > 140 && PoseAnalytics.Spread(p, PoseLandmark.LeftAnkle, PoseLandmark.RightAnkle) < shoulders * 1.2) cues.Add("Jump your feet wider as your arms go up.");
+            return cues;
+        }),
+        new("Bicep curl", "Elbow angle (working arm)", 55, 150, "elbows pinned to your sides", p => Math.Min(
+            PoseAnalytics.Angle(p, PoseLandmark.LeftShoulder, PoseLandmark.LeftElbow, PoseLandmark.LeftWrist),
+            PoseAnalytics.Angle(p, PoseLandmark.RightShoulder, PoseLandmark.RightElbow, PoseLandmark.RightWrist)), (p, f) =>
+        {
+            var cues = new List<string>();
+            if (PoseAnalytics.UpperArmFlexion(p) > 35) cues.Add("Keep your elbows by your sides; don't swing the upper arm.");
+            if (PoseAnalytics.TrunkLean(p) > 15) cues.Add("Stand tall: avoid leaning back to lift.");
+            return cues;
+        }),
+        new("Lunge", "Front knee angle", 105, 160, "front knee at about 90°", p => Math.Min(
+            PoseAnalytics.Angle(p, PoseLandmark.LeftHip, PoseLandmark.LeftKnee, PoseLandmark.LeftAnkle),
+            PoseAnalytics.Angle(p, PoseLandmark.RightHip, PoseLandmark.RightKnee, PoseLandmark.RightAnkle)), (p, f) =>
+        {
+            var cues = new List<string>();
+            if (PoseAnalytics.TrunkLean(p) > 25) cues.Add("Keep your torso upright.");
+            return cues;
+        }),
+    ];
+
+    private RepCounter _counter = new(100, 160);
+    private State _state = new(0, 0, 0, double.NaN, double.NaN, false, [], false);
+    private readonly List<string> _cueLog = [];
+
+    [Parameter] public string Title { get; set; } = "Exercise monitor";
+
+    /// <summary>Squat, Push-up, Jumping jack, Bicep curl or Lunge.</summary>
+    [Parameter] public string ExerciseName { get; set; } = "Squat";
+
+    /// <summary>Raised when a repetition completes (total reps).</summary>
+    [Parameter] public EventCallback<int> OnRep { get; set; }
+
+    private ExerciseSpec Current => Exercises.FirstOrDefault(e => e.Name == ExerciseName) ?? Exercises[0];
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Bodies;
+
+    private string? _lastExercise;
+
+    protected override void OnParametersSet()
+    {
+        if (_lastExercise != ExerciseName)
+        {
+            Reset();
+        }
+    }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var spec = Current;
+        var pose = Tasks.Pose(frame).Poses.FirstOrDefault();
+        var overlay = new VisionOverlay();
+        if (pose is null)
+        {
+            _state = _state with { Seen = false, Cues = [] };
+            overlay.Status = "Step into view";
+            return overlay;
+        }
+
+        var metric = spec.Metric(pose);
+        var cues = spec.Form(pose, frame);
+        var counted = frame.IsLive && _counter.Update(metric, frame.TimestampMs / 1000.0);
+        _state = new State(_counter.Reps, _counter.CompletedSets.Count + (_counter.RepsInSet > 0 ? 1 : 0), _counter.AverageTempo, _counter.LastDepth, metric, _counter.IsDown, cues, true);
+        if (counted)
+        {
+            _cueLog.AddRange(cues);
+            _ = InvokeAsync(() => OnRep.InvokeAsync(_counter.Reps));
+        }
+
+        overlay.Landmarks.Add(Overlay.Pose(pose, cues.Count > 0 ? Overlay.Warning : Overlay.Nila));
+        overlay.Status = $"{spec.Name}: {_counter.Reps} reps · {metric:0}°";
+        if (cues.Count > 0)
+        {
+            overlay.Texts.Add(Overlay.Label(0.02f, 0.92f, cues[0], Overlay.Warning, 15));
+        }
+
+        return overlay;
+    }
+
+    private void Changed(VisionSourceKind kind)
+    {
+        Reset();
+        HandleSourceChanged(kind);
+    }
+
+    private void Reset()
+    {
+        _lastExercise = ExerciseName;
+        _counter = new RepCounter(Current.Low, Current.High);
+        _cueLog.Clear();
+        _state = new State(0, 0, 0, double.NaN, double.NaN, false, [], false);
+    }
+
+    private Task Coach()
+    {
+        var cueSummary = _cueLog.Count == 0 ? "no form issues flagged" : string.Join("; ", _cueLog.GroupBy(c => c).OrderByDescending(g => g.Count()).Take(4).Select(g => $"{g.Key} (×{g.Count()})"));
+        var facts = string.Create(CultureInfo.InvariantCulture,
+            $"Exercise {Current.Name}. Reps {_state.Reps}, sets {_state.Sets}, average tempo {_state.Tempo:0.0} s/rep, last depth {_state.Depth:0}° ({Current.MetricLabel}; good range below {Current.Low}°). Current cues: {string.Join("; ", _state.Cues)}. Session cues: {cueSummary}.");
+        return AskAboutFrameAsync("a certified personal trainer giving brief, encouraging, specific feedback", "How was my set and what should I fix?", facts, attachImage: false);
+    }
+}

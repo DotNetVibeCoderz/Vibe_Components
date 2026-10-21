@@ -1,0 +1,106 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* Manual assembly analytics: hands entering and leaving the work zone mark cycles; cycle time vs takt, idle time and a trend chart. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"Station {Station} · takt {TaktSeconds:0} s")" Icon="bi-gear-wide-connected">
+        <div class="bai-stack">
+            <div class="bai-row">
+                <div><div class="baiv-big">@_cycles.Count</div><span class="bai-small bai-muted">cycles</span></div>
+                <div><div class="baiv-big">@(_cycles.Count == 0 ? "–" : _cycles.Average().ToString("0.0", CultureInfo.InvariantCulture) + " s")</div><span class="bai-small bai-muted">avg cycle</span></div>
+                <div><div class="baiv-big" style="color:@(_idle > IdleAlertSeconds ? "var(--bai-danger)" : null)">@_idle.ToString("0", CultureInfo.InvariantCulture) s</div><span class="bai-small bai-muted">idle</span></div>
+            </div>
+            <span class="bai-small">State: <b>@(_handsIn ? "working (hands in zone)" : "between parts")</b> · over takt @_cycles.Count(c => c > TaktSeconds) of @_cycles.Count</span>
+            @if (_cycles.Count > 0)
+            {
+                <LineChart Series="@([new ChartSeries("Cycle", _cycles.Select((c, i) => new ChartPoint(i + 1, c)).ToArray()), new ChartSeries("Takt", [new ChartPoint(1, TaktSeconds), new ChartPoint(Math.Max(2, _cycles.Count), TaktSeconds)]) { Dashed = true }])" Height="150" XLabel="Cycle" ShowLegend="false" />
+            }
+            <span class="bai-small bai-faint">Use a live camera above the workbench. A cycle starts when hands enter the work zone and ends when they leave for at least @ExitSeconds.ToString("0.0", CultureInfo.InvariantCulture) s.</span>
+            @EventLog(5)
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private readonly List<double> _cycles = [];
+    private bool _handsIn;
+    private long _cycleStart = -1, _outSince = -1, _lastT, _lastActivity;
+    private double _idle;
+
+    [Parameter] public string Title { get; set; } = "Assembly line analytics";
+    [Parameter] public string Station { get; set; } = "A-3";
+    [Parameter] public double TaktSeconds { get; set; } = 12;
+    [Parameter] public double ExitSeconds { get; set; } = 0.8;
+    [Parameter] public double IdleAlertSeconds { get; set; } = 20;
+
+    /// <summary>The work area on the bench (normalized).</summary>
+    [Parameter] public (float X, float Y, float W, float H) WorkZone { get; set; } = (0.25f, 0.35f, 0.5f, 0.6f);
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.OpenPalms, VisionSamples.ThumbsUp, VisionSamples.Warehouse];
+
+    private void Changed(VisionSourceKind kind)
+    {
+        HandleSourceChanged(kind);
+        _handsIn = false;
+        _cycleStart = _outSince = -1;
+        _lastActivity = 0;
+    }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var hands = Tasks.Hands(frame, 2).Hands;
+        var t = frame.IsLive ? frame.TimestampMs : _lastT + 1000;
+        _lastT = t;
+        var inZone = hands.Any(h => VisionSolutions.Inside((h.Landmarks[9].X, h.Landmarks[9].Y), WorkZone));
+        if (inZone)
+        {
+            _lastActivity = t;
+            _outSince = -1;
+            if (!_handsIn)
+            {
+                _handsIn = true;
+                if (_cycleStart < 0)
+                {
+                    _cycleStart = t;
+                }
+            }
+        }
+        else if (_handsIn)
+        {
+            if (_outSince < 0)
+            {
+                _outSince = t;
+            }
+            else if (t - _outSince >= ExitSeconds * 1000 && frame.IsLive)
+            {
+                _handsIn = false;
+                var cycle = (_outSince - _cycleStart) / 1000.0;
+                _cycleStart = -1;
+                if (cycle > 0.5)
+                {
+                    _cycles.Add(cycle);
+                    Publish("cycle", $"Cycle {_cycles.Count}: {cycle:0.0} s{(cycle > TaktSeconds ? $" (over takt by {cycle - TaktSeconds:0.0} s)" : "")}",
+                        cycle > TaktSeconds * 1.3 ? VisionEventSeverity.Warning : VisionEventSeverity.Info);
+                }
+            }
+        }
+
+        var idle = (t - _lastActivity) / 1000.0;
+        if (_idle < IdleAlertSeconds && idle >= IdleAlertSeconds && frame.IsLive)
+        {
+            Publish("idle", $"Station {Station} idle for {IdleAlertSeconds:0} s", VisionEventSeverity.Warning);
+        }
+
+        _idle = frame.IsLive ? idle : 0;
+        var overlay = new VisionOverlay();
+        overlay.Boxes.Add(VisionSolutions.ZoneBox(WorkZone, "Work zone", inZone ? Overlay.Soga : Overlay.Tarum));
+        foreach (var h in hands)
+        {
+            overlay.Landmarks.Add(Overlay.Hand(h));
+        }
+
+        overlay.Status = _handsIn ? $"Working {(t - (_cycleStart < 0 ? t : _cycleStart)) / 1000.0:0.0} s" : "Waiting";
+        return overlay;
+    }
+}

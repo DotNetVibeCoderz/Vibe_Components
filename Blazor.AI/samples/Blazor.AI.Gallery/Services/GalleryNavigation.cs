@@ -36,5 +36,15 @@ public static class GalleryNavigation
         new("Enterprise command", "3d/enterprise", "bi-globe2", "Blazor.AI.ThreeD", 6, "Digital twin platform, enterprise knowledge graph, AgentOps, KPI sphere, mission control, autonomy"),
     ];
 
-    public static int TotalComponents => Sections.Sum(s => s.Components) + ThreeDSections.Sum(s => s.Components);
+    /// <summary>Blazor.AI.MediaPipe pages (counts are set once the pages are complete).</summary>
+    public static IReadOnlyList<NavItem> VisionSections { get; } =
+    [
+        new("Vision essentials", "vision", "bi-camera-video", "Blazor.AI.MediaPipe", 4, "Face mesh, gestures, body pose, background removal"),
+        new("Face & hands", "vision/face-hands", "bi-person-bounding-box", "Blazor.AI.MediaPipe", 13, "Camera core, recorder, models, face detection, 3-D mesh, expressions, attendance, verification, analytics, hands, sign language, air drawing, finger counting"),
+        new("Body, segmentation & 3D", "vision/body", "bi-person-arms-up", "Blazor.AI.MediaPipe", 21, "Skeletons, exercise, yoga, sports, ergonomics, holistic, digital human, mocap, avatars, green screen, segmentation, Three.js views"),
+        new("Detection & copilot", "vision/detection-copilot", "bi-bounding-box", "Blazor.AI.MediaPipe", 14, "Objects, retail, warehouse, PPE, vehicles, classification, food, plant disease, fish, medical images, vision copilot, VQA, video summary"),
+        new("Vision solutions", "vision/solutions", "bi-grid-1x2", "Blazor.AI.MediaPipe", 23, "Healthcare, agritech, education, industry and analytics dashboards"),
+    ];
+
+    public static int TotalComponents => Sections.Sum(s => s.Components) + ThreeDSections.Sum(s => s.Components) + VisionSections.Sum(s => s.Components);
 }

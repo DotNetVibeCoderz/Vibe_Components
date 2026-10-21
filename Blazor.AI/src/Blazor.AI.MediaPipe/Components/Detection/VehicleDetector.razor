@@ -1,0 +1,156 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Transport analytics: vehicle counts by class, a virtual counting line with direction, and counts over time. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="SourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="Cars, buses, trucks, motorcycles, bicycles" Icon="bi-car-front">
+        <div class="bai-stack">
+            <div class="bai-chips">
+                @foreach (var cls in VehicleClasses)
+                {
+                    <span class="bai-badge"><b>@_state.InView.GetValueOrDefault(cls)</b>&nbsp;@cls</span>
+                }
+            </div>
+            <span class="bai-label">Counting line</span>
+            <div class="bai-row bai-small">
+                <select class="bai-select" style="width:auto" @bind="_orientation" aria-label="Line orientation">
+                    <option value="h">Horizontal</option>
+                    <option value="v">Vertical</option>
+                </select>
+                <label>at <input type="range" min="0.1" max="0.9" step="0.05" @bind="_linePos" @bind:event="oninput" style="width:8rem" aria-label="Line position" /> @_linePos.ToString("P0", CultureInfo.InvariantCulture)</label>
+                <button type="button" class="bai-chip" @onclick="ResetCounts">Reset</button>
+            </div>
+            <table class="bai-table">
+                <thead><tr><th>Class</th><th>@(_orientation == "h" ? "↓ in" : "→ in")</th><th>@(_orientation == "h" ? "↑ out" : "← out")</th></tr></thead>
+                <tbody>
+                    @foreach (var cls in VehicleClasses)
+                    {
+                        <tr><td>@cls</td><td class="bai-num">@_state.In.GetValueOrDefault(cls)</td><td class="bai-num">@_state.Out.GetValueOrDefault(cls)</td></tr>
+                    }
+                </tbody>
+            </table>
+            @if (_series.Count > 0)
+            {
+                <LineChart Title="Vehicles in view" Series="@_series" Height="160" ShowLegend="true" />
+            }
+            <span class="bai-small bai-muted">Line crossing needs a live source (camera, video or stream); a still image only gives counts in view.</span>
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Summarise"><i class="bi bi-stars" aria-hidden="true"></i>Traffic summary</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public static readonly string[] VehicleClasses = ["car", "bus", "truck", "motorcycle", "bicycle"];
+
+    private sealed record State(IReadOnlyDictionary<string, int> InView, IReadOnlyDictionary<string, int> In, IReadOnlyDictionary<string, int> Out);
+
+    private readonly SimpleTracker _tracker = new(0.2f, 10);
+    private readonly Dictionary<string, int> _in = [], _out = [];
+    private readonly HashSet<int> _counted = [];
+    private readonly List<(long T, Dictionary<string, int> Counts)> _history = [];
+    private State _state = new(new Dictionary<string, int>(), new Dictionary<string, int>(), new Dictionary<string, int>());
+    private IReadOnlyList<ChartSeries> _series = [];
+    private string _orientation = "h";
+    private double _linePos = 0.6;
+    private long _lastSample = -10_000;
+
+    [Parameter] public string Title { get; set; } = "Vehicle detector";
+
+    /// <summary>Raised when a vehicle crosses the counting line: class and direction ("in" or "out").</summary>
+    [Parameter] public EventCallback<(string Class, string Direction)> OnCrossing { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Street, VisionSamples.Warehouse];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.Objects(frame, 0.3f, 40, VehicleClasses.ToHashSet());
+        var horizontal = _orientation == "h";
+        var line = (float)_linePos;
+        var tracked = _tracker.Update(result.Detections, frame.Width, frame.Height);
+        var overlay = new VisionOverlay();
+        foreach (var o in tracked)
+        {
+            if (frame.IsLive && _tracker.PreviousCentre(o.Id) is { } prev && !_counted.Contains(o.Id))
+            {
+                var (before, after) = horizontal ? (prev.Y, o.CenterY) : (prev.X, o.CenterX);
+                if ((before < line) != (after < line))
+                {
+                    var dir = after > before ? "in" : "out";
+                    lock (_in)
+                    {
+                        var target = dir == "in" ? _in : _out;
+                        target[o.Label] = target.GetValueOrDefault(o.Label) + 1;
+                    }
+
+                    _counted.Add(o.Id);
+                    _ = InvokeAsync(() => OnCrossing.InvokeAsync((o.Label, dir)));
+                }
+            }
+
+            overlay.Boxes.Add(new OverlayBox { X = o.X, Y = o.Y, W = o.W, H = o.H, Color = ObjectDetectionPanel.ColorFor(o.Label), Label = $"#{o.Id} {o.Label}", Dashed = _counted.Contains(o.Id) });
+        }
+
+        overlay.Paths.Add(new OverlayPath { Points = horizontal ? [0, line, 1, line] : [line, 0, line, 1], Color = Overlay.Warning, Width = 3 });
+        var inView = tracked.GroupBy(o => o.Label).ToDictionary(g => g.Key, g => g.Count());
+        Dictionary<string, int> inCopy, outCopy;
+        lock (_in)
+        {
+            inCopy = new(_in);
+            outCopy = new(_out);
+        }
+
+        _state = new State(inView, inCopy, outCopy);
+        if (frame.IsLive && frame.TimestampMs - _lastSample >= 2000)
+        {
+            _lastSample = frame.TimestampMs;
+            lock (_history)
+            {
+                _history.Add((frame.TimestampMs, inView));
+                if (_history.Count > 90)
+                {
+                    _history.RemoveAt(0);
+                }
+
+                _series = VehicleClasses.Where(c => _history.Any(h => h.Counts.ContainsKey(c)))
+                    .Select(c => new ChartSeries(c, _history.Select(h => new ChartPoint(h.T / 1000.0, h.Counts.GetValueOrDefault(c))).ToArray()) { Color = ObjectDetectionPanel.ColorFor(c) })
+                    .ToList();
+            }
+        }
+
+        overlay.Status = $"{tracked.Count} vehicles · in {inCopy.Values.Sum()} · out {outCopy.Values.Sum()}";
+        return overlay;
+    }
+
+    private void SourceChanged(VisionSourceKind kind)
+    {
+        _tracker.Reset();
+        ResetCounts();
+        HandleSourceChanged(kind);
+    }
+
+    private void ResetCounts()
+    {
+        lock (_in)
+        {
+            _in.Clear();
+            _out.Clear();
+        }
+
+        _counted.Clear();
+        lock (_history)
+        {
+            _history.Clear();
+            _series = [];
+        }
+    }
+
+    private Task Summarise()
+    {
+        var s = _state;
+        var facts = $"In view: {string.Join(", ", s.InView.Select(kv => $"{kv.Value} {kv.Key}"))}. Crossed the line inbound: {string.Join(", ", s.In.Select(kv => $"{kv.Value} {kv.Key}"))}; outbound: {string.Join(", ", s.Out.Select(kv => $"{kv.Value} {kv.Key}"))}.";
+        return AskAboutFrameAsync("a traffic analyst for an Indonesian city", "Summarise the traffic in this view and any congestion or safety concerns.", facts);
+    }
+}

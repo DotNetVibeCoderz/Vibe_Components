@@ -13,6 +13,7 @@
     <ProjectReference Include="..\..\src\Blazor.AI.LocalModels\Blazor.AI.LocalModels.csproj" />
     <ProjectReference Include="..\..\src\Blazor.AI.Bio\Blazor.AI.Bio.csproj" />
     <ProjectReference Include="..\..\src\Blazor.AI.ThreeD\Blazor.AI.ThreeD.csproj" />
+    <ProjectReference Include="..\..\src\Blazor.AI.MediaPipe\Blazor.AI.MediaPipe.csproj" />
   </ItemGroup>
   <ItemGroup>
     <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-gwg2-r3hj-4w44" />

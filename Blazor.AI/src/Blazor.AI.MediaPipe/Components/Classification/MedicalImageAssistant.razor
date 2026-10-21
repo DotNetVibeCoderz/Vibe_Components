@@ -1,0 +1,297 @@
+@namespace Blazor.AI.MediaPipe
+@inherits AiComponentBase
+@using Microsoft.Extensions.AI
+@* Clinical image workflow helper: view with contrast/zoom, measure, annotate, then ask a vision model for a structured observation. Images stay in memory only. *@
+
+<div class="@CssClass("bai-stack")" @attributes="AdditionalAttributes">
+    <div class="bai-alert is-warning" role="note"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span><b>Not a diagnosis.</b> A workflow aid for qualified healthcare professionals. AI observations can be wrong; clinical judgement and proper diagnostics decide. Images are kept in this browser session's memory only and are never stored.</span></div>
+    <div class="baiv-split">
+        <div class="bai-stack">
+            <div class="baiv-bar" role="toolbar" aria-label="Image tools">
+                <label class="bai-chip" style="position:relative; cursor:pointer"><i class="bi bi-upload" aria-hidden="true"></i>Upload image
+                    <InputFile OnChange="LoadAsync" accept="image/*" style="position:absolute; inset:0; opacity:0; cursor:pointer" aria-label="Upload a clinical image" />
+                </label>
+                @foreach (var (mode, icon, text) in Modes)
+                {
+                    <button type="button" class="bai-chip @(_mode == mode ? "is-active" : null)" @onclick="() => SetMode(mode)"><i class="bi @icon" aria-hidden="true"></i>@text</button>
+                }
+                <button type="button" class="bai-chip" disabled="@(_image is null)" @onclick="Clear"><i class="bi bi-x-circle" aria-hidden="true"></i>Clear</button>
+            </div>
+            <div class="bai-row bai-small">
+                <label>Contrast <input type="range" min="50" max="250" @bind="_contrast" @bind:event="oninput" aria-label="Contrast" /></label>
+                <label>Brightness <input type="range" min="50" max="200" @bind="_brightness" @bind:event="oninput" aria-label="Brightness" /></label>
+                <label>Zoom <input type="range" min="1" max="4" step="0.25" @bind="_zoom" @bind:event="oninput" aria-label="Zoom" /></label>
+                <label><input type="checkbox" class="form-check-input" @bind="_invert" /> invert</label>
+                <label><input type="checkbox" class="form-check-input" @bind="_gray" /> greyscale</label>
+            </div>
+            <div class="bai-glass" style="overflow:auto; max-height:@Height; padding:0">
+                @if (_image is null)
+                {
+                    <div class="bai-small bai-muted" style="padding:3rem 1rem; text-align:center"><i class="bi bi-image" style="font-size:2rem" aria-hidden="true"></i><br />Upload a dermoscopy, X-ray or wound photo to begin.</div>
+                }
+                else
+                {
+                    var (dw, dh) = DisplaySize;
+                    <div style="position:relative; width:@Px(dw); height:@Px(dh)">
+                        <img src="@_image.DataUrl" alt="Clinical image under review" draggable="false" @onclick="ClickImage"
+                             style="width:@Px(dw); height:@Px(dh); display:block; cursor:crosshair; filter:@Filter; user-select:none" />
+                        <svg width="@Px(dw)" height="@Px(dh)" viewBox="0 0 @Px(dw) @Px(dh)" style="position:absolute; inset:0; pointer-events:none" aria-hidden="true">
+                            @foreach (var (m, i) in _measures.Select((m, i) => (m, i)))
+                            {
+                                <line x1="@Px(m.A.X * dw)" y1="@Px(m.A.Y * dh)" x2="@Px(m.B.X * dw)" y2="@Px(m.B.Y * dh)" stroke="#3cc4b1" stroke-width="2" />
+                                <circle cx="@Px(m.A.X * dw)" cy="@Px(m.A.Y * dh)" r="4" fill="#3cc4b1" />
+                                <circle cx="@Px(m.B.X * dw)" cy="@Px(m.B.Y * dh)" r="4" fill="#3cc4b1" />
+                                <!text x="@Px((m.A.X + m.B.X) / 2 * dw + 6)" y="@Px((m.A.Y + m.B.Y) / 2 * dh - 6)" fill="#fff" stroke="#000" stroke-width="3" paint-order="stroke" font-size="13">M@(i + 1) @Length(m)</!text>
+                            }
+                            @if (_first is { } f)
+                            {
+                                <circle cx="@Px(f.X * dw)" cy="@Px(f.Y * dh)" r="5" fill="none" stroke="#d9964f" stroke-width="2" />
+                            }
+                            @foreach (var (a, i) in _notes.Select((a, i) => (a, i)))
+                            {
+                                <circle cx="@Px(a.At.X * dw)" cy="@Px(a.At.Y * dh)" r="9" fill="#d9964f" />
+                                <!text x="@Px(a.At.X * dw)" y="@Px(a.At.Y * dh + 4)" text-anchor="middle" fill="#1b1530" font-size="11" font-weight="700">@(i + 1)</!text>
+                            }
+                        </svg>
+                    </div>
+                }
+            </div>
+            <span class="bai-small bai-muted">@Hint</span>
+        </div>
+        <AiCard Title="@Title" Subtitle="Measure · annotate · structured observation" Icon="bi-clipboard2-pulse">
+            <div class="bai-stack">
+                <div class="bai-row">
+                    <select class="bai-select" style="width:auto" @bind="_modality" aria-label="Image type">
+                        @foreach (var m in Modalities) { <option value="@m">@m</option> }
+                    </select>
+                    <span class="bai-small bai-muted">@(_image is null ? "No image" : $"{_image.Width}×{_image.Height} px")</span>
+                </div>
+                <span class="bai-label">Scale</span>
+                <div class="bai-row bai-small">
+                    @if (_mmPerPx is { } s)
+                    {
+                        <span>@s.ToString("0.000", CultureInfo.InvariantCulture) mm/px</span>
+                        <button type="button" class="bai-btn-ghost" @onclick="() => _mmPerPx = null">Reset</button>
+                    }
+                    else
+                    {
+                        <span class="bai-muted">Uncalibrated (pixels). Draw a line over a ruler, then:</span>
+                    }
+                    <input type="number" min="0.1" step="0.1" class="bai-input" style="width:5rem" @bind="_knownMm" aria-label="Known length in millimetres" /> mm
+                    <button type="button" class="bai-btn-ghost" disabled="@(_measures.Count == 0)" @onclick="Calibrate">Use last line</button>
+                </div>
+                @if (_measures.Count > 0)
+                {
+                    <span class="bai-label">Measurements</span>
+                    @foreach (var (m, i) in _measures.Select((m, i) => (m, i)).ToList())
+                    {
+                        <div class="bai-row bai-small"><span class="bai-spacer">M@(i + 1): <b>@Length(m)</b></span><button type="button" class="bai-btn-ghost" aria-label="Remove measurement" @onclick="() => _measures.Remove(m)"><i class="bi bi-x" aria-hidden="true"></i></button></div>
+                    }
+                }
+                <span class="bai-label">Annotations</span>
+                <input class="bai-input" @bind="_noteText" placeholder="Note for the next click, e.g. irregular border" aria-label="Annotation text" />
+                @foreach (var (a, i) in _notes.Select((a, i) => (a, i)).ToList())
+                {
+                    <div class="bai-row bai-small"><span class="bai-spacer"><b>@(i + 1).</b> @a.Text</span><button type="button" class="bai-btn-ghost" aria-label="Remove annotation" @onclick="() => _notes.Remove(a)"><i class="bi bi-x" aria-hidden="true"></i></button></div>
+                }
+                <textarea class="bai-input" rows="2" @bind="_question" placeholder="Clinical question, e.g. describe the lesion using ABCDE features" aria-label="Clinical question"></textarea>
+                <button type="button" class="bai-btn bai-btn-ai" style="width:fit-content" disabled="@(IsBusy || _image is null)" @onclick="ObserveAsync"><i class="bi bi-stars" aria-hidden="true"></i>Structured observation</button>
+                <AiError Message="@Error" />
+                @if (_answer is not null)
+                {
+                    <AiOutput Text="@_answer" IsBusy="@IsBusy" />
+                    <span class="bai-small bai-muted">@(_usedImage ? "Model saw the image (original, without display adjustments)." : "Model could not read images: answered from measurements and notes only.") Not a diagnosis.</span>
+                }
+            </div>
+        </AiCard>
+    </div>
+</div>
+
+@code {
+    private sealed record LoadedImage(byte[] Bytes, string ContentType, string DataUrl, int Width, int Height);
+    private readonly record struct Pt(double X, double Y);
+    private sealed record Measure(Pt A, Pt B);
+    private sealed record Note(Pt At, string Text);
+
+    private static readonly (string Mode, string Icon, string Text)[] Modes =
+        [("measure", "bi-rulers", "Measure"), ("annotate", "bi-pin-angle", "Annotate"), ("view", "bi-eye", "View")];
+
+    private LoadedImage? _image;
+    private readonly List<Measure> _measures = [];
+    private readonly List<Note> _notes = [];
+    private Pt? _first;
+    private string _mode = "measure", _modality = "Dermoscopy";
+    private string? _noteText, _question, _answer;
+    private int _contrast = 100, _brightness = 100;
+    private double _zoom = 1, _knownMm = 10;
+    private double? _mmPerPx;
+    private bool _invert, _gray, _usedImage;
+
+    [Parameter] public string Title { get; set; } = "Medical image assistant";
+
+    /// <summary>Maximum height of the viewer (CSS length).</summary>
+    [Parameter] public string Height { get; set; } = "520px";
+
+    /// <summary>Display width at zoom 1, in CSS pixels (the viewer scrolls when zoomed).</summary>
+    [Parameter] public double BaseWidth { get; set; } = 560;
+
+    /// <summary>Largest accepted upload, in bytes.</summary>
+    [Parameter] public long MaxBytes { get; set; } = 12 * 1024 * 1024;
+
+    [Parameter] public IReadOnlyList<string> Modalities { get; set; } = ["Dermoscopy", "Clinical skin photo", "Chest X-ray", "Other X-ray", "Wound photo", "Ophthalmic photo", "Other"];
+
+    /// <summary>Language for answers; null follows the model's default.</summary>
+    [Parameter] public string? Language { get; set; }
+
+    private (double W, double H) DisplaySize => _image is null ? (0, 0) : (BaseWidth * _zoom, BaseWidth * _zoom * _image.Height / Math.Max(1, _image.Width));
+
+    private string Filter => string.Create(CultureInfo.InvariantCulture, $"contrast({_contrast}%) brightness({_brightness}%) invert({(_invert ? 1 : 0)}) grayscale({(_gray ? 1 : 0)})");
+
+    private string Hint => _mode switch
+    {
+        "measure" => _first is null ? "Click two points to measure a distance." : "Click the second point.",
+        "annotate" => "Type a note, then click where it applies.",
+        _ => "View mode: adjust contrast and zoom.",
+    };
+
+    private static string Px(double v) => v.ToString("0.#", CultureInfo.InvariantCulture);
+
+    private async Task LoadAsync(InputFileChangeEventArgs e)
+    {
+        Error = null;
+        try
+        {
+            await using var stream = e.File.OpenReadStream(MaxBytes);
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+            var bytes = memory.ToArray();
+            // Decode once for the pixel size (the scale and measurements are in image pixels).
+            using var decoded = MediaPipeNet.Imaging.MPImage.Load(bytes);
+            var type = string.IsNullOrEmpty(e.File.ContentType) ? "image/jpeg" : e.File.ContentType;
+            _image = new LoadedImage(bytes, type, $"data:{type};base64,{Convert.ToBase64String(bytes)}", decoded.Width, decoded.Height);
+            _measures.Clear();
+            _notes.Clear();
+            _first = null;
+            _answer = null;
+            _mmPerPx = null;
+        }
+        catch (Exception ex)
+        {
+            Error = $"Could not open the image: {ex.Message}";
+        }
+    }
+
+    private void SetMode(string mode)
+    {
+        _mode = mode;
+        _first = null;
+    }
+
+    private void ClickImage(MouseEventArgs e)
+    {
+        var (dw, dh) = DisplaySize;
+        if (_image is null || dw <= 0)
+        {
+            return;
+        }
+
+        var p = new Pt(Math.Clamp(e.OffsetX / dw, 0, 1), Math.Clamp(e.OffsetY / dh, 0, 1));
+        if (_mode == "measure")
+        {
+            if (_first is { } a)
+            {
+                _measures.Add(new Measure(a, p));
+                _first = null;
+            }
+            else
+            {
+                _first = p;
+            }
+        }
+        else if (_mode == "annotate")
+        {
+            _notes.Add(new Note(p, string.IsNullOrWhiteSpace(_noteText) ? $"Point {_notes.Count + 1}" : _noteText.Trim()));
+            _noteText = null;
+        }
+    }
+
+    private double Pixels(Measure m) => _image is null ? 0
+        : Math.Sqrt(Math.Pow((m.B.X - m.A.X) * _image.Width, 2) + Math.Pow((m.B.Y - m.A.Y) * _image.Height, 2));
+
+    private string Length(Measure m) => _mmPerPx is { } s
+        ? string.Create(CultureInfo.InvariantCulture, $"{Pixels(m) * s:0.0} mm")
+        : string.Create(CultureInfo.InvariantCulture, $"{Pixels(m):0} px");
+
+    private void Calibrate()
+    {
+        var px = _measures.Count == 0 ? 0 : Pixels(_measures[^1]);
+        if (px > 0 && _knownMm > 0)
+        {
+            _mmPerPx = _knownMm / px;
+        }
+    }
+
+    private void Clear()
+    {
+        _image = null;
+        _measures.Clear();
+        _notes.Clear();
+        _first = null;
+        _answer = null;
+        _mmPerPx = null;
+    }
+
+    private Task ObserveAsync() => RunAsync(async ct =>
+    {
+        if (_image is not { } image)
+        {
+            return;
+        }
+
+        var measures = _measures.Count == 0 ? "none" : string.Join("; ", _measures.Select((m, i) => $"M{i + 1} = {Length(m)}"));
+        var notes = _notes.Count == 0 ? "none" : string.Join("; ", _notes.Select((n, i) => string.Create(CultureInfo.InvariantCulture, $"{i + 1}. {n.Text} at ({n.At.X:0.00}, {n.At.Y:0.00})")));
+        var facts = $"Image type: {_modality}. Size {image.Width}x{image.Height} px. Scale: {(_mmPerPx is { } s ? string.Create(CultureInfo.InvariantCulture, $"{s:0.000} mm/px") : "uncalibrated")}. " +
+                    $"Clinician measurements: {measures}. Clinician annotations (normalised x,y): {notes}.";
+        var question = string.IsNullOrWhiteSpace(_question) ? "Describe the visible findings." : _question.Trim();
+        var system = "You assist a qualified clinician reviewing a medical image. You do not diagnose. Reply with the headings " +
+                     "Observations, Measurements, Considerations (differential features to assess, not a diagnosis), Suggested next steps, Limitations. " +
+                     "Describe only what is visible or given; flag image-quality limits and say when something cannot be judged from a photo." +
+                     (Language is null ? string.Empty : $" Answer in {Language}.");
+        var text = PromptTags.Wrap(PromptTags.Input, question) + "\n" + PromptTags.Wrap(PromptTags.Context, facts);
+        var client = ClientFactory.GetChatClient(Provider);
+        var options = AiChatOptions.ForTask(AiTasks.Insight);
+        var builder = new StringBuilder();
+        _answer = string.Empty;
+        List<ChatMessage> Messages(bool withImage) =>
+        [
+            new(ChatRole.System, system),
+            new(ChatRole.User, withImage ? [new TextContent(text), new DataContent(image.Bytes, image.ContentType)] : [new TextContent(text)]),
+        ];
+
+        async Task StreamAsync(bool withImage)
+        {
+            _usedImage = withImage;
+            await foreach (var update in client.GetStreamingResponseAsync(Messages(withImage), options, ct))
+            {
+                builder.Append(update.Text);
+                _answer = builder.ToString();
+                RenderThrottled();
+            }
+        }
+
+        try
+        {
+            await StreamAsync(true);
+        }
+        catch (Exception ex) when (builder.Length == 0 && ex is not OperationCanceledException and not Blazor.AI.Abstractions.Security.AiGuardrailException)
+        {
+            await StreamAsync(false);
+        }
+    });
+
+    public override async ValueTask DisposeAsync()
+    {
+        Clear();
+        await base.DisposeAsync();
+    }
+}

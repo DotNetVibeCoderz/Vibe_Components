@@ -1,0 +1,140 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* Skills training from hand and pose landmarks: WHO hand-hygiene steps or CPR hand position, with a checklist and score. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{(_mode == "hygiene" ? "Hand hygiene (WHO steps)" : "CPR hand position")} · score {Score}")" Icon="bi-heart-pulse">
+        <div class="bai-stack">
+            <div class="bai-chips" role="radiogroup" aria-label="Skill">
+                <button type="button" role="radio" aria-checked="@(_mode == "hygiene")" class="bai-chip @(_mode == "hygiene" ? "is-active" : null)" @onclick="@(() => SetMode("hygiene"))">Hand hygiene</button>
+                <button type="button" role="radio" aria-checked="@(_mode == "cpr")" class="bai-chip @(_mode == "cpr" ? "is-active" : null)" @onclick="@(() => SetMode("cpr"))">CPR hands</button>
+            </div>
+            <ol class="bai-small" style="margin:0; padding-left:1.2rem">
+                @foreach (var s in Steps)
+                {
+                    <li style="@(s.Done ? "color:var(--bai-nila)" : s == Steps.FirstOrDefault(x => !x.Done) ? "font-weight:700" : "color:var(--bai-ink-muted)")">
+                        @(s.Done ? "✓ " : "")@s.Title <span class="bai-faint">@s.Hint</span>
+                    </li>
+                }
+            </ol>
+            <div class="baiv-meter"><span>Current step</span><div><span style="width:@((_match * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@_match.ToString("P0", CultureInfo.InvariantCulture)</span></div>
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="Restart">Restart</button>
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="Debrief"><i class="bi bi-stars" aria-hidden="true"></i>Debrief</button>
+            </div>
+            <span class="bai-small bai-faint">Training aid only; follow your local clinical guidelines.</span>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private sealed class Step(string title, string hint, Func<SkillPose, double> match, double holdSeconds)
+    {
+        public string Title { get; } = title;
+        public string Hint { get; } = hint;
+        public Func<SkillPose, double> Match { get; } = match;
+        public double HoldSeconds { get; } = holdSeconds;
+        public double Held { get; set; }
+        public bool Done { get; set; }
+    }
+
+    private sealed record SkillPose(HandLandmarks? Left, HandLandmarks? Right, PoseLandmarks? Pose, double Aspect);
+
+    private string _mode = "hygiene";
+    private List<Step> _steps = [];
+    private double _match;
+    private long _lastT;
+
+    [Parameter] public string Title { get; set; } = "Medical skills trainer";
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.OpenPalms, VisionSamples.ThumbsUp, VisionSamples.Fall];
+
+    private List<Step> Steps => _steps.Count > 0 ? _steps : _steps = Build(_mode);
+
+    private int Score => (int)Math.Round(Steps.Count(s => s.Done) * 100.0 / Math.Max(1, Steps.Count));
+
+    private static double Near(NormalizedLandmark a, NormalizedLandmark b, double aspect, double radius) =>
+        Math.Clamp(1 - VisionMath.Distance(a, b, aspect) / radius, 0, 1);
+
+    private static List<Step> Build(string mode) => mode == "hygiene"
+        ?
+        [
+            new("Show both hands, palms up", "two open hands", p => p.Left is not null && p.Right is not null ? Math.Min(VisionMath.CountFingers(p.Left), VisionMath.CountFingers(p.Right)) / 5.0 : 0, 1.0),
+            new("Palm to palm", "bring palms together", p => p.Left is not null && p.Right is not null ? Near(p.Left.Landmarks[9], p.Right.Landmarks[9], p.Aspect, 0.25) : 0, 1.5),
+            new("Interlace fingers", "fingertips meet the other knuckles", p => p.Left is not null && p.Right is not null ? Near(p.Left.Landmarks[8], p.Right.Landmarks[5], p.Aspect, 0.2) : 0, 1.5),
+            new("Rub thumbs", "wrap a fist around the other thumb", p => p.Left is not null && p.Right is not null ? Near(p.Left.Landmarks[4], p.Right.Landmarks[0], p.Aspect, 0.22) : 0, 1.5),
+            new("Fingertips in palm", "close one hand into the other palm", p => p.Left is not null && p.Right is not null && Math.Min(VisionMath.CountFingers(p.Left), VisionMath.CountFingers(p.Right)) <= 2 ? 1 : 0, 1.5),
+        ]
+        :
+        [
+            new("Kneel beside the patient", "upper body visible", p => p.Pose is null ? 0 : 1, 1.0),
+            new("Hands centred on the chest", "stack hands, wrists together", p => p.Left is not null && p.Right is not null ? Near(p.Left.Landmarks[0], p.Right.Landmarks[0], p.Aspect, 0.15) : 0, 1.5),
+            new("Arms straight", "elbows locked", p => p.Pose is null ? 0 : Math.Clamp((Math.Min(
+                VisionMath.Angle3(p.Pose.WorldLandmarks[11], p.Pose.WorldLandmarks[13], p.Pose.WorldLandmarks[15]),
+                VisionMath.Angle3(p.Pose.WorldLandmarks[12], p.Pose.WorldLandmarks[14], p.Pose.WorldLandmarks[16])) - 120) / 50, 0, 1), 1.5),
+            new("Shoulders over hands", "lean over, push straight down", p => p.Pose is null ? 0 : Math.Clamp(1 - Math.Abs((p.Pose.Landmarks[11].X + p.Pose.Landmarks[12].X) / 2 - (p.Pose.Landmarks[15].X + p.Pose.Landmarks[16].X) / 2) * 6, 0, 1), 1.5),
+        ];
+
+    private void SetMode(string mode)
+    {
+        _mode = mode;
+        Restart();
+    }
+
+    private void Restart()
+    {
+        _steps = Build(_mode);
+        Narration = null;
+        _ = Camera?.ReprocessAsync();
+    }
+
+    private void Changed(VisionSourceKind kind) => HandleSourceChanged(kind);
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var overlay = new VisionOverlay();
+        var hands = Tasks.Hands(frame, 2).Hands;
+        var pose = _mode == "cpr" ? Tasks.Pose(frame).Poses.FirstOrDefault() : null;
+        var sp = new SkillPose(hands.FirstOrDefault(h => h.IsLeft), hands.FirstOrDefault(h => !h.IsLeft), pose, frame.Width / (double)frame.Height);
+        var t = frame.IsLive ? frame.TimestampMs : _lastT + 2000;
+        var dt = Math.Clamp((t - _lastT) / 1000.0, 0, 2);
+        _lastT = t;
+        var step = Steps.FirstOrDefault(s => !s.Done);
+        _match = step?.Match(sp) ?? 1;
+        if (step is not null)
+        {
+            step.Held = _match >= 0.6 ? step.Held + dt : Math.Max(0, step.Held - dt);
+            if (step.Held >= step.HoldSeconds)
+            {
+                step.Done = true;
+                Publish("step", $"Step done: {step.Title}");
+                if (Steps.All(s => s.Done))
+                {
+                    Publish("complete", $"{(_mode == "hygiene" ? "Hand hygiene" : "CPR hand position")} completed", VisionEventSeverity.Info);
+                }
+            }
+        }
+
+        foreach (var h in hands)
+        {
+            overlay.Landmarks.Add(Overlay.Hand(h));
+        }
+
+        if (pose is not null)
+        {
+            overlay.Landmarks.Add(Overlay.Pose(pose, Overlay.Tarum));
+        }
+
+        overlay.Texts.Add(Overlay.Label(0.03f, 0.9f, step is null ? "All steps complete ✓" : $"Step: {step.Title} ({_match:P0})", Overlay.White, 15));
+        overlay.Status = $"Score {Score}";
+        return overlay;
+    }
+
+    private Task Debrief() => AskAboutFrameAsync("a clinical skills instructor giving brief, encouraging feedback",
+        "Give a short debrief and one thing to practise next.",
+        $"Skill: {(_mode == "hygiene" ? "hand hygiene" : "CPR hand position")}. Steps: {string.Join("; ", Steps.Select(s => $"{s.Title}: {(s.Done ? "done" : "not done")}"))}. Score {Score}/100.",
+        attachImage: false);
+}

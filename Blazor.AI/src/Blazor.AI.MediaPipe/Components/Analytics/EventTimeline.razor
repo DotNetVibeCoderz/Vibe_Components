@@ -1,0 +1,101 @@
+@namespace Blazor.AI.MediaPipe
+@inherits StreamComponentBase
+@* Chronological vision events with snapshot thumbnails, grouped by minute, filterable by severity, source and text. *@
+
+<div class="@CssClass("baiv")">
+    <AiCard Title="@Title" Subtitle="@($"{_shown.Count} of {Current.Count} events")" Icon="bi-clock-history">
+        <div class="bai-stack">
+            <div class="bai-row" style="flex-wrap:wrap; gap:.4rem">
+                @foreach (var s in Enum.GetValues<VisionEventSeverity>())
+                {
+                    var sev = s;
+                    <button type="button" class="bai-chip @(_severities.Contains(sev) ? "is-active" : null)" aria-pressed="@_severities.Contains(sev)" @onclick="() => Toggle(sev)">@sev</button>
+                }
+                <select class="bai-select" style="max-width:12rem" @bind="_source" @bind:after="Filter" aria-label="Source">
+                    <option value="">All sources</option>
+                    @foreach (var src in Current.Select(e => e.Source).Distinct().Order())
+                    {
+                        <option value="@src">@src</option>
+                    }
+                </select>
+                <input class="bai-input" style="max-width:14rem" placeholder="Search…" @bind="_query" @bind:event="oninput" @bind:after="Filter" aria-label="Search events" />
+                <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_hideCounts" @bind:after="Filter" /> hide count updates</label>
+                @if (AllowClear) { <button type="button" class="bai-btn bai-btn-ghost" @onclick="() => Stream.Clear()"><i class="bi bi-trash"></i> Clear</button> }
+            </div>
+            <div class="baiv-log" style="max-height:@MaxHeight" aria-live="polite">
+                @if (_shown.Count == 0)
+                {
+                    <span class="bai-small bai-muted">No events match. Events appear here as vision components publish them.</span>
+                }
+                @foreach (var group in _shown.GroupBy(e => e.At.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture)))
+                {
+                    <div class="bai-label" style="margin-top:.4rem">@group.Key</div>
+                    @foreach (var e in group)
+                    {
+                        <div style="display:flex; gap:.5rem; align-items:center; padding:.2rem 0; border-left:3px solid @Color(e.Severity); padding-left:.5rem">
+                            <span class="bai-small bai-faint" style="font-variant-numeric:tabular-nums">@e.At.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)</span>
+                            <span class="bai-badge">@e.Source</span>
+                            <span style="flex:1">@e.Message</span>
+                            @if (ShowSnapshots && e.Snapshot is not null)
+                            {
+                                <button type="button" class="bai-btn-ghost" style="padding:0; border:0; background:none" @onclick="() => _selected = e" aria-label="Show snapshot">
+                                    <img src="@e.Snapshot" alt="Snapshot of @e.Kind" style="height:40px; border-radius:4px" />
+                                </button>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+            @if (_selected?.Snapshot is { } img)
+            {
+                <figure style="margin:0">
+                    <img src="@img" alt="Event snapshot" style="width:100%; border-radius:8px" />
+                    <figcaption class="bai-small bai-muted">@_selected.At.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture) · @_selected.Source · @_selected.Message
+                        <button type="button" class="bai-btn bai-btn-ghost" @onclick="() => _selected = null">Close</button></figcaption>
+                </figure>
+            }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private readonly HashSet<VisionEventSeverity> _severities = [.. Enum.GetValues<VisionEventSeverity>()];
+    private List<VisionEvent> _shown = [];
+    private string _source = "", _query = "";
+    private bool _hideCounts = true;
+    private VisionEvent? _selected;
+
+    [Parameter] public string Title { get; set; } = "Event timeline";
+    [Parameter] public int MaxItems { get; set; } = 200;
+    [Parameter] public bool ShowSnapshots { get; set; } = true;
+    [Parameter] public bool AllowClear { get; set; } = true;
+    [Parameter] public string MaxHeight { get; set; } = "360px";
+
+    protected override void OnEvents(IReadOnlyList<VisionEvent> events) => Filter();
+
+    private void Toggle(VisionEventSeverity s)
+    {
+        if (!_severities.Remove(s))
+        {
+            _severities.Add(s);
+        }
+
+        Filter();
+    }
+
+    private void Filter() => _shown = Current
+        .Where(e => _severities.Contains(e.Severity))
+        .Where(e => !_hideCounts || e.Kind is not ("count" or "headcount"))
+        .Where(e => _source.Length == 0 || e.Source == _source)
+        .Where(e => _query.Length == 0 || e.Message.Contains(_query, StringComparison.OrdinalIgnoreCase) || e.Kind.Contains(_query, StringComparison.OrdinalIgnoreCase))
+        .Reverse()
+        .Take(MaxItems)
+        .ToList();
+
+    private static string Color(VisionEventSeverity s) => s switch
+    {
+        VisionEventSeverity.Alert => "var(--bai-danger)",
+        VisionEventSeverity.Warning => "var(--bai-soga)",
+        _ => "var(--bai-nila)",
+    };
+}

@@ -1,0 +1,177 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Static hand shapes become letters (built-in subset + signs you teach); AI turns the letters into a sentence. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="Fingerspelling subset: A B D I L V W Y + space (open hand)" Icon="bi-translate">
+        <div class="bai-stack">
+            <div class="bai-row">
+                <div class="baiv-big" aria-live="polite">@(_current ?? "–")</div>
+                <span class="bai-small bai-muted">@(_stable)/@StableFrames frames</span>
+            </div>
+            <div class="bai-input" style="min-height:2.6rem; font-family:var(--bai-font-mono); font-size:1.1rem" aria-label="Spelled text">@_buffer<span class="bai-faint">▌</span></div>
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="Backspace">⌫ Back</button>
+                <button type="button" class="bai-btn-ghost" @onclick="() => _buffer = string.Empty">Clear</button>
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || string.IsNullOrWhiteSpace(_buffer))" @onclick="MakeSentence"><i class="bi bi-stars" aria-hidden="true"></i>Make a sentence</button>
+            </div>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+            <details>
+                <summary class="bai-small">Teach a sign</summary>
+                <div class="bai-row" style="margin-top:.4rem">
+                    <input class="bai-input bai-spacer" @bind="_teach" placeholder="Letter or word, e.g. O or TERIMA KASIH" aria-label="Sign to teach" />
+                    <button type="button" class="bai-btn-ghost" disabled="@(_lastShape is null || string.IsNullOrWhiteSpace(_teach))" @onclick="Teach">Capture</button>
+                </div>
+                <div class="bai-chips" style="margin-top:.3rem">
+                    @foreach (var g in _custom.GroupBy(c => c.Label)) { <span class="bai-badge bai-badge-ai">@g.Key ×@g.Count()</span> }
+                </div>
+            </details>
+            <span class="bai-small bai-faint">Built-in rules read which fingers are extended: A fist, B four fingers up, D index, I pinky, L thumb + index, V index + middle, W index + middle + ring, Y thumb + pinky, open hand = space. Letters that need motion (J, Z) or fine shape (C, O, M, N…) need taught templates. This is a learning aid, not a sign-language interpreter.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private IReadOnlyList<(string Label, float[] Shape)> _custom = [];
+    private string _buffer = string.Empty;
+    private string? _current, _candidate, _teach;
+    private int _stable;
+    private bool _committed, _sawGap = true;
+    private float[]? _lastShape;
+
+    [Parameter] public string Title { get; set; } = "Sign language assistant";
+
+    /// <summary>Consecutive live frames a sign must hold before it is added.</summary>
+    [Parameter] public int StableFrames { get; set; } = 8;
+
+    /// <summary>Raised when a letter or word is added.</summary>
+    [Parameter] public EventCallback<string> OnSign { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Hands;
+
+    /// <summary>Built-in letter from finger extension [thumb, index, middle, ring, pinky], or null.</summary>
+    public static string? RuleLetter(bool[] e) => (e[0], e[1], e[2], e[3], e[4]) switch
+    {
+        (_, false, false, false, false) => "A",
+        (false, true, true, true, true) => "B",
+        (true, true, true, true, true) => " ",
+        (false, true, false, false, false) => "D",
+        (false, false, false, false, true) => "I",
+        (true, true, false, false, false) => "L",
+        (false, true, true, false, false) => "V",
+        (false, true, true, true, false) => "W",
+        (true, false, false, false, true) => "Y",
+        _ => null,
+    };
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.Hands(frame, 1);
+        var hand = result.Hands.FirstOrDefault();
+        if (hand is null)
+        {
+            _current = null;
+            _candidate = null;
+            _stable = 0;
+            _sawGap = true;
+            return new VisionOverlay { Status = "No hand" };
+        }
+
+        var shape = GestureRecognizerPanel.Shape(hand);
+        _lastShape = shape;
+        string? sign = null;
+        if (_custom.Count > 0)
+        {
+            var (label, d) = _custom.Select(c => (c.Label, d: Rms(c.Shape, shape))).MinBy(x => x.d);
+            if (d < 0.25)
+            {
+                sign = label;
+            }
+        }
+
+        sign ??= RuleLetter(VisionMath.ExtendedFingers(hand));
+        _current = sign switch { null => "?", " " => "␣", _ => sign };
+        if (sign != _candidate)
+        {
+            _candidate = sign;
+            _stable = 0;
+            _committed = false;
+        }
+        else
+        {
+            _stable = Math.Min(StableFrames, _stable + 1);
+        }
+
+        // Still images commit immediately; live frames need a stable hold, and repeating the same letter needs a gap or change.
+        var ready = !frame.IsLive || _stable >= StableFrames;
+        if (sign is not null && ready && !_committed && (_sawGap || !_buffer.EndsWith(sign, StringComparison.Ordinal)))
+        {
+            _committed = true;
+            _sawGap = false;
+            _buffer += sign.Length > 1 ? (_buffer.Length == 0 || _buffer.EndsWith(' ') ? string.Empty : " ") + sign + " " : sign;
+            _ = InvokeAsync(() => OnSign.InvokeAsync(sign));
+        }
+
+        var overlay = new VisionOverlay { Status = $"{_current} · {_stable}/{StableFrames}" };
+        overlay.Landmarks.Add(Overlay.Hand(hand, Overlay.Nila));
+        var (x, y, _, _) = Overlay.Bounds(hand.Landmarks);
+        overlay.Texts.Add(Overlay.Label(x, Math.Max(0.02f, y - 0.06f), _current, Overlay.White, 26));
+        return overlay;
+    }
+
+    private static double Rms(float[] a, float[] b)
+    {
+        double s = 0;
+        for (var i = 0; i < Math.Min(a.Length, b.Length); i++)
+        {
+            s += (a[i] - b[i]) * (a[i] - b[i]);
+        }
+
+        return Math.Sqrt(s / a.Length);
+    }
+
+    private void Teach()
+    {
+        if (_lastShape is not null && !string.IsNullOrWhiteSpace(_teach))
+        {
+            _custom = [.. _custom, (_teach.Trim().ToUpperInvariant(), _lastShape)];
+        }
+    }
+
+    private void Backspace()
+    {
+        if (_buffer.Length > 0)
+        {
+            _buffer = _buffer[..^1];
+        }
+    }
+
+    private Task MakeSentence() => RunAsync(async ct =>
+    {
+        var text = _buffer.Trim();
+        Narration = string.Empty;
+        var system = "You turn fingerspelled letters and signed words into one natural sentence. Fix obvious spelling, keep the meaning, and output only the sentence." +
+                     (Language is null ? string.Empty : $" Answer in {Language}.");
+        var builder = new StringBuilder();
+        try
+        {
+            await foreach (var token in Ai.StreamAsync(system, PromptTags.Wrap(PromptTags.Input, text), AiTasks.Rewrite, Provider, null, ct))
+            {
+                builder.Append(token);
+                Narration = builder.ToString();
+                RenderThrottled();
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Narration = text; // Offline fallback: the spelled text as is.
+        }
+
+        if (string.IsNullOrWhiteSpace(Narration))
+        {
+            Narration = text;
+        }
+    });
+}

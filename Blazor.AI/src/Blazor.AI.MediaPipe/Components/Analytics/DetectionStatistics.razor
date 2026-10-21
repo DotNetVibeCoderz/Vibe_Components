@@ -1,0 +1,128 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* Object counts per class over time windows: current bar chart, per-window trend lines and a summary table (avg / peak). *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="Changed" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{_windows.Count} windows of {WindowSeconds:0} s · {_frames} frames")" Icon="bi-bar-chart-line">
+        <div class="bai-stack">
+            @if (_current.Count == 0) { <span class="bai-small bai-muted">Nothing detected in the latest frame.</span> }
+            else { <BarChart Values="@_current" Horizontal="true" Height="@Math.Max(90, 30 * _current.Count + 30)" /> }
+            @if (_trend.Count > 0 && _windows.Count > 1)
+            {
+                <LineChart Series="@_trend" Height="170" XLabel="window" ZeroBased="true" ShowLegend="true" />
+            }
+            <div class="bai-table-wrap">
+                <table class="bai-table">
+                    <thead><tr><th>Class</th><th>Now</th><th>Avg / frame</th><th>Peak</th></tr></thead>
+                    <tbody>
+                        @foreach (var row in _table)
+                        {
+                            <tr><td>@row.Label</td><td class="bai-num">@row.Now</td><td class="bai-num">@row.Avg.ToString("0.0", CultureInfo.InvariantCulture)</td><td class="bai-num">@row.Peak</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <button type="button" class="bai-btn bai-btn-ghost" @onclick="Reset"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private sealed class Window
+    {
+        public long Start;
+        public int Frames;
+        public readonly Dictionary<string, int> Sum = [];
+    }
+
+    public sealed record ClassStat(string Label, int Now, double Avg, int Peak);
+
+    private readonly List<Window> _windows = [];
+    private readonly Dictionary<string, int> _peak = [];
+    private readonly Dictionary<string, long> _total = [];
+    private long _frames, _lastT;
+    private List<BarValue> _current = [];
+    private List<ChartSeries> _trend = [];
+    private List<ClassStat> _table = [];
+
+    [Parameter] public string Title { get; set; } = "Detection statistics";
+
+    /// <summary>COCO classes to count; null counts every class.</summary>
+    [Parameter] public IReadOnlySet<string>? Classes { get; set; }
+
+    [Parameter] public double WindowSeconds { get; set; } = 10;
+    [Parameter] public int MaxWindows { get; set; } = 30;
+    [Parameter] public float ScoreThreshold { get; set; } = 0.35f;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Scenes;
+
+    private void Changed(VisionSourceKind kind)
+    {
+        HandleSourceChanged(kind);
+        Clear();
+    }
+
+    private void Reset()
+    {
+        Clear();
+        _ = Camera?.ReprocessAsync();
+    }
+
+    private void Clear()
+    {
+        lock (_windows)
+        {
+            _windows.Clear();
+            _peak.Clear();
+            _total.Clear();
+            _frames = 0;
+        }
+    }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var dets = Tasks.Objects(frame, ScoreThreshold, 50, Classes).Detections;
+        var counts = dets.GroupBy(d => d.TopCategory?.CategoryName ?? "object").ToDictionary(g => g.Key, g => g.Count());
+        // Stills advance one window each, so switching samples builds a comparison.
+        var t = frame.IsLive ? frame.TimestampMs : _lastT + (long)(WindowSeconds * 1000);
+        _lastT = t;
+        lock (_windows)
+        {
+            _frames++;
+            if (_windows.Count == 0 || t - _windows[^1].Start >= WindowSeconds * 1000)
+            {
+                _windows.Add(new Window { Start = t });
+                if (_windows.Count > MaxWindows)
+                {
+                    _windows.RemoveAt(0);
+                }
+            }
+
+            var w = _windows[^1];
+            w.Frames++;
+            foreach (var (label, n) in counts)
+            {
+                w.Sum[label] = w.Sum.GetValueOrDefault(label) + n;
+                _peak[label] = Math.Max(_peak.GetValueOrDefault(label), n);
+                _total[label] = _total.GetValueOrDefault(label) + n;
+            }
+
+            var top = _total.OrderByDescending(x => x.Value).Take(5).Select(x => x.Key).ToList();
+            var palette = new[] { "var(--bai-soga)", "var(--bai-nila)", "var(--bai-tarum)", "var(--bai-danger)", "#7b8cff" };
+            _trend = top.Select((label, i) => new ChartSeries(label, _windows.Select((win, j) => new ChartPoint(j + 1, win.Frames == 0 ? 0 : win.Sum.GetValueOrDefault(label) / (double)win.Frames)).ToArray()) { Color = palette[i % palette.Length] }).ToList();
+            _table = _total.OrderByDescending(x => x.Value)
+                .Select(x => new ClassStat(x.Key, counts.GetValueOrDefault(x.Key), x.Value / (double)_frames, _peak[x.Key])).ToList();
+        }
+
+        _current = counts.OrderByDescending(x => x.Value).Select(x => new BarValue(x.Key, x.Value)).ToList();
+        var overlay = new VisionOverlay();
+        foreach (var d in dets)
+        {
+            overlay.Boxes.Add(Overlay.Box(d, frame.Width, frame.Height));
+        }
+
+        overlay.Status = string.Join(" · ", counts.OrderByDescending(x => x.Value).Take(4).Select(x => $"{x.Key} {x.Value}"));
+        return overlay;
+    }
+}

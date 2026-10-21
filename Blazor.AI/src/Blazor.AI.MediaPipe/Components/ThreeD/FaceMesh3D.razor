@@ -1,0 +1,140 @@
+@namespace Blazor.AI.MediaPipe
+@using Blazor.AI.ThreeD
+@inherits VisionComponentBase
+@* The 478-point face mesh as an orbitable 3-D point cloud, coloured by depth or expression, with a gaze arrow and live blendshapes. *@
+
+<div class="@CssClass("baiv-split")">
+    <div class="bai-grid-2" style="align-items:start">
+        <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+        <Scene3D Objects="@_objects" Options="@_options" Height="@Height" />
+    </div>
+    <AiCard Title="@Title" Subtitle="Face landmarker · 478 points + 52 blendshapes" Icon="bi-person-bounding-box">
+        <div class="bai-stack">
+            <div class="bai-chips" role="radiogroup" aria-label="Point colours">
+                @foreach (var mode in new[] { "Depth", "Expression", "Mono" })
+                {
+                    <button type="button" role="radio" aria-checked="@(mode == _colorMode)" class="bai-chip @(mode == _colorMode ? "is-active" : null)" @onclick="() => SetColorMode(mode)">@mode</button>
+                }
+            </div>
+            @if (_state is { } s)
+            {
+                <div class="bai-row" style="gap:1.2rem">
+                    <div><b>@s.Expression</b><span class="bai-small bai-muted"> expression</span></div>
+                    <div><b>@s.Yaw.ToString("+0;-0;0", CultureInfo.InvariantCulture)°</b><span class="bai-small bai-muted"> yaw</span></div>
+                    <div><b>@s.Pitch.ToString("+0;-0;0", CultureInfo.InvariantCulture)°</b><span class="bai-small bai-muted"> pitch</span></div>
+                </div>
+                @foreach (var (name, v) in s.Top)
+                {
+                    <div class="baiv-meter"><span>@name</span><div><span style="width:@((v * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@v.ToString("0.00", CultureInfo.InvariantCulture)</span></div>
+                }
+            }
+            else
+            {
+                <p class="bai-small bai-muted" style="margin:0">Look at the camera to build the mesh.</p>
+            }
+            <span class="bai-small bai-muted">Drag the 3-D view to orbit. Depth is relative (MediaPipe's z), scaled to the face width.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private sealed record FaceState(string Expression, double Yaw, double Pitch, IReadOnlyList<(string Name, double Value)> Top);
+
+    private readonly Scene3DOptions _options = new()
+    {
+        Camera = new() { Position = [0, 1.45, 3.1], Target = [0, 1.4, 0], Fov = 40 },
+        Controls = new() { MinDistance = 1.2, MaxDistance = 7 },
+        Lights = "studio",
+        AriaLabel = "3-D face mesh",
+    };
+
+    private readonly SceneClock _clock = new();
+    private IReadOnlyList<Object3D> _objects = [];
+    private FaceState? _state;
+    private string? _colorMode;
+
+    [Parameter] public string Title { get; set; } = "Face mesh 3D";
+
+    /// <summary>Depth, Expression or Mono.</summary>
+    [Parameter] public string ColorMode { get; set; } = "Depth";
+
+    [Parameter] public double PointSize { get; set; } = 0.035;
+
+    /// <summary>Blendshapes listed in the panel.</summary>
+    [Parameter] public int TopBlendshapes { get; set; } = 6;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Face, VisionSamples.ThumbsUp];
+
+    protected override void OnInitialized() => _colorMode = ColorMode;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var face = Tasks.FaceLandmarks(frame, 1, blendshapes: true).Faces.FirstOrDefault();
+        var overlay = new VisionOverlay();
+        if (face is null)
+        {
+            _state = null;
+            overlay.Status = "No face";
+            return overlay;
+        }
+
+        var (label, _) = ExpressionMood.From(face);
+        var (yaw, pitch) = VisionMath.HeadPose(face.Landmarks);
+        var top = face.Blendshapes is null
+            ? []
+            : face.Blendshapes.OrderByDescending(b => b.Score).Take(TopBlendshapes).Select(b => (b.CategoryName ?? "?", (double)b.Score)).ToList();
+        _state = new FaceState(label, yaw, pitch, top);
+        if (_clock.Due(frame))
+        {
+            _objects = Build(face, frame.Width / (double)Math.Max(1, frame.Height), label, yaw, pitch);
+            _ = InvokeAsync(StateHasChanged);
+        }
+
+        overlay.Landmarks.AddRange(Overlay.Face(face, allPoints: false));
+        overlay.Status = $"{label} · yaw {yaw:+0;-0;0}°";
+        return overlay;
+    }
+
+    private List<Object3D> Build(FaceLandmarks face, double aspect, string expression, double yaw, double pitch)
+    {
+        var pts = Body3D.FacePoints(face.Landmarks, aspect);
+        IReadOnlyList<string>? colors = null;
+        var mono = ThreeDPalette.Nila;
+        if (_colorMode == "Depth")
+        {
+            var zs = pts.Select(p => p[2]).ToArray();
+            double min = zs.Min(), max = zs.Max();
+            colors = zs.Select(z => Lerp("#2b2f6b", "#3cc4b1", (z - min) / Math.Max(1e-6, max - min))).ToArray();
+        }
+        else if (_colorMode == "Expression")
+        {
+            mono = Body3D.ExpressionColor(expression);
+        }
+
+        var nose = pts[1];
+        var y = yaw * Math.PI / 180;
+        var p = pitch * Math.PI / 180;
+        var dir = new[] { Math.Sin(y) * Math.Cos(p), -Math.Sin(p), Math.Cos(y) * Math.Cos(p) };
+        return
+        [
+            new Object3D { Id = "mesh", Kind = "points", Points = pts, Colors = colors, Color = mono, PointSize = PointSize, Pickable = false },
+            new Object3D { Id = "gaze", Kind = "arrow", From = nose, To = [nose[0] + dir[0] * 0.6, nose[1] + dir[1] * 0.6, nose[2] + dir[2] * 0.6], Color = ThreeDPalette.Soga, Pickable = false },
+        ];
+    }
+
+    private static string Lerp(string a, string b, double t)
+    {
+        t = Math.Clamp(t, 0, 1);
+        int C(string hex, int i) => Convert.ToInt32(hex.Substring(1 + i * 2, 2), 16);
+        var r = (int)(C(a, 0) + (C(b, 0) - C(a, 0)) * t);
+        var g = (int)(C(a, 1) + (C(b, 1) - C(a, 1)) * t);
+        var bl = (int)(C(a, 2) + (C(b, 2) - C(a, 2)) * t);
+        return $"#{r:x2}{g:x2}{bl:x2}";
+    }
+
+    private Task SetColorMode(string mode)
+    {
+        _colorMode = mode;
+        return Camera?.ReprocessAsync() ?? Task.CompletedTask;
+    }
+}

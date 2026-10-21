@@ -1,0 +1,119 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* Gamified gesture lessons: show the target gesture before the timer runs out, build streaks and level up. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"Level {_level} · score {_score} · streak {_streak}")" Icon="bi-controller">
+        <div class="bai-stack">
+            @if (_playing)
+            {
+                <div class="baiv-big" aria-live="assertive">@Pretty(_target)</div>
+                <div class="baiv-meter"><span>Time left</span><div><span style="width:@((_timeLeft / RoundSeconds * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@_timeLeft.ToString("0.0", CultureInfo.InvariantCulture)s</span></div>
+                <span class="bai-small bai-muted">Seen: @Pretty(_seen)</span>
+            }
+            else
+            {
+                <p style="margin:0">Show each gesture to the camera before time runs out. Every 5 correct answers you level up and the timer gets shorter.</p>
+            }
+            <div class="bai-row">
+                <button type="button" class="bai-btn bai-btn-ai" @onclick="Start">@(_playing ? "Restart" : "Start lesson")</button>
+                <span class="bai-small">Best streak <b>@_bestStreak</b></span>
+            </div>
+            <span class="bai-small bai-faint">For live play, press Camera. Sample photos show a single gesture each.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly string[] Pool = ["Thumb_Up", "Open_Palm", "Victory", "Pointing_Up", "Closed_Fist", "ILoveYou", "Thumb_Down"];
+    private readonly Random _rng = new();
+    private string _target = Pool[0];
+    private string? _seen;
+    private bool _playing;
+    private int _score, _streak, _bestStreak, _level = 1, _correct;
+    private double _timeLeft;
+    private long _lastT;
+
+    [Parameter] public string Title { get; set; } = "Gesture learning platform";
+
+    /// <summary>Seconds per round at level 1.</summary>
+    [Parameter] public double RoundSeconds { get; set; } = 8;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.ThumbsUp, VisionSamples.OpenPalms, VisionSamples.Face];
+
+    private void Start()
+    {
+        _playing = true;
+        _score = _streak = _correct = 0;
+        _level = 1;
+        NextRound();
+        _ = Camera?.ReprocessAsync();
+    }
+
+    private void NextRound()
+    {
+        var options = Pool.Where(p => p != _target).ToArray();
+        _target = options[_rng.Next(options.Length)];
+        _timeLeft = Math.Max(3, RoundSeconds - (_level - 1));
+    }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.Gestures(frame, 1, 0.4f);
+        var hand = result.Hands.FirstOrDefault();
+        _seen = hand?.TopGesture?.CategoryName;
+        var overlay = new VisionOverlay();
+        if (hand is not null)
+        {
+            overlay.Landmarks.Add(Overlay.Hand(hand.Hand, _seen == _target ? Overlay.Nila : Overlay.Soga));
+        }
+
+        var t = frame.IsLive ? frame.TimestampMs : _lastT + 1000;
+        var dt = Math.Clamp((t - _lastT) / 1000.0, 0, 1.5);
+        _lastT = t;
+        if (_playing)
+        {
+            if (_seen == _target)
+            {
+                _streak++;
+                _bestStreak = Math.Max(_bestStreak, _streak);
+                _score += 10 * _level + (int)Math.Round(_timeLeft);
+                if (++_correct % 5 == 0)
+                {
+                    _level++;
+                    Publish("level", $"Level {_level} reached (score {_score})");
+                }
+
+                NextRound();
+            }
+            else
+            {
+                _timeLeft -= dt;
+                if (_timeLeft <= 0)
+                {
+                    _streak = 0;
+                    NextRound();
+                }
+            }
+
+            overlay.Texts.Add(Overlay.Label(0.03f, 0.88f, $"Show: {Pretty(_target)}", Overlay.White, 18));
+        }
+
+        overlay.Status = $"Score {_score} · streak {_streak}";
+        return overlay;
+    }
+
+    private static string Pretty(string? g) => g switch
+    {
+        "Thumb_Up" => "👍 Thumbs up",
+        "Thumb_Down" => "👎 Thumbs down",
+        "Victory" => "✌ Victory",
+        "Pointing_Up" => "☝ Point up",
+        "Open_Palm" => "✋ Open palm",
+        "Closed_Fist" => "✊ Fist",
+        "ILoveYou" => "🤟 I love you",
+        null or "" or "None" => "–",
+        _ => g,
+    };
+}

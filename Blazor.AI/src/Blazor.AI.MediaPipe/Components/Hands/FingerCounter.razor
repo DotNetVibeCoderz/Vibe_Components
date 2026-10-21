@@ -1,0 +1,62 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Real-time finger counting for one or two hands. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="Extended fingers per hand" Icon="bi-123">
+        <div class="bai-stack">
+            <div class="baiv-big" style="font-size:4.5rem" aria-live="polite">@(_hands.Count == 0 ? "–" : _total.ToString(CultureInfo.InvariantCulture))</div>
+            <div class="bai-row">
+                @foreach (var (side, n) in _hands) { <span class="bai-badge">@side: @n</span> }
+            </div>
+            @if (_history.Count > 1)
+            {
+                <span class="bai-label">Recent counts</span>
+                <Sparkline Values="@_history" Width="300" Height="40" />
+            }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private IReadOnlyList<(string Side, int Count)> _hands = [];
+    private IReadOnlyList<double> _history = [];
+    private int _total;
+
+    [Parameter] public string Title { get; set; } = "Finger counter";
+
+    /// <summary>Raised when the total changes.</summary>
+    [Parameter] public EventCallback<int> OnCount { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Hands;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.Hands(frame, 2);
+        var overlay = new VisionOverlay();
+        var hands = new List<(string, int)>();
+        foreach (var hand in result.Hands)
+        {
+            var ext = VisionMath.ExtendedFingers(hand);
+            int[] tips = [4, 8, 12, 16, 20];
+            overlay.Landmarks.Add(Overlay.Hand(hand, highlight: tips.Where((_, i) => ext[i]).ToArray()));
+            var n = ext.Count(x => x);
+            hands.Add((hand.Handedness?.CategoryName ?? "?", n));
+            var (x, y, _, _) = Overlay.Bounds(hand.Landmarks);
+            overlay.Texts.Add(Overlay.Label(x, Math.Max(0.02f, y - 0.05f), n.ToString(CultureInfo.InvariantCulture), Overlay.White, 22));
+        }
+
+        var total = hands.Sum(h => h.Item2);
+        if (total != _total)
+        {
+            _ = InvokeAsync(() => OnCount.InvokeAsync(total));
+        }
+
+        _total = total;
+        _hands = hands;
+        _history = [.. _history.TakeLast(39), total];
+        overlay.Status = $"{total} finger(s)";
+        return overlay;
+    }
+}

@@ -27,6 +27,7 @@ builder.Services.AddBlazorAIAnalytics();
 builder.Services.AddBlazorAILocalModels(o => o.HuggingFaceToken = builder.Configuration["HuggingFace:Token"]);
 builder.Services.AddBlazorAIBio();
 builder.Services.AddBlazorAIThreeD();
+builder.Services.AddBlazorAIMediaPipe();
 builder.Services.AddSingleton<DemoData>();
 
 var app = builder.Build();

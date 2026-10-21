@@ -1,0 +1,77 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* One-click natural-language explanation of the current frame, with the detected items it is based on. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="Detections → explanation" Icon="bi-card-text">
+        <div class="bai-stack">
+            <span class="bai-label">Detected</span>
+            @if (_facts.IsEmpty)
+            {
+                <span class="bai-small bai-muted">Waiting for a frame…</span>
+            }
+            else
+            {
+                <ul class="bai-small" style="margin:0; padding-left:1.1rem">
+                    @foreach (var (label, count) in _facts.Objects) { <li>@count × @label</li> }
+                    @if (_facts.Objects.Count == 0) { <li>No COCO objects above threshold</li> }
+                    <li>@_facts.Faces face(s)@(_facts.Posture is { } p ? $" · main person {p}" : null)</li>
+                    @if (_facts.Classes.Count > 0) { <li>Scene: @string.Join(", ", _facts.Classes.Select(c => c.Label))</li> }
+                </ul>
+            }
+            <div class="bai-row">
+                <select class="bai-select" style="width:auto" @bind="_style" aria-label="Explanation style">
+                    <option value="brief">Brief caption</option>
+                    <option value="detailed">Detailed description</option>
+                    <option value="accessible">Accessibility (alt text)</option>
+                    <option value="safety">Safety check</option>
+                </select>
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain this scene</button>
+            </div>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private SceneFacts _facts = SceneFacts.Empty;
+    private long _lastFull = -1_000_000;
+    private string _style = "brief";
+
+    [Parameter] public string Title { get; set; } = "Scene explainer";
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Scenes;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var full = !frame.IsLive || frame.TimestampMs - _lastFull >= 1000 || frame.TimestampMs < _lastFull;
+        var facts = SceneFacts.From(Tasks, frame, full);
+        if (full)
+        {
+            _lastFull = frame.TimestampMs;
+        }
+        else
+        {
+            facts = facts with { Faces = _facts.Faces, Posture = _facts.Posture, Classes = _facts.Classes };
+        }
+
+        _facts = facts;
+        var overlay = new VisionOverlay();
+        overlay.Boxes.AddRange(facts.Boxes);
+        return overlay;
+    }
+
+    private Task Explain()
+    {
+        var question = _style switch
+        {
+            "detailed" => "Describe this scene in detail: setting, objects, people and what they are doing, and notable relationships between them.",
+            "accessible" => "Write concise alt text (one or two sentences) for a blind user, then one line of extra detail.",
+            "safety" => "Explain the scene focusing on safety: hazards, unsafe behaviour or missing protective equipment, and what to do.",
+            _ => "Give a one-sentence caption of this scene, then list the main items.",
+        };
+        return AskAboutFrameAsync("a scene-understanding assistant", question, _facts.Describe());
+    }
+}

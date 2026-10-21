@@ -1,0 +1,124 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* Field and canopy analysis from RGB: excess-green vegetation index, canopy cover, stress zones (yellow/brown) and AI agronomy notes. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="RGB vegetation indices (ExG) · no multispectral camera needed" Icon="bi-flower1">
+        <div class="bai-stack">
+            @if (_result is { } r)
+            {
+                <div class="bai-row">
+                    <div><div class="baiv-big">@r.Canopy.ToString("P0", CultureInfo.InvariantCulture)</div><span class="bai-small bai-muted">canopy cover</span></div>
+                    <div><div class="baiv-big" style="color:@(r.Stressed > 0.15 ? "var(--bai-danger)" : "var(--bai-nila)")">@r.Stressed.ToString("P0", CultureInfo.InvariantCulture)</div><span class="bai-small bai-muted">of canopy stressed</span></div>
+                </div>
+                <div class="baiv-meter"><span>Mean ExG</span><div><span style="width:@(Math.Clamp(r.MeanExg * 250, 0, 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@r.MeanExg.ToString("0.00", CultureInfo.InvariantCulture)</span></div>
+                <span class="bai-small bai-muted">Heat map: red cells hold yellow or brown foliage (possible nutrient deficiency, drought or disease).</span>
+            }
+            <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_showHeat" @bind:after="Refresh" /> stress heat map</label>
+            <button type="button" class="bai-btn bai-btn-ai" style="width:fit-content" disabled="@(IsBusy || _result is null)" @onclick="Notes"><i class="bi bi-stars" aria-hidden="true"></i>Agronomy notes</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private sealed record CropResult(double Canopy, double Stressed, double MeanExg);
+
+    private CropResult? _result;
+    private bool _showHeat = true;
+
+    [Parameter] public string Title { get; set; } = "Crop vision";
+    [Parameter] public string Crop { get; set; } = "tomato";
+
+    /// <summary>Heat grid resolution (columns).</summary>
+    [Parameter] public int GridColumns { get; set; } = 24;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.LeafDisease, VisionSamples.Livestock, VisionSamples.Fruit];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var (rgb, w, h) = VisionSolutions.Pixels(frame.Image, 240);
+        var cols = Math.Clamp(GridColumns, 6, 64);
+        var rows = Math.Max(4, (int)Math.Round(cols * h / (double)w));
+        var veg = new int[cols * rows];
+        var stress = new int[cols * rows];
+        var total = new int[cols * rows];
+        long vegAll = 0, stressAll = 0;
+        double exgSum = 0;
+        for (var y = 0; y < h; y++)
+        {
+            for (var x = 0; x < w; x++)
+            {
+                var i = (y * w + x) * 3;
+                double r = rgb[i], g = rgb[i + 1], b = rgb[i + 2];
+                var sum = Math.Max(1, r + g + b);
+                var exg = (2 * g - r - b) / sum;
+                exgSum += exg;
+                var cell = Math.Min(rows - 1, y * rows / h) * cols + Math.Min(cols - 1, x * cols / w);
+                total[cell]++;
+                var (hue, s, v) = VisionSolutions.Hsv(rgb[i], rgb[i + 1], rgb[i + 2]);
+                var green = exg > 0.05 && hue is > 60 and < 170;
+                var yellowBrown = s > 0.25 && v > 0.15 && hue is > 15 and < 60 && g > b;
+                if (green)
+                {
+                    veg[cell]++;
+                    vegAll++;
+                }
+                else if (yellowBrown && Neighbourhood(rgb, w, h, x, y))
+                {
+                    stress[cell]++;
+                    stressAll++;
+                }
+            }
+        }
+
+        var n = (double)w * h;
+        var canopy = (vegAll + stressAll) / n;
+        var stressed = stressAll / Math.Max(1.0, vegAll + stressAll);
+        _result = new CropResult(canopy, stressed, exgSum / n);
+        var overlay = new VisionOverlay { Status = $"Canopy {canopy:P0} · stressed {stressed:P0}" };
+        if (_showHeat)
+        {
+            overlay.Heat = new OverlayHeat
+            {
+                Cols = cols, Rows = rows, Opacity = 0.55f,
+                Values = Enumerable.Range(0, cols * rows).Select(c => total[c] == 0 ? 0f : (float)Math.Clamp(stress[c] / (double)Math.Max(1, stress[c] + veg[c]) * 1.6, 0, 1)).ToArray(),
+            };
+        }
+
+        if (stressed > 0.15 && frame.Index % 30 == 0)
+        {
+            Publish("stress", $"{Crop}: {stressed:P0} of the canopy looks stressed", VisionEventSeverity.Warning);
+        }
+
+        return overlay;
+    }
+
+    // Only count yellow/brown pixels that sit next to vegetation (ignores soil and sky).
+    private static bool Neighbourhood(byte[] rgb, int w, int h, int x, int y)
+    {
+        for (var dy = -3; dy <= 3; dy += 3)
+        {
+            for (var dx = -3; dx <= 3; dx += 3)
+            {
+                var xx = Math.Clamp(x + dx, 0, w - 1);
+                var yy = Math.Clamp(y + dy, 0, h - 1);
+                var i = (yy * w + xx) * 3;
+                if (rgb[i + 1] > rgb[i] + 8 && rgb[i + 1] > rgb[i + 2] + 8)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+
+    private Task Notes() => AskAboutFrameAsync("an agronomist advising a smallholder farmer in Indonesia",
+        $"What could explain the stressed areas on this {Crop} crop, and what should the farmer check first?",
+        string.Create(CultureInfo.InvariantCulture, $"Canopy cover {_result!.Canopy:P0}; stressed (yellow/brown) share of canopy {_result.Stressed:P0}; mean excess-green index {_result.MeanExg:0.00}. Measured from an RGB photo, not lab tests."));
+}

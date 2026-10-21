@@ -1,0 +1,173 @@
+@namespace Blazor.AI.MediaPipe
+@using Blazor.AI.ThreeD
+@inherits VisionComponentBase
+@inject IJSRuntime JsRuntime
+@* Virtual green screen: the selfie segmenter keeps the person and the browser composites a new background behind them. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"Virtual background · subject {_coverage:P0} of the frame")" Icon="bi-image">
+        <div class="bai-stack">
+            <span class="bai-label">Background</span>
+            <div class="bai-row" role="radiogroup" aria-label="Background picture" style="flex-wrap:wrap; gap:.5rem">
+                @foreach (var bg in AllBackgrounds)
+                {
+                    var active = bg.Url == _bgUrl;
+                    <button type="button" role="radio" aria-checked="@active" aria-label="@bg.Name" title="@bg.Name" @onclick="() => SelectImage(bg.Url)"
+                            style="width:84px; height:52px; padding:0; border-radius:8px; cursor:pointer; background:center/cover url('@bg.Url'); border:2px solid @(active ? "var(--bai-ai, #d9964f)" : "var(--bai-line)")"></button>
+                }
+                <label class="bai-chip" style="position:relative; cursor:pointer; height:52px"><i class="bi bi-upload" aria-hidden="true"></i>Your own
+                    <InputFile OnChange="UploadAsync" accept="image/*" style="position:absolute; inset:0; opacity:0; cursor:pointer" aria-label="Upload a background picture" />
+                </label>
+            </div>
+            <div class="bai-row" role="radiogroup" aria-label="Background colour" style="flex-wrap:wrap; gap:.4rem">
+                @foreach (var (name, hex) in Colors)
+                {
+                    var active = _bgUrl is null && _color == hex;
+                    <button type="button" role="radio" aria-checked="@active" aria-label="@name" title="@name" @onclick="() => SelectColor(hex)"
+                            style="width:30px; height:30px; border-radius:50%; cursor:pointer; background:@hex; border:2px solid @(active ? "var(--bai-ai, #d9964f)" : "var(--bai-line)")"></button>
+                }
+            </div>
+            <label class="bai-small">Edge threshold <input type="range" min="0" max="0.9" step="0.05" @bind="_threshold" @bind:after="Refresh" style="width:100%" aria-label="Edge threshold" /></label>
+            <label class="bai-row bai-small"><input type="checkbox" @bind="_hair" @bind:after="Refresh" /> Refine hair (multiclass model, slower)</label>
+            @if (_uploadError is not null)
+            {
+                <div class="bai-alert" role="alert">@_uploadError</div>
+            }
+            <span class="bai-small bai-muted">Uploaded backgrounds stay in the browser as an object URL; only the person mask travels from the server.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    /// <summary>A selectable background picture.</summary>
+    public sealed record BackgroundChoice(string Name, string Url);
+
+    /// <summary>Built-in backgrounds (Blazor.AI.ThreeD concept art).</summary>
+    public static readonly IReadOnlyList<BackgroundChoice> DefaultBackgrounds =
+    [
+        new("World concept", ThreeDAssets.WorldConcept),
+        new("Studio hero", ThreeDAssets.HeroArt),
+    ];
+
+    private static readonly (string Name, string Hex)[] Colors =
+        [("Chroma green", "#00b140"), ("Tarum indigo", "#2b2f6b"), ("Soga amber", "#d9964f"), ("Nila teal", "#3cc4b1"), ("Studio white", "#f4f1ea"), ("Black", "#0d0f1a")];
+
+    private string? _bgUrl, _uploadUrl, _uploadError;
+    private string _color = "#00b140";
+    private double _threshold = 0.35, _coverage;
+    private bool _hair, _initialised;
+
+    [Parameter] public string Title { get; set; } = "Green screen replacement";
+
+    /// <summary>Background pictures to offer; defaults to <see cref="DefaultBackgrounds"/>.</summary>
+    [Parameter] public IReadOnlyList<BackgroundChoice>? Backgrounds { get; set; }
+
+    /// <summary>Initial background URL (null starts with a colour).</summary>
+    [Parameter] public string? BackgroundUrl { get; set; }
+
+    /// <summary>Largest accepted upload in bytes.</summary>
+    [Parameter] public long MaxUploadBytes { get; set; } = 8 * 1024 * 1024;
+
+    private IEnumerable<BackgroundChoice> AllBackgrounds =>
+        (Backgrounds ?? DefaultBackgrounds).Concat(_uploadUrl is null ? [] : [new BackgroundChoice("Your upload", _uploadUrl)]);
+
+    protected override void OnParametersSet()
+    {
+        if (!_initialised)
+        {
+            _initialised = true;
+            _bgUrl = BackgroundUrl ?? (Backgrounds ?? DefaultBackgrounds).FirstOrDefault()?.Url;
+        }
+    }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        SegmentationMask? mask;
+        if (_hair)
+        {
+            // 1 − P(background) of the multiclass model keeps hair strands the selfie model tends to clip.
+            mask = Tasks.Segment(frame, SegmenterModel.SelfieMulticlass).ConfidenceMask;
+        }
+        else
+        {
+            mask = Tasks.Segment(frame, SegmenterModel.Selfie).ConfidenceMask;
+        }
+
+        if (mask is null)
+        {
+            return VisionOverlay.Empty;
+        }
+
+        _coverage = mask.Coverage(0.5f);
+        var m = Overlay.Mask(BackgroundRemoval.Threshold(mask, (float)_threshold), "replace", _color, _bgUrl, maxWidth: 320);
+        return new VisionOverlay { Mask = m, Status = _coverage < 0.02 ? "No person" : $"{_coverage:P0} subject" };
+    }
+
+    private Task SelectImage(string url)
+    {
+        _bgUrl = url;
+        return Refresh();
+    }
+
+    private Task SelectColor(string hex)
+    {
+        _bgUrl = null;
+        _color = hex;
+        return Refresh();
+    }
+
+    private async Task UploadAsync(InputFileChangeEventArgs e)
+    {
+        _uploadError = null;
+        try
+        {
+            var file = e.File;
+            if (file.Size > MaxUploadBytes)
+            {
+                _uploadError = $"Pick a picture under {MaxUploadBytes / 1024 / 1024} MB.";
+                return;
+            }
+
+            await using var stream = file.OpenReadStream(MaxUploadBytes);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            await using var module = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./_content/Blazor.AI.MediaPipe/blazor-ai-vision.js");
+            var url = await module.InvokeAsync<string>("objectUrl", ms.ToArray(), file.ContentType);
+            await RevokeUploadAsync();
+            _uploadUrl = url;
+            _bgUrl = url;
+            await Refresh();
+        }
+        catch (Exception ex) when (ex is IOException or JSException or InvalidOperationException)
+        {
+            _uploadError = $"Could not load the picture: {ex.Message}";
+        }
+    }
+
+    private async Task RevokeUploadAsync()
+    {
+        if (_uploadUrl is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await JsRuntime.InvokeVoidAsync("URL.revokeObjectURL", _uploadUrl);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _uploadUrl = null;
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+
+    public override async ValueTask DisposeAsync()
+    {
+        await RevokeUploadAsync();
+        await base.DisposeAsync();
+    }
+}

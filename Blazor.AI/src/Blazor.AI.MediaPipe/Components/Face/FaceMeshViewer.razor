@@ -1,0 +1,152 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@using Blazor.AI.ThreeD
+@* The 478-point face mesh rendered in 3-D (Three.js), coloured by depth, beside the camera. *@
+
+<div class="@CssClass("bai-grid-2")" style="align-items:start">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <Scene3D @ref="_scene" Objects="@_objects" Options="@_options" Height="@Height">
+        <div class="bai3d-panel">
+            <h4>@Title</h4>
+            <div class="bai3d-kpi">
+                <div><b>@(_hasFace ? "478" : "–")</b><span>points</span></div>
+                <div><b>@_depthRange.ToString("0.0", CultureInfo.InvariantCulture)</b><span>depth span</span></div>
+            </div>
+        </div>
+    </Scene3D>
+</div>
+
+@code {
+    private static readonly (string Name, IReadOnlyList<(int A, int B)> Pairs, string Color)[] Contours =
+    [
+        ("oval", Connections.FaceOval, "#7b8cff"), ("lips", Connections.Lips, "#e5534b"), ("leye", Connections.LeftEye, "#3cc4b1"),
+        ("reye", Connections.RightEye, "#3cc4b1"), ("lbrow", Connections.LeftEyebrow, "#d9964f"), ("rbrow", Connections.RightEyebrow, "#d9964f"),
+    ];
+
+    private static readonly IReadOnlyList<int[]>[] Chains = Contours.Select(c => Chain(c.Pairs)).ToArray();
+
+    private Scene3D? _scene;
+    private IReadOnlyList<Object3D> _objects = [];
+    private readonly Scene3DOptions _options = new()
+    {
+        Camera = new() { Position = [0, 0, 5.2], Target = [0, 0, 0], Fov = 40 },
+        Controls = new() { AutoRotate = false, MinDistance = 2, MaxDistance = 12 },
+        Shadows = false,
+        Lights = "soft",
+        AriaLabel = "3D face mesh",
+    };
+
+    private DateTime _lastScene;
+    private bool _hasFace;
+    private double _depthRange;
+
+    [Parameter] public string Title { get; set; } = "3D face mesh";
+
+    /// <summary>Maximum scene updates per second (the camera itself runs faster).</summary>
+    [Parameter] public double SceneRate { get; set; } = 5;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Face, VisionSamples.ThumbsUp];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.FaceLandmarks(frame, 1, blendshapes: false);
+        var overlay = new VisionOverlay();
+        var face = result.Faces.FirstOrDefault();
+        _hasFace = face is not null;
+        if (face is null)
+        {
+            overlay.Status = "No face";
+            return overlay;
+        }
+
+        foreach (var layer in Overlay.Face(face, allPoints: false))
+        {
+            overlay.Landmarks.Add(layer);
+        }
+
+        if (!frame.IsLive || (DateTime.UtcNow - _lastScene).TotalSeconds >= 1 / Math.Max(0.5, SceneRate))
+        {
+            _lastScene = DateTime.UtcNow;
+            var objects = Build(face, frame.Width / (double)frame.Height);
+            _ = InvokeAsync(() =>
+            {
+                _objects = objects;
+                StateHasChanged();
+            });
+        }
+
+        overlay.Status = "478 points";
+        return overlay;
+    }
+
+    private Object3D[] Build(FaceLandmarks face, double aspect)
+    {
+        var l = face.Landmarks;
+        // Centre on the nose bridge; Z in MediaPipe is relative to the face scale (roughly the same units as X).
+        var cx = l.Average(p => p.X);
+        var cy = l.Average(p => p.Y);
+        var span = Math.Max(l.Max(p => p.X) - l.Min(p => p.X), 1e-4);
+        var k = 3.0 / span;
+        double[] P(int i) => [(l[i].X - cx) * k, -(l[i].Y - cy) * k / aspect, -l[i].Z * k];
+        var zs = l.Select(p => (double)-p.Z).ToArray();
+        var zmin = zs.Min();
+        var zmax = zs.Max();
+        _depthRange = (zmax - zmin) * k;
+        var points = Enumerable.Range(0, l.Count).Select(P).ToArray();
+        var colors = zs.Select(z => ThreeDPalette.Ramp((z - zmin) / Math.Max(1e-6, zmax - zmin))).ToArray();
+        var list = new List<Object3D>
+        {
+            new() { Id = "mesh", Kind = "points", Points = points, Colors = colors, PointSize = 0.045, Pickable = false },
+        };
+        for (var c = 0; c < Contours.Length; c++)
+        {
+            for (var s = 0; s < Chains[c].Count; s++)
+            {
+                list.Add(new Object3D { Id = $"{Contours[c].Name}{s}", Kind = "line", Points = Chains[c][s].Select(P).ToArray(), Color = Contours[c].Color, Pickable = false });
+            }
+        }
+
+        return [.. list];
+    }
+
+    /// <summary>Orders edge pairs into polylines (closed loops repeat their first point).</summary>
+    private static IReadOnlyList<int[]> Chain(IReadOnlyList<(int A, int B)> pairs)
+    {
+        var adj = new Dictionary<int, List<int>>();
+        foreach (var (a, b) in pairs)
+        {
+            (adj.TryGetValue(a, out var la) ? la : adj[a] = []).Add(b);
+            (adj.TryGetValue(b, out var lb) ? lb : adj[b] = []).Add(a);
+        }
+
+        var used = new HashSet<(int, int)>();
+        var chains = new List<int[]>();
+        foreach (var (a0, b0) in pairs)
+        {
+            if (used.Contains((Math.Min(a0, b0), Math.Max(a0, b0))))
+            {
+                continue;
+            }
+
+            var chain = new List<int> { a0 };
+            var cur = a0;
+            var next = b0;
+            while (true)
+            {
+                used.Add((Math.Min(cur, next), Math.Max(cur, next)));
+                chain.Add(next);
+                var prev = cur;
+                cur = next;
+                next = adj[cur].FirstOrDefault(n => n != prev && !used.Contains((Math.Min(cur, n), Math.Max(cur, n))), -1);
+                if (next < 0)
+                {
+                    break;
+                }
+            }
+
+            chains.Add([.. chain]);
+        }
+
+        return chains;
+    }
+}

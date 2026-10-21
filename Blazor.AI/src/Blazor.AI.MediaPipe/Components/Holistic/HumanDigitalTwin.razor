@@ -1,0 +1,114 @@
+@namespace Blazor.AI.MediaPipe
+@using Blazor.AI.ThreeD
+@inherits VisionComponentBase
+@* A digital twin of a person's movement: a 3-D capsule body driven by world landmarks, with live body metrics. *@
+
+<div class="@CssClass("baiv-split")">
+    <div class="bai-grid-2" style="align-items:start">
+        <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+        <Scene3D Objects="@_objects" Options="@_options" Height="@Height" />
+    </div>
+    <AiCard Title="@Title" Subtitle="Pose world landmarks → 3-D twin" Icon="bi-person-gear">
+        <div class="bai-stack">
+            @if (_m is { } m)
+            {
+                <div class="bai-row" style="gap:1.2rem">
+                    <div><b>@m.Height.ToString("0.00", CultureInfo.InvariantCulture) m</b><span class="bai-small bai-muted"> est. height</span></div>
+                    <div><b>@m.ArmSpan.ToString("0.00", CultureInfo.InvariantCulture) m</b><span class="bai-small bai-muted"> arm span</span></div>
+                </div>
+                <div class="baiv-meter"><span>Balance</span><div><span style="width:@((m.Balance * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@m.Balance.ToString("P0", CultureInfo.InvariantCulture)</span></div>
+                <div class="baiv-meter"><span>Activity</span><div><span style="width:@(Math.Clamp(m.Activity / 2 * 100, 0, 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@m.Activity.ToString("0.0", CultureInfo.InvariantCulture)</span></div>
+                <span class="bai-small">Posture: <b>@m.Posture</b> · trunk lean @m.TrunkLean.ToString("0", CultureInfo.InvariantCulture)°</span>
+                @foreach (var (name, deg) in m.Angles)
+                {
+                    <div class="baiv-meter"><span>@name</span><div><span style="width:@((deg / 180 * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@deg.ToString("0", CultureInfo.InvariantCulture)°</span></div>
+                }
+            }
+            else
+            {
+                <p class="bai-small bai-muted" style="margin:0">Step into view to create the twin.</p>
+            }
+            <span class="bai-small bai-muted">Height is estimated from landmark distances (head to heel) and is approximate.</span>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    /// <summary>Body metrics derived from metric world landmarks.</summary>
+    public sealed record TwinMetrics(double Height, double ArmSpan, double Balance, double Activity, string Posture, double TrunkLean, IReadOnlyList<(string Name, double Degrees)> Angles);
+
+    private IReadOnlyList<Object3D> _objects = [];
+    private readonly Scene3DOptions _options = Body3D.Stage("Digital twin of the tracked person");
+    private TwinMetrics? _m;
+    private MediaPipeNet.Landmark[]? _prev;
+    private double _prevT = double.NaN, _activity;
+    private DateTime _lastScene;
+
+    [Parameter] public string Title { get; set; } = "Human digital twin";
+
+    [Parameter] public string BodyColor { get; set; } = "#d9d4c4";
+    [Parameter] public string AccentColor { get; set; } = ThreeDPalette.Nila;
+
+    /// <summary>Raised with each metrics update (on the processing thread).</summary>
+    [Parameter] public Action<TwinMetrics>? OnMetrics { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Bodies;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var pose = Tasks.Pose(frame, PoseModel.Full).Poses.FirstOrDefault();
+        var overlay = new VisionOverlay();
+        if (pose is null)
+        {
+            _m = null;
+            overlay.Status = "No person";
+            return overlay;
+        }
+
+        var w = pose.WorldLandmarks.ToArray();
+        var t = frame.TimestampMs / 1000.0;
+        if (frame.IsLive && _prev is not null && t > _prevT)
+        {
+            var moved = w.Zip(_prev, (a, b) => System.Numerics.Vector3.Distance(PoseAnalytics.V(a), PoseAnalytics.V(b))).Average();
+            _activity = _activity * 0.8 + moved / (t - _prevT) * 0.2 * 10;
+        }
+
+        _prev = w;
+        _prevT = t;
+        _m = Metrics(pose, _activity);
+        OnMetrics?.Invoke(_m);
+        if (!frame.IsLive || (DateTime.UtcNow - _lastScene).TotalMilliseconds > 100)
+        {
+            _lastScene = DateTime.UtcNow;
+            _objects = Body3D.Capsules("tw-", w, BodyColor, AccentColor);
+            _ = InvokeAsync(StateHasChanged);
+        }
+
+        overlay.Landmarks.Add(Overlay.Pose(pose, Overlay.Nila));
+        overlay.Status = $"{_m.Posture} · balance {_m.Balance:P0}";
+        return overlay;
+    }
+
+    /// <summary>Computes the twin's body metrics.</summary>
+    public static TwinMetrics Metrics(PoseLandmarks pose, double activity)
+    {
+        var w = pose.WorldLandmarks;
+        double D(PoseLandmark a, PoseLandmark b) => System.Numerics.Vector3.Distance(PoseAnalytics.V(w[(int)a]), PoseAnalytics.V(w[(int)b]));
+        // Height: nose→hips→knees→heels chain plus ~10 cm for the crown.
+        var leg = (D(PoseLandmark.LeftHip, PoseLandmark.LeftKnee) + D(PoseLandmark.LeftKnee, PoseLandmark.LeftHeel) + D(PoseLandmark.RightHip, PoseLandmark.RightKnee) + D(PoseLandmark.RightKnee, PoseLandmark.RightHeel)) / 2;
+        var trunk = System.Numerics.Vector3.Distance(PoseAnalytics.Mid(pose, PoseLandmark.LeftHip, PoseLandmark.RightHip), PoseAnalytics.V(w[(int)PoseLandmark.Nose]));
+        var height = leg + trunk + 0.12;
+        var span = D(PoseLandmark.LeftWrist, PoseLandmark.LeftElbow) + D(PoseLandmark.LeftElbow, PoseLandmark.LeftShoulder) + D(PoseLandmark.LeftShoulder, PoseLandmark.RightShoulder)
+                   + D(PoseLandmark.RightShoulder, PoseLandmark.RightElbow) + D(PoseLandmark.RightElbow, PoseLandmark.RightWrist) + 0.18;
+        // Balance: how close the centre of mass (hip/shoulder midpoint) projects to the centre of the feet.
+        var com = (PoseAnalytics.Mid(pose, PoseLandmark.LeftHip, PoseLandmark.RightHip) + PoseAnalytics.Mid(pose, PoseLandmark.LeftShoulder, PoseLandmark.RightShoulder)) / 2;
+        var feet = PoseAnalytics.Mid(pose, PoseLandmark.LeftAnkle, PoseLandmark.RightAnkle);
+        var offset = Math.Sqrt(Math.Pow(com.X - feet.X, 2) + Math.Pow(com.Z - feet.Z, 2));
+        var balance = Math.Clamp(1 - offset / 0.25, 0, 1);
+        var knees = (PoseAnalytics.Angle(pose, PoseLandmark.LeftHip, PoseLandmark.LeftKnee, PoseLandmark.LeftAnkle) + PoseAnalytics.Angle(pose, PoseLandmark.RightHip, PoseLandmark.RightKnee, PoseLandmark.RightAnkle)) / 2;
+        var lean = PoseAnalytics.TrunkLean(pose);
+        var posture = lean > 60 ? "Lying / bent over" : knees < 120 ? "Crouching / sitting" : lean > 25 ? "Leaning" : "Standing";
+        var angles = PoseAnalytics.Joints.Where(j => j.Name.Contains("knee") || j.Name.Contains("elbow")).Select(j => (j.Name, PoseAnalytics.Angle(pose, j.A, j.B, j.C))).ToList();
+        return new TwinMetrics(height, span, balance, activity, posture, lean, angles);
+    }
+}

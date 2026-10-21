@@ -1,0 +1,141 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* PPE compliance: people are detected, then each head (and optionally torso) region is checked for a hard hat / hi-vis vest. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="Person detection + head/torso PPE check" Icon="bi-cone-striped">
+        <div class="bai-stack">
+            <div class="bai-row" style="gap:1.2rem">
+                <div><div class="baiv-big" style="color:@(_state.Compliance >= 1 ? "var(--bai-nila)" : "var(--bai-danger)")">@(_state.People == 0 ? "–" : _state.Compliance.ToString("P0", CultureInfo.InvariantCulture))</div><span class="bai-small bai-muted">compliant</span></div>
+                <div><div class="baiv-big">@_state.People</div><span class="bai-small bai-muted">people</span></div>
+                <div><div class="baiv-big" style="color:var(--bai-danger)">@_state.Violations</div><span class="bai-small bai-muted">without PPE</span></div>
+            </div>
+            <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_requireVest" @bind:after="Refresh" /> also require a hi-vis vest</label>
+            <label class="bai-small">Hard-hat sensitivity <b>@_sensitivity.ToString("0.00", CultureInfo.InvariantCulture)</b>
+                <input type="range" min="0.03" max="0.25" step="0.01" @bind="_sensitivity" @bind:event="oninput" @bind:after="Refresh" style="width:100%" aria-label="Hard hat sensitivity" />
+            </label>
+            <span class="bai-label">Events</span>
+            <div class="baiv-log" aria-live="polite">
+                @foreach (var e in Events.AsEnumerable().Reverse().Take(12)) { <span><span class="bai-faint">@e.At.ToString("HH:mm:ss", CultureInfo.InvariantCulture)</span> @e.Text</span> }
+                @if (Events.Count == 0) { <span class="bai-muted">No violations recorded.</span> }
+            </div>
+            <details class="bai-small"><summary>How it works</summary>
+                People come from the object detector. A hard hat is assumed when the top of the head region is mostly saturated yellow, orange, red or bright white (typical hard-hat colours), or when the image classifier sees a helmet. It is a screening aid: confirm violations visually and calibrate the sensitivity on your site's footage.
+            </details>
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Report"><i class="bi bi-stars" aria-hidden="true"></i>Safety summary</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed record PpeCheck(float X, float Y, float W, float H, bool Helmet, bool Vest, double HelmetScore, double VestScore)
+    {
+        public bool Compliant(bool requireVest) => Helmet && (!requireVest || Vest);
+    }
+
+    private sealed record State(int People, int Violations, double Compliance, IReadOnlyList<PpeCheck> Checks);
+
+    private static readonly IReadOnlySet<string> HelmetClasses = new HashSet<string> { "crash helmet", "football helmet", "cowboy hat" };
+    private readonly List<(DateTime At, string Text)> _events = [];
+    private State _state = new(0, 0, 0, []);
+    private bool _requireVest;
+    private double _sensitivity = 0.08;
+    private int _lastViolations;
+
+    private IReadOnlyList<(DateTime At, string Text)> Events
+    {
+        get
+        {
+            lock (_events)
+            {
+                return [.. _events];
+            }
+        }
+    }
+
+    [Parameter] public string Title { get; set; } = "Safety helmet detector";
+
+    /// <summary>Raised when the number of people without PPE goes up.</summary>
+    [Parameter] public EventCallback<int> OnViolation { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Construction, VisionSamples.Warehouse, VisionSamples.ThumbsUp];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var people = Tasks.Objects(frame, 0.3f, 25, new HashSet<string> { "person" }).Detections;
+        var px = new PixelBuffer(frame.Image);
+        var checks = new List<PpeCheck>();
+        foreach (var d in people)
+        {
+            var x = d.BoundingBox.X / frame.Width;
+            var y = d.BoundingBox.Y / frame.Height;
+            var w = d.BoundingBox.Width / frame.Width;
+            var h = d.BoundingBox.Height / frame.Height;
+            if (h < 0.06f)
+            {
+                continue; // too small to judge
+            }
+
+            var helmetColour = px.HiVisFraction(x + w * 0.2f, y, w * 0.6f, h * 0.14f);
+            double helmetClass = 0;
+            if (helmetColour < _sensitivity && h > 0.2f)
+            {
+                var crop = new NormalizedRect(x + w / 2, y + h * 0.1f, Math.Min(1, w * 0.9f), Math.Min(1, h * 0.24f));
+                helmetClass = Tasks.Classify(frame, 5, HelmetClasses, crop).Categories.Sum(c => c.Score);
+            }
+
+            var vest = px.HiVisFraction(x + w * 0.2f, y + h * 0.25f, w * 0.6f, h * 0.3f);
+            checks.Add(new PpeCheck(x, y, w, h, helmetColour >= _sensitivity || helmetClass > 0.3, vest >= 0.12, Math.Max(helmetColour, helmetClass), vest));
+        }
+
+        var violations = checks.Count(c => !c.Compliant(_requireVest));
+        _state = new State(checks.Count, violations, checks.Count == 0 ? 0 : (checks.Count - violations) / (double)checks.Count, checks);
+        if (violations > _lastViolations)
+        {
+            var text = $"{violations} of {checks.Count} people without {(_requireVest ? "hard hat or vest" : "a hard hat")}";
+            lock (_events)
+            {
+                _events.Add((DateTime.Now, text));
+            }
+
+            RecordEvent("PPE violation: " + text);
+            _ = InvokeAsync(() => OnViolation.InvokeAsync(violations));
+        }
+
+        _lastViolations = violations;
+        var overlay = new VisionOverlay();
+        foreach (var c in checks)
+        {
+            var ok = c.Compliant(_requireVest);
+            var missing = !c.Helmet ? "no hard hat" : !c.Vest && _requireVest ? "no vest" : null;
+            overlay.Boxes.Add(new OverlayBox { X = c.X, Y = c.Y, W = c.W, H = c.H, Color = ok ? Overlay.Nila : Overlay.Danger, Label = ok ? "PPE ok" : missing, Fill = !ok });
+            overlay.Boxes.Add(new OverlayBox { X = c.X + c.W * 0.2f, Y = c.Y, W = c.W * 0.6f, H = c.H * 0.14f, Color = c.Helmet ? Overlay.Nila : Overlay.Danger, Dashed = true });
+        }
+
+        overlay.Status = checks.Count == 0 ? "No people" : $"{checks.Count - violations}/{checks.Count} compliant";
+        return overlay;
+    }
+
+    private Task Refresh()
+    {
+        _lastViolations = int.MaxValue; // do not log events caused by changing settings
+        return Camera?.ReprocessAsync() ?? Task.CompletedTask;
+    }
+
+    private Task Report()
+    {
+        var s = _state;
+        List<(DateTime At, string Text)> events;
+        lock (_events)
+        {
+            events = [.. _events.TakeLast(10)];
+        }
+
+        var facts = string.Create(CultureInfo.InvariantCulture,
+            $"{s.People} people, {s.Violations} without required PPE ({(_requireVest ? "hard hat and vest" : "hard hat")}); compliance {s.Compliance:P0}. Recent events: {string.Join("; ", events.Select(e => $"{e.At:HH:mm} {e.Text}"))}.");
+        return AskAboutFrameAsync("a construction site safety officer", "Summarise PPE compliance in this view and recommend actions.", facts);
+    }
+}

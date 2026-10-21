@@ -1,0 +1,146 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Gesture recognition (thumbs up/down, victory, pointing, open palm, fist, I love you) plus custom gestures taught by example. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="21-point hands · canned + custom gestures" Icon="bi-hand-thumbs-up">
+        <div class="bai-stack">
+            <div class="baiv-big" aria-live="polite">@(_current ?? "–")</div>
+            <span class="bai-small bai-muted">@(_hands == 0 ? "Show your hand to the camera." : $"{_hands} hand(s) · {_confidence:P0} confidence")</span>
+            <span class="bai-label">Recent</span>
+            <div class="bai-chips">
+                @foreach (var g in _history.TakeLast(10).Reverse()) { <span class="bai-badge">@g</span> }
+            </div>
+            <details>
+                <summary class="bai-small">Teach a custom gesture</summary>
+                <div class="bai-stack" style="margin-top:.4rem">
+                    <div class="bai-row">
+                        <input class="bai-input bai-spacer" @bind="_newName" placeholder="Name, e.g. OK sign" aria-label="Custom gesture name" />
+                        <button type="button" class="bai-btn-ghost" disabled="@(_lastHand is null || string.IsNullOrWhiteSpace(_newName))" @onclick="Teach">Capture</button>
+                    </div>
+                    <span class="bai-small bai-muted">Hold the gesture and press Capture 3–5 times from slightly different angles. Matching uses the hand's normalised shape.</span>
+                    <div class="bai-chips">
+                        @foreach (var c in _custom.GroupBy(c => c.Name)) { <span class="bai-badge bai-badge-ai">@c.Key ×@c.Count()</span> }
+                    </div>
+                </div>
+            </details>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private readonly List<string> _history = [];
+    private readonly List<(string Name, float[] Shape)> _custom = [];
+    private string? _current, _newName;
+    private float _confidence;
+    private int _hands;
+    private float[]? _lastHand;
+
+    [Parameter] public string Title { get; set; } = "Gesture recognizer";
+
+    /// <summary>Minimum confidence for a gesture to count.</summary>
+    [Parameter] public float MinScore { get; set; } = 0.55f;
+
+    /// <summary>Raised when the recognised gesture changes (canned names such as Thumb_Up, or a custom name).</summary>
+    [Parameter] public EventCallback<string> OnGesture { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.ThumbsUp, .. VisionSamples.People.Where(s => s != VisionSamples.ThumbsUp)];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.Gestures(frame, 2, 0.3f);
+        _hands = result.Hands.Count;
+        var overlay = new VisionOverlay();
+        string? best = null;
+        float bestScore = 0;
+        foreach (var rh in result.Hands)
+        {
+            overlay.Landmarks.Add(Overlay.Hand(rh.Hand, highlight: [4, 8, 12, 16, 20]));
+            var shape = Shape(rh.Hand);
+            _lastHand = shape;
+            var (name, score) = (rh.TopGesture?.CategoryName, rh.TopGesture?.Score ?? 0);
+            if (_custom.Count > 0)
+            {
+                var nearest = _custom.Select(c => (c.Name, d: Dist(c.Shape, shape))).MinBy(x => x.d);
+                var customScore = (float)Math.Max(0, 1 - nearest.d / 0.6);
+                if (customScore > score && customScore > 0.55)
+                {
+                    (name, score) = (nearest.Name, customScore);
+                }
+            }
+
+            if (name is { Length: > 0 } && name != "None" && score >= MinScore && score > bestScore)
+            {
+                (best, bestScore) = (name, score);
+            }
+
+            var (x, y, _, _) = Overlay.Bounds(rh.Hand.Landmarks);
+            overlay.Texts.Add(Overlay.Label(x, Math.Max(0.02f, y - 0.04f), $"{rh.Hand.Handedness.CategoryName}: {Pretty(name)} {score:P0}", Overlay.White));
+        }
+
+        _confidence = bestScore;
+        var pretty = best is null ? null : Pretty(best);
+        if (pretty != _current)
+        {
+            _current = pretty;
+            if (pretty is not null)
+            {
+                _history.Add(pretty);
+                _ = InvokeAsync(() => OnGesture.InvokeAsync(best!));
+            }
+        }
+
+        overlay.Status = pretty ?? (_hands == 0 ? "No hand" : "…");
+        return overlay;
+    }
+
+    private static string Pretty(string? name) => name switch
+    {
+        "Thumb_Up" => "👍 Thumbs up",
+        "Thumb_Down" => "👎 Thumbs down",
+        "Victory" => "✌ Victory",
+        "Pointing_Up" => "☝ Pointing",
+        "Open_Palm" => "✋ Open palm",
+        "Closed_Fist" => "✊ Fist",
+        "ILoveYou" => "🤟 I love you",
+        null or "" or "None" => "–",
+        _ => name,
+    };
+
+    /// <summary>Wrist-relative, scale-normalised 2-D hand shape (42 values), mirrored to a right hand.</summary>
+    public static float[] Shape(HandLandmarks hand)
+    {
+        var l = hand.Landmarks;
+        var w = l[0];
+        var scale = (float)Math.Max(1e-4, Math.Sqrt(Math.Pow(l[9].X - w.X, 2) + Math.Pow(l[9].Y - w.Y, 2)));
+        var flip = hand.IsLeft ? -1 : 1;
+        var v = new float[l.Count * 2];
+        for (var i = 0; i < l.Count; i++)
+        {
+            v[2 * i] = (l[i].X - w.X) / scale * flip;
+            v[2 * i + 1] = (l[i].Y - w.Y) / scale;
+        }
+
+        return v;
+    }
+
+    private static double Dist(float[] a, float[] b)
+    {
+        double s = 0;
+        for (var i = 0; i < Math.Min(a.Length, b.Length); i++)
+        {
+            s += (a[i] - b[i]) * (a[i] - b[i]);
+        }
+
+        return Math.Sqrt(s / a.Length);
+    }
+
+    private void Teach()
+    {
+        if (_lastHand is not null && !string.IsNullOrWhiteSpace(_newName))
+        {
+            _custom.Add((_newName.Trim(), _lastHand));
+        }
+    }
+}

@@ -1,0 +1,155 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Records clips of the picture with its overlay, takes screenshots, and snapshots evidence automatically when a trigger fires. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@(_recording ? "Recording…" : $"{_clips.Count} clip(s) · {_evidence.Count} snapshot(s)")" Icon="bi-record-circle">
+        <div class="bai-stack">
+            <div class="bai-row">
+                @if (_recording)
+                {
+                    <button type="button" class="bai-btn bai-btn-ai" @onclick="StopAsync"><i class="bi bi-stop-fill" aria-hidden="true"></i>Stop</button>
+                }
+                else
+                {
+                    <button type="button" class="bai-btn bai-btn-ai" @onclick="RecordAsync"><i class="bi bi-record-fill" aria-hidden="true"></i>Record</button>
+                }
+                <button type="button" class="bai-btn-ghost" @onclick="ScreenshotAsync"><i class="bi bi-camera" aria-hidden="true"></i>Screenshot</button>
+            </div>
+            <label class="bai-small">Auto-snapshot when
+                <select class="bai-select" @bind="_trigger" aria-label="Snapshot trigger">
+                    <option value="none">never</option>
+                    <option value="appear">a face appears</option>
+                    <option value="change">the face count changes</option>
+                </select>
+            </label>
+            <AiError Message="@Error" />
+            @if (_clips.Count > 0)
+            {
+                <span class="bai-label">Clips</span>
+                @foreach (var c in _clips)
+                {
+                    <div class="bai-row bai-small">
+                        <span class="bai-spacer">@c.At.ToString("HH:mm:ss", CultureInfo.InvariantCulture) · @c.Seconds.ToString("0", CultureInfo.InvariantCulture) s</span>
+                        <button type="button" class="bai-btn-ghost" @onclick="() => DownloadClipAsync(c)"><i class="bi bi-download" aria-hidden="true"></i>WebM</button>
+                    </div>
+                }
+            }
+            @if (_evidence.Count > 0)
+            {
+                <span class="bai-label">Evidence</span>
+                <div class="baiv-thumbs">
+                    @foreach (var e in _evidence)
+                    {
+                        <a href="@e.DataUrl" download="@($"evidence-{e.At:yyyyMMdd-HHmmss}.jpg")" title="@($"{e.At:HH:mm:ss} · {e.Reason}")"><img src="@e.DataUrl" alt="@e.Reason" /></a>
+                    }
+                </div>
+            }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed record RecordedClip(string Url, DateTime At, double Seconds);
+
+    public sealed record EvidenceSnapshot(string DataUrl, DateTime At, string Reason);
+
+    private IReadOnlyList<RecordedClip> _clips = [];
+    private IReadOnlyList<EvidenceSnapshot> _evidence = [];
+    private bool _recording;
+    private DateTime _recordStart;
+    private string _trigger = "change";
+    private int _lastFaces = -1;
+    private DateTime _lastAuto;
+
+    [Parameter] public string Title { get; set; } = "Vision recorder";
+
+    /// <summary>Minimum seconds between automatic snapshots.</summary>
+    [Parameter] public double SnapshotCooldownSeconds { get; set; } = 3;
+
+    /// <summary>Raised for each evidence snapshot (store it in your evidence system).</summary>
+    [Parameter] public EventCallback<EvidenceSnapshot> OnEvidence { get; set; }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        if (_trigger == "none")
+        {
+            return new VisionOverlay { Status = _recording ? "● REC" : null };
+        }
+
+        var faces = Tasks.DetectFaces(frame);
+        var overlay = new VisionOverlay { Status = (_recording ? "● REC · " : string.Empty) + $"{faces.Detections.Count} face(s)" };
+        foreach (var d in faces.Detections)
+        {
+            overlay.Boxes.Add(Overlay.Box(d, frame.Width, frame.Height, "face", Overlay.Nila));
+        }
+
+        var count = faces.Detections.Count;
+        var fire = _trigger switch
+        {
+            "appear" => count > 0 && _lastFaces == 0,
+            "change" => _lastFaces >= 0 && count != _lastFaces,
+            _ => false,
+        };
+        var previous = _lastFaces;
+        _lastFaces = count;
+        if (fire && (DateTime.UtcNow - _lastAuto).TotalSeconds >= SnapshotCooldownSeconds)
+        {
+            _lastAuto = DateTime.UtcNow;
+            _ = InvokeAsync(() => CaptureAsync($"Faces {previous} → {count}"));
+        }
+
+        return overlay;
+    }
+
+    protected override void HandleSourceChanged(VisionSourceKind kind)
+    {
+        base.HandleSourceChanged(kind);
+        _lastFaces = -1;
+    }
+
+    private async Task RecordAsync()
+    {
+        Error = null;
+        if (await Camera!.StartRecordingAsync())
+        {
+            _recording = true;
+            _recordStart = DateTime.Now;
+        }
+        else
+        {
+            Error = "This browser cannot record the picture (MediaRecorder with WebM is required).";
+        }
+    }
+
+    private async Task StopAsync()
+    {
+        var url = await Camera!.StopRecordingAsync();
+        _recording = false;
+        if (url is not null)
+        {
+            _clips = [new RecordedClip(url, _recordStart, (DateTime.Now - _recordStart).TotalSeconds), .. _clips];
+            RecordEvent("Video clip recorded");
+        }
+    }
+
+    private Task ScreenshotAsync() => CaptureAsync("Manual screenshot");
+
+    private Task DownloadClipAsync(RecordedClip c) => Camera!.DownloadAsync(c.Url, $"clip-{c.At:yyyyMMdd-HHmmss}.webm");
+
+    private async Task CaptureAsync(string reason)
+    {
+        var data = await Camera!.SnapshotAsync();
+        if (data is null)
+        {
+            return;
+        }
+
+        var snap = new EvidenceSnapshot(data, DateTime.Now, reason);
+        _evidence = [snap, .. _evidence.Take(23)];
+        RecordEvent($"Snapshot: {reason}");
+        await OnEvidence.InvokeAsync(snap);
+        StateHasChanged();
+    }
+}

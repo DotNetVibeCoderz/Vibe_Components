@@ -1,0 +1,149 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Fish species: ImageNet fish classes scanned over a grid, plus a reference gallery of your own labelled species (tilapia, snapper, catfish …). *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="ImageNet fish classes + your reference gallery" Icon="bi-water">
+        <div class="bai-stack">
+            @if (_state.Match is { } m)
+            {
+                <div class="baiv-big" style="font-size:1.6rem">@m.Label</div>
+                <span class="bai-small bai-muted">From your gallery · similarity @m.Similarity.ToString("0.00", CultureInfo.InvariantCulture) · vote @m.Confidence.ToString("P0", CultureInfo.InvariantCulture)</span>
+            }
+            @if (_state.Species.Count > 0)
+            {
+                <span class="bai-label">ImageNet fish classes found</span>
+                @foreach (var (label, score) in _state.Species)
+                {
+                    <div class="baiv-meter"><span>@label</span><div><span style="width:@((Math.Min(1, score * 2) * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@score.ToString("P0", CultureInfo.InvariantCulture)</span></div>
+                }
+            }
+            else if (_state.Match is null)
+            {
+                <p class="bai-small bai-muted" style="margin:0">ImageNet only knows a few fish (tench, goldfish, coho, sturgeon, gar, lionfish, puffer, eel, barracouta …). Teach local species below.</p>
+            }
+            <span class="bai-label">Reference gallery</span>
+            <div class="bai-row">
+                <select class="bai-select" style="width:auto" @bind="_region" aria-label="Region to label">
+                    <option value="full">Whole frame</option>
+                    <option value="best">Best fish tile</option>
+                    <option value="center">Centre</option>
+                    <option value="left">Left half</option>
+                    <option value="right">Right half</option>
+                </select>
+                <input class="bai-input bai-spacer" @bind="_label" placeholder="Species, e.g. Nila (tilapia)" aria-label="Species label" />
+                <button type="button" class="bai-btn-ghost" disabled="@(string.IsNullOrWhiteSpace(_label))" @onclick="TeachAsync">Add</button>
+            </div>
+            <div class="bai-chips">
+                @foreach (var g in _gallery.Examples.GroupBy(e => e.Label)) { <span class="bai-badge bai-badge-ai">@g.Key ×@g.Count()</span> }
+            </div>
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Ask"><i class="bi bi-stars" aria-hidden="true"></i>Identify with AI</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private sealed record State(IReadOnlyList<(string Label, float Score)> Species, GalleryMatch? Match, NormalizedRect? BestTile);
+
+    /// <summary>ImageNet labels that are fish.</summary>
+    public static readonly IReadOnlySet<string> FishClasses = new HashSet<string>
+    {
+        "tench", "goldfish", "great white shark", "tiger shark", "hammerhead", "electric ray", "stingray", "barracouta", "eel", "coho",
+        "rock beauty", "anemone fish", "sturgeon", "gar", "lionfish", "puffer",
+    };
+
+    private readonly ExampleGallery _gallery = new();
+    private State _state = new([], null, null);
+    private string _region = "best";
+    private string? _label;
+    private float[]? _embedding;
+    private VisionFrameSnapshot? _last;
+
+    private sealed record VisionFrameSnapshot(byte[] Jpeg, NormalizedRect? Best);
+
+    [Parameter] public string Title { get; set; } = "Fish species recognizer";
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Fish, VisionSamples.Livestock];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        // Whole frame plus a 3×3 grid, so several fish in one picture can each be scored.
+        var scores = new Dictionary<string, float>();
+        NormalizedRect? best = null;
+        float bestScore = 0;
+        void Score(NormalizedRect? r)
+        {
+            foreach (var c in Tasks.Classify(frame, 3, FishClasses, r).Categories)
+            {
+                var name = c.CategoryName ?? "?";
+                scores[name] = Math.Max(scores.GetValueOrDefault(name), c.Score);
+                if (r is not null && c.Score > bestScore)
+                {
+                    bestScore = c.Score;
+                    best = r;
+                }
+            }
+        }
+
+        Score(null);
+        for (var gy = 0; gy < 3; gy++)
+        {
+            for (var gx = 0; gx < 3; gx++)
+            {
+                Score(new NormalizedRect((gx + 0.5f) / 3, (gy + 0.5f) / 3, 0.45f, 0.45f));
+            }
+        }
+
+        _embedding = Tasks.Embed(frame.Image).Values.ToArray();
+        var species = scores.Where(kv => kv.Value >= 0.05f).OrderByDescending(kv => kv.Value).Take(5).Select(kv => (kv.Key, kv.Value)).ToList();
+        _state = new State(species, _gallery.Predict(_embedding), best);
+        _last = new VisionFrameSnapshot(frame.Jpeg, best);
+        var overlay = new VisionOverlay { Status = _state.Match?.Label ?? (species.Count > 0 ? species[0].Key : "No fish class") };
+        if (best is { } b && bestScore >= 0.1f)
+        {
+            overlay.Boxes.Add(new OverlayBox { X = b.XCenter - b.Width / 2, Y = b.YCenter - b.Height / 2, W = b.Width, H = b.Height, Color = Overlay.Nila, Dashed = true, Label = species.FirstOrDefault().Key });
+        }
+
+        return overlay;
+    }
+
+    private async Task TeachAsync()
+    {
+        var label = _label?.Trim();
+        if (string.IsNullOrEmpty(label) || _last is null)
+        {
+            return;
+        }
+
+        NormalizedRect? rect = _region switch
+        {
+            "best" => _last.Best,
+            "full" => null,
+            _ => ImageClassifierPanel.Rect(_region),
+        };
+        // Embed the chosen region of the last frame on a worker thread (the frame itself has been disposed).
+        var jpeg = _last.Jpeg;
+        var embedding = await Task.Run(() =>
+        {
+            using var image = MediaPipeNet.Imaging.MPImage.Load(jpeg);
+            return Tasks.Embed(image, rect).Values.ToArray();
+        });
+        _gallery.Add(new LabelledExample(label, embedding));
+        if (_embedding is not null)
+        {
+            _state = _state with { Match = _gallery.Predict(_embedding) };
+        }
+    }
+
+    private Task Ask()
+    {
+        var s = _state;
+        var facts = $"ImageNet fish classes: {string.Join(", ", s.Species.Select(x => string.Create(CultureInfo.InvariantCulture, $"{x.Label} {x.Score:P0}")))}. " +
+                    (s.Match is { } m ? string.Create(CultureInfo.InvariantCulture, $"Closest reference: {m.Label} (similarity {m.Similarity:0.00}).") : "No reference examples yet.");
+        return AskAboutFrameAsync("a fisheries officer familiar with Indonesian aquaculture and market fish",
+            "Which species are visible (local and scientific names), how sure are you, and what freshness or quality signs do you see?", facts);
+    }
+}

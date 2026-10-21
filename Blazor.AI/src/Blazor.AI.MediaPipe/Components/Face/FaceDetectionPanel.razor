@@ -1,0 +1,109 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Real-time face detection: boxes, six keypoints, confidence, short/full-range models and optional privacy blur. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="BlazeFace · boxes + 6 keypoints" Icon="bi-person-square">
+        <div class="bai-stack">
+            <div class="baiv-big" aria-live="polite">@_count <span class="bai-small bai-muted">face(s)</span></div>
+            <div class="bai-row bai-small">
+                <select class="bai-select" style="width:auto" @bind="_model" @bind:after="Refresh" aria-label="Detector model">
+                    <option value="@FaceDetectorModel.ShortRange">Short range (≤ 2 m)</option>
+                    <option value="@FaceDetectorModel.FullRange">Full range (≤ 5 m)</option>
+                </select>
+                <label><input type="checkbox" class="form-check-input" @bind="_privacy" @bind:after="Refresh" /> privacy blur</label>
+            </div>
+            <label class="bai-small">Min confidence @_minConfidence.ToString("P0", CultureInfo.InvariantCulture)
+                <input type="range" min="0.2" max="0.9" step="0.05" @bind="_minConfidence" @bind:after="Refresh" style="width:100%" aria-label="Minimum confidence" />
+            </label>
+            @foreach (var (score, size) in _faces)
+            {
+                <div class="baiv-meter"><span>Face · @size.ToString("P0", CultureInfo.InvariantCulture) of width</span><div><span style="width:@((score * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@score.ToString("0.00", CultureInfo.InvariantCulture)</span></div>
+            }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private FaceDetectorModel _model = FaceDetectorModel.ShortRange;
+    private bool _privacy;
+    private float _minConfidence = 0.5f;
+    private int _count;
+    private IReadOnlyList<(float Score, float Size)> _faces = [];
+
+    [Parameter] public string Title { get; set; } = "Face detection";
+
+    /// <summary>Start with privacy blur on (faces are blurred in the picture).</summary>
+    [Parameter] public bool PrivacyBlur { get; set; }
+
+    /// <summary>Raised when the number of faces changes.</summary>
+    [Parameter] public EventCallback<int> OnCountChanged { get; set; }
+
+    protected override void OnInitialized() => _privacy = PrivacyBlur;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var result = Tasks.DetectFaces(frame, _model, _minConfidence);
+        var overlay = new VisionOverlay();
+        var faces = new List<(float, float)>();
+        foreach (var d in result.Detections)
+        {
+            var box = Overlay.Box(d, frame.Width, frame.Height, $"face {d.Score:P0}", Overlay.Nila);
+            overlay.Boxes.Add(box);
+            faces.Add((d.Score, box.W));
+            if (d.Keypoints is { Count: > 0 } kps)
+            {
+                // Keypoints are normalized; guard against pixel coordinates just in case.
+                var px = kps.Any(k => k.X > 1.5f || k.Y > 1.5f);
+                var pts = kps.SelectMany(k => new[] { px ? k.X / frame.Width : k.X, px ? k.Y / frame.Height : k.Y }).ToArray();
+                overlay.Landmarks.Add(new OverlayLandmarks { Points = pts, Color = Overlay.Soga, PointColor = Overlay.Soga, Radius = 4, LineWidth = 0 });
+            }
+        }
+
+        if (_privacy && result.Detections.Count > 0)
+        {
+            overlay.Mask = PrivacyMask(result.Detections, frame.Width, frame.Height);
+        }
+
+        var count = result.Detections.Count;
+        if (count != _count)
+        {
+            _ = InvokeAsync(() => OnCountChanged.InvokeAsync(count));
+        }
+
+        _count = count;
+        _faces = faces;
+        overlay.Status = $"{count} face(s)";
+        return overlay;
+    }
+
+    // Blur mode keeps where the mask is 1 and blurs where it is 0, so faces are the zeros.
+    private static OverlayMask PrivacyMask(IReadOnlyList<Detection> faces, int width, int height)
+    {
+        const int w = 160;
+        var h = Math.Max(1, (int)Math.Round(w * height / (double)width));
+        var data = new float[w * h];
+        Array.Fill(data, 1f);
+        foreach (var d in faces)
+        {
+            var b = d.BoundingBox;
+            var x0 = (int)Math.Floor((b.X - b.Width * 0.15) / width * w);
+            var x1 = (int)Math.Ceiling((b.X + b.Width * 1.15) / width * w);
+            var y0 = (int)Math.Floor((b.Y - b.Height * 0.25) / height * h);
+            var y1 = (int)Math.Ceiling((b.Y + b.Height * 1.1) / height * h);
+            for (var y = Math.Max(0, y0); y < Math.Min(h, y1); y++)
+            {
+                for (var x = Math.Max(0, x0); x < Math.Min(w, x1); x++)
+                {
+                    data[y * w + x] = 0;
+                }
+            }
+        }
+
+        var m = Overlay.Mask(new SegmentationMask(w, h, data), "blur");
+        return new OverlayMask { Width = m.Width, Height = m.Height, Data = m.Data, Mode = "blur", BlurPx = 22 };
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+}

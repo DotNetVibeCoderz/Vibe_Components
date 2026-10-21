@@ -1,0 +1,119 @@
+@namespace Blazor.AI.MediaPipe
+@inherits SolutionComponentBase
+@* Bed/chair monitoring: safe-zone exit, movement level, and an immobility timer for pressure-injury prevention. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"Patient {PatientName} · safe zone {(_inZone ? "occupied" : "empty")}")" Icon="bi-hospital">
+        <div class="bai-stack">
+            <div class="bai-row">
+                <div><div class="baiv-big">@_movement.ToString("0", CultureInfo.InvariantCulture)</div><span class="bai-small bai-muted">movement (0–100)</span></div>
+                <div><div class="baiv-big">@TimeSpan.FromSeconds(_stillSeconds).ToString(@"mm\:ss")</div><span class="bai-small bai-muted">since last repositioning</span></div>
+            </div>
+            <div class="baiv-meter"><span>Immobility</span><div><span style="width:@(Math.Min(100, _stillSeconds / (RepositionMinutes * 60) * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">@RepositionMinutes min</span></div>
+            <label class="bai-small">Safe zone (normalized x, y, w, h)
+                <input class="bai-input" style="font-family:var(--bai-font-mono)" value="@ZoneText" @onchange="SetZone" aria-label="Safe zone rectangle" />
+            </label>
+            <span class="bai-label">Alerts</span>
+            @EventLog()
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private float[]? _previous;
+    private double _movement, _stillSeconds;
+    private bool _inZone = true, _wasInZone = true, _immobilityAlerted;
+    private long _lastT;
+
+    [Parameter] public string Title { get; set; } = "Patient movement monitor";
+    [Parameter] public string PatientName { get; set; } = "Bed 4";
+
+    /// <summary>The bed or chair area (normalized). Leaving it raises an out-of-bed alert.</summary>
+    [Parameter] public (float X, float Y, float W, float H) SafeZone { get; set; } = (0.08f, 0.35f, 0.84f, 0.6f);
+
+    /// <summary>Minutes without meaningful movement before a repositioning reminder (pressure-injury risk).</summary>
+    [Parameter] public double RepositionMinutes { get; set; } = 2;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Fall, VisionSamples.DeskPosture, VisionSamples.Yoga];
+
+    private string ZoneText => string.Create(CultureInfo.InvariantCulture, $"{SafeZone.X:0.00}, {SafeZone.Y:0.00}, {SafeZone.W:0.00}, {SafeZone.H:0.00}");
+
+    private void SetZone(ChangeEventArgs e)
+    {
+        var parts = (e.Value?.ToString() ?? "").Split(',').Select(p => float.TryParse(p, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : float.NaN).ToArray();
+        if (parts.Length == 4 && parts.All(float.IsFinite))
+        {
+            SafeZone = (parts[0], parts[1], parts[2], parts[3]);
+            _ = Camera?.ReprocessAsync();
+        }
+    }
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var overlay = new VisionOverlay();
+        overlay.Boxes.Add(VisionSolutions.ZoneBox(SafeZone, "Safe zone", _inZone ? Overlay.Nila : Overlay.Danger, fill: false));
+        var pose = Tasks.Pose(frame).Poses.FirstOrDefault();
+        var t = frame.IsLive ? frame.TimestampMs : _lastT + 1000;
+        var dt = Math.Clamp((t - _lastT) / 1000.0, 0, 2);
+        _lastT = t;
+        if (pose is null)
+        {
+            _inZone = false;
+            overlay.Status = "No patient visible";
+            CheckZone();
+            return overlay;
+        }
+
+        var hips = ((pose.Landmarks[23].X + pose.Landmarks[24].X) / 2, (pose.Landmarks[23].Y + pose.Landmarks[24].Y) / 2);
+        _inZone = VisionSolutions.Inside(hips, SafeZone);
+        CheckZone();
+        var points = Overlay.Points(pose.Landmarks);
+        if (_previous is not null && frame.IsLive)
+        {
+            double sum = 0;
+            for (var i = 0; i < points.Length; i++)
+            {
+                sum += Math.Abs(points[i] - _previous[i]);
+            }
+
+            var level = Math.Clamp(sum / points.Length * 4000, 0, 100);
+            _movement = _movement * 0.7 + level * 0.3;
+        }
+
+        _previous = points;
+        if (_movement > 8)
+        {
+            _stillSeconds = 0;
+            _immobilityAlerted = false;
+        }
+        else
+        {
+            _stillSeconds += dt;
+        }
+
+        if (!_immobilityAlerted && _stillSeconds >= RepositionMinutes * 60)
+        {
+            _immobilityAlerted = true;
+            Publish("reposition", $"{PatientName}: no movement for {RepositionMinutes:0} min — reposition the patient", VisionEventSeverity.Warning);
+        }
+
+        overlay.Landmarks.Add(Overlay.Pose(pose, _inZone ? Overlay.Nila : Overlay.Danger));
+        overlay.Status = $"{(_inZone ? "In zone" : "OUT OF ZONE")} · movement {_movement:0}";
+        return overlay;
+    }
+
+    private void CheckZone()
+    {
+        if (_wasInZone && !_inZone)
+        {
+            Publish("zone-exit", $"{PatientName}: patient left the safe zone", VisionEventSeverity.Alert, snapshot: true);
+        }
+        else if (!_wasInZone && _inZone)
+        {
+            Publish("zone-return", $"{PatientName}: patient back in the safe zone");
+        }
+
+        _wasInZone = _inZone;
+    }
+}

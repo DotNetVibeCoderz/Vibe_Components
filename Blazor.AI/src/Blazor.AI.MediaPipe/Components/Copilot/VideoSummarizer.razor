@@ -1,0 +1,149 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Samples a video (upload, stream or camera) every k seconds, keeps a timeline of detections and classes, then summarises it. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="Timeline of sampled frames → summary" Icon="bi-film">
+        <div class="bai-stack">
+            <div class="bai-row">
+                <label class="bai-small">Every <input type="number" min="0.5" max="30" step="0.5" class="bai-input" style="width:4.5rem" @bind="_interval" disabled="@_capturing" /> s</label>
+                <label class="bai-small">for <input type="number" min="0" max="600" class="bai-input" style="width:4.5rem" @bind="_duration" disabled="@_capturing" /> s <span class="bai-muted">(0 = until stopped)</span></label>
+            </div>
+            <div class="bai-row">
+                @if (_capturing)
+                {
+                    <button type="button" class="bai-btn" @onclick="StopAsync"><i class="bi bi-stop-circle" aria-hidden="true"></i>Stop · @_timeline.Count samples</button>
+                }
+                else
+                {
+                    <button type="button" class="bai-btn" @onclick="Start"><i class="bi bi-record-circle" aria-hidden="true"></i>Start sampling</button>
+                    <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || _timeline.Count == 0)" @onclick="Summarise"><i class="bi bi-stars" aria-hidden="true"></i>Summarise</button>
+                }
+            </div>
+            <span class="bai-small bai-muted">Upload a video with the Upload button (or use the camera), then start sampling.</span>
+            @if (_timeline.Count > 0)
+            {
+                var stats = Aggregate(_timeline);
+                <span class="bai-label">Presence over @_timeline.Count samples (@Seconds(_timeline[^1].At))</span>
+                @foreach (var s in stats.Take(8))
+                {
+                    <div class="baiv-meter"><span>@s.Label</span><div><span style="width:@((s.Share * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div><span class="bai-num">max @s.Max</span></div>
+                }
+                <span class="bai-label">Timeline</span>
+                <div class="bai-chips" style="max-height:140px; overflow:auto">
+                    @foreach (var e in _timeline)
+                    {
+                        <span class="bai-chip" title="@e.Scene">@Seconds(e.At) · @(e.Objects.Count == 0 ? "—" : string.Join(", ", e.Objects.Take(3).Select(o => $"{o.Count} {o.Label}")))</span>
+                    }
+                </div>
+            }
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    /// <summary>One sampled frame.</summary>
+    public sealed record TimelineEntry(TimeSpan At, IReadOnlyList<(string Label, int Count)> Objects, int Faces, string? Scene);
+
+    private sealed record ClassStat(string Label, double Share, int Max);
+
+    private readonly System.Diagnostics.Stopwatch _clock = new();
+    private IReadOnlyList<TimelineEntry> _timeline = [];
+    private volatile bool _capturing;
+    private TimeSpan _nextSample;
+    private double _interval = 2, _duration = 30;
+
+    [Parameter] public string Title { get; set; } = "Video summarizer";
+
+    /// <summary>Raised with the finished timeline when sampling stops.</summary>
+    [Parameter] public EventCallback<IReadOnlyList<TimelineEntry>> OnTimeline { get; set; }
+
+    /// <summary>Summarise automatically when sampling stops.</summary>
+    [Parameter] public bool AutoSummarise { get; set; } = true;
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => VisionSamples.Scenes;
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        if (!_capturing)
+        {
+            var quick = SceneFacts.From(Tasks, frame, full: false);
+            var idle = new VisionOverlay();
+            idle.Boxes.AddRange(quick.Boxes);
+            return idle;
+        }
+
+        var at = _clock.Elapsed;
+        if (_duration > 0 && at.TotalSeconds >= _duration)
+        {
+            _capturing = false;
+            _ = InvokeAsync(StopAsync);
+            return null;
+        }
+
+        var overlay = new VisionOverlay { Status = string.Create(CultureInfo.InvariantCulture, $"● sampling {Seconds(at)}") };
+        if (at >= _nextSample)
+        {
+            _nextSample = at + TimeSpan.FromSeconds(Math.Max(0.5, _interval));
+            var facts = SceneFacts.From(Tasks, frame, full: true);
+            _timeline = [.. _timeline, new TimelineEntry(at, facts.Objects, facts.Faces, facts.Classes.FirstOrDefault().Label)];
+            overlay.Boxes.AddRange(facts.Boxes);
+        }
+
+        return overlay;
+    }
+
+    private void Start()
+    {
+        _timeline = [];
+        Narration = null;
+        _nextSample = TimeSpan.Zero;
+        _clock.Restart();
+        _capturing = true;
+        if (Camera?.Source == VisionSourceKind.Image)
+        {
+            _ = Camera.ReprocessAsync();
+        }
+    }
+
+    private async Task StopAsync()
+    {
+        _capturing = false;
+        _clock.Stop();
+        StateHasChanged();
+        var timeline = _timeline;
+        if (timeline.Count == 0)
+        {
+            return;
+        }
+
+        RecordEvent($"Video sampled: {timeline.Count} frames over {Seconds(timeline[^1].At)}");
+        await OnTimeline.InvokeAsync(timeline);
+        if (AutoSummarise)
+        {
+            await Summarise();
+        }
+    }
+
+    private Task Summarise()
+    {
+        var timeline = _timeline;
+        var stats = Aggregate(timeline);
+        var aggregate = string.Join(", ", stats.Select(s => string.Create(CultureInfo.InvariantCulture, $"{s.Label} in {s.Share:P0} of samples (max {s.Max})")));
+        var lines = string.Join("\n", timeline.Select(e =>
+            $"{Seconds(e.At)}: {(e.Objects.Count == 0 ? "no objects" : string.Join(", ", e.Objects.Select(o => $"{o.Count} {o.Label}")))}; faces {e.Faces}; scene {e.Scene ?? "?"}"));
+        var facts = $"{timeline.Count} frames sampled every {_interval.ToString(CultureInfo.InvariantCulture)} s.\nAggregate: {aggregate}.\nTimeline:\n{lines}";
+        return AskAboutFrameAsync("a video analyst",
+            "Summarise what happens in this video: main subjects, how the scene changes over time (with timestamps), and anything notable.", facts, attachImage: false);
+    }
+
+    private static List<ClassStat> Aggregate(IReadOnlyList<TimelineEntry> timeline) =>
+        timeline.SelectMany(e => e.Objects).GroupBy(o => o.Label)
+            .Select(g => new ClassStat(g.Key, g.Count() / (double)Math.Max(1, timeline.Count), g.Max(o => o.Count)))
+            .OrderByDescending(s => s.Share).ThenByDescending(s => s.Max).ToList();
+
+    private static string Seconds(TimeSpan t) => t.ToString(t.TotalHours >= 1 ? @"h\:mm\:ss" : @"m\:ss", CultureInfo.InvariantCulture);
+}

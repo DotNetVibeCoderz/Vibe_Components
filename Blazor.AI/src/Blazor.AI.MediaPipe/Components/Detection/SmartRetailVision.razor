@@ -1,0 +1,101 @@
+@namespace Blazor.AI.MediaPipe
+@inherits VisionComponentBase
+@* Shelf analytics: shelf rows, empty gaps, fill (planogram compliance) and detected products, with AI restock suggestions. *@
+
+<div class="@CssClass("baiv-split")">
+    <CameraViewer @ref="Camera" OnFrame="HandleFrameAsync" OnSourceChanged="HandleSourceChanged" Samples="@EffectiveSamples" StartWithCamera="@StartWithCamera" Fps="@Fps" Height="@Height" />
+    <AiCard Title="@Title" Subtitle="@($"{_state.Rows.Count} shelf rows · {_state.Gaps} gap(s)")" Icon="bi-shop">
+        <div class="bai-stack">
+            <div class="bai-row" style="gap:1.2rem">
+                <div><div class="baiv-big" style="color:@(_state.Compliance >= Target ? "var(--bai-nila)" : "var(--bai-danger)")">@_state.Compliance.ToString("P0", CultureInfo.InvariantCulture)</div><span class="bai-small bai-muted">shelf fill (target @Target.ToString("P0", CultureInfo.InvariantCulture))</span></div>
+                <div><div class="baiv-big">@_state.Products</div><span class="bai-small bai-muted">products detected</span></div>
+            </div>
+            @foreach (var (row, i) in _state.Rows.Select((r, i) => (r, i)))
+            {
+                <div class="baiv-meter"><span>Shelf @(i + 1)@(row.Gaps.Count > 0 ? $" · {row.Gaps.Count} gap" : "")</span><div><span style="width:@((row.Fill * 100).ToString("0", CultureInfo.InvariantCulture))%; @(row.Fill < Target ? "background:var(--bai-danger)" : null)"></span></div><span class="bai-num">@row.Fill.ToString("P0", CultureInfo.InvariantCulture)</span></div>
+            }
+            <label class="bai-small">Empty sensitivity <input type="range" min="0.02" max="0.09" step="0.005" @bind="_threshold" @bind:event="oninput" @bind:after="Refresh" style="width:100%" aria-label="Empty sensitivity" /></label>
+            <details class="bai-small"><summary>How it works</summary>
+                Shelf boards are found from strong horizontal edges. Each shelf is split into tiles; a tile counts as stocked when it has product-like texture, and two or more empty tiles in a row are reported as a gap. Bottles, cups and other COCO objects are also detected. Tune the sensitivity to your store's lighting and fixtures.
+            </details>
+            <button type="button" class="bai-btn bai-btn-ai" style="width:fit-content" disabled="@IsBusy" @onclick="Restock"><i class="bi bi-stars" aria-hidden="true"></i>Restock suggestions</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private sealed record State(IReadOnlyList<ShelfAnalysis.ShelfRow> Rows, int Gaps, double Compliance, int Products, IReadOnlyDictionary<string, int> ProductCounts);
+
+    private static readonly IReadOnlySet<string> ProductClasses = new HashSet<string> { "bottle", "cup", "wine glass", "bowl", "banana", "apple", "orange", "broccoli", "carrot", "donut", "cake", "sandwich", "book", "vase", "teddy bear", "cell phone" };
+    private State _state = new([], 0, 0, 0, new Dictionary<string, int>());
+    private double _threshold = 0.045;
+    private IReadOnlySet<int> _lowRows = new HashSet<int>();
+
+    [Parameter] public string Title { get; set; } = "Smart retail vision";
+
+    /// <summary>Shelf fill below this ratio is flagged.</summary>
+    [Parameter] public double Target { get; set; } = 0.85;
+
+    /// <summary>Raised when a shelf row falls below <see cref="Target"/>: row number (1-based) and fill.</summary>
+    [Parameter] public EventCallback<(int Row, double Fill)> OnLowStock { get; set; }
+
+    protected override IReadOnlyList<VisionSample> DefaultSamples => [VisionSamples.Shelf, VisionSamples.Warehouse, VisionSamples.Fruit];
+
+    protected override VisionOverlay? Process(VisionFrame frame)
+    {
+        var px = new PixelBuffer(frame.Image);
+        var rows = ShelfAnalysis.Analyse(px, 24, _threshold);
+        var products = Tasks.Objects(frame, 0.3f, 60, ProductClasses).Detections;
+        var overlay = new VisionOverlay();
+        var gaps = 0;
+        var low = new HashSet<int>();
+        foreach (var (row, i) in rows.Select((r, i) => (r, i)))
+        {
+            overlay.Paths.Add(new OverlayPath { Points = [0, row.Bottom, 1, row.Bottom], Color = "rgba(123,140,255,0.6)", Width = 2 });
+            overlay.Texts.Add(Overlay.Label(0.005f, row.Top + 0.01f, $"Shelf {i + 1} · {row.Fill:P0}", row.Fill < Target ? Overlay.Danger : Overlay.White, 12));
+            foreach (var (x0, x1) in row.Gaps)
+            {
+                gaps++;
+                var top = row.Top + (row.Bottom - row.Top) * 0.15f;
+                overlay.Boxes.Add(new OverlayBox { X = x0, Y = top, W = x1 - x0, H = (row.Bottom - row.Top) * 0.75f, Color = Overlay.Danger, Dashed = true, Fill = true, Label = "empty" });
+            }
+
+            var number = i + 1;
+            if (row.Fill < Target && low.Add(number) && !_lowRows.Contains(number))
+            {
+                var fill = row.Fill;
+                RecordEvent(string.Create(CultureInfo.InvariantCulture, $"Low stock: shelf {number} at {fill:P0}"));
+                _ = InvokeAsync(() => OnLowStock.InvokeAsync((number, fill)));
+            }
+            else if (row.Fill < Target)
+            {
+                low.Add(number);
+            }
+        }
+
+        foreach (var d in products)
+        {
+            overlay.Boxes.Add(Overlay.Box(d, frame.Width, frame.Height, d.TopCategory?.CategoryName, Overlay.Nila));
+        }
+
+        _lowRows = low; // rows already reported stay quiet until they recover
+        var compliance = rows.Count == 0 ? 0 : rows.Average(r => r.Fill);
+        _state = new State(rows, gaps, compliance, products.Count, products.GroupBy(p => p.TopCategory?.CategoryName ?? "item").ToDictionary(g => g.Key, g => g.Count()));
+        overlay.Status = $"Fill {compliance:P0} · {gaps} gap(s)";
+        return overlay;
+    }
+
+    private Task Refresh() => Camera?.ReprocessAsync() ?? Task.CompletedTask;
+
+    private Task Restock()
+    {
+        var s = _state;
+        var facts = string.Create(CultureInfo.InvariantCulture,
+            $"{s.Rows.Count} shelf rows. Fill by row (top to bottom): {string.Join(", ", s.Rows.Select((r, i) => $"shelf {i + 1} {r.Fill:P0} with {r.Gaps.Count} empty gap(s) at {string.Join("/", r.Gaps.Select(g => $"{g.X0:P0}-{g.X1:P0} across"))}"))}. " +
+            $"Overall fill {s.Compliance:P0} (target {Target:P0}). Detected products: {string.Join(", ", s.ProductCounts.Select(kv => $"{kv.Value} {kv.Key}"))}.");
+        return AskAboutFrameAsync("a retail merchandising analyst for an Indonesian minimarket",
+            "Which shelf positions need restocking first, what product types belong there (from what is visible), and what should staff do now?", facts);
+    }
+}
