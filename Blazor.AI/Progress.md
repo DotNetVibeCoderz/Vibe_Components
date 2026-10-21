@@ -25,7 +25,8 @@ Roadmap: [PLAN.md](PLAN.md).
 | NuGet icon | ✅ | `assets/icon.png` (kawung motif) |
 | Docs EN / ID | ✅ | README + `docs/en`, `docs/id` (getting started, providers, components, security) |
 | Pack | ✅ | All 11 packages pack cleanly (`dotnet pack -c Release`) |
-| Monorepo + CI | 🟡 | Copy to `C:\experiment\VibeCoding\Vibe_Components\Blazor.AI` with `.github/workflows/blazor-ai.yml`; push/publish awaits owner confirmation |
+| Monorepo + CI | ✅ | In `Vibe_Components/Blazor.AI`; `.github/workflows/blazor-ai.yml` builds and tests every change and publishes on `blazor-ai-v*` tags |
+| Release 1.0.0 | ✅ | Tagged `blazor-ai-v1.0.0` on 2026-10-21; all 11 packages (+ symbols) pushed to NuGet by CI |
 
 ## Verified against real services
 
