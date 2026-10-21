@@ -426,3 +426,6 @@ FodyWeavers.xsd
 
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
+
+# Local MCP server configuration (machine-specific)
+.mcp.json
