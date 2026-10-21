@@ -1,0 +1,244 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@using Blazor.AI.Analytics
+@using Blazor.AI.Visualization
+@* A 3D grid world where a robot learns by Q-learning or SARSA. Training runs in .NET; every few episodes the current policy is replayed live. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height">
+        <div class="bai3d-panel">
+            <h4>Episode @_stats.Count / @Episodes</h4>
+            <div class="bai3d-kpi">
+                <div><b>@(_stats.Count == 0 ? "–" : _stats[^1].Return.ToString("0.00", CultureInfo.InvariantCulture))</b><span>return</span></div>
+                <div><b>@SuccessRate.ToString("P0", CultureInfo.InvariantCulture)</b><span>goal rate (last 50)</span></div>
+                <div><b>@_epsilon.ToString("0.00", CultureInfo.InvariantCulture)</b><span>ε explore</span></div>
+            </div>
+            @if (_avg.Count > 1)
+            {
+                <div style="margin-top:.4rem"><Sparkline Values="@_avg" Width="220" Height="34" Color="#d9964f" /></div>
+                <span class="bai-small" style="color:#aab1e6">moving-average return</span>
+            }
+        </div>
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            <span><i style="background:@ThreeDPalette.Nila"></i>goal</span><span><i style="background:@ThreeDPalette.Danger"></i>trap</span>
+            <span><i style="background:#4a557f"></i>wall</span><span><i style="background:@ThreeDPalette.Ramp(0.8)"></i>often visited</span>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="@Title" Subtitle="Tabular reinforcement learning" Icon="bi-joystick">
+        <div class="bai-stack">
+            <div>
+                <label class="bai-label" for="@($"{_uid}-alg")">Algorithm</label>
+                <select id="@($"{_uid}-alg")" class="bai-select" @bind="Algorithm" disabled="@_training">
+                    <option value="@GridAlgorithm.QLearning">Q-learning (off-policy)</option>
+                    <option value="@GridAlgorithm.Sarsa">SARSA (on-policy, safer)</option>
+                </select>
+            </div>
+            <div class="bai-grid-2">
+                <div>
+                    <label class="bai-label" for="@($"{_uid}-ep")">Episodes</label>
+                    <input id="@($"{_uid}-ep")" type="number" min="20" max="2000" step="20" class="bai-input" @bind="Episodes" disabled="@_training" />
+                </div>
+                <div>
+                    <label class="bai-label" for="@($"{_uid}-slip")">Slip chance</label>
+                    <input id="@($"{_uid}-slip")" type="number" min="0" max="0.5" step="0.05" class="bai-input" @bind="Slip" disabled="@_training" />
+                </div>
+            </div>
+            <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_watch" /> replay the policy while training</label>
+            <div class="bai-row">
+                @if (_training)
+                {
+                    <button type="button" class="bai-btn" @onclick="Stop"><i class="bi bi-stop-fill" aria-hidden="true"></i>Stop</button>
+                }
+                else
+                {
+                    <button type="button" class="bai-btn bai-btn-ai" @onclick="TrainAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Train</button>
+                    <button type="button" class="bai-btn-ghost" disabled="@(_learner is null)" @onclick="ReplayAsync"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>Replay best path</button>
+                }
+            </div>
+            <p class="bai-small bai-muted" style="margin:0">Rewards: −0.04 per step, +1 at the goal, −1 in a trap, −0.1 for bumping a wall.</p>
+            <AiError Message="@Error" />
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@(IsBusy || _stats.Count == 0)" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain the training</button>
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private readonly string _uid = "rlta-" + Guid.NewGuid().ToString("N")[..6];
+    private readonly List<GridEpisode> _stats = [];
+    private readonly List<double> _avg = [];
+    private Scene3DOptions _options = new();
+    private DesignedGridWorld _world = GridScene.Arena();
+    private GridQLearner? _learner;
+    private CancellationTokenSource? _cts;
+    private bool _training, _watch = true;
+    private double _epsilon = 1;
+
+    [Parameter] public string Title { get; set; } = "RL training arena";
+
+    /// <summary>The grid to learn; defaults to a 9×7 maze with two traps.</summary>
+    [Parameter] public DesignedGridWorld? World { get; set; }
+
+    [Parameter] public GridAlgorithm Algorithm { get; set; } = GridAlgorithm.QLearning;
+
+    [Parameter] public int Episodes { get; set; } = 400;
+
+    /// <summary>Probability that a move slips sideways (stochastic world).</summary>
+    [Parameter] public double Slip { get; set; }
+
+    [Parameter] public EventCallback<GridEpisode> OnEpisode { get; set; }
+
+    private double SuccessRate => _stats.Count == 0 ? 0 : _stats.TakeLast(50).Count(e => e.ReachedGoal) / (double)Math.Min(50, _stats.Count);
+
+    protected override void OnInitialized()
+    {
+        _world = World ?? GridScene.Arena();
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 8.5, 8.5], Target = [0, 0, 0.3], Fov = 42 },
+            Lights = "night",
+            Controls = new() { MaxDistance = 22 },
+            AriaLabel = "Grid world where a robot learns to reach the goal",
+        };
+        BuildScene();
+    }
+
+    private void BuildScene(int[]? visits = null)
+    {
+        var max = visits is null ? 1 : Math.Max(1, visits.Max());
+        var list = GridScene.Build(_world, visits is null ? null : (x, y) =>
+        {
+            var v = visits[y * _world.Width + x];
+            return v == 0 ? null : ThreeDPalette.Ramp(0.15 + 0.85 * Math.Sqrt(v / (double)max));
+        });
+        var start = GridScene.Cell(_world, _world.StartIndex % _world.Width, _world.StartIndex / _world.Width);
+        list.Add(new Object3D { Id = "agent", Kind = "model", Url = ThreeDAssets.GuideBot, FitHeight = 0.62, Position = start, Clip = "Idle", Tooltip = "Learning agent" });
+        Objects = list;
+    }
+
+    private async Task TrainAsync()
+    {
+        Stop();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+        _training = true;
+        Error = null;
+        Narration = null;
+        _stats.Clear();
+        _avg.Clear();
+        _world = World is null ? GridScene.Arena(new GridRewards { MaxSteps = 120, Slip = Math.Clamp(Slip, 0, 0.5) }) : World;
+        _world.Rewards.Slip = Math.Clamp(Slip, 0, 0.5);
+        _learner = new GridQLearner(_world, Algorithm) { EpsilonDecay = Math.Pow(0.05, 1.0 / Math.Max(20, Episodes * 0.7)) };
+        BuildScene();
+        var total = Math.Clamp(Episodes, 20, 2000);
+        var chunk = Math.Max(10, total / 25);
+        try
+        {
+            while (_stats.Count < total && !ct.IsCancellationRequested)
+            {
+                var n = Math.Min(chunk, total - _stats.Count);
+                var batch = await Task.Run(() =>
+                {
+                    var list = new List<GridEpisode>(n);
+                    for (var i = 0; i < n; i++)
+                    {
+                        list.Add(_learner.RunEpisode());
+                    }
+
+                    return list;
+                }, ct);
+                foreach (var e in batch)
+                {
+                    _stats.Add(e);
+                    var window = _stats.TakeLast(25).ToList();
+                    _avg.Add(window.Average(x => x.Return));
+                    await OnEpisode.InvokeAsync(e);
+                }
+
+                _epsilon = _learner.Epsilon;
+                BuildScene(_learner.Visits);
+                StateHasChanged();
+                if (_watch)
+                {
+                    await PlayPathAsync(batch[^1].Path, ct, 70);
+                }
+                else
+                {
+                    await Task.Delay(30, ct);
+                }
+            }
+
+            if (!ct.IsCancellationRequested)
+            {
+                await ReplayAsync();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _training = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ReplayAsync()
+    {
+        if (_learner is null)
+        {
+            return;
+        }
+
+        var greedy = _learner.RunEpisode(greedy: true);
+        await PlayPathAsync(greedy.Path, CancellationToken.None, 160);
+        if (Scene is not null)
+        {
+            await Scene.PlayClipAsync("agent", greedy.ReachedGoal ? "Happy" : "Think", loop: false);
+        }
+    }
+
+    private async Task PlayPathAsync(IReadOnlyList<(int X, int Y)> path, CancellationToken ct, int msPerStep)
+    {
+        if (Scene is null || path.Count == 0)
+        {
+            return;
+        }
+
+        await Scene.PlayClipAsync("agent", "Walk");
+        var steps = path.Take(60).ToList();
+        for (var i = 0; i < steps.Count && !ct.IsCancellationRequested; i++)
+        {
+            var (x, y) = steps[i];
+            var yaw = i == 0 ? 0 : GridScene.YawBetween(steps[i - 1], steps[i]);
+            await Scene.UpdateAsync([new ObjectPatch { Id = "agent", Position = GridScene.Cell(_world, x, y), Rotation = [0, yaw, 0] }], msPerStep);
+            await Task.Delay(msPerStep, ct);
+        }
+
+        await Scene.PlayClipAsync("agent", "Idle");
+    }
+
+    private void Stop()
+    {
+        _cts?.Cancel();
+        _cts = null;
+    }
+
+    private Task Explain()
+    {
+        var first = _stats.Take(50).ToList();
+        var last = _stats.TakeLast(50).ToList();
+        var facts = string.Create(CultureInfo.InvariantCulture,
+            $"{Algorithm} on a {_world.Width}x{_world.Height} grid maze with 2 traps, slip {Slip:0.00}. Trained {_stats.Count} episodes. " +
+            $"First 50 episodes: mean return {first.Average(e => e.Return):0.00}, goal rate {first.Count(e => e.ReachedGoal) / (double)first.Count:P0}, traps {first.Count(e => e.HitTrap)}. " +
+            $"Last 50: mean return {last.Average(e => e.Return):0.00}, goal rate {last.Count(e => e.ReachedGoal) / (double)last.Count:P0}, traps {last.Count(e => e.HitTrap)}, mean steps {last.Average(e => e.Steps):0.0}. Final epsilon {_epsilon:0.00}.");
+        return NarrateAsync("a reinforcement learning tutor", facts);
+    }
+
+    public override ValueTask DisposeAsync()
+    {
+        Stop();
+        return base.DisposeAsync();
+    }
+}

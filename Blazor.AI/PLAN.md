@@ -28,6 +28,7 @@ Blazor.AI gives Blazor developers ready-made AI components that work with any mo
 | Local models | `Blazor.AI.LocalModels` | Hugging Face hub, local NLP/vision/OCR/speech |
 | Biology | `Blazor.AI.Bio` | Sequences, alignment, phylogeny, proteins, molecules, CRISPR, primers, codons, RNA-seq |
 | Tooling | `Blazor.AI.Templates` | `dotnet new blazorai` |
+| 3D | `Blazor.AI.ThreeD` (v1.1) | Scene3D engine; avatars, 3D viz, agents, decisions, RL, digital twins, health, engineering, education, gaming, enterprise |
 | Samples | Gallery (Server), WASM sample | Every component with code; industry showcases |
 | Quality | Tests, docs EN/ID, CI publish | xUnit + bUnit, bilingual docs with screenshots, GitHub Actions |
 
@@ -40,6 +41,8 @@ Blazor.AI gives Blazor developers ready-made AI components that work with any mo
 - More bUnit coverage: every component renders with the simulated model.
 
 ## v1.2: reach
+
+- 3D: WebXR (VR/AR) mode for Scene3D, instanced rendering for large twins, glTF export of generated CAD/worlds, more rigged characters (Rodin + Blender pipeline in `tools/blender`).
 
 - WebAssembly-friendly server proxy package so WASM apps can use cloud models without exposing keys.
 - Voice mode for `AiChat` (speech in, speech out) using the LocalModels speech stack.

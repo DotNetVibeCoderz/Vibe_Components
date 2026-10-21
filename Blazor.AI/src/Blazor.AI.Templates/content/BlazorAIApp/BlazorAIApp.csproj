@@ -8,9 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Blazor.AI.Components" Version="1.0.0" />
+    <PackageReference Include="Blazor.AI.Components" Version="1.1.0" />
 <!--#if (agents) -->
-    <PackageReference Include="Blazor.AI.Agents" Version="1.0.0" />
+    <PackageReference Include="Blazor.AI.Agents" Version="1.1.0" />
 <!--#endif -->
   </ItemGroup>
 

@@ -1,0 +1,282 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Text → entities and relations → an interactive 3-D graph. Four views: knowledge graph, entity relationship, semantic, concept map. *@
+
+<div class="@CssClass("bai-stack")">
+    <div class="bai-row">
+        @foreach (var m in Modes)
+        {
+            <button type="button" class="bai-chip @(m == Mode ? "is-active" : null)" @onclick="() => SetMode(m)">@m</button>
+        }
+        <span class="bai-spacer"></span>
+        @if (_graph is { } g) { <span class="bai-badge @(g.FromModel ? "bai-badge-ai" : "bai-badge-local")">@(g.FromModel ? "extracted by AI" : "local extraction")</span> }
+    </div>
+    <div class="bai3d-split">
+        <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+            @if (_graph is { } g)
+            {
+                <div class="bai3d-panel">
+                    <h4>@Mode</h4>
+                    <div class="bai3d-kpi">
+                        <div><b>@g.Entities.Count</b><span>entities</span></div>
+                        <div><b>@g.Relations.Count</b><span>relations</span></div>
+                        <div><b>@(g.Entities.Count == 0 ? "–" : g.Entities.MaxBy(e => g.Degree(e.Name))!.Name)</b><span>hub</span></div>
+                    </div>
+                </div>
+                <div class="bai3d-legend bai3d-hud-bottom" style="color:#c9cff5">
+                    @foreach (var t in g.Entities.Select(e => e.Type).Distinct()) { <span><i style="background:@TypeColor(t)"></i>@t</span> }
+                </div>
+            }
+        </Scene3D>
+        <AiCard Title="@Title" Subtitle="Hover an edge's midpoint for its relation; click a node to explore it" Icon="bi-diagram-3">
+            <div class="bai-stack">
+                <textarea class="bai-textarea" rows="7" @bind="Text" aria-label="Source text"></textarea>
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="Extract"><i class="bi bi-diagram-3" aria-hidden="true"></i>Build graph</button>
+                <AiError Message="@Error" />
+                @if (_focus is { } f && _graph is { } g)
+                {
+                    <div class="bai-stack" style="gap:.3rem">
+                        <span class="bai-label">@f.Name <span class="bai-faint">· @f.Type</span></span>
+                        @foreach (var r in g.Relations.Where(r => r.Source == f.Name || r.Target == f.Name))
+                        {
+                            <span class="bai-small">@r.Source <i class="bi bi-arrow-right" aria-hidden="true"></i> <em>@r.Relation</em> <i class="bi bi-arrow-right" aria-hidden="true"></i> @r.Target</span>
+                        }
+                    </div>
+                }
+                @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+            </div>
+        </AiCard>
+    </div>
+</div>
+
+@code {
+    public static readonly string[] Modes = ["Knowledge graph", "Entity relationship", "Semantic", "Concept map"];
+    private Scene3DOptions _options = new();
+    private ExtractedGraph? _graph;
+    private GraphEntity? _focus;
+    private Dictionary<string, double[]> _pos = [];
+    private Dictionary<string, int> _community = [];
+
+    [Parameter] public string Title { get; set; } = "Knowledge graph";
+
+    /// <summary>Knowledge graph, Entity relationship, Semantic or Concept map.</summary>
+    [Parameter] public string Mode { get; set; } = "Knowledge graph";
+
+    [Parameter] public string Text { get; set; } =
+        "Borobudur was built by the Sailendra Dynasty in Central Java in the 9th century. The temple stands in Magelang near Yogyakarta. " +
+        "Gunadharma is traditionally named as the architect of Borobudur. Thomas Stamford Raffles brought Borobudur to European attention in 1814. " +
+        "UNESCO restored Borobudur with the Government of Indonesia between 1975 and 1982. UNESCO listed Borobudur as a World Heritage Site in 1991. " +
+        "Prambanan is a Hindu temple near Yogyakarta built by the Sanjaya Dynasty. The Sailendra Dynasty and the Sanjaya Dynasty ruled the Mataram Kingdom.";
+
+    /// <summary>Provide a graph directly instead of extracting it from <see cref="Text"/>.</summary>
+    [Parameter] public ExtractedGraph? Graph { get; set; }
+
+    [Parameter] public EventCallback<GraphEntity> OnEntitySelected { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 3.5, 11], Target = [0, 0.3, 0] },
+            Controls = new() { AutoRotate = true, AutoRotateSpeed = 0.4 },
+            Shadows = false,
+            Lights = "night",
+            AriaLabel = "3D knowledge graph",
+        };
+        _graph = Graph ?? GraphExtraction.Local(Text);
+        Layout();
+        Build();
+    }
+
+    private void SetMode(string mode)
+    {
+        Mode = mode;
+        Layout();
+        Build();
+    }
+
+    private Task Extract() => RunAsync(async ct =>
+    {
+        Narration = null;
+        _focus = null;
+        var json = await PlanAsync("You extract a knowledge graph. Use entity names exactly as written in the text. Relations are short verb phrases.", Text, GraphExtraction.Schema, ct);
+        _graph = GraphExtraction.FromJson(json, Text) ?? GraphExtraction.Local(Text);
+        Layout();
+        Build();
+    });
+
+    private void Layout()
+    {
+        if (_graph is not { } g || g.Entities.Count == 0)
+        {
+            _pos = [];
+            return;
+        }
+
+        var names = g.Entities.Select(e => e.Name).ToList();
+        _community = Communities(g);
+        if (Mode == "Concept map")
+        {
+            // Breadth-first tree from the most connected concept.
+            var root = g.Entities.MaxBy(e => g.Degree(e.Name))!.Name;
+            var children = new Dictionary<string, List<string>>();
+            var seen = new HashSet<string> { root };
+            var queue = new Queue<string>([root]);
+            while (queue.Count > 0)
+            {
+                var n = queue.Dequeue();
+                children[n] = [];
+                foreach (var r in g.Relations.Where(r => r.Source == n || r.Target == n))
+                {
+                    var other = r.Source == n ? r.Target : r.Source;
+                    if (seen.Add(other))
+                    {
+                        children[n].Add(other);
+                        queue.Enqueue(other);
+                    }
+                }
+            }
+
+            foreach (var orphan in names.Where(n => !seen.Contains(n)))
+            {
+                children[root].Add(orphan);
+                children[orphan] = [];
+            }
+
+            _pos = Layout3D.Tree(root, n => n, n => children.GetValueOrDefault(n) ?? [], 1.8, 1.5);
+            foreach (var p in _pos.Values)
+            {
+                p[1] += 3.2;
+            }
+
+            return;
+        }
+
+        var edges = g.Relations.Select(r => (r.Source, r.Target, 1.0)).ToList();
+        if (Mode == "Semantic")
+        {
+            // Pull members of the same community together.
+            foreach (var group in _community.GroupBy(c => c.Value))
+            {
+                var members = group.Select(m => m.Key).ToList();
+                for (var i = 1; i < members.Count; i++)
+                {
+                    edges.Add((members[0], members[i], 0.6));
+                }
+            }
+        }
+
+        _pos = Layout3D.Force(names, edges, radius: Mode == "Entity relationship" ? 4.2 : 3.8);
+    }
+
+    private void Build()
+    {
+        if (_graph is not { } g)
+        {
+            Objects = [];
+            return;
+        }
+
+        var list = new List<Object3D>();
+        var maxDeg = Math.Max(1, g.Entities.Max(e => g.Degree(e.Name)));
+        var index = g.Entities.Select((e, i) => (e.Name, i)).ToDictionary(x => x.Name, x => x.i);
+        foreach (var e in g.Entities)
+        {
+            if (!_pos.TryGetValue(e.Name, out var p))
+            {
+                continue;
+            }
+
+            var deg = g.Degree(e.Name);
+            var color = Mode == "Semantic" ? ThreeDPalette.Category(_community.GetValueOrDefault(e.Name)) : TypeColor(e.Type);
+            var focused = _focus?.Name == e.Name;
+            var size = 0.16 + 0.22 * deg / maxDeg;
+            list.Add(Mode == "Entity relationship"
+                ? new Object3D { Id = $"n{index[e.Name]}", Kind = "box", Size = [size * 2.6, size * 1.2, size * 1.2], Position = p, Color = color, Edges = "#ffffff", Emissive = color, EmissiveIntensity = focused ? 0.8 : 0.12, Label = e.Name, LabelClass = focused ? "is-soga" : null, Tooltip = $"{e.Name}\n{e.Type} · {deg} relations" }
+                : new Object3D { Id = $"n{index[e.Name]}", Kind = "sphere", Radius = size, Segments = 24, Position = p, Color = color, Emissive = color, EmissiveIntensity = focused ? 0.9 : 0.25, Roughness = 0.3, Label = e.Name, LabelClass = focused ? "is-soga" : "is-plain", Tooltip = $"{e.Name}\n{e.Type} · {deg} relations" });
+        }
+
+        var k = 0;
+        foreach (var r in g.Relations)
+        {
+            if (!_pos.TryGetValue(r.Source, out var a) || !_pos.TryGetValue(r.Target, out var b))
+            {
+                continue;
+            }
+
+            var touchesFocus = _focus is not null && (r.Source == _focus.Name || r.Target == _focus.Name);
+            var dimmed = _focus is not null && !touchesFocus;
+            var pts = Mode is "Entity relationship" or "Concept map" ? new[] { a, b } : Layout3D.Arc(a, b, 0.25 + Layout3D.Distance(a, b) * 0.08);
+            list.Add(new Object3D
+            {
+                Id = $"e{k}", Kind = touchesFocus ? "tube" : "line", Points = pts, Radius = 0.02, Pickable = false,
+                Color = touchesFocus ? ThreeDPalette.Soga : "#8f9bd9", Opacity = dimmed ? 0.12 : 0.7, Emissive = touchesFocus ? ThreeDPalette.Soga : null, EmissiveIntensity = touchesFocus ? 0.6 : null,
+            });
+            var mid = pts[pts.Length / 2];
+            list.Add(new Object3D
+            {
+                Id = $"m{k}", Kind = Mode == "Entity relationship" ? "icosahedron" : "sphere", Radius = 0.05, Segments = 8, Position = mid, Color = dimmed ? "#3b4270" : "#d9dcf5",
+                Tooltip = $"{r.Source}\n— {r.Relation} →\n{r.Target}", Label = Mode == "Entity relationship" && !dimmed ? r.Relation : null, LabelClass = "is-mono",
+            });
+            if (Mode == "Entity relationship" && !dimmed)
+            {
+                var dir = new[] { b[0] - a[0], b[1] - a[1], b[2] - a[2] };
+                list.Add(new Object3D { Id = $"a{k}", Kind = "arrow", From = [mid[0] - dir[0] * 0.08, mid[1] - dir[1] * 0.08, mid[2] - dir[2] * 0.08], To = [mid[0] + dir[0] * 0.12, mid[1] + dir[1] * 0.12, mid[2] + dir[2] * 0.12], Color = ThreeDPalette.Soga, Pickable = false });
+            }
+
+            k++;
+        }
+
+        Objects = list;
+    }
+
+    private async Task Picked(PickEvent e)
+    {
+        if (_graph is not { } g || !e.Id.StartsWith('n') || !int.TryParse(e.Id[1..], out var i) || i >= g.Entities.Count)
+        {
+            return;
+        }
+
+        _focus = g.Entities[i];
+        Build();
+        await OnEntitySelected.InvokeAsync(_focus);
+        if (Scene is not null)
+        {
+            await Scene.FocusAsync(e.Id, 6);
+        }
+
+        var rels = g.Relations.Where(r => r.Source == _focus.Name || r.Target == _focus.Name).Select(r => $"{r.Source} {r.Relation} {r.Target}");
+        await NarrateAsync("a knowledge-graph guide", $"Entity: {_focus.Name} ({_focus.Type}). Relations: {string.Join("; ", rels)}. Source text: {Text}");
+    }
+
+    /// <summary>Label propagation over relations (deterministic order).</summary>
+    private static Dictionary<string, int> Communities(ExtractedGraph g)
+    {
+        var label = g.Entities.Select((e, i) => (e.Name, i)).ToDictionary(x => x.Name, x => x.i);
+        for (var it = 0; it < 10; it++)
+        {
+            foreach (var e in g.Entities)
+            {
+                var neighbours = g.Relations.Where(r => r.Source == e.Name || r.Target == e.Name).Select(r => label[r.Source == e.Name ? r.Target : r.Source]).ToList();
+                if (neighbours.Count > 0)
+                {
+                    label[e.Name] = neighbours.GroupBy(x => x).OrderByDescending(x => x.Count()).ThenBy(x => x.Key).First().Key;
+                }
+            }
+        }
+
+        var remap = label.Values.Distinct().Order().Select((v, i) => (v, i)).ToDictionary(x => x.v, x => x.i);
+        return label.ToDictionary(x => x.Key, x => remap[x.Value]);
+    }
+
+    private static string TypeColor(string type) => type switch
+    {
+        "Person" => ThreeDPalette.Soga,
+        "Place" => ThreeDPalette.Nila,
+        "Organization" => "#7b8cff",
+        "Event" => "#c45ad6",
+        "Date" => ThreeDPalette.Warning,
+        "Thing" => "#f07aa8",
+        _ => "#9aa3c7",
+    };
+}

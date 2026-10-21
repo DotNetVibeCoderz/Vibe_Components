@@ -1,0 +1,229 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* AI-guided resuscitation training: a 3D patient, a live vitals monitor driven by a BLS state machine, scoring and an AI debrief. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel" style="min-width:250px">
+                <h4>Monitor · @_sim.Phase</h4>
+                <svg viewBox="0 0 240 60" width="240" height="60" role="img" aria-label="@($"ECG, rhythm {_sim.Rhythm}")" style="display:block; background:rgba(0,0,0,.35); border-radius:8px">
+                    <polyline fill="none" stroke="@(_sim.Rosc ? "#5fe08a" : "#ffd36a")" stroke-width="1.6" points="@EcgPoints()" />
+                </svg>
+                <div class="bai3d-kpi" style="margin-top:.4rem">
+                    <div><b style="color:@(_sim.HeartRate == 0 ? ThreeDPalette.Danger : "#5fe08a")">@(_sim.HeartRate == 0 ? "—" : _sim.HeartRate.ToString(CultureInfo.InvariantCulture))</b><span>HR · @_sim.Rhythm</span></div>
+                    <div><b>@_sim.SpO2%</b><span>SpO₂</span></div>
+                    <div><b>@_sim.BloodPressure</b><span>BP</span></div>
+                    <div><b>@_sim.EtCo2</b><span>EtCO₂</span></div>
+                </div>
+            </div>
+            <div class="bai3d-panel">
+                <h4>Score</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@_sim.Score</b><span>points</span></div>
+                    <div><b>@_sim.Second s</b><span>elapsed</span></div>
+                </div>
+            </div>
+        </div>
+        @if (_last is { } l)
+        {
+            <div class="bai3d-panel bai3d-hud-bottom" aria-live="polite" style="border-color:@(l.Points < 0 ? ThreeDPalette.Danger : ThreeDPalette.Nila)">
+                <b>@l.Action</b> @(l.Points == 0 ? "" : $"({l.Points:+0;-0})") · @l.Feedback
+            </div>
+        }
+    </Scene3D>
+
+    <AiCard Title="@Title" Subtitle="Adult BLS · shockable cardiac arrest" Icon="bi-heart-pulse">
+        <div class="bai-stack">
+            <p class="bai-small bai-muted" style="margin:0">@Briefing</p>
+            <div class="bai-row">
+                <label class="bai-small">Rate <input type="number" min="60" max="160" step="5" class="bai-input" style="width:4.5rem" @bind="_sim.Rate" />/min</label>
+                <label class="bai-small">Depth <input type="number" min="2" max="8" step="0.5" class="bai-input" style="width:4.5rem" @bind="_sim.Depth" /> cm</label>
+                <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_coach" /> coaching hints</label>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:.4rem">
+                @foreach (var a in CprScenario.Actions)
+                {
+                    var hinted = _coach && a.Id == _sim.Expected && !_sim.Finished;
+                    <button type="button" class="@(hinted ? "bai-btn bai-btn-ai" : "bai-btn-ghost")" style="justify-content:flex-start" title="@a.Hint" disabled="@_sim.Finished" @onclick="() => Act(a.Id)">
+                        <i class="bi @a.Icon" aria-hidden="true"></i>@a.Label
+                    </button>
+                }
+            </div>
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="Restart"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>Restart</button>
+                <span class="bai-spacer"></span>
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@(IsBusy || _sim.Log.Count == 0)" @onclick="Debrief"><i class="bi bi-stars" aria-hidden="true"></i>AI debrief</button>
+            </div>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+            <details>
+                <summary class="bai-small">Action log (@_sim.Log.Count)</summary>
+                <ol class="bai-small" style="margin:.3rem 0 0; padding-left:1.2rem">
+                    @foreach (var e in _sim.Log) { <li>t@(e.Second)s · @e.Action (@e.Points.ToString("+0;-0;0", CultureInfo.InvariantCulture)) · @e.Feedback</li> }
+                </ol>
+            </details>
+            <p class="bai-small bai-faint" style="margin:0">Training simulation only; follow your local resuscitation council guidelines.</p>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private CprScenario _sim = new();
+    private TrainingLogEntry? _last;
+    private Scene3DOptions _options = new();
+    private CancellationTokenSource? _clock;
+    private bool _coach = true;
+
+    [Parameter] public string Title { get; set; } = "Resuscitation trainer";
+
+    [Parameter] public string Briefing { get; set; } = "A 58-year-old man collapses in the hospital lobby. You are the first responder. Work through the steps; the monitor reacts to what you do.";
+
+    /// <summary>Who the debrief is written for.</summary>
+    [Parameter] public string Audience { get; set; } = "a nursing student";
+
+    [Parameter] public EventCallback<CprScenario> OnFinished { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [-2.3, 2.3, 1.4], Target = [0.2, 0.3, -1.1] },
+            Ground = new(8, "#2a2f4a"),
+            Lights = "soft",
+            AriaLabel = "Resuscitation training scene with a patient on the floor",
+        };
+        Rebuild();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            StartClock();
+        }
+    }
+
+    private void StartClock()
+    {
+        _clock?.Cancel();
+        _clock = new CancellationTokenSource();
+        _ = RunClockAsync(_clock.Token);
+    }
+
+    private async Task RunClockAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                if (_sim.Finished)
+                {
+                    break;
+                }
+
+                var wasAed = _sim.AedArrived;
+                _sim.Tick();
+                await InvokeAsync(() =>
+                {
+                    if (wasAed != _sim.AedArrived)
+                    {
+                        Rebuild();
+                    }
+
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void Rebuild()
+    {
+        var chest = new double[] { 0, 0.27, -1.3 };
+        var list = new List<Object3D>
+        {
+            new() { Id = "floor-mat", Kind = "box", Position = [0, 0.005, -1.0], Size = [1.2, 0.01, 2.2], Color = "#3b4a7a", Roughness = 0.9, Pickable = false },
+            new() { Id = "patient", Kind = "model", Url = ThreeDAssets.Mannequin, FitHeight = 1.75, Rotation = [-Math.PI / 2, 0, 0], Position = [0, 0.13, 0.0], Tooltip = "Patient" },
+            new() { Id = "rescuer", Kind = "model", Url = ThreeDAssets.GuideBot, FitHeight = 1.5, Position = [0.75, 0, -1.25], Rotation = [0, -Math.PI / 2, 0], Clip = _sim.Rosc ? "Happy" : _sim.Compressing ? "Talk" : "Idle", Tooltip = "You (rescuer)" },
+        };
+        if (_sim.Compressing)
+        {
+            list.Add(new Object3D { Id = "hands", Kind = "torus", Position = [chest[0], chest[1] + 0.04, chest[2]], Rotation = [Math.PI / 2, 0, 0], Radius = 0.09, Tube = 0.025, Color = ThreeDPalette.Soga, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 1, Animate = Animate3D.Pulse(0.25, _sim.Rate / 60.0 * 2.1), Pickable = false, Label = $"{_sim.Rate}/min", LabelClass = _sim.QualityGood ? "is-nila" : "is-danger" });
+        }
+
+        if (_sim.AedArrived)
+        {
+            list.Add(new Object3D { Id = "aed", Kind = "box", Position = [-0.55, 0.12, -1.1], Size = [0.32, 0.24, 0.12], Color = "#f2c94c", Edges = "#7a5b00", Label = "AED", LabelClass = "is-soga", Tooltip = "Automated external defibrillator" });
+        }
+
+        if (_sim.PadsOn)
+        {
+            list.Add(new Object3D { Id = "pad-r", Kind = "box", Position = [-0.08, 0.27, -1.42], Size = [0.1, 0.01, 0.13], Color = "#f2f2f2", Pickable = false });
+            list.Add(new Object3D { Id = "pad-l", Kind = "box", Position = [0.13, 0.25, -1.2], Size = [0.1, 0.01, 0.13], Color = "#f2f2f2", Pickable = false });
+            list.Add(Object3D.Line("lead", [[-0.08, 0.28, -1.42], [-0.4, 0.2, -1.2], [-0.55, 0.2, -1.1]], "#e5534b"));
+        }
+
+        list.Add(new Object3D { Id = "heart", Kind = "model", Url = ThreeDAssets.Heart, FitHeight = 0.12, Position = [0.03, 0.42, -1.27], Visible = _sim.Rosc || _sim.Compressing, Animate = _sim.Rosc ? Animate3D.Pulse(0.08, 1.4) : Animate3D.Pulse(0.04, _sim.Rate / 60.0 * 2.1), Tooltip = "Heart" });
+        Objects = [.. list];
+    }
+
+    private async Task Act(string id)
+    {
+        _last = _sim.Do(id);
+        Rebuild();
+        if (id == "shock" && _last.Points > 0)
+        {
+            await Scene!.PlayClipAsync("rescuer", "Happy", loop: false);
+        }
+        else if (id is "help")
+        {
+            await Scene!.PlayClipAsync("rescuer", "Point", loop: false);
+        }
+        else if (id is "breathing" or "analyse" or "pulse")
+        {
+            await Scene!.PlayClipAsync("rescuer", "Think", loop: false);
+        }
+
+        if (_sim.Finished)
+        {
+            await OnFinished.InvokeAsync(_sim);
+        }
+    }
+
+    private void Restart()
+    {
+        _sim = new CprScenario { Rate = _sim.Rate, Depth = _sim.Depth };
+        _last = null;
+        Narration = null;
+        Rebuild();
+        StartClock();
+    }
+
+    private async Task Debrief()
+    {
+        await NarrateAsync($"a resuscitation instructor debriefing {Audience}",
+            $"Simulation transcript: {_sim.Transcript()} Give a structured debrief: what went well, the most important improvement, and one tip for the next attempt.");
+        if (string.IsNullOrWhiteSpace(Narration) || Error is not null || IsOffline())
+        {
+            Error = null;
+            Narration = _sim.LocalDebrief();
+        }
+    }
+
+    private bool IsOffline() =>
+        (ClientFactory.Providers.FirstOrDefault(p => string.Equals(p.Name, Provider, StringComparison.OrdinalIgnoreCase)) ?? ClientFactory.DefaultProvider).Kind == Blazor.AI.Abstractions.Providers.AiProviderKind.Simulated;
+
+    private string EcgPoints() =>
+        string.Join(" ", _sim.Ecg().Select(p => string.Create(CultureInfo.InvariantCulture, $"{p.X * 240:0.#},{(1 - p.Y) * 60:0.#}")));
+
+    public override ValueTask DisposeAsync()
+    {
+        _clock?.Cancel();
+        _clock?.Dispose();
+        return base.DisposeAsync();
+    }
+}

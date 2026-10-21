@@ -1,0 +1,236 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@using Blazor.AI.Analytics
+@* Machine-learning cluster viewer: KMeans, DBSCAN, HDBSCAN and hierarchical clustering in 3-D, with AI cluster naming. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        @if (_layout is { } l)
+        {
+            <div class="bai3d-panel">
+                <h4>@l.Dataset</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@l.Clusters</b><span>clusters</span></div>
+                    <div><b>@l.Silhouette.ToString("0.00", CultureInfo.InvariantCulture)</b><span>silhouette</span></div>
+                    <div><b>@l.Noise</b><span>noise</span></div>
+                    <div><b>@l.Labels.Length</b><span>rows</span></div>
+                </div>
+            </div>
+        }
+        @if (_selected is { } s)
+        {
+            <div class="bai3d-panel bai3d-hud-bottom">
+                <h4>@Name(s)</h4>
+                @foreach (var (f, z) in s.ZScores.OrderByDescending(z => Math.Abs(z.Value)))
+                {
+                    <div class="bai-small">@f: <b>@s.Means[f].ToString("N2", CultureInfo.InvariantCulture)</b> <span style="color:@(z >= 0 ? ThreeDPalette.Soga : ThreeDPalette.Nila)">(@z.ToString("+0.0;−0.0", CultureInfo.InvariantCulture)σ)</span></div>
+                }
+            </div>
+        }
+    </Scene3D>
+
+    <AiCard Title="@Title" Subtitle="GraviLearn clustering on standardised features" Icon="bi-bullseye">
+        <div class="bai-stack">
+            <div>
+                <label class="bai-label" for="@($"{_uid}-ds")">Dataset</label>
+                <select id="@($"{_uid}-ds")" class="bai-select" @bind="_datasetIndex" @bind:after="Recompute">
+                    @for (var i = 0; i < ClusterEngine.Datasets.Count; i++) { <option value="@i">@ClusterEngine.Datasets[i].Name</option> }
+                </select>
+            </div>
+            <div>
+                <span class="bai-label">Algorithm</span>
+                <div class="bai-chips">
+                    @foreach (var a in Enum.GetValues<ClusterAlgorithm>())
+                    {
+                        <button type="button" class="bai-chip @(a == Algorithm ? "is-active" : null)" @onclick="() => SetAlgorithm(a)">@Label(a)</button>
+                    }
+                </div>
+            </div>
+            @if (Algorithm is ClusterAlgorithm.KMeans or ClusterAlgorithm.Hierarchical)
+            {
+                <label class="bai-small">Clusters (k): <b>@K</b>
+                    <input type="range" min="2" max="8" class="form-range" @bind="K" @bind:event="oninput" @bind:after="Recompute" />
+                </label>
+            }
+            else if (Algorithm is ClusterAlgorithm.Dbscan)
+            {
+                <label class="bai-small">Neighbourhood radius ε: <b>@Epsilon.ToString("0.00", CultureInfo.InvariantCulture)</b>
+                    <input type="range" min="0.2" max="2" step="0.05" class="form-range" @bind="Epsilon" @bind:event="oninput" @bind:after="Recompute" />
+                </label>
+            }
+            else
+            {
+                <label class="bai-small">Minimum cluster size: <b>@MinClusterSize</b>
+                    <input type="range" min="4" max="60" class="form-range" @bind="MinClusterSize" @bind:event="oninput" @bind:after="Recompute" />
+                </label>
+            }
+            <AiError Message="@(Error ?? _computeError)" />
+            @if (_layout is { } l)
+            {
+                <div class="bai-stack" style="gap:.35rem">
+                    @foreach (var s in l.Summaries)
+                    {
+                        <button type="button" class="bai-chip" style="justify-content:flex-start; text-align:left" @onclick="() => Select(s)">
+                            <i style="display:inline-block; width:.7rem; height:.7rem; border-radius:50%; background:@ThreeDPalette.Category(s.Id)"></i>@Name(s) <span class="bai-faint">(@s.Size)</span>
+                        </button>
+                    }
+                </div>
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="NameClusters"><i class="bi bi-stars" aria-hidden="true"></i>Name &amp; describe clusters</button>
+            }
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private readonly string _uid = "bai-ce-" + Guid.NewGuid().ToString("N")[..6];
+    private Scene3DOptions _options = new();
+    private ClusterLayout? _layout;
+    private ClusterSummary? _selected;
+    private string? _computeError;
+    private int _datasetIndex;
+    private Dictionary<int, string> _names = [];
+
+    [Parameter] public string Title { get; set; } = "Cluster explorer";
+    [Parameter] public ClusterAlgorithm Algorithm { get; set; } = ClusterAlgorithm.KMeans;
+    [Parameter] public int K { get; set; } = 4;
+    [Parameter] public double Epsilon { get; set; } = 0.8;
+    [Parameter] public int MinClusterSize { get; set; } = 15;
+
+    /// <summary>Your own dataset (numeric feature columns are clustered). Defaults to the built-in samples.</summary>
+    [Parameter] public AnalyticsDataset? Dataset { get; set; }
+
+    [Parameter] public EventCallback<ClusterLayout> OnClustered { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [7.5, 6.5, 8.5], Target = [0, 3.2, 0] },
+            Grid = new(12, 12, "#5b6bd6", 0.16),
+            Controls = new() { AutoRotate = true, AutoRotateSpeed = 0.5 },
+            AriaLabel = "3D scatter of clustered data",
+        };
+        await Recompute();
+    }
+
+    private static string Label(ClusterAlgorithm a) => a switch
+    {
+        ClusterAlgorithm.Dbscan => "DBSCAN",
+        ClusterAlgorithm.Hdbscan => "HDBSCAN",
+        ClusterAlgorithm.Hierarchical => "Hierarchical",
+        _ => "K-Means",
+    };
+
+    private string Name(ClusterSummary s) => _names.TryGetValue(s.Id, out var n) ? n : s.AutoName;
+
+    private Task SetAlgorithm(ClusterAlgorithm a)
+    {
+        Algorithm = a;
+        return Recompute();
+    }
+
+    private async Task Recompute()
+    {
+        _computeError = null;
+        _selected = null;
+        _names = [];
+        Narration = null;
+        var dataset = Dataset ?? ClusterEngine.Datasets[Math.Clamp(_datasetIndex, 0, ClusterEngine.Datasets.Count - 1)].Create();
+        var (alg, k, eps, min) = (Algorithm, K, Epsilon, MinClusterSize);
+        try
+        {
+            _layout = await Task.Run(() => ClusterEngine.Run(dataset, alg, k, eps, min));
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            _computeError = ex.Message;
+            return;
+        }
+
+        Build();
+        await OnClustered.InvokeAsync(_layout);
+    }
+
+    private void Build()
+    {
+        if (_layout is not { } l)
+        {
+            return;
+        }
+
+        var list = new List<Object3D>
+        {
+            new()
+            {
+                Id = "cloud", Kind = "points", Points = l.Points, PointSize = 0.13, Pickable = false,
+                Colors = l.Labels.Select(c => c < 0 ? "#5d6385" : ThreeDPalette.Category(c)).ToArray(),
+            },
+        };
+        foreach (var s in l.Summaries)
+        {
+            var color = ThreeDPalette.Category(s.Id);
+            var radius = 0.18 + Math.Cbrt(s.Size) * 0.05;
+            list.Add(new Object3D
+            {
+                Id = $"c{s.Id}", Kind = "icosahedron", Detail = 1, Position = s.Centroid, Radius = radius, Color = color, Emissive = color,
+                EmissiveIntensity = _selected?.Id == s.Id ? 0.9 : 0.35, Opacity = 0.9, FlatShading = true, Label = Name(s), LabelClass = "is-plain",
+                Tooltip = $"{Name(s)}\n{s.Size} rows — click for details", Animate = Animate3D.Pulse(0.05, 0.5 + s.Id * 0.1),
+            });
+            list.Add(new Object3D { Id = $"h{s.Id}", Kind = "sphere", Position = s.Centroid, Radius = radius * 3.2, Color = color, Opacity = 0.07, Pickable = false, CastShadow = false });
+            list.Add(Object3D.Line($"drop{s.Id}", [s.Centroid, [s.Centroid[0], 0, s.Centroid[2]]], color, dashed: true));
+        }
+
+        Objects = list;
+    }
+
+    private Task Picked(PickEvent e)
+    {
+        if (_layout is { } l && e.Id.StartsWith('c') && int.TryParse(e.Id[1..], out var id) && l.Summaries.FirstOrDefault(s => s.Id == id) is { } s)
+        {
+            return Select(s);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task Select(ClusterSummary s)
+    {
+        _selected = s;
+        Build();
+        if (Scene is not null)
+        {
+            await Scene.FocusAsync($"c{s.Id}", 5);
+        }
+    }
+
+    private async Task NameClusters()
+    {
+        if (_layout is not { } l)
+        {
+            return;
+        }
+
+        var facts = string.Join("\n", l.Summaries.Select(s =>
+            $"Cluster {s.Id}: {s.Size} rows; " + string.Join(", ", s.ZScores.Select(z => string.Create(CultureInfo.InvariantCulture, $"{z.Key} mean {s.Means[z.Key]:0.##} ({z.Value:+0.0;-0.0} sd)")))));
+        await RunAsync(async ct =>
+        {
+            var json = await PlanAsync("You name customer or data segments for business users. Give each cluster a 2-4 word name based on its distinctive features.",
+                $"Dataset: {l.Dataset}. Algorithm {Label(Algorithm)}.\n{facts}", """{"clusters":[{"id":0,"name":"Segment name"}]}""", ct);
+            if (json?["clusters"] is System.Text.Json.Nodes.JsonArray arr)
+            {
+                foreach (var node in arr)
+                {
+                    if (node?["id"]?.GetValueKind() == System.Text.Json.JsonValueKind.Number && node["name"]?.GetValue<string>() is { Length: > 1 and < 40 } name
+                        && l.Summaries.Any(s => s.Id == node["id"]!.GetValue<int>()) && !string.Equals(name, "Segment name", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _names[node["id"]!.GetValue<int>()] = name;
+                    }
+                }
+            }
+        });
+        Build();
+        await NarrateAsync("a data scientist describing clusters to a business team",
+            $"{l.Dataset}, {Label(Algorithm)}: {l.Clusters} clusters, silhouette {l.Silhouette:0.00}, {l.Noise} noise points.\n{facts}\nNames: {string.Join("; ", l.Summaries.Select(s => $"{s.Id}={Name(s)}"))}");
+    }
+}

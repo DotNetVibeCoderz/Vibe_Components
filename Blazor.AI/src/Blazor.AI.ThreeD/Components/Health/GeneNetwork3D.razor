@@ -1,0 +1,210 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@using Biotech.Net.Core
+@using Blazor.AI.Bio
+@* Gene co-expression network: Pearson correlation of log expression for the most variable genes, force layout in 3-D, coloured by fold change. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-panel">
+            <h4>Co-expression network</h4>
+            <div class="bai3d-kpi">
+                <div><b>@_genes.Count</b><span>genes</span></div>
+                <div><b>@_edges.Count</b><span>edges |r| ≥ @TwinUi.N(_threshold, "0.00")</span></div>
+                <div><b>@_modules</b><span>modules</span></div>
+            </div>
+        </div>
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            <span><i style="background:@ThreeDPalette.Soga; border-radius:50%"></i>up in @Treatment</span>
+            <span><i style="background:@ThreeDPalette.Nila; border-radius:50%"></i>down</span>
+            <span><i style="background:@ThreeDPalette.Muted; border-radius:50%"></i>unchanged</span>
+            <span><i style="background:#7b8cff"></i>positive r</span>
+            <span><i style="background:@ThreeDPalette.Danger"></i>negative r</span>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="@Title" Subtitle="RNA-seq co-expression · Biotech.Net" Icon="bi-share">
+        <div class="bai-stack">
+            <div class="bai-row">
+                <label class="bai-small">Genes <input type="number" min="10" max="80" class="bai-input" style="width:4.5rem" @bind="_top" /></label>
+                <label class="bai-small">|r| ≥ <input type="number" min="0.5" max="0.99" step="0.01" class="bai-input" style="width:5rem" @bind="_threshold" /></label>
+                <button type="button" class="bai-btn bai-btn-ai" @onclick="Compute"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>Rebuild</button>
+            </div>
+            <AiError Message="@Error" />
+            @if (_selected is { } g)
+            {
+                <div class="bai-small">
+                    <b>@g.Name</b> · log₂FC <span style="color:@GeneColor(g)">@TwinUi.N(g.Log2Fc, "+0.00;-0.00")</span> · mean @TwinUi.N(g.Mean, "0") counts
+                    <div class="bai-faint">Neighbours: @string.Join(", ", Neighbours(g.Name).Take(8))</div>
+                </div>
+                <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>What could @g.Name be doing?</button>
+            }
+            else
+            {
+                <p class="bai-small bai-muted" style="margin:0">Click a gene to see its neighbours and ask the AI about it.</p>
+            }
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+            <p class="bai-small bai-faint" style="margin:0">Correlation is not causation: edges suggest co-regulation, not direct interaction.</p>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed record GeneNode(string Name, double Log2Fc, double Mean, double Variance);
+    private Scene3DOptions _options = new();
+    private List<GeneNode> _genes = [];
+    private List<(string A, string B, double R)> _edges = [];
+    private int _top = 40, _modules;
+    private double _threshold = 0.9;
+    private GeneNode? _selected;
+
+    [Parameter] public string Title { get; set; } = "Gene network explorer";
+
+    /// <summary>Genes × samples count matrix with a "condition" column annotation; defaults to the synthetic stress experiment.</summary>
+    [Parameter] public Dataset? Counts { get; set; }
+
+    [Parameter] public string Reference { get; set; } = "control";
+    [Parameter] public string Treatment { get; set; } = "treated";
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 3, 13], Target = [0, 0, 0] },
+            Controls = new() { AutoRotate = true, AutoRotateSpeed = 0.5, MaxPolarAngle = Math.PI },
+            Shadows = false,
+            Lights = "night",
+            AriaLabel = "3D gene co-expression network",
+        };
+        Compute();
+    }
+
+    private void Compute()
+    {
+        Error = null;
+        _selected = null;
+        Narration = null;
+        var data = Counts ?? BioSamples.CountMatrix();
+        var condition = data.ColumnAnnotations.TryGetValue("condition", out var c) ? c : [];
+        var refCols = Enumerable.Range(0, data.Columns).Where(j => j < condition.Length && condition[j] == Reference).ToArray();
+        var trtCols = Enumerable.Range(0, data.Columns).Where(j => j < condition.Length && condition[j] == Treatment).ToArray();
+        if (data.Columns < 3)
+        {
+            Error = "Need at least three samples to correlate genes.";
+            return;
+        }
+
+        var log = new List<(string Name, double[] Values, double Mean, double Fc)>();
+        for (var i = 0; i < data.Rows; i++)
+        {
+            var row = data.Row(i).ToArray();
+            var lv = row.Select(v => Math.Log2(v + 1)).ToArray();
+            var fc = refCols.Length > 0 && trtCols.Length > 0 ? trtCols.Average(j => lv[j]) - refCols.Average(j => lv[j]) : 0;
+            log.Add((data.RowNames[i], lv, row.Average(), fc));
+        }
+
+        var top = log.Where(g => g.Mean >= 10).OrderByDescending(g => Variance(g.Values)).Take(Math.Clamp(_top, 10, 80)).ToList();
+        _genes = top.Select(g => new GeneNode(g.Name, g.Fc, g.Mean, Variance(g.Values))).ToList();
+        _edges = [];
+        for (var a = 0; a < top.Count; a++)
+        {
+            for (var b = a + 1; b < top.Count; b++)
+            {
+                var r = Pearson(top[a].Values, top[b].Values);
+                if (Math.Abs(r) >= _threshold)
+                {
+                    _edges.Add((top[a].Name, top[b].Name, r));
+                }
+            }
+        }
+
+        // Keep the densest edges if the threshold is loose.
+        _edges = _edges.OrderByDescending(e => Math.Abs(e.R)).Take(220).ToList();
+        _modules = CountModules();
+        Render();
+    }
+
+    private void Render()
+    {
+        var positions = Layout3D.Force(_genes.Select(g => g.Name).ToList(), _edges.Select(e => (e.A, e.B, Math.Abs(e.R))).ToList(), radius: 4.5, seed: 3);
+        var maxMean = _genes.Count == 0 ? 1 : _genes.Max(g => g.Mean);
+        var list = new List<Object3D>();
+        foreach (var g in _genes)
+        {
+            var selected = g == _selected;
+            list.Add(new Object3D
+            {
+                Id = $"g-{g.Name}", Kind = "sphere", Position = positions[g.Name], Radius = 0.12 + 0.18 * Math.Sqrt(g.Mean / maxMean), Segments = 18, Color = GeneColor(g),
+                Emissive = selected ? "#ffffff" : GeneColor(g), EmissiveIntensity = selected ? 0.6 : 0.25, Label = selected || Math.Abs(g.Log2Fc) > 1.5 ? g.Name : null, LabelClass = "is-plain",
+                Tooltip = string.Create(CultureInfo.InvariantCulture, $"{g.Name}\nlog2FC {g.Log2Fc:+0.00;-0.00} · mean {g.Mean:0} counts"),
+            });
+        }
+
+        var k = 0;
+        foreach (var (a, b, r) in _edges)
+        {
+            var highlight = _selected is not null && (a == _selected.Name || b == _selected.Name);
+            list.Add(new Object3D
+            {
+                Id = $"e{k++}", Kind = "line", Points = [positions[a], positions[b]], Color = r > 0 ? "#7b8cff" : ThreeDPalette.Danger,
+                Opacity = highlight ? 0.95 : _selected is null ? 0.35 + (Math.Abs(r) - _threshold) * 3 : 0.08, Pickable = false,
+            });
+        }
+
+        Objects = [.. list];
+    }
+
+    private string GeneColor(GeneNode g) => g.Log2Fc > 1 ? ThreeDPalette.Soga : g.Log2Fc < -1 ? ThreeDPalette.Nila : ThreeDPalette.Muted;
+
+    private IEnumerable<string> Neighbours(string gene) =>
+        _edges.Where(e => e.A == gene || e.B == gene).OrderByDescending(e => Math.Abs(e.R)).Select(e => $"{(e.A == gene ? e.B : e.A)} ({e.R.ToString("+0.00;-0.00", CultureInfo.InvariantCulture)})");
+
+    private int CountModules()
+    {
+        var parent = _genes.ToDictionary(g => g.Name, g => g.Name);
+        string Find(string x) => parent[x] == x ? x : parent[x] = Find(parent[x]);
+        foreach (var (a, b, _) in _edges)
+        {
+            parent[Find(a)] = Find(b);
+        }
+
+        return _genes.Select(g => Find(g.Name)).Distinct().Count(root => _genes.Count(g => Find(g.Name) == root) >= 3);
+    }
+
+    private void Picked(PickEvent e)
+    {
+        if (e.Id.StartsWith("g-", StringComparison.Ordinal))
+        {
+            _selected = _genes.FirstOrDefault(g => g.Name == e.Id[2..]);
+            Narration = null;
+            Render();
+        }
+    }
+
+    private Task Explain()
+    {
+        var g = _selected!;
+        return NarrateAsync("a molecular biologist interpreting an RNA-seq experiment", string.Create(CultureInfo.InvariantCulture,
+            $"Gene {g.Name}: log2 fold change {g.Log2Fc:+0.00;-0.00} ({Treatment} vs {Reference}), mean {g.Mean:0} counts. Co-expressed with: {string.Join(", ", Neighbours(g.Name).Take(10))}. " +
+            $"Using known biology of these genes (clearly marked as general knowledge, not from this data), suggest what pathway or process this cluster may reflect."));
+    }
+
+    private static double Variance(double[] v)
+    {
+        var m = v.Average();
+        return v.Sum(x => (x - m) * (x - m)) / Math.Max(1, v.Length - 1);
+    }
+
+    private static double Pearson(double[] x, double[] y)
+    {
+        double mx = x.Average(), my = y.Average(), sxy = 0, sxx = 0, syy = 0;
+        for (var i = 0; i < x.Length; i++)
+        {
+            sxy += (x[i] - mx) * (y[i] - my);
+            sxx += (x[i] - mx) * (x[i] - mx);
+            syy += (y[i] - my) * (y[i] - my);
+        }
+
+        return sxx < 1e-12 || syy < 1e-12 ? 0 : sxy / Math.Sqrt(sxx * syy);
+    }
+}

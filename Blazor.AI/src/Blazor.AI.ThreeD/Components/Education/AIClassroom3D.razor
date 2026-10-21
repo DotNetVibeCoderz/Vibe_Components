@@ -1,0 +1,199 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* A virtual classroom: AI writes the lesson and quiz, the robot teacher presents each point at the board with lip sync. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnSpeechEnded="SpeechEnded">
+        <div class="bai3d-panel">
+            <h4>@_lesson.Title</h4>
+            @(_point < 0 ? "Press Teach to start the lesson." : $"Point {_point + 1} of {_lesson.Points.Count}")
+        </div>
+    </Scene3D>
+
+    <AiCard Title="AI classroom" Subtitle="Lesson, narration and quiz from any topic" Icon="bi-mortarboard">
+        <div class="bai-stack">
+            <div class="bai-row">
+                <input class="bai-input bai-spacer" @bind="_topic" placeholder="Topic, e.g. photosynthesis" aria-label="Lesson topic" />
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="Prepare"><i class="bi bi-stars" aria-hidden="true"></i>Prepare</button>
+            </div>
+            @if (IsBusy) { <AiThinking Label="Preparing the lesson…" /> }
+            <AiError Message="@Error" />
+            <ol class="bai-small" style="margin:0; padding-left:1.2rem">
+                @foreach (var (p, i) in _lesson.Points.Select((p, i) => (p, i)))
+                {
+                    <li style="@(i == _point ? "color:var(--bai-soga); font-weight:600" : null)">@p</li>
+                }
+            </ol>
+            <div class="bai-row">
+                <button type="button" class="bai-btn" @onclick="Teach" disabled="@(_teaching)"><i class="bi bi-play-fill" aria-hidden="true"></i>Teach</button>
+                <button type="button" class="bai-btn-ghost" @onclick="StopTeaching" disabled="@(!_teaching)"><i class="bi bi-stop-fill" aria-hidden="true"></i>Stop</button>
+                <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_voice" /> voice</label>
+            </div>
+            @if (_lesson.Quiz.Count > 0)
+            {
+                <span class="bai-label">Quiz</span>
+                @foreach (var (q, qi) in _lesson.Quiz.Select((q, i) => (q, i)))
+                {
+                    <fieldset class="bai-small" style="border:0; padding:0; margin:0">
+                        <legend style="font-size:inherit; font-weight:600">@(qi + 1). @q.Question</legend>
+                        @foreach (var (opt, oi) in q.Options.Select((o, i) => (o, i)))
+                        {
+                            var name = $"q{qi}";
+                            <label style="display:block"><input type="radio" name="@name" checked="@(_answers.GetValueOrDefault(qi, -1) == oi)" @onchange="() => _answers[qi] = oi" /> @opt
+                                @if (_checked && oi == q.Answer) { <span style="color:var(--bai-nila)"> ✓</span> }
+                            </label>
+                        }
+                    </fieldset>
+                }
+                <div class="bai-row">
+                    <button type="button" class="bai-btn-ghost" @onclick="Check">Check answers</button>
+                    @if (_checked) { <b class="bai-small">Score: @_lesson.Quiz.Select((q, i) => _answers.GetValueOrDefault(i, -1) == q.Answer ? 1 : 0).Sum() / @_lesson.Quiz.Count</b> }
+                </div>
+            }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private Scene3DOptions _options = new();
+    private string? _topic = "Photosynthesis";
+    private Lesson _lesson = LessonPlanner.Local("Photosynthesis");
+    private int _point = -1;
+    private bool _teaching, _voice = true, _checked;
+    private readonly Dictionary<int, int> _answers = [];
+
+    public sealed record QuizItem(string Question, IReadOnlyList<string> Options, int Answer);
+
+    public sealed record Lesson(string Title, IReadOnlyList<string> Points, IReadOnlyList<QuizItem> Quiz);
+
+    /// <summary>BCP-47 language for the teacher's voice.</summary>
+    [Parameter] public string SpeechLanguage { get; set; } = "en-US";
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [3.2, 2.6, 6.2], Target = [0, 1.3, -1.2] },
+            Lights = "soft",
+            AriaLabel = "Virtual classroom with a robot teacher",
+        };
+        Draw();
+    }
+
+    private void Draw()
+    {
+        var list = new List<Object3D>
+        {
+            new() { Id = "floor", Kind = "box", Size = [8, 0.1, 7], Position = [0, -0.05, 0.5], Color = "#c9a77c", Roughness = 0.9, Pickable = false },
+            new() { Id = "wall", Kind = "box", Size = [8, 3.4, 0.1], Position = [0, 1.7, -3], Color = "#e9ecf7", Pickable = false },
+            new() { Id = "board", Kind = "box", Size = [4.2, 1.9, 0.06], Position = [0, 1.9, -2.92], Color = "#1f3d34", Roughness = 0.95, Edges = "#8a6a3f", Pickable = false },
+            new() { Id = "board-title", Kind = "text", Position = [0, 2.65, -2.85], Label = _lesson.Title, LabelClass = "is-plain is-big", Pickable = false },
+        };
+        for (var i = 0; i < _lesson.Points.Count && i < 5; i++)
+        {
+            var text = _lesson.Points[i];
+            if (text.Length > 46) text = text[..45] + "…";
+            list.Add(new Object3D { Id = $"line{i}", Kind = "text", Position = [0, 2.3 - i * 0.3, -2.85], Label = (i <= _point || _point < 0 ? text : "· · ·"), LabelClass = i == _point ? "is-soga" : "is-plain", Pickable = false });
+        }
+
+        list.Add(new Object3D { Id = "teacher", Kind = "model", Url = ThreeDAssets.GuideBot, FitHeight = 1.55, Position = [2.5, 0, -2.2], Rotation = [0, -0.5, 0], Clip = "Idle", Tooltip = "Your robot teacher" });
+        for (var r = 0; r < 3; r++)
+        {
+            for (var c = 0; c < 4; c++)
+            {
+                var x = (c - 1.5) * 1.5;
+                var z = 0.2 + r * 1.3;
+                list.Add(new Object3D { Id = $"desk{r}{c}", Kind = "box", Size = [1.0, 0.06, 0.55], Position = [x, 0.72, z], Color = "#8a6a3f", Pickable = false });
+                list.Add(new Object3D { Id = $"leg{r}{c}", Kind = "box", Size = [0.9, 0.7, 0.04], Position = [x, 0.36, z + 0.24], Color = "#5e4a33", Pickable = false });
+                var color = ThreeDPalette.Category(r * 4 + c);
+                list.Add(new Object3D { Id = $"kid{r}{c}", Kind = "capsule", Radius = 0.14, Height = 0.32, Position = [x, 0.95, z + 0.45], Color = color, Pickable = false });
+                list.Add(new Object3D { Id = $"kidhead{r}{c}", Kind = "sphere", Radius = 0.13, Position = [x, 1.32, z + 0.45], Color = "#e7c3a0", Pickable = false,
+                    Animate = _teaching ? Animate3D.Bob(0.015, 0.6 + (r + c) * 0.1) : null });
+            }
+        }
+
+        Objects = list;
+    }
+
+    private Task Prepare() => RunAsync(async ct =>
+    {
+        var topic = string.IsNullOrWhiteSpace(_topic) ? "Photosynthesis" : _topic!.Trim();
+        var lesson = LessonPlanner.Local(topic);
+        try
+        {
+            var json = await PlanAsync("You are a great teacher. Write a short lesson: 4 key points (each one sentence a student can understand) and a 3-question multiple-choice quiz with the index of the correct option.",
+                topic + (Language is null ? string.Empty : $" (write in {Language})"),
+                """{"title":"","points":["","","",""],"quiz":[{"question":"","options":["","","",""],"answer":0}]}""", ct);
+            var points = (json?["points"] as System.Text.Json.Nodes.JsonArray)?.Select(n => n?.ToString() ?? string.Empty).Where(p => p.Length > 12).Take(5).ToList();
+            var quiz = (json?["quiz"] as System.Text.Json.Nodes.JsonArray)?.Select(n => new QuizItem(
+                    n?["question"]?.ToString() ?? string.Empty,
+                    (n?["options"] as System.Text.Json.Nodes.JsonArray)?.Select(o => o?.ToString() ?? string.Empty).Where(o => o.Length > 0).ToList() ?? [],
+                    (int)(n?["answer"]?.GetValue<double>() ?? 0)))
+                .Where(q => q.Question.EndsWith('?') && q.Options.Count >= 2 && q.Answer >= 0 && q.Answer < q.Options.Count).Take(3).ToList();
+            if (points is { Count: >= 3 })
+            {
+                lesson = new Lesson(json?["title"]?.ToString() is { Length: > 2 } t ? t : lesson.Title, points, quiz is { Count: > 0 } ? quiz : lesson.Quiz);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Local outline stands.
+        }
+
+        _lesson = lesson;
+        _point = -1;
+        _answers.Clear();
+        _checked = false;
+        Draw();
+    });
+
+    private async Task Teach()
+    {
+        _teaching = true;
+        _point = -1;
+        await NextPoint();
+    }
+
+    private async Task NextPoint()
+    {
+        if (!_teaching)
+        {
+            return;
+        }
+
+        _point++;
+        if (_point >= _lesson.Points.Count)
+        {
+            _teaching = false;
+            Draw();
+            await Scene!.PlayClipAsync("teacher", "Happy", false);
+            StateHasChanged();
+            return;
+        }
+
+        Draw();
+        StateHasChanged();
+        await Scene!.PlayClipAsync("teacher", _point % 2 == 0 ? "Point" : "Talk", _point % 2 != 0);
+        if (_voice)
+        {
+            await Scene.SpeakAsync("teacher", _lesson.Points[_point], SpeechLanguage);
+        }
+        else
+        {
+            await Task.Delay(2500);
+            await NextPoint();
+        }
+    }
+
+    private Task SpeechEnded(string id) => id == "teacher" ? NextPoint() : Task.CompletedTask;
+
+    private async Task StopTeaching()
+    {
+        _teaching = false;
+        await Scene!.StopSpeakingAsync();
+        await Scene.PlayClipAsync("teacher", "Idle");
+        Draw();
+    }
+
+    private void Check() => _checked = true;
+}

@@ -1,0 +1,225 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Evolution tracking: generations of cart–pole controllers as stacked rings, fitness as size and colour, the champion's lineage traced, and the champion balancing live. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel">
+                <h4>Generation @_evo.Generations.Count</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@Best.ToString("0", CultureInfo.InvariantCulture)</b><span>best steps (max @_evo.MaxSteps)</span></div>
+                    <div><b>@Mean.ToString("0", CultureInfo.InvariantCulture)</b><span>population mean</span></div>
+                    <div><b>@_lineage.Count</b><span>lineage length</span></div>
+                </div>
+            </div>
+            @if (_picked is not null)
+            {
+                <div class="bai3d-panel bai3d-hud-right">@_picked</div>
+            }
+        </div>
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            <span><i style="background:@ThreeDPalette.Ramp(0.1)"></i>weak</span><span><i style="background:@ThreeDPalette.Ramp(0.95)"></i>fit</span><span><i style="background:@ThreeDPalette.Soga"></i>champion lineage</span>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="@Title" Subtitle="Neuro-evolution on cart–pole" Icon="bi-diagram-3">
+        <div class="bai-stack">
+            <div class="bai-grid-2">
+                <div>
+                    <label class="bai-label" for="@($"{_uid}-g")">Generations</label>
+                    <input id="@($"{_uid}-g")" type="number" min="5" max="60" class="bai-input" @bind="GenerationCount" disabled="@_running" />
+                </div>
+                <div>
+                    <label class="bai-label" for="@($"{_uid}-m")">Mutation σ</label>
+                    <input id="@($"{_uid}-m")" type="number" min="0.05" max="1" step="0.05" class="bai-input" @bind="Mutation" disabled="@_running" />
+                </div>
+            </div>
+            <div class="bai-row">
+                @if (_running)
+                {
+                    <button type="button" class="bai-btn" @onclick="Stop"><i class="bi bi-stop-fill" aria-hidden="true"></i>Stop</button>
+                }
+                else
+                {
+                    <button type="button" class="bai-btn bai-btn-ai" @onclick="EvolveAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Evolve</button>
+                    <button type="button" class="bai-btn-ghost" disabled="@(_lineage.Count == 0)" @onclick="ShowChampionAsync"><i class="bi bi-trophy" aria-hidden="true"></i>Run champion</button>
+                }
+            </div>
+            <p class="bai-small bai-muted" style="margin:0">Each ring is a generation (bottom = first). Sphere size and colour show fitness; elites carried over unchanged are outlined. Click a sphere for its weights.</p>
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@(IsBusy || _evo.Generations.Count == 0)" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain the evolution</button>
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private const double LayerGap = 0.42;
+    private readonly string _uid = "rlev-" + Guid.NewGuid().ToString("N")[..6];
+    private Scene3DOptions _options = new();
+    private PolicyEvolution _evo = new();
+    private List<Genome> _lineage = [];
+    private CancellationTokenSource? _cts;
+    private bool _running;
+    private string? _picked;
+
+    [Parameter] public string Title { get; set; } = "Evolution viewer";
+    [Parameter] public int GenerationCount { get; set; } = 18;
+    [Parameter] public int Population { get; set; } = 24;
+    [Parameter] public double Mutation { get; set; } = 0.35;
+
+    private double Best => _evo.Generations.Count == 0 ? 0 : _evo.Generations[^1].Max(g => g.Fitness);
+
+    private double Mean => _evo.Generations.Count == 0 ? 0 : _evo.Generations[^1].Average(g => g.Fitness);
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [7.5, 5.5, 7.5], Target = [0, 2.6, 0], Fov = 45 },
+            Lights = "night",
+            AriaLabel = "Generations of evolving controllers stacked as rings",
+        };
+        Build();
+    }
+
+    private void Build()
+    {
+        var list = new List<Object3D>
+        {
+            new() { Id = "base", Kind = "cylinder", Radius = 3.2, Height = 0.06, Position = [0, -0.05, 0], Color = ThreeDPalette.TarumDeep, Pickable = false },
+        };
+        var lineageIds = _lineage.Select(g => (g.Generation, g.Index)).ToHashSet();
+        var maxFit = Math.Max(1, _evo.MaxSteps);
+        foreach (var gen in _evo.Generations)
+        {
+            var y = 0.25 + gen[0].Generation * LayerGap;
+            foreach (var g in gen)
+            {
+                var p = Pos(g.Generation, g.Index, gen.Count);
+                var t = g.Fitness / maxFit;
+                var onLine = lineageIds.Contains((g.Generation, g.Index));
+                list.Add(new Object3D
+                {
+                    Id = $"g-{g.Generation}-{g.Index}", Kind = "sphere", Position = p, Radius = 0.06 + t * 0.14, Segments = 14,
+                    Color = onLine ? ThreeDPalette.Soga : ThreeDPalette.Ramp(t), Emissive = onLine ? ThreeDPalette.Soga : null, EmissiveIntensity = onLine ? 0.7 : null,
+                    Tooltip = string.Create(CultureInfo.InvariantCulture, $"Gen {g.Generation} #{g.Index}\nfitness {g.Fitness:0} steps{(g.Elite ? "\nelite (copied)" : string.Empty)}"),
+                });
+                if (g.Elite)
+                {
+                    list.Add(new Object3D { Id = $"e-{g.Generation}-{g.Index}", Kind = "torus", Position = p, Radius = 0.2, Tube = 0.012, Rotation = [Math.PI / 2, 0, 0], Color = "#ffffff", Opacity = 0.6, Pickable = false });
+                }
+            }
+
+            list.Add(Object3D.Text($"lbl-{gen[0].Generation}", [-2.9, y, 0], $"G{gen[0].Generation}", "is-plain is-mono"));
+        }
+
+        if (_lineage.Count > 1)
+        {
+            var pts = _lineage.Select(g => Pos(g.Generation, g.Index, _evo.Generations[g.Generation].Count)).ToArray();
+            list.Add(new Object3D { Id = "lineage", Kind = "tube", Points = pts, Radius = 0.025, Color = ThreeDPalette.Soga, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 0.8, Tooltip = "Champion lineage" });
+        }
+
+        // Cart–pole stage for the champion.
+        list.Add(new Object3D { Id = "track", Kind = "box", Position = [0, 0.03, 3.4], Size = [4.8, 0.04, 0.12], Color = "#4a557f", Pickable = false });
+        list.Add(new Object3D { Id = "cart", Kind = "box", Position = [0, 0.15, 3.4], Size = [0.5, 0.22, 0.3], Color = ThreeDPalette.Nila, Edges = "#ffffff", Tooltip = "Champion's cart" });
+        list.Add(new Object3D { Id = "pole", Kind = "group", Parent = "cart", Position = [0, 0.11, 0] });
+        list.Add(new Object3D { Id = "pole-rod", Kind = "cylinder", Parent = "pole", Radius = 0.025, Height = 1.0, Position = [0, 0.5, 0], Color = ThreeDPalette.Soga, Pickable = false });
+        list.Add(new Object3D { Id = "pole-tip", Kind = "sphere", Parent = "pole", Radius = 0.06, Position = [0, 1.0, 0], Color = ThreeDPalette.Soga, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 0.6, Pickable = false });
+        Objects = list;
+    }
+
+    private static double[] Pos(int gen, int index, int count)
+    {
+        var a = index / (double)count * Math.PI * 2 + gen * 0.13;
+        var r = 2.2;
+        return [Math.Cos(a) * r, 0.25 + gen * LayerGap, Math.Sin(a) * r];
+    }
+
+    private async Task EvolveAsync()
+    {
+        Stop();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+        _running = true;
+        _evo = new PolicyEvolution(Math.Clamp(Population, 8, 60)) { MutationScale = Math.Clamp(Mutation, 0.01, 2) };
+        _lineage = [];
+        _picked = null;
+        Narration = null;
+        var gens = Math.Clamp(GenerationCount, 2, 60);
+        try
+        {
+            for (var g = 0; g < gens && !ct.IsCancellationRequested; g++)
+            {
+                await Task.Run(() => _evo.Step(), ct);
+                _lineage = _evo.BestLineage();
+                Build();
+                StateHasChanged();
+                await Task.Delay(60, ct);
+            }
+
+            await ShowChampionAsync();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _running = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowChampionAsync()
+    {
+        if (Scene is null || _lineage.Count == 0)
+        {
+            return;
+        }
+
+        var frames = _evo.Rollout(_lineage[^1].Weights, max: 220);
+        for (var i = 0; i < frames.Count; i += 2)
+        {
+            var (x, theta) = frames[i];
+            await Scene.UpdateAsync(
+            [
+                new ObjectPatch { Id = "cart", Position = [x, 0.15, 3.4] },
+                new ObjectPatch { Id = "pole", Rotation = [0, 0, -theta] },
+            ], 40);
+            await Task.Delay(40);
+        }
+    }
+
+    private void Picked(PickEvent e)
+    {
+        var parts = e.Id.Split('-');
+        if (parts.Length != 3 || parts[0] != "g")
+        {
+            return;
+        }
+
+        var g = _evo.Generations[int.Parse(parts[1], CultureInfo.InvariantCulture)][int.Parse(parts[2], CultureInfo.InvariantCulture)];
+        _picked = string.Create(CultureInfo.InvariantCulture, $"Gen {g.Generation} #{g.Index} · fitness {g.Fitness:0}\nw = [{string.Join(", ", g.Weights.Select(w => w.ToString("0.00", CultureInfo.InvariantCulture)))}]");
+    }
+
+    private void Stop()
+    {
+        _cts?.Cancel();
+        _cts = null;
+    }
+
+    private Task Explain()
+    {
+        var curve = string.Join(", ", _evo.Generations.Select(g => g.Max(x => x.Fitness).ToString("0", CultureInfo.InvariantCulture)));
+        var w = _lineage.Count == 0 ? "none" : string.Join(", ", _lineage[^1].Weights.Select(v => v.ToString("0.00", CultureInfo.InvariantCulture)));
+        var facts = $"Neuro-evolution of linear cart-pole controllers (population {_evo.Population}, mutation sigma {Mutation:0.00}, elitism 3, tournament selection). Best fitness per generation (max {_evo.MaxSteps} steps): {curve}. " +
+                    $"Final mean fitness {Mean:0}. Champion weights on [x, x', theta, theta', bias]: [{w}]. Champion lineage spans {_lineage.Count} generations.";
+        return NarrateAsync("an evolutionary computation researcher", facts);
+    }
+
+    public override ValueTask DisposeAsync()
+    {
+        Stop();
+        return base.DisposeAsync();
+    }
+}

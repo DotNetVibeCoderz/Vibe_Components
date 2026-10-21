@@ -1,0 +1,181 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Seeded procedural terrain (fBm noise, island falloff, ridges, thermal erosion); AI turns a description into parameters. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height">
+        <div class="bai3d-panel">
+            <h4>Seed @_s.Seed</h4>
+            <div class="bai3d-kpi">
+                <div><b>@_terrain?.LandFraction.ToString("P0", CultureInfo.InvariantCulture)</b><span>land</span></div>
+                <div><b>@(_terrain?.Size)²</b><span>grid</span></div>
+                <div><b>@_s.Octaves</b><span>octaves</span></div>
+            </div>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="Procedural world studio" Subtitle="Deterministic: same seed, same world" Icon="bi-globe-asia-australia">
+        <div class="bai-stack">
+            <div class="bai-row">
+                <input class="bai-input bai-spacer" @bind="_prompt" placeholder="Describe a world, e.g. misty volcanic archipelago" aria-label="World description" />
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="Suggest"><i class="bi bi-stars" aria-hidden="true"></i>Suggest</button>
+            </div>
+            <AiError Message="@Error" />
+            @if (_rationale is not null) { <p class="bai-small bai-muted" style="margin:0">@_rationale</p> }
+            <label class="bai-small">Seed <input type="number" class="bai-input" @bind="_seed" @bind:after="Rebuild" /></label>
+            @Slider("Octaves", _s.Octaves, 1, 8, 1, v => _s = _s with { Octaves = (int)v })
+            @Slider("Persistence", _s.Persistence, 0.2, 0.8, 0.02, v => _s = _s with { Persistence = v })
+            @Slider("Sea level", _s.SeaLevel, 0.1, 0.7, 0.01, v => _s = _s with { SeaLevel = v })
+            @Slider("Island falloff", _s.Island, 0, 1.2, 0.05, v => _s = _s with { Island = v })
+            @Slider("Ridges", _s.Ridges, 0, 1, 0.05, v => _s = _s with { Ridges = v })
+            @Slider("Erosion passes", _s.ErosionPasses, 0, 10, 1, v => _s = _s with { ErosionPasses = (int)v })
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="Randomize"><i class="bi bi-shuffle" aria-hidden="true"></i>New seed</button>
+                <button type="button" class="bai-btn-ghost" @onclick="ExportCsv"><i class="bi bi-filetype-csv" aria-hidden="true"></i>Heightmap CSV</button>
+                <button type="button" class="bai-btn-ghost" @onclick="Preview"><i class="bi bi-image" aria-hidden="true"></i>Top view</button>
+            </div>
+            @if (_preview is not null)
+            {
+                <img src="@_preview" alt="Top-down terrain preview" style="width:160px; image-rendering:pixelated; border-radius:8px; border:1px solid var(--bai-line)" />
+            }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private Scene3DOptions _options = new();
+    private TerrainSettings _s = new();
+    private Terrain? _terrain;
+    private string? _prompt = "misty volcanic archipelago";
+    private string? _rationale;
+    private string? _preview;
+    private const double World = 12;
+
+    private int _seed;
+
+    [Parameter] public int Seed { get; set; } = 1337;
+
+    [Parameter] public EventCallback<Terrain> OnGenerated { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [10, 9, 11], Target = [0, 0.4, 0] },
+            Lights = "day",
+            Fog = new("#0b0f29", 18, 40),
+            AriaLabel = "Procedurally generated terrain",
+        };
+        _seed = Seed;
+        _s = _s with { Seed = _seed };
+        Build();
+    }
+
+    private RenderFragment Slider(string label, double value, double min, double max, double step, Action<double> set) => __builder =>
+    {
+        <label class="bai-small" style="display:grid; grid-template-columns:7.5rem 1fr 2.6rem; gap:.4rem; align-items:center">
+            @label
+            <input type="range" min="@Inv(min)" max="@Inv(max)" step="@Inv(step)" value="@Inv(value)" aria-label="@label"
+                   @onchange="e => Change(set, e.Value)" />
+            <span class="bai-num">@value.ToString(step >= 1 ? "0" : "0.00", CultureInfo.InvariantCulture)</span>
+        </label>
+    };
+
+    private void Change(Action<double> set, object? value)
+    {
+        set(double.TryParse(value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0);
+        Rebuild();
+    }
+
+    private static string Inv(double v) => v.ToString(CultureInfo.InvariantCulture);
+
+    private void Rebuild()
+    {
+        _s = _s with { Seed = _seed };
+        _preview = null;
+        Build();
+    }
+
+    private void Build()
+    {
+        _terrain = TerrainGenerator.Generate(_s);
+        var list = TerrainGenerator.ToObjects(_terrain, World).ToList();
+        var trees = TerrainGenerator.Sample(_terrain, 0.08, 0.5, 120, _s.Seed, 2);
+        list.Add(new Object3D
+        {
+            Id = "forest", Kind = "points", Points = trees.Select(p => { var w = _terrain.WorldPos(p.X, p.Z, World); return new[] { w[0], w[1] + 0.12, w[2] }; }).ToArray(),
+            Color = "#2e6b34", PointSize = 0.22, Pickable = false,
+        });
+        Objects = list;
+        _ = OnGenerated.InvokeAsync(_terrain);
+    }
+
+    private void Randomize()
+    {
+        _seed = Random.Shared.Next(1, 99999);
+        Rebuild();
+    }
+
+    private async Task ExportCsv()
+    {
+        if (_terrain is not null)
+        {
+            await Js.DownloadTextAsync($"heightmap-{_s.Seed}.csv", TerrainGenerator.ToCsv(_terrain), "text/csv");
+        }
+    }
+
+    private void Preview() => _preview = _terrain is null ? null : TerrainGenerator.ToSvgDataUrl(_terrain, 2);
+
+    private Task Suggest() => RunAsync(async ct =>
+    {
+        var text = _prompt ?? string.Empty;
+        var local = FromWords(text);
+        _s = local;
+        _seed = local.Seed;
+        _rationale = "Local interpretation applied.";
+        try
+        {
+            var plan = await PlanAsync("You are a procedural terrain designer. Map the description to noise parameters.", text,
+                """{"octaves":5,"persistence":0.5,"seaLevel":0.4,"island":0.6,"ridges":0.3,"erosionPasses":3,"rationale":"why these values"}""", ct);
+            if (plan is not null && plan["seaLevel"]?.GetValue<double>() is double sea && sea is > 0.05 and < 0.9)
+            {
+                _s = _s with
+                {
+                    Octaves = Math.Clamp((int)(plan["octaves"]?.GetValue<double>() ?? local.Octaves), 1, 8),
+                    Persistence = Math.Clamp(plan["persistence"]?.GetValue<double>() ?? local.Persistence, 0.2, 0.8),
+                    SeaLevel = sea,
+                    Island = Math.Clamp(plan["island"]?.GetValue<double>() ?? local.Island, 0, 1.2),
+                    Ridges = Math.Clamp(plan["ridges"]?.GetValue<double>() ?? local.Ridges, 0, 1),
+                    ErosionPasses = Math.Clamp((int)(plan["erosionPasses"]?.GetValue<double>() ?? local.ErosionPasses), 0, 10),
+                };
+                // Keep keyword intent when the model is vague (e.g. the offline simulator).
+                if (text.Contains("archipelago", StringComparison.OrdinalIgnoreCase) || text.Contains("island", StringComparison.OrdinalIgnoreCase) || text.Contains("pulau", StringComparison.OrdinalIgnoreCase))
+                {
+                    _s = _s with { Island = Math.Max(_s.Island, 0.7), SeaLevel = Math.Max(_s.SeaLevel, 0.42) };
+                }
+
+                _rationale = plan["rationale"]?.ToString() is { Length: > 3 } r ? r : _rationale;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The local interpretation stands.
+        }
+
+        Build();
+    });
+
+    /// <summary>Keyword → parameters, used offline and as the baseline for the model's suggestion.</summary>
+    public static TerrainSettings FromWords(string text)
+    {
+        var t = text.ToLowerInvariant();
+        var s = new TerrainSettings { Seed = Math.Abs(text.GetHashCode(StringComparison.Ordinal) % 99999) + 1 };
+        if (t.Contains("archipelago") || t.Contains("island") || t.Contains("pulau")) s = s with { Island = 0.9, SeaLevel = 0.45 };
+        if (t.Contains("continent") || t.Contains("plain") || t.Contains("dataran")) s = s with { Island = 0.2, SeaLevel = 0.25, Ridges = 0.05 };
+        if (t.Contains("volcan") || t.Contains("gunung") || t.Contains("mountain")) s = s with { Ridges = 0.75, Persistence = 0.55 };
+        if (t.Contains("rugged") || t.Contains("jagged") || t.Contains("terjal")) s = s with { Octaves = 7, Persistence = 0.62 };
+        if (t.Contains("smooth") || t.Contains("rolling") || t.Contains("misty") || t.Contains("old")) s = s with { ErosionPasses = 6, Persistence = Math.Min(s.Persistence, 0.45) };
+        if (t.Contains("desert") || t.Contains("dry")) s = s with { SeaLevel = 0.12 };
+        return s;
+    }
+}

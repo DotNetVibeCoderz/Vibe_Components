@@ -1,0 +1,170 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* The Sun and eight planets: orbits at relative speeds, readable or true-ratio distances, facts and AI Q&A per planet. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel">
+                <h4>@(_selected?.Name ?? "Solar System")</h4>
+                @if (_selected is { } p)
+                {
+                    <div class="bai3d-kpi">
+                        <div><b>@p.DistanceAu.ToString("0.00", CultureInfo.InvariantCulture) AU</b><span>from the Sun</span></div>
+                        <div><b>@Period(p)</b><span>year</span></div>
+                        <div><b>@p.Moons</b><span>moons</span></div>
+                    </div>
+                }
+                else
+                {
+                    <span>Click a planet to visit it.</span>
+                }
+            </div>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="Solar System explorer" Subtitle="Sizes exaggerated so every planet is visible" Icon="bi-sun">
+        <div class="bai-stack">
+            <div class="bai-row">
+                <button type="button" class="bai-chip @(_trueScale ? null : "is-active")" @onclick="() => SetScale(false)">Readable distances</button>
+                <button type="button" class="bai-chip @(_trueScale ? "is-active" : null)" @onclick="() => SetScale(true)">True distance ratio</button>
+                <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_paused" @bind:after="Build" /> pause</label>
+            </div>
+            <div class="bai-row">
+                @foreach (var p in Planets)
+                {
+                    <button type="button" class="bai-chip @(p == _selected ? "is-active" : null)" @onclick="() => Select(p)"><i style="display:inline-block; width:.6rem; height:.6rem; border-radius:50%; background:@p.Color; margin-right:.3rem"></i>@p.Name</button>
+                }
+            </div>
+            @if (_selected is { } sel)
+            {
+                <p class="bai-small" style="margin:0">@sel.Fact</p>
+                <form class="bai-row" @onsubmit="Ask" @onsubmit:preventDefault="true">
+                    <input class="bai-input bai-spacer" @bind="_question" placeholder="@($"Ask about {sel.Name}…")" aria-label="Question" />
+                    <button type="submit" class="bai-btn bai-btn-ai" disabled="@IsBusy"><i class="bi bi-stars" aria-hidden="true"></i>Ask</button>
+                </form>
+            }
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private Scene3DOptions _options = new();
+    private bool _trueScale, _paused;
+    private Planet? _selected;
+    private string? _question;
+
+    /// <summary>Planet data (radius km, distance AU, orbital period days).</summary>
+    public sealed record Planet(string Name, double RadiusKm, double DistanceAu, double PeriodDays, int Moons, string Color, string Fact, bool Rings = false);
+
+    public static readonly Planet[] Planets =
+    [
+        new("Mercury", 2440, 0.39, 88, 0, "#a8a39a", "The smallest planet; a day (sunrise to sunrise) lasts 176 Earth days."),
+        new("Venus", 6052, 0.72, 225, 0, "#e3c98f", "The hottest planet (~465 °C) thanks to a runaway greenhouse effect; it spins backwards."),
+        new("Earth", 6371, 1.0, 365.25, 1, "#3f8fd8", "The only known world with life and liquid surface water; Indonesia alone has more than 17,000 islands."),
+        new("Mars", 3390, 1.52, 687, 2, "#d0623c", "Home to Olympus Mons, the tallest volcano in the Solar System (about 22 km)."),
+        new("Jupiter", 69911, 5.2, 4333, 95, "#d9b48a", "So massive that it is 2.5 times all other planets combined; its Great Red Spot is a storm larger than Earth."),
+        new("Saturn", 58232, 9.58, 10759, 146, "#e8d29a", "Its rings are mostly water ice and only tens of metres thick in places.", true),
+        new("Uranus", 25362, 19.2, 30687, 28, "#9fd8e0", "Tilted 98°, it rolls around the Sun on its side."),
+        new("Neptune", 24622, 30.05, 60190, 16, "#4c6fe0", "The windiest planet, with gusts over 2,000 km/h."),
+    ];
+
+    /// <summary>Which planet to select first (optional).</summary>
+    [Parameter] public string? Focus { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 16, 26], Target = [0, 0, 0] },
+            Background = "#03040f",
+            Lights = "night",
+            Shadows = false,
+            Environment = false,
+            Controls = new() { MaxDistance = 120 },
+            AriaLabel = "Solar System with orbiting planets",
+        };
+        _selected = Planets.FirstOrDefault(p => p.Name.Equals(Focus, StringComparison.OrdinalIgnoreCase));
+        Build();
+    }
+
+    private static string Period(Planet p) => p.PeriodDays < 1000 ? $"{p.PeriodDays:0} d" : $"{p.PeriodDays / 365.25:0.0} y";
+
+    private double Orbit(Planet p) => _trueScale ? p.DistanceAu * 2.2 : 3.2 + Array.IndexOf(Planets, p) * 2.4;
+
+    private static double Size(Planet p) => 0.18 + Math.Pow(p.RadiusKm / 69911, 0.45) * 0.9;
+
+    private void Build()
+    {
+        var list = new List<Object3D>
+        {
+            new() { Id = "sun", Kind = "sphere", Radius = 1.6, Segments = 48, Color = "#ffcf6b", Emissive = "#ffb02e", EmissiveIntensity = 2.2, Unlit = true, Label = "Sun", LabelClass = "is-soga", Tooltip = "The Sun: 99.86% of the Solar System's mass", Animate = Animate3D.Spin(0.05) },
+            new() { Id = "glow", Kind = "sphere", Radius = 2.2, Color = "#ffb02e", Opacity = 0.12, Unlit = true, Pickable = false, Animate = Animate3D.Pulse(0.04, 0.4) },
+        };
+        // Stars: a fixed shell of points.
+        var rng = new Random(5);
+        list.Add(new Object3D { Id = "stars", Kind = "points", Pickable = false, PointSize = 0.25, Color = "#ffffff", Opacity = 0.8,
+            Points = Enumerable.Range(0, 400).Select(i => Layout3D.Fibonacci(i, 400, 90 + rng.NextDouble() * 20)).ToArray() });
+
+        foreach (var (p, i) in Planets.Select((p, i) => (p, i)))
+        {
+            var r = Orbit(p);
+            var speed = 0.6 * Math.Pow(365.25 / p.PeriodDays, 0.6);
+            var phase = i * 1.3;
+            var ring = Enumerable.Range(0, 97).Select(k => new[] { Math.Cos(k / 96.0 * Math.PI * 2) * r, 0, Math.Sin(k / 96.0 * Math.PI * 2) * r }).ToArray();
+            list.Add(new Object3D { Id = $"orbit-{p.Name}", Kind = "line", Points = ring, Color = p == _selected ? ThreeDPalette.Soga : "#3d4fb8", Opacity = 0.5, Pickable = false });
+            var planet = new Object3D
+            {
+                Id = p.Name, Kind = "sphere", Radius = Size(p), Segments = 32, Color = p.Color, Roughness = 0.8,
+                Position = [Math.Cos(phase) * r, 0, Math.Sin(phase) * r],
+                Animate = _paused ? Animate3D.Spin(0.3) : Animate3D.Orbit(r, speed, phase) with { SelfSpin = 0.6 },
+                Label = p.Name, LabelClass = p == _selected ? "is-soga" : "is-plain",
+                Tooltip = string.Create(CultureInfo.InvariantCulture, $"{p.Name}\n{p.DistanceAu:0.00} AU · {Period(p)} · {p.Moons} moons"),
+            };
+            list.Add(planet);
+            if (p.Rings)
+            {
+                list.Add(new Object3D { Id = $"{p.Name}-rings", Kind = "ring", Parent = p.Name, InnerRadius = Size(p) * 1.3, Radius = Size(p) * 2.1, Rotation = [-Math.PI / 2.3, 0, 0], Color = "#d8c79a", Opacity = 0.7, DoubleSided = true, Pickable = false });
+            }
+        }
+
+        Objects = list;
+    }
+
+    private void SetScale(bool trueScale)
+    {
+        _trueScale = trueScale;
+        Build();
+        _ = Scene?.FlyToAsync(trueScale ? [0, 40, 70] : [0, 16, 26], [0, 0, 0]);
+    }
+
+    private void Picked(PickEvent e)
+    {
+        if (Planets.FirstOrDefault(p => p.Name == e.Id) is { } p)
+        {
+            _ = Select(p);
+        }
+    }
+
+    private async Task Select(Planet p)
+    {
+        _selected = p;
+        _paused = true;
+        Narration = null;
+        Build();
+        StateHasChanged();
+        await Task.Delay(60);
+        await Scene!.FocusAsync(p.Name, Size(p) * 6 + 1.5);
+    }
+
+    private Task Ask()
+    {
+        var p = _selected!;
+        var q = string.IsNullOrWhiteSpace(_question) ? $"Tell me something amazing about {p.Name}." : _question!;
+        var facts = string.Create(CultureInfo.InvariantCulture,
+            $"Question: {q}\nPlanet {p.Name}: radius {p.RadiusKm:N0} km, {p.DistanceAu} AU from the Sun, orbital period {p.PeriodDays:N0} days, {p.Moons} known moons. Fact: {p.Fact}");
+        return NarrateAsync("an enthusiastic astronomy teacher for school students", facts, AiTasks.Rag);
+    }
+}

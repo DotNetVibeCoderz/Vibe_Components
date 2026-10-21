@@ -15,6 +15,7 @@ Halaman ini berisi daftar semua Razor component di Blazor.AI, dikelompokkan per 
 - [Blazor.AI.Analytics](#blazoraianalytics)
 - [Blazor.AI.LocalModels](#blazorailocalmodels)
 - [Blazor.AI.Bio](#blazoraibio)
+- [Blazor.AI.ThreeD](#blazoraithreed)
 
 ## Parameter umum
 
@@ -2394,4 +2395,900 @@ Tanpa panggilan AI. Tanpa parameter `Class`.
 
 ```razor
 <SequenceInput @bind-Value="dna" Samples="@([("EGFP", BioSamples.Egfp)])" />
+```
+
+---
+
+## Blazor.AI.ThreeD
+
+Paket: `Blazor.AI.ThreeD` · Namespace: `Blazor.AI.ThreeD`
+
+```csharp
+builder.Services.AddBlazorAIThreeD();
+```
+
+```html
+<link rel="stylesheet" href="_content/Blazor.AI.ThreeD/blazor-ai-3d.css" />
+```
+
+`AddBlazorAIThreeD()` mendaftarkan `CompanionMemoryStore` per pengguna yang dipakai `AICompanion3D`. Component-component ini dibangun di atas `AddBlazorAIComponents()`. Component yang memakai ulang paket lain juga membutuhkan paket tersebut terdaftar; `AgentStudio3D` dan `MultiAgentArena` meng-inject service agent sehingga butuh `AddBlazorAIAgents()`. Three.js sudah dibundel di dalam paket. Lihat [Component 3D](threed.md) untuk model scene, aset, dan cara setup.
+
+```razor
+@using Blazor.AI.ThreeD
+```
+
+### Parameter umum 3D
+
+Sebagian besar component mewarisi `ThreeDComponentBase`, yang mewarisi `AiComponentBase`. Component tersebut menerima [parameter umum](#parameter-umum) (`Provider`, `Class`, `OnError`, atribut yang tidak cocok) ditambah:
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Height` | `string` | `"520px"` | Tinggi CSS viewport 3D. |
+| `Language` | `string?` | `null` | Bahasa narasi AI. `null` mengikuti default model. |
+
+Digital twin mewarisi `TwinComponentBase`, yang menambahkan:
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `UpdatesPerSecond` | `double` | `2` | Langkah simulasi per detik, dibatasi ke 0.5–5. |
+| `AutoStart` | `bool` | `true` | Memulai simulasi live setelah render pertama. |
+
+Geometri, fisika, statistik, dan training dijalankan di .NET; model hanya membuat rencana atau narasi dari fakta hasil perhitungan. Setiap component punya fallback lokal, jadi tetap berjalan dengan model simulasi offline.
+
+### Inti
+
+### Scene3D
+
+Host Three.js yang menjadi dasar semua component 3D: objek deklaratif, picking, gerakan kamera, dan overlay HTML. Lihat [Model scene](threed.md#model-scene) untuk method-method-nya.
+
+Tanpa panggilan AI. Tidak mewarisi base class.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Objects` | `IReadOnlyList<Object3D>` | `[]` | Objek yang ditampilkan. Berikan list baru untuk memperbarui; objek di-diff berdasarkan `Id`. |
+| `Options` | `Scene3DOptions` | `new()` | Background, kamera, kontrol, pencahayaan, bayangan, ground, grid, dan fog. |
+| `Height` | `string` | `"480px"` | Tinggi CSS. |
+| `Class` | `string?` | `null` | Kelas CSS tambahan untuk elemen root. |
+| `ChildContent` | `RenderFragment?` | `null` | Overlay HTML (HUD) yang digambar di atas scene. |
+| `OnPick` | `EventCallback<PickEvent>` | | Dipicu saat objek yang bisa di-pick diklik. |
+| `OnModelLoaded` | `EventCallback<ModelInfo>` | | Dipicu saat model glTF selesai dimuat, beserta clip, morph, dan jumlah segitiganya. |
+| `OnSpeechEnded` | `EventCallback<string>` | | Dipicu dengan id objek saat `SpeakAsync` selesai. |
+| `OnReady` | `EventCallback` | | Dipicu saat scene selesai diinisialisasi. |
+
+Juga menerima atribut yang tidak cocok.
+
+```razor
+<Scene3D @ref="scene" Objects="@objects" Options="@options" Height="420px" OnPick="Picked">
+    <div class="bai3d-panel">Overlay HTML</div>
+</Scene3D>
+```
+
+### ModelViewer3D
+
+Viewer glTF/GLB dengan orbit, animation clip, morph target, wireframe, jumlah segitiga, dan screenshot.
+
+Tanpa panggilan AI. Tidak mewarisi base class.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Model viewer"` | Judul kartu. |
+| `Url` | `string` | `ThreeDAssets.GuideBot` | URL model. |
+| `FitHeight` | `double` | `1.7` | Menskalakan model ke tinggi ini dalam satuan scene. |
+| `Height` | `string` | `"420px"` | Tinggi CSS. |
+| `AutoRotate` | `bool` | `false` | Memutar kamera mengelilingi model. |
+| `Class` | `string?` | `null` | Kelas CSS tambahan. |
+
+```razor
+<ModelViewer3D Url="@ThreeDAssets.GuideBot" FitHeight="1.7" AutoRotate="true" />
+```
+
+### Asisten
+
+![Talking avatar](../screenshots/3d-aiavatar3d.jpg)
+
+![Tour guide](../screenshots/3d-aitourguide3d.jpg)
+
+### AIAvatar3D
+
+Avatar 3D yang bisa bicara: input suara atau teks, balasan AI dengan emosi dan gestur, lalu output suara dengan lip sync.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Name` | `string` | `"Kawi"` | Nama avatar. |
+| `Persona` | `string` | `"A friendly guide who answers briefly and warmly"` | Kepribadian yang dipakai di system prompt default. |
+| `SystemPrompt` | `string?` | `null` | Menggantikan system prompt default yang disusun dari `Name` dan `Persona`. |
+| `Placeholder` | `string` | `"Say hello, ask anything…"` | Placeholder input. |
+| `Greeting` | `string?` | `"Hi! I'm Kawi. Ask me anything, or press the mic and talk to me."` | Pesan pertama. `null` tidak menampilkan apa pun. |
+| `SpeechLanguage` | `string` | `"en-US"` | Bahasa BCP-47 untuk input dan output suara, misalnya `"id-ID"`. |
+| `ModelUrl` | `string` | `ThreeDAssets.GuideBot` | Model avatar. |
+| `OnReply` | `EventCallback<string>` | | Dipicu dengan setiap balasan. |
+
+```razor
+<AIAvatar3D Name="Kawi" Persona="a museum guide for Borobudur" SpeechLanguage="id-ID" />
+```
+
+### AICompanion3D
+
+Pendamping AI dengan memory, kepribadian, tujuan, dan kondisi emosi yang terlihat; memory-nya mengorbit di sekitar robot.
+
+Base: `ThreeDComponentBase`. Memakai `CompanionMemoryStore`, yang didaftarkan oleh `AddBlazorAIThreeD()`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Name` | `string` | `"Sekar"` | Nama pendamping. |
+| `SpeechLanguage` | `string` | `"en-US"` | Bahasa BCP-47 untuk suara. |
+| `Greeting` | `string` | `"Hi, I'm Sekar. I remember what you tell me and help with your goals. What should I call you?"` | Pesan pertama. |
+
+```razor
+<AICompanion3D Name="Sekar" SpeechLanguage="id-ID" Greeting="Halo! Aku Sekar. Siapa namamu?" />
+```
+
+### AITourGuide3D
+
+Robot pemandu berjalan di antara titik-titik menarik, menunjuk setiap titik, dan menarasikannya dengan suara ber-lip sync.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Name` | `string` | `"Kawi"` | Nama pemandu. |
+| `Tour` | `string` | `"Museum"` | Tur preset: `Museum`, `Smart City`, `Campus`, `Factory`, atau `Tourism`. |
+| `Preset` | `TourPreset?` | `null` | Tur kustom (scenery dan pemberhentian) yang dipakai sebagai pengganti `Tour`. |
+| `SpeechLanguage` | `string` | `"en-US"` | Bahasa BCP-47 untuk suara. |
+| `OnStopReached` | `EventCallback<TourStop>` | | Dipicu saat pemandu tiba di sebuah pemberhentian. |
+
+```razor
+<AITourGuide3D Tour="Museum" SpeechLanguage="id-ID" OnStopReached="stop => Log(stop.Name)" />
+```
+
+### Visualisasi
+
+### AI3DChart
+
+Chart 3D bar, scatter, bubble, surface, dan box dengan insight yang ditulis AI.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Regional sales"` | Judul kartu. |
+| `Mode` | `string` | `"Bars"` | `Bars`, `Scatter`, `Bubbles`, `Surface`, atau `Statistical`. |
+| `Categories` | `IReadOnlyList<string>` | `["Q1", "Q2", "Q3", "Q4"]` | Kategori bar (sumbu X). |
+| `Series` | `IReadOnlyList<string>` | empat nama pulau | Series bar (sumbu Z). |
+| `Values` | `double[][]` | contoh data penjualan | Nilai bar dalam bentuk `[series][category]`. |
+| `Points` | `IReadOnlyList<(double X, double Y, double Z, double Size, int Group)>?` | `null` | Titik untuk scatter dan bubble. `null` memakai titik contoh. |
+| `Surface` | `Func<double, double, double>?` | `null` | Fungsi surface z = f(x, y) yang di-sample pada [-1, 1]². `null` memakai fungsi contoh. |
+| `OnSelect` | `EventCallback<PickEvent>` | | Dipicu saat bar atau titik diklik. |
+
+```razor
+<AI3DChart Title="Sales by island" Mode="Bars"
+           Categories="@(["Q1","Q2","Q3","Q4"])" Series="@islands" Values="@sales" />
+```
+
+### AIClusterExplorer
+
+Menjalankan clustering KMeans, DBSCAN, HDBSCAN, atau hierarchical, menampilkan cluster dalam 3D, dan meminta AI memberi nama cluster.
+
+Base: `ThreeDComponentBase`. Memakai `AnalyticsDataset` dari Blazor.AI.Analytics.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Cluster explorer"` | Judul kartu. |
+| `Algorithm` | `ClusterAlgorithm` | `ClusterAlgorithm.KMeans` | `KMeans`, `Dbscan`, `Hdbscan`, atau `Hierarchical`. |
+| `K` | `int` | `4` | Jumlah cluster untuk KMeans dan hierarchical. |
+| `Epsilon` | `double` | `0.8` | Radius tetangga untuk DBSCAN. |
+| `MinClusterSize` | `int` | `15` | Ukuran cluster minimum untuk HDBSCAN. |
+| `Dataset` | `AnalyticsDataset?` | `null` | Data milikmu sendiri; kolom numerik yang di-cluster. `null` memakai sampel bawaan. |
+| `OnClustered` | `EventCallback<ClusterLayout>` | | Dipicu dengan label, posisi, dan silhouette score. |
+
+```razor
+<AIClusterExplorer Algorithm="ClusterAlgorithm.Hdbscan" MinClusterSize="15"
+                   Dataset="@SampleDatasets.Segments()" OnClustered="r => silhouette = r.Silhouette" />
+```
+
+### AIKnowledgeGraph3D
+
+Mengekstrak entitas dan relasi dari teks lalu menampilkannya sebagai graph 3D, dalam empat tampilan.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Knowledge graph"` | Judul kartu. |
+| `Mode` | `string` | `"Knowledge graph"` | `Knowledge graph`, `Entity relationship`, `Semantic`, atau `Concept map`. |
+| `Text` | `string` | teks singkat tentang Borobudur dan Prambanan | Teks sumber ekstraksi graph. |
+| `Graph` | `ExtractedGraph?` | `null` | Graph yang ditampilkan sebagai pengganti hasil ekstraksi dari `Text`. |
+| `OnEntitySelected` | `EventCallback<GraphEntity>` | | Dipicu saat sebuah entitas diklik. |
+
+```razor
+<AIKnowledgeGraph3D Mode="Concept map" Text="@article" OnEntitySelected="e => selected = e.Name" />
+```
+
+### AIVectorSpaceViewer
+
+Memproyeksikan embedding dokumen, pertanyaan, dan jawaban ke 3D dengan PCA; sebuah query menampilkan tetangga terdekatnya.
+
+Base: `ThreeDComponentBase`. Memakai embedding model dari provider dan kembali ke hashing embedding offline jika tidak tersedia.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Vector space viewer"` | Judul kartu. |
+| `Source` | `IReadOnlyList<AIVectorSpaceViewer.VectorItem>?` | `null` | Item dalam bentuk `(Kind, Text)`. `null` memakai sampel. |
+| `TopK` | `int` | `5` | Jumlah tetangga yang ditampilkan untuk sebuah query. |
+
+```razor
+<AIVectorSpaceViewer Source="@items" TopK="5" />
+```
+
+### Agent
+
+### AgentStudio3D
+
+Ekosistem agent dalam 3D: agent sebagai node dan tool sebagai satelit; ubah agent di panel samping dan jalankan sebuah task untuk melihat alurnya.
+
+Base: `ThreeDComponentBase`. Membutuhkan `AddBlazorAIAgents()`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `OnAgentSaved` | `EventCallback<AgentDefinition>` | | Dipicu saat sebuah agent disimpan. |
+
+```razor
+<AgentStudio3D OnAgentSaved="a => Console.WriteLine(a.Name)" />
+```
+
+### MultiAgentArena
+
+Agent-agent duduk di arena melingkar dan saling mengirim pesan sebagai paket bercahaya sambil mengerjakan sebuah tujuan.
+
+Base: `ThreeDComponentBase`. Membutuhkan `AddBlazorAIAgents()`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Goal` | `string` | contoh tujuan | Task untuk tim. |
+| `Mode` | `OrchestrationMode` | `OrchestrationMode.Sequential` | `Sequential`, `RoundRobin`, atau `Supervisor`. |
+| `Team` | `IReadOnlyList<AgentDefinition>` | `MultiAgentArena.DefaultTeam` | Agent sesuai urutan bicara. Default-nya agent riset, perencanaan, coding, dan evaluasi. |
+| `OnCompleted` | `EventCallback<IReadOnlyList<AgentMessage>>` | | Dipicu dengan transkrip. |
+
+```razor
+<MultiAgentArena Goal="Rancang aplikasi antrean puskesmas" Mode="OrchestrationMode.RoundRobin"
+                 OnCompleted="msgs => transcript = msgs" />
+```
+
+### AgentMindMap3D
+
+Menampilkan rencana agent untuk sebuah tujuan sebagai reasoning tree, planning graph dengan dependensi, atau execution graph yang disimulasikan.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Goal` | `string` | contoh tujuan | Tujuan yang direncanakan. |
+| `View` | `string` | `"Reasoning tree"` | `Reasoning tree`, `Planning graph`, atau `Execution graph`. |
+| `StepDelayMs` | `int` | `650` | Jeda antarlangkah saat menyimulasikan eksekusi. |
+| `OnStepSelected` | `EventCallback<MindStep>` | | Dipicu saat sebuah langkah diklik. |
+
+```razor
+<AgentMindMap3D Goal="Digitalise 120 village cooperatives in NTT" View="Execution graph" StepDelayMs="500" />
+```
+
+### Keputusan
+
+![Strategy simulator](../screenshots/3d-strategysimulator3d.jpg)
+
+### DecisionTree3D
+
+Decision tree 3D yang interaktif: ubah kasusnya, lihat kasus itu menelusuri tree, lalu minta AI menjelaskan hasilnya.
+
+Base: `ThreeDComponentBase`. Memakai `DecisionTreeNode` dari Blazor.AI.Decision.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Decision tree"` | Judul kartu. |
+| `Subtitle` | `string` | `"Customer churn risk"` | Subjudul kartu. |
+| `Tree` | `DecisionTreeNode` | `DecisionTreeNode.ChurnSample()` | Tree-nya. Kondisi memakai bahasa ekspresi Blazor.AI.Decision. |
+| `Facts` | `IDictionary<string, object?>` | contoh pelanggan | Fakta input. |
+| `OnDecided` | `EventCallback<DecisionTreeNode>` | | Dipicu dengan leaf yang dicapai. |
+
+```razor
+<DecisionTree3D Tree="@loanTree" Facts="@applicant" Subtitle="Loan approval"
+                OnDecided="leaf => outcome = leaf.Outcome" />
+```
+
+### RuleGraph3D
+
+Business rule sebagai graph 3D: fakta mengalir ke rule, rule menulis hasil, rule yang terpicu menyala, dan variabel yang ditulis oleh beberapa rule ditandai sebagai konflik.
+
+Base: `ThreeDComponentBase`. Memakai rule engine Blazor.AI.Decision.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Rule graph"` | Judul kartu. |
+| `Rules` | `List<BusinessRule>` | `RuleGraph3DSamples.Rules()` | Rule yang dievaluasi. |
+| `Facts` | `IDictionary<string, object?>` | `RuleEditor.SampleFacts()` | Fakta input. |
+| `Mode` | `RuleMode` | `RuleMode.AllMatches` | `AllMatches` atau `FirstMatch`. |
+| `OnEvaluated` | `EventCallback<RuleEvaluation>` | | Dipicu setelah evaluasi. |
+
+```razor
+<RuleGraph3D Rules="@rules" Facts="@order" OnEvaluated="r => fired = r.Fired.Count()" />
+```
+
+### StrategySimulator3D
+
+Simulasi Monte-Carlo sebuah KPI terhadap dua tuas, ditampilkan sebagai lanskap 3D dengan titik pilihanmu, titik terbaik, dan menara skenario dengan risiko P5–P95.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Strategy simulator"` | Judul kartu. |
+| `Preset` | `string` | `"banking"` | `banking`, `insurance`, `healthcare`, `supply`, atau `retail`. |
+| `Model` | `StrategyPreset?` | `null` | Model kustom yang dipakai sebagai pengganti preset. |
+| `Trials` | `int` | `160` | Jumlah trial Monte-Carlo per titik grid. |
+
+```razor
+<StrategySimulator3D Preset="supply" Trials="200" Language="Bahasa Indonesia" />
+```
+
+### Reinforcement learning
+
+### RLTrainingArena
+
+Robot mempelajari grid world 3D dengan Q-learning atau SARSA; training berjalan di .NET dan policy saat ini diputar ulang setiap beberapa episode.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"RL training arena"` | Judul kartu. |
+| `World` | `DesignedGridWorld?` | `null` | Grid-nya. `null` memakai maze 9×7 dengan dua jebakan. |
+| `Algorithm` | `GridAlgorithm` | `GridAlgorithm.QLearning` | `QLearning` atau `Sarsa`. |
+| `Episodes` | `int` | `400` | Jumlah episode training (dibatasi ke 20–2000). |
+| `Slip` | `double` | `0` | Probabilitas sebuah langkah tergelincir ke samping. Hanya berlaku untuk grid bawaan. |
+| `OnEpisode` | `EventCallback<GridEpisode>` | | Dipicu setelah setiap episode. |
+
+```razor
+<RLTrainingArena Algorithm="GridAlgorithm.Sarsa" Episodes="600" Slip="0.1"
+                 OnEpisode="e => returns.Add(e.Return)" />
+```
+
+### RLPolicyViewer
+
+Menampilkan policy hasil training sebagai kolom nilai dan panah aksi greedy per sel, dengan slider untuk menelusuri snapshot training.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Policy evolution"` | Judul kartu. |
+| `World` | `DesignedGridWorld?` | `null` | Grid-nya. `null` memakai maze bawaan. |
+| `Algorithm` | `GridAlgorithm` | `GridAlgorithm.QLearning` | `QLearning` atau `Sarsa`. |
+| `Episodes` | `int` | `360` | Jumlah episode training (dibatasi ke 40–3000). |
+| `Snapshots` | `int` | `24` | Jumlah snapshot yang disimpan selama training (dibatasi ke 4–60). |
+
+```razor
+<RLPolicyViewer Episodes="500" Snapshots="30" Algorithm="GridAlgorithm.QLearning" />
+```
+
+### RLBattleArena
+
+Pemburu dan pelari belajar saling melawan dalam game pursuit–evasion, dengan papan skor live dan replay pertandingan.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"RL battle arena"` | Judul kartu. |
+| `HunterPolicy` | `BattlePolicy` | `BattlePolicy.Learning` | `Learning`, `Heuristic`, atau `Random`. |
+| `RunnerPolicy` | `BattlePolicy` | `BattlePolicy.Learning` | `Learning`, `Heuristic`, atau `Random`. |
+| `Matches` | `int` | `4000` | Jumlah pertandingan training (dibatasi ke 200–20000). |
+
+```razor
+<RLBattleArena HunterPolicy="BattlePolicy.Learning" RunnerPolicy="BattlePolicy.Heuristic" Matches="6000" />
+```
+
+### RLEvolutionViewer
+
+Mengevolusikan controller cart-pole dan menampilkan generasi sebagai cincin bertumpuk, fitness sebagai ukuran dan warna, garis keturunan sang juara, serta sang juara yang sedang menyeimbangkan tiang secara live.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Evolution viewer"` | Judul kartu. |
+| `GenerationCount` | `int` | `18` | Jumlah generasi yang dievolusikan (dibatasi ke 2–60). |
+| `Population` | `int` | `24` | Jumlah controller per generasi (dibatasi ke 8–60). |
+| `Mutation` | `double` | `0.35` | Sigma mutasi (dibatasi ke 0.01–2). |
+
+```razor
+<RLEvolutionViewer GenerationCount="25" Population="32" Mutation="0.3" />
+```
+
+### ResourceOptimizationArena
+
+Policy RL mengalokasikan unit ke zona (menara menunjukkan permintaan yang diharapkan, kubus bertumpuk menunjukkan unit) dan dibandingkan dengan baseline.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Resource optimisation arena"` | Judul kartu. |
+| `Scenario` | `AllocationScenario?` | `null` | Skenario kustom yang dipakai sebagai pengganti preset bawaan. |
+| `TrainingDays` | `int` | `3000` | Jumlah hari training yang disimulasikan. |
+
+```razor
+<ResourceOptimizationArena Scenario="@depots" TrainingDays="4000" />
+```
+
+### Digital twin
+
+![Smart city](../screenshots/3d-smartcity3d.jpg)
+
+Setiap twin menjalankan `TwinSimulator` dengan timer, mewarnai scene dari pembacaan live, dan menyertakan `TwinCopilot`. Base-nya `TwinComponentBase`, jadi twin juga menerima `UpdatesPerSecond` dan `AutoStart`.
+
+### SmartFactory3D
+
+Pabrik dengan lini produksi dan sel robot, OEE live, predictive maintenance (remaining useful life), dan copilot AI.
+
+Base: `TwinComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Plant Cikarang · Assembly"` | Judul kartu. |
+| `Lines` | `int` | `2` | Jumlah lini produksi (1–3). |
+| `StationsPerLine` | `int` | `3` | Jumlah sel robot per lini (2–4). |
+| `IdealCycleSeconds` | `double` | `42` | Cycle time ideal per stasiun dalam detik, baseline performa OEE. |
+
+```razor
+<SmartFactory3D Title="Plant Karawang · Line A/B" Lines="2" StationsPerLine="3"
+                IdealCycleSeconds="40" Language="Bahasa Indonesia" />
+```
+
+### SmartBuilding3D
+
+Gedung dengan lantai dan ruangan yang diwarnai menurut energi, suhu, atau okupansi, titik-titik orang, peringatan keamanan, dan copilot AI.
+
+Base: `TwinComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Menara Kawung · HQ"` | Judul kartu. |
+| `Floors` | `int` | `4` | Jumlah lantai (1–8). |
+| `RoomArea` | `double` | `120` | Luas ruangan dalam meter persegi, dipakai untuk intensitas energi. |
+
+```razor
+<SmartBuilding3D Floors="5" RoomArea="140" UpdatesPerSecond="1" />
+```
+
+### SmartFarm3D
+
+Kebun dengan zona irigasi, petak kelembapan tanah, jagung yang tumbuh, deteksi penyakit, prediksi hasil panen, dan agronom AI.
+
+Base: `TwinComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Kebun Jagung Sleman"` | Judul kartu. |
+| `SeasonDays` | `int` | `110` | Panjang musim tanam dalam hari. |
+| `PotentialYield` | `double` | `9.5` | Hasil panen yang bisa dicapai dalam t/ha pada kondisi ideal. |
+
+```razor
+<SmartFarm3D SeasonDays="110" PotentialYield="9.5" />
+```
+
+### SmartAquaculture3D
+
+Keramba jaring dengan ikan yang berenang, kualitas air, prediksi pertumbuhan, dan optimasi pemberian pakan.
+
+Base: `TwinComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Waduk Jatiluhur"` | Judul kartu. |
+| `FishPerCage` | `int` | `6000` | Jumlah ikan yang ditebar per keramba. |
+| `HarvestWeight` | `double` | `500` | Berat panen dalam gram. |
+| `VisibleFish` | `int` | `9` | Jumlah model ikan yang digambar per keramba, sebagai sampel visual dari stok. |
+
+```razor
+<SmartAquaculture3D Title="Keramba Waduk Jatiluhur" FishPerCage="6000" HarvestWeight="500" />
+```
+
+### SmartCity3D
+
+Kota dengan tinggi gedung berbasis data, lalu lintas per jalan, mobil yang bergerak, kondisi jembatan dan utilitas, gelembung kualitas udara, dan copilot AI.
+
+Base: `TwinComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Bandung Smart City"` | Judul kartu. |
+| `BlockValues` | `IReadOnlyList<double>?` | `null` | Satu nilai per blok kota, urut per baris (misalnya kepadatan penduduk), yang menentukan tinggi gedung. Kota ini punya 9 blok; kurang dari 9 nilai akan memakai sampel. |
+
+```razor
+<SmartCity3D BlockValues="@densityIndex" />
+```
+
+### TwinCopilot
+
+Menjawab pertanyaan tentang digital twin yang sedang berjalan dari snapshot pembacaan, tren, dan event-nya; saat offline, diagnosis lokal yang menjawab. Twin di atas sudah menyertakannya; pakai langsung dengan `TwinSimulator` milikmu sendiri.
+
+Base: `AiComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Simulator` | `TwinSimulator` | | Wajib. Simulator yang dibaca. |
+| `Role` | `string` | `"an operations engineer for this digital twin"` | Peran copilot. |
+| `Context` | `Func<string>?` | `null` | Fakta tambahan yang ditambahkan ke snapshot, misalnya KPI yang dihitung oleh component host. |
+| `Placeholder` | `string` | `"Ask about the live readings…"` | Placeholder input. |
+| `Suggestions` | `IReadOnlyList<string>` | `[]` | Pertanyaan pembuka. |
+| `Language` | `string?` | `null` | Bahasa jawaban. |
+
+```razor
+<TwinCopilot Simulator="@sim" Role="a plant reliability engineer" Context="@Kpis" />
+```
+
+### Kesehatan & bioteknologi
+
+![Molecule explorer](../screenshots/3d-moleculeexplorer3d.jpg)
+
+### HumanBody3D
+
+Viewer anatomi dengan tubuh transparan serta lapisan organ dan kerangka; klik sebuah organ untuk memfokuskan kamera dan mempelajarinya.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Audience` | `string` | `"a high-school student"` | Untuk siapa penjelasan ditulis. |
+| `OnOrganSelected` | `EventCallback<HumanBody3D.Organ>` | | Dipicu saat sebuah organ dipilih. |
+
+```razor
+<HumanBody3D Audience="a nursing student" Language="Bahasa Indonesia" OnOrganSelected="o => selected = o.Name" />
+```
+
+### MoleculeExplorer3D
+
+Membangun molekul 3D dari SMILES (conformer embedding) dan menampilkannya sebagai ball-and-stick, space-filling, atau wire dengan warna CPK, descriptor, dan penjelasan AI.
+
+Base: `ThreeDComponentBase`. Memakai Biotech.Net melalui Blazor.AI.Bio.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"3D molecule explorer"` | Judul kartu. |
+| `Smiles` | `string?` | `BioSamples.Molecules[1].Smiles` (kafein) | Molekul dalam format SMILES. |
+
+```razor
+<MoleculeExplorer3D Smiles="CC(=O)Oc1ccccc1C(=O)O" />
+```
+
+### ProteinViewer3D
+
+Menampilkan struktur PDB sebagai tube jejak Cα yang diwarnai menurut chain, pelangi N→C, atau struktur sekunder; residu menampilkan tooltip saat di-hover.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Protein viewer"` | Judul kartu. |
+| `Pdb` | `string?` | `null` | Teks PDB. `null` memakai sampel sintetis. |
+| `MaxMarkers` | `int` | `350` | Jumlah maksimum residu yang digambar sebagai penanda yang bisa di-pick. |
+
+```razor
+<ProteinViewer3D Pdb="@pdbText" MaxMarkers="300" />
+```
+
+### GeneNetwork3D
+
+Jaringan ko-ekspresi gen: korelasi Pearson dari log ekspresi untuk gen-gen yang paling bervariasi, ditata dalam 3D dan diwarnai menurut fold change.
+
+Base: `ThreeDComponentBase`. Memakai Blazor.AI.Bio.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Gene network explorer"` | Judul kartu. |
+| `Counts` | `Dataset?` | `null` | Count dalam bentuk gen × sampel dengan anotasi `condition`. `null` memakai eksperimen stres sintetis. |
+| `Reference` | `string` | `"control"` | Kondisi referensi. |
+| `Treatment` | `string` | `"treated"` | Kondisi perlakuan. |
+
+```razor
+<GeneNetwork3D Counts="@counts" Reference="control" Treatment="treated" />
+```
+
+### MedicalTrainingSimulator
+
+Pelatihan resusitasi dengan pasien 3D, monitor tanda vital yang digerakkan state machine BLS, penilaian, dan debrief AI.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Resuscitation trainer"` | Judul kartu. |
+| `Briefing` | `string` | skenario pasien yang kolaps | Teks skenario yang ditampilkan di awal. |
+| `Audience` | `string` | `"a nursing student"` | Untuk siapa debrief ditulis. |
+| `OnFinished` | `EventCallback<CprScenario>` | | Dipicu saat skenario selesai, beserta skor dan log-nya. |
+
+```razor
+<MedicalTrainingSimulator Audience="a first-year medical student" OnFinished="s => SaveScore(s.Score, s.Log)" />
+```
+
+### Rekayasa
+
+![CAD copilot](../screenshots/3d-cadcopilot3d.jpg)
+
+### CADCopilot3D
+
+Mengubah deskripsi menjadi part parametrik: AI (atau parser lokal) menulis daftar fitur, kamu mengubah dimensinya, dan hasilnya bisa diekspor ke JSON.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `OnPartChanged` | `EventCallback<CadPart>` | | Dipicu saat part berubah. |
+
+```razor
+<CADCopilot3D OnPartChanged="part => Save(part.ToJson())" />
+```
+
+### BIMAssistant3D
+
+Ajukan pertanyaan tentang model bangunan: AI memetakan pertanyaan ke sebuah query, .NET menghitung jawabannya dari elemen-elemen bangunan dan menyorotnya.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Elements` | `IReadOnlyList<BimElement>?` | `null` | Elemen bangunan. `null` memakai sampel dua lantai dengan benturan duct yang disengaja. |
+
+```razor
+<BIMAssistant3D Elements="@myElements" Language="Bahasa Indonesia" />
+```
+
+### EngineeringSimulation3D
+
+Analisis CFD, FEM, termal, dan struktural yang dihitung di C# dan ditampilkan dalam 3D, dengan penjelasan hasil oleh AI.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `InitialMode` | `string` | `"CFD"` | Mode yang dibuka pertama: `CFD`, `FEM`, `Thermal`, atau `Structural`. |
+
+```razor
+<EngineeringSimulation3D InitialMode="FEM" />
+```
+
+### MeshOptimizationStudio
+
+Decimation mesh yang ditampilkan berdampingan (asli dan teroptimasi), dengan anggaran segitiga, pengukuran LOD, dan rekomendasi AI.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Url` | `string?` | `null` | Model glTF/GLB yang dibuka. `null` memakai `ThreeDAssets.Stupa`. |
+
+```razor
+<MeshOptimizationStudio Url="@ThreeDAssets.Stupa" />
+```
+
+### Pendidikan
+
+### AIClassroom3D
+
+Kelas virtual: AI menulis materi pelajaran dan kuis, lalu robot guru menyampaikan setiap poin di papan tulis dengan lip sync.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `SpeechLanguage` | `string` | `"en-US"` | Bahasa BCP-47 untuk suara guru. |
+
+```razor
+<AIClassroom3D SpeechLanguage="id-ID" Language="Bahasa Indonesia" />
+```
+
+### SolarSystemExplorer
+
+Matahari dan delapan planet dengan orbit pada kecepatan relatif, jarak yang mudah dibaca atau sesuai rasio sebenarnya, fakta, serta tanya jawab AI per planet.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Focus` | `string?` | `null` | Planet yang dipilih pertama kali. |
+
+```razor
+<SolarSystemExplorer Focus="Jupiter" Height="560px" />
+```
+
+### HistoryExplorer3D
+
+Situs bersejarah dalam 3D (Borobudur, Prambanan) dengan hotspot cerita, timeline yang membangun ulang situs per era, dan narator AI.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `InitialSite` | `string` | `"Borobudur"` | Situs yang dibuka pertama: `Borobudur` atau `Prambanan`. |
+
+```razor
+<HistoryExplorer3D InitialSite="Prambanan" Language="Bahasa Indonesia" />
+```
+
+### ScienceLab3D
+
+Lab virtual dengan bandul (RK4), gerak proyektil, dan rangkaian hukum Ohm, yang dihitung di C#, dianimasikan dalam 3D, diplot, dan dijelaskan.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `InitialExperiment` | `string` | `"Pendulum"` | Eksperimen yang dibuka pertama: `Pendulum`, `Projectile`, atau `Ohm's law`. |
+
+```razor
+<ScienceLab3D InitialExperiment="Pendulum" />
+```
+
+### Gaming
+
+![World builder](../screenshots/3d-aiworldbuilder.jpg)
+
+### NPCStudio
+
+Membuat NPC dengan kepribadian, latar belakang, dialog, dan statistik, menampilkan preview 3D dengan emote, dan memungkinkanmu chat dengan NPC sesuai karakternya.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `OnGenerated` | `EventCallback<NPCStudio.Npc>` | | Dipicu dengan setiap NPC yang dibuat. |
+
+```razor
+<NPCStudio OnGenerated="npc => SaveNpc(npc)" />
+```
+
+### AIQuestGenerator
+
+Membuat rangkaian quest (langkah, objektif, hadiah, percabangan) dari sebuah tema dan menatanya sebagai waypoint di peta 3D.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `OnGenerated` | `EventCallback<AIQuestGenerator.Quest>` | | Dipicu dengan setiap quest yang dibuat. |
+
+```razor
+<AIQuestGenerator OnGenerated="quest => questLog.Add(quest)" />
+```
+
+### AIWorldBuilder
+
+Mengubah prompt menjadi rencana dunia (bioma, landmark, permukiman) lalu membangun dunia 3D prosedural dengan hutan, desa, dan candi.
+
+Base: `ThreeDComponentBase`. Tidak ada parameter lain.
+
+```razor
+<AIWorldBuilder Height="600px" />
+```
+
+### AIDungeonMaster
+
+Game master AI di atas dungeon meja 3D: dadu dilempar secara lokal, rule menentukan hasil, dan model yang bernarasi.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Party` | `IReadOnlyList<string>` | `["Arjuna the archer", "Sinta the healer", "Bima the warrior"]` | Anggota party yang ditampilkan sebagai token. |
+
+```razor
+<AIDungeonMaster Party="@(["Arjuna the archer", "Sinta the healer"])" />
+```
+
+### ProceduralWorldStudio
+
+Terrain prosedural ber-seed (noise fBm, island falloff, punggungan, erosi termal); AI mengubah deskripsi menjadi pengaturan generator.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Seed` | `int` | `1337` | Seed acak awal. |
+| `OnGenerated` | `EventCallback<Terrain>` | | Dipicu dengan setiap terrain yang dibuat. |
+
+```razor
+<ProceduralWorldStudio Seed="2026" OnGenerated="terrain => heightmap = terrain" />
+```
+
+### Enterprise
+
+![Executive analytics sphere](../screenshots/3d-executiveanalyticssphere.jpg)
+
+### DigitalTwinPlatform
+
+Digital twin multi-lokasi (situs, area, aset) dengan kondisi dan suhu live, alarm, remaining useful life, dan copilot pemeliharaan AI.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `IntervalMs` | `int` | `1500` | Interval pembaruan dalam milidetik (minimum 500). |
+
+```razor
+<DigitalTwinPlatform IntervalMs="1500" Height="560px" />
+```
+
+### EnterpriseKnowledgeGraph3D
+
+Knowledge graph perusahaan berisi tim, sistem, dataset, dokumen, dan orang, dengan pencarian, filter domain, serta tanya jawab atas graph.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Nodes` | `IReadOnlyList<EnterpriseKnowledgeGraph3D.EnterpriseNode>` | contoh perusahaan | Node dalam bentuk `(Name, Type, Domain)`. |
+| `Edges` | `IReadOnlyList<EnterpriseKnowledgeGraph3D.EnterpriseLink>` | contoh perusahaan | Link dalam bentuk `(From, Relation, To)`. |
+
+```razor
+<EnterpriseKnowledgeGraph3D Nodes="@nodes" Edges="@edges" />
+```
+
+### EnterpriseAgentOperationsCenter
+
+Armada agent AI yang ditampilkan sebagai menara (tinggi adalah throughput, warna adalah error rate, cincin adalah SLO latensi), dengan insiden dan ringkasan operasional dari AI.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `LatencySloMs` | `double` | `2500` | Service-level objective latensi dalam milidetik. |
+
+```razor
+<EnterpriseAgentOperationsCenter LatencySloMs="2000" />
+```
+
+### ExecutiveAnalyticsSphere
+
+KPI eksekutif di atas sebuah globe: posisi adalah domain, ukuran adalah pencapaian, warna menunjukkan sesuai atau meleset dari target, dan denyut menandai anomali.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Title` | `string` | `"Company pulse"` | Judul kartu. |
+| `Kpis` | `IReadOnlyList<LiveMetric>?` | `null` | KPI milikmu sendiri. `null` memakai perusahaan simulasi. |
+| `IntervalMs` | `int` | `2000` | Interval pembaruan dalam milidetik (minimum 500). |
+
+```razor
+<ExecutiveAnalyticsSphere Title="Board pulse" Kpis="@kpis" IntervalMs="5000" />
+```
+
+### MultiAgentCommandCenter
+
+Pusat kendali untuk tim agent: memecah misi menjadi task, membagikannya ke agent spesialis, dan menampilkan eksekusinya dalam 3D.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Agents` | `IReadOnlyList<string>` | `["Researcher", "Planner", "Analyst", "Writer", "Reviewer"]` | Peran spesialis dalam tim. |
+
+```razor
+<MultiAgentCommandCenter Language="Bahasa Indonesia" />
+```
+
+### AutonomousOperationsDashboard
+
+Loop tertutup sense, analyse, decide, dan act: keputusan dengan confidence sama dengan atau di atas threshold dieksekusi otomatis, sisanya menunggu persetujuan manusia.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Tipe | Default | Fungsi |
+|---|---|---|---|
+| `Threshold` | `double` | `0.85` | Confidence minimum agar sebuah keputusan dieksekusi otomatis. |
+| `IntervalMs` | `int` | `3500` | Durasi satu siklus loop dalam milidetik (minimum 1000). |
+
+```razor
+<AutonomousOperationsDashboard Threshold="0.9" IntervalMs="3000" />
 ```

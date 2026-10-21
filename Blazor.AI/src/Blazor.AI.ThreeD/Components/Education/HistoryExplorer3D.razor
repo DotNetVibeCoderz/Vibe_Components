@@ -1,0 +1,267 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Historical sites in 3D (Borobudur, Prambanan) with story hotspots, a timeline that rebuilds the site per era, and an AI narrator. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-panel">
+            <h4>@_site.Name · @YearText(_year)</h4>
+            @Era().Title
+        </div>
+    </Scene3D>
+
+    <AiCard Title="History explorer" Subtitle="@_site.Subtitle" Icon="bi-bank">
+        <div class="bai-stack">
+            <div class="bai-row">
+                @foreach (var s in Sites)
+                {
+                    <button type="button" class="bai-chip @(s == _site ? "is-active" : null)" @onclick="() => SetSite(s)">@s.Name</button>
+                }
+            </div>
+            <label class="bai-small">Timeline: <b>@YearText(_year)</b>
+                <input type="range" min="@_site.Events[0].Year" max="2026" step="1" @bind="_year" @bind:event="oninput" @bind:after="Build" style="width:100%" aria-label="Year" />
+            </label>
+            <div class="bai-row bai-small">
+                @foreach (var ev in _site.Events)
+                {
+                    <button type="button" class="bai-chip @(Era() == ev ? "is-active" : null)" @onclick="() => Jump(ev.Year)">@YearText(ev.Year)</button>
+                }
+            </div>
+            <p class="bai-small" style="margin:0"><b>@Era().Title.</b> @Era().Story</p>
+            @if (_hotspot is { } h)
+            {
+                <div class="bai-small" style="border-left:3px solid var(--bai-soga); padding-left:.6rem"><b>@h.Name</b><br />@h.Story</div>
+            }
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Narrate"><i class="bi bi-stars" aria-hidden="true"></i>Narrate this moment</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private Scene3DOptions _options = new();
+    private Site _site = Sites[0];
+    private int _year = 1991;
+    private Hotspot? _hotspot;
+
+    public sealed record SiteEvent(int Year, string Title, string Story, string State);
+
+    public sealed record Hotspot(string Id, string Name, string Story, double[] Position);
+
+    public sealed record Site(string Name, string Subtitle, IReadOnlyList<SiteEvent> Events, IReadOnlyList<Hotspot> Hotspots);
+
+    public static readonly Site[] Sites =
+    [
+        new("Borobudur", "Central Java · 9th century Mahayana Buddhist monument",
+        [
+            new(760, "Construction begins", "Under the Sailendra dynasty, builders shape a hill into nine stacked platforms using about 55,000 m³ of andesite stone.", "building"),
+            new(825, "Completed", "Pilgrims walk clockwise up the terraces past 2,672 relief panels, from the world of desire to formlessness.", "complete"),
+            new(1006, "Abandoned", "As the court moves to East Java and Merapi erupts, the monument is gradually buried under ash and jungle.", "buried"),
+            new(1814, "Rediscovered", "Sir Thomas Stamford Raffles hears of the site; H. C. Cornelius clears vegetation and reveals the ruined terraces.", "ruined"),
+            new(1973, "UNESCO restoration", "A ten-year restoration dismantles and rebuilds the lower terraces with new drainage.", "restoring"),
+            new(1991, "World Heritage", "Inscribed as a UNESCO World Heritage Site; today it is Indonesia's most visited monument.", "complete"),
+        ],
+        [
+            new("hs-main", "Main stupa", "The crowning stupa, 11 m across, is empty: a symbol of nirvana and emptiness.", [0, 6.4, 0]),
+            new("hs-relief", "Karmawibhangga reliefs", "Hidden behind the foot of the monument, these 160 panels show cause and effect in daily life.", [5.6, 0.6, 0]),
+            new("hs-lattice", "Perforated stupas", "72 bell-shaped stupas, each sheltering a seated Buddha statue visible through the lattice.", [-3.2, 4.6, 0]),
+        ]),
+        new("Prambanan", "Yogyakarta · 9th century Hindu temple compound",
+        [
+            new(850, "Built", "Rakai Pikatan dedicates the compound to the Trimurti; the Shiva temple rises 47 m above the plain.", "complete"),
+            new(1549, "Earthquake", "A major earthquake topples many of the 240 temples; the site is slowly overgrown.", "ruined"),
+            new(1918, "Reconstruction starts", "Dutch archaeologists begin the anastylosis of the main temples, stone by stone.", "restoring"),
+            new(1953, "Shiva temple restored", "President Sukarno inaugurates the rebuilt Shiva temple.", "complete"),
+            new(2006, "Yogyakarta earthquake", "The 2006 earthquake damages the temples; access is restricted for repairs.", "ruined"),
+            new(2009, "Repaired", "Repairs complete; the Ramayana ballet is staged here under the full moon.", "complete"),
+        ],
+        [
+            new("hs-shiva", "Shiva temple", "The tallest temple (47 m), with Ramayana reliefs along its balustrade.", [0, 7.5, 0]),
+            new("hs-vishnu", "Vishnu & Brahma temples", "Flanking Shiva, these 33 m temples complete the Trimurti.", [3.4, 5, 0]),
+            new("hs-vahana", "Vahana temples", "Facing the main shrines, they housed the deities' mounts such as Nandi the bull.", [0, 3, 4]),
+        ]),
+    ];
+
+    /// <summary>Initial site: Borobudur or Prambanan.</summary>
+    [Parameter] public string InitialSite { get; set; } = "Borobudur";
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [13, 9, 15], Target = [0, 2.5, 0] },
+            Lights = "day",
+            Background = "#b9d3ea",
+            Fog = new("#b9d3ea", 30, 70),
+            Ground = new(40, "#6f8f4e"),
+            AriaLabel = "Historical site reconstruction",
+        };
+        _site = Sites.FirstOrDefault(s => s.Name.Equals(InitialSite, StringComparison.OrdinalIgnoreCase)) ?? Sites[0];
+        _year = _site.Events[^1].Year;
+        Build();
+    }
+
+    private static string YearText(int y) => y < 1000 ? $"{y} CE" : y.ToString(CultureInfo.InvariantCulture);
+
+    private SiteEvent Era() => _site.Events.LastOrDefault(e => e.Year <= _year) ?? _site.Events[0];
+
+    private void SetSite(Site s)
+    {
+        _site = s;
+        _year = s.Events[^1].Year;
+        _hotspot = null;
+        Narration = null;
+        Build();
+    }
+
+    private void Jump(int year)
+    {
+        _year = year;
+        Build();
+    }
+
+    private void Build()
+    {
+        var era = Era();
+        // Construction progress within the first era.
+        var progress = era.State == "building" && _site.Events.Count > 1 ? Math.Clamp((_year - era.Year) / (double)(_site.Events[1].Year - era.Year), 0.1, 1) : 1;
+        var list = _site.Name == "Borobudur" ? Borobudur(era.State, progress) : Prambanan(era.State);
+        foreach (var h in _site.Hotspots)
+        {
+            list.Add(new Object3D { Id = h.Id, Kind = "sphere", Radius = 0.28, Position = h.Position, Color = ThreeDPalette.Soga, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 0.9, Opacity = 0.9,
+                Animate = Animate3D.Pulse(0.15, 1.2), Label = h.Name, LabelClass = "is-soga", Tooltip = h.Story });
+        }
+
+        Objects = list;
+    }
+
+    private static List<Object3D> Borobudur(string state, double progress)
+    {
+        var list = new List<Object3D>();
+        const string stone = "#8d8a83";
+        var levels = state == "building" ? (int)Math.Ceiling(progress * 9) : 9;
+        var y = 0.0;
+        for (var i = 0; i < Math.Min(levels, 6); i++)
+        {
+            var w = 12 - i * 1.5;
+            var h = i == 0 ? 0.9 : 0.6;
+            var ruined = state == "ruined" && i is 2 or 4;
+            list.Add(new Object3D { Id = $"terrace{i}", Kind = "box", Size = [w, h, w], Position = [0, y + h / 2, 0], Color = ruined ? "#6f6a60" : stone, Roughness = 0.95, Edges = "#5b574f", Pickable = false });
+            y += h;
+        }
+
+        for (var r = 0; r < 3 && levels > 6 + r; r++)
+        {
+            var radius = 3.4 - r * 0.85;
+            list.Add(new Object3D { Id = $"circle{r}", Kind = "cylinder", Radius = radius + 0.4, Height = 0.4, Segments = 48, Position = [0, y + 0.2, 0], Color = stone, Roughness = 0.95, Pickable = false });
+            var count = 12 - r * 3;
+            for (var k = 0; k < count; k++)
+            {
+                if (state == "ruined" && (k + r) % 3 == 0)
+                {
+                    continue; // missing stupas before restoration
+                }
+
+                var a = k / (double)count * Math.PI * 2;
+                list.Add(new Object3D { Id = $"stupa{r}-{k}", Kind = "model", Url = ThreeDAssets.Stupa, FitHeight = 0.75, Position = [Math.Cos(a) * radius, y + 0.4, Math.Sin(a) * radius], Pickable = false });
+            }
+
+            y += 0.4;
+        }
+
+        if (levels >= 9)
+        {
+            list.Add(new Object3D { Id = "main", Kind = "model", Url = ThreeDAssets.Stupa, FitHeight = 1.9, Position = [0, y, 0], Pickable = false });
+        }
+
+        if (state == "buried")
+        {
+            // Ash and jungle cover: a soft green mound with trees.
+            list.Add(new Object3D { Id = "mound", Kind = "sphere", Radius = 8.5, Scale = new[] { 1.0, 0.55, 1.0 }, Position = [0, 0, 0], Color = "#4f7f3c", Roughness = 1, Pickable = false });
+            var rng = new Random(3);
+            for (var t = 0; t < 60; t++)
+            {
+                var a = rng.NextDouble() * Math.PI * 2;
+                var d = rng.NextDouble() * 7.5;
+                var h = Math.Sqrt(Math.Max(0, 1 - d * d / 72.25)) * 8.5 * 0.55;
+                list.Add(new Object3D { Id = $"jungle{t}", Kind = "cone", Radius = 0.45, Height = 1.2, Segments = 6, Position = [Math.Cos(a) * d, h + 0.5, Math.Sin(a) * d], Color = "#2f6b37", FlatShading = true, Pickable = false });
+            }
+        }
+
+        if (state is "restoring")
+        {
+            list.Add(new Object3D { Id = "scaffold", Kind = "box", Size = [12.6, 3.2, 12.6], Position = [0, 1.6, 0], Wireframe = true, Color = "#d9964f", Opacity = 0.6, Pickable = false });
+        }
+
+        return list;
+    }
+
+    private static List<Object3D> Prambanan(string state)
+    {
+        var list = new List<Object3D>();
+        const string stone = "#7d7268";
+        list.Add(new Object3D { Id = "court", Kind = "box", Size = [14, 0.4, 14], Position = [0, 0.2, 0], Color = "#9a8f80", Roughness = 1, Pickable = false });
+        void Temple(string id, double x, double z, double h, double w)
+        {
+            var collapsed = state == "ruined";
+            var tiers = collapsed ? 2 : 5;
+            var y = 0.4;
+            for (var t = 0; t < tiers; t++)
+            {
+                var tw = w * (1 - t * 0.16);
+                var th = t == 0 ? h * 0.22 : h * 0.13;
+                list.Add(new Object3D { Id = $"{id}-t{t}", Kind = "box", Size = [tw, th, tw], Position = [x, y + th / 2, z], Color = stone, Roughness = 0.95, Edges = "#5e554d", Pickable = false });
+                y += th;
+            }
+
+            if (!collapsed)
+            {
+                list.Add(new Object3D { Id = $"{id}-spire", Kind = "cone", Radius = w * 0.28, Height = h * 0.3, Segments = 8, Position = [x, y + h * 0.15, z], Color = stone, FlatShading = true, Pickable = false });
+            }
+            else
+            {
+                var rng = new Random(id.Length * 17);
+                for (var r = 0; r < 8; r++)
+                {
+                    list.Add(new Object3D { Id = $"{id}-rubble{r}", Kind = "box", Size = [0.4, 0.3, 0.5], Position = [x + (rng.NextDouble() - 0.5) * w * 1.6, 0.55, z + (rng.NextDouble() - 0.5) * w * 1.6], Rotation = [0, rng.NextDouble() * 3, 0.3], Color = stone, Pickable = false });
+                }
+            }
+        }
+
+        Temple("shiva", 0, 0, 7, 3.2);
+        Temple("vishnu", 3.4, -1.2, 5, 2.2);
+        Temple("brahma", -3.4, -1.2, 5, 2.2);
+        Temple("nandi", 0, 4, 3, 1.6);
+        Temple("garuda", 3.4, 4, 2.6, 1.4);
+        Temple("angsa", -3.4, 4, 2.6, 1.4);
+        for (var k = 0; k < 16; k++)
+        {
+            var a = k / 16.0 * Math.PI * 2;
+            Temple($"perwara{k}", Math.Cos(a) * 9, Math.Sin(a) * 9, 1.6, 0.9);
+        }
+
+        if (state == "restoring")
+        {
+            list.Add(new Object3D { Id = "scaffold", Kind = "box", Size = [3.6, 7.4, 3.6], Position = [0, 3.7, 0], Wireframe = true, Color = "#d9964f", Opacity = 0.7, Pickable = false });
+        }
+
+        return list;
+    }
+
+    private async Task Picked(PickEvent e)
+    {
+        _hotspot = _site.Hotspots.FirstOrDefault(h => h.Id == e.Id);
+        if (_hotspot is { } h)
+        {
+            await Scene!.FlyToAsync([h.Position[0] + 5, h.Position[1] + 3, h.Position[2] + 7], h.Position);
+        }
+    }
+
+    private Task Narrate()
+    {
+        var era = Era();
+        var facts = $"Site: {_site.Name} ({_site.Subtitle}). Year {YearText(_year)}: {era.Title}. {era.Story}" + (_hotspot is { } h ? $" The visitor is looking at: {h.Name}. {h.Story}" : string.Empty);
+        return NarrateAsync("a museum guide narrating to visitors as if they were standing there at that moment in history", facts, AiTasks.Generate);
+    }
+}

@@ -1,0 +1,253 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* 3-D charts: bars, scatter, bubbles, surface and a statistical (box) view, with AI-generated insight. *@
+
+<div class="@CssClass("bai-stack")">
+    <div class="bai-row">
+        @foreach (var m in Modes)
+        {
+            <button type="button" class="bai-chip @(m == Mode ? "is-active" : null)" @onclick="() => SetMode(m)">@m</button>
+        }
+        <span class="bai-spacer"></span>
+        <button type="button" class="bai-btn-ghost" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain chart</button>
+    </div>
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        @if (_picked is not null)
+        {
+            <div class="bai3d-panel"><h4>Selected</h4>@_picked</div>
+        }
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            @if (Mode is "Bars")
+            {
+                @foreach (var (s, i) in Series.Select((s, i) => (s, i))) { <span><i style="background:@ThreeDPalette.Category(i)"></i>@s</span> }
+            }
+            else if (Mode is "Surface")
+            {
+                <span><i style="background:@ThreeDPalette.Ramp(0)"></i>low</span><span><i style="background:@ThreeDPalette.Ramp(1)"></i>high</span>
+            }
+        </div>
+    </Scene3D>
+    <AiError Message="@Error" />
+    @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+</div>
+
+@code {
+    public static readonly string[] Modes = ["Bars", "Scatter", "Bubbles", "Surface", "Statistical"];
+    private Scene3DOptions _options = new();
+    private string? _picked;
+
+    [Parameter] public string Title { get; set; } = "Regional sales";
+
+    /// <summary>Bars, Scatter, Bubbles, Surface or Statistical.</summary>
+    [Parameter] public string Mode { get; set; } = "Bars";
+
+    /// <summary>Bar categories (X axis).</summary>
+    [Parameter] public IReadOnlyList<string> Categories { get; set; } = ["Q1", "Q2", "Q3", "Q4"];
+
+    /// <summary>Bar series (Z axis).</summary>
+    [Parameter] public IReadOnlyList<string> Series { get; set; } = ["Jawa", "Sumatra", "Kalimantan", "Sulawesi"];
+
+    /// <summary>Bar values [series][category].</summary>
+    [Parameter] public double[][] Values { get; set; } = [[42, 48, 55, 61], [30, 33, 31, 38], [18, 22, 26, 29], [21, 19, 24, 31]];
+
+    /// <summary>Scatter/bubble points: x, y, z, optional size, optional group.</summary>
+    [Parameter] public IReadOnlyList<(double X, double Y, double Z, double Size, int Group)>? Points { get; set; }
+
+    /// <summary>Surface function z = f(x, y) sampled on [-1, 1]².</summary>
+    [Parameter] public Func<double, double, double>? Surface { get; set; }
+
+    [Parameter] public EventCallback<PickEvent> OnSelect { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [7.5, 6.5, 9], Target = [0, 1.6, 0] },
+            Grid = new(12, 12, "#5b6bd6", 0.18),
+            Lights = "studio",
+            AriaLabel = $"{Title}, 3D {Mode.ToLowerInvariant()} chart",
+        };
+        Build();
+    }
+
+    private void SetMode(string mode)
+    {
+        Mode = mode;
+        Narration = null;
+        _picked = null;
+        Build();
+    }
+
+    private void Build()
+    {
+        var list = new List<Object3D>();
+        switch (Mode)
+        {
+            case "Bars": BuildBars(list); break;
+            case "Scatter": BuildScatter(list, bubbles: false); break;
+            case "Bubbles": BuildScatter(list, bubbles: true); break;
+            case "Surface": BuildSurface(list); break;
+            default: BuildBox(list); break;
+        }
+
+        Objects = list;
+    }
+
+    private void BuildBars(List<Object3D> list)
+    {
+        var max = Values.SelectMany(v => v).DefaultIfEmpty(1).Max();
+        var nx = Categories.Count;
+        var nz = Series.Count;
+        for (var s = 0; s < nz; s++)
+        {
+            for (var c = 0; c < nx; c++)
+            {
+                var v = s < Values.Length && c < Values[s].Length ? Values[s][c] : 0;
+                var h = Math.Max(0.02, v / max * 4);
+                var x = (c - (nx - 1) / 2.0) * 1.3;
+                var z = (s - (nz - 1) / 2.0) * 1.3;
+                list.Add(new Object3D
+                {
+                    Id = $"bar-{s}-{c}", Kind = "box", Position = [x, h / 2, z], Size = [0.8, h, 0.8], Color = ThreeDPalette.Category(s),
+                    Roughness = 0.35, Metalness = 0.15, Edges = "#ffffff",
+                    Tooltip = $"{Series[s]} · {Categories[c]}\n{v.ToString("N1", CultureInfo.InvariantCulture)}",
+                });
+            }
+        }
+
+        for (var c = 0; c < nx; c++)
+        {
+            list.Add(Object3D.Text($"cat-{c}", [(c - (nx - 1) / 2.0) * 1.3, 0.05, (nz / 2.0) * 1.3 + 0.4], Categories[c], "is-plain"));
+        }
+
+        for (var s = 0; s < nz; s++)
+        {
+            list.Add(Object3D.Text($"ser-{s}", [-(nx / 2.0) * 1.3 - 0.6, 0.05, (s - (nz - 1) / 2.0) * 1.3], Series[s], "is-plain"));
+        }
+
+        list.Add(Object3D.Text("max", [-(nx / 2.0) * 1.3 - 0.6, 4.1, -(nz / 2.0) * 1.3], max.ToString("N0", CultureInfo.InvariantCulture), "is-plain is-mono"));
+        list.Add(Object3D.Line("yaxis", [[-(nx / 2.0) * 1.3 - 0.2, 0, -(nz / 2.0) * 1.3], [-(nx / 2.0) * 1.3 - 0.2, 4, -(nz / 2.0) * 1.3]], "#8a8fb0"));
+    }
+
+    private IReadOnlyList<(double X, double Y, double Z, double Size, int Group)> SamplePoints()
+    {
+        if (Points is { Count: > 0 })
+        {
+            return Points;
+        }
+
+        // Three synthetic customer segments: spend, visits, tenure.
+        var rng = new Random(11);
+        var pts = new List<(double, double, double, double, int)>();
+        (double, double, double)[] centres = [(-1.5, 1.5, -1), (1.6, 2.8, 0.8), (0.2, 0.9, 1.8)];
+        for (var g = 0; g < 3; g++)
+        {
+            for (var i = 0; i < 45; i++)
+            {
+                var (cx, cy, cz) = centres[g];
+                pts.Add((cx + Gauss(rng) * 0.6, Math.Max(0.1, cy + Gauss(rng) * 0.5), cz + Gauss(rng) * 0.6, 0.5 + rng.NextDouble(), g));
+            }
+        }
+
+        return pts;
+    }
+
+    private void BuildScatter(List<Object3D> list, bool bubbles)
+    {
+        var pts = SamplePoints();
+        if (!bubbles)
+        {
+            list.Add(new Object3D
+            {
+                Id = "cloud", Kind = "points", Points = pts.Select(p => new[] { p.X, p.Y, p.Z }).ToArray(),
+                Colors = pts.Select(p => ThreeDPalette.Category(p.Group)).ToArray(), PointSize = 0.16, Tooltip = $"{pts.Count} points",
+            });
+        }
+        else
+        {
+            var i = 0;
+            foreach (var p in pts.Where((_, k) => k % 2 == 0))
+            {
+                list.Add(new Object3D
+                {
+                    Id = $"b{i++}", Kind = "sphere", Position = [p.X, p.Y, p.Z], Radius = 0.08 + p.Size * 0.12, Segments = 16, Color = ThreeDPalette.Category(p.Group),
+                    Opacity = 0.85, Roughness = 0.25, Tooltip = string.Create(CultureInfo.InvariantCulture, $"Segment {p.Group + 1}\nx {p.X:0.00} · y {p.Y:0.00} · z {p.Z:0.00}\nsize {p.Size:0.00}"),
+                });
+            }
+        }
+
+        AddAxes(list);
+    }
+
+    private void BuildSurface(List<Object3D> list)
+    {
+        const int n = 48;
+        var f = Surface ?? ((x, y) => Math.Sin(3 * x) * Math.Cos(3 * y) * 0.8 + Math.Exp(-(x * x + y * y) * 3) * 1.6);
+        var values = new double[n * n];
+        for (var r = 0; r < n; r++)
+        {
+            for (var c = 0; c < n; c++)
+            {
+                values[r * n + c] = f(c / (n - 1.0) * 2 - 1, r / (n - 1.0) * 2 - 1);
+            }
+        }
+
+        var min = values.Min();
+        var max = values.Max();
+        var span = Math.Max(1e-9, max - min);
+        list.Add(new Object3D
+        {
+            Id = "surface", Kind = "surface", Rows = n, Cols = n, Size = [8, 0, 8], Values = values.Select(v => (v - min) / span * 3 + 0.05).ToArray(),
+            Colors = values.Select(v => ThreeDPalette.Ramp((v - min) / span)).ToArray(), DoubleSided = true, Roughness = 0.4,
+            Tooltip = string.Create(CultureInfo.InvariantCulture, $"min {min:0.00} · max {max:0.00}"),
+        });
+        list.Add(new Object3D { Id = "surface-wire", Kind = "surface", Rows = n / 3, Cols = n / 3, Size = [8, 0, 8], Pickable = false, Wireframe = true, Opacity = 0.15, Color = "#ffffff",
+            Values = Enumerable.Range(0, (n / 3) * (n / 3)).Select(i => (f((i % (n / 3)) / (n / 3 - 1.0) * 2 - 1, (i / (n / 3)) / (n / 3 - 1.0) * 2 - 1) - min) / span * 3 + 0.07).ToArray() });
+    }
+
+    private void BuildBox(List<Object3D> list)
+    {
+        // Box plots per series: quartiles and whiskers from the bar values.
+        var all = Values.SelectMany(v => v).DefaultIfEmpty(1).ToArray();
+        var max = all.Max();
+        for (var s = 0; s < Values.Length; s++)
+        {
+            var v = Values[s].OrderBy(x => x).ToArray();
+            double Q(double p) => v.Length == 0 ? 0 : v[(int)Math.Round(p * (v.Length - 1))];
+            double Y(double x) => x / max * 4;
+            var x0 = (s - (Values.Length - 1) / 2.0) * 1.6;
+            var color = ThreeDPalette.Category(s);
+            list.Add(new Object3D { Id = $"box-{s}", Kind = "box", Position = [x0, (Y(Q(0.25)) + Y(Q(0.75))) / 2, 0], Size = [0.9, Math.Max(0.04, Y(Q(0.75)) - Y(Q(0.25))), 0.9], Color = color, Opacity = 0.8, Edges = "#ffffff",
+                Tooltip = string.Create(CultureInfo.InvariantCulture, $"{(s < Series.Count ? Series[s] : $"S{s}")}\nQ1 {Q(0.25):0.0} · median {Q(0.5):0.0} · Q3 {Q(0.75):0.0}") });
+            list.Add(new Object3D { Id = $"med-{s}", Kind = "box", Position = [x0, Y(Q(0.5)), 0], Size = [0.95, 0.05, 0.95], Color = "#ffffff", Pickable = false });
+            list.Add(Object3D.Line($"wh-{s}", [[x0, Y(Q(0)), 0], [x0, Y(Q(1)), 0]], color));
+            list.Add(Object3D.Text($"lbl-{s}", [x0, 0.05, 0.9], s < Series.Count ? Series[s] : $"S{s}", "is-plain"));
+        }
+    }
+
+    private static void AddAxes(List<Object3D> list)
+    {
+        list.Add(new Object3D { Id = "ax-x", Kind = "arrow", From = [-3.5, 0, -3.5], To = [3.5, 0, -3.5], Color = ThreeDPalette.Soga, Pickable = false, Label = "X", LabelClass = "is-plain" });
+        list.Add(new Object3D { Id = "ax-y", Kind = "arrow", From = [-3.5, 0, -3.5], To = [-3.5, 4, -3.5], Color = ThreeDPalette.Nila, Pickable = false });
+        list.Add(new Object3D { Id = "ax-z", Kind = "arrow", From = [-3.5, 0, -3.5], To = [-3.5, 0, 3.5], Color = "#7b8cff", Pickable = false });
+    }
+
+    private async Task Picked(PickEvent e)
+    {
+        _picked = Objects.FirstOrDefault(o => o.Id == e.Id)?.Tooltip;
+        await OnSelect.InvokeAsync(e);
+    }
+
+    private Task Explain()
+    {
+        var facts = Mode switch
+        {
+            "Bars" or "Statistical" => string.Join("; ", Series.Select((s, i) => $"{s}: {string.Join(", ", (i < Values.Length ? Values[i] : []).Select((v, c) => $"{(c < Categories.Count ? Categories[c] : c.ToString())} {v:0.#}"))}")),
+            "Surface" => "A surface plot of a function over a 2-D grid with peaks and valleys; colour shows height.",
+            _ => $"{SamplePoints().Count} points in 3 segments; segment centres " + string.Join("; ", SamplePoints().GroupBy(p => p.Group).Select(g => string.Create(CultureInfo.InvariantCulture, $"segment {g.Key + 1}: x {g.Average(p => p.X):0.0}, y {g.Average(p => p.Y):0.0}, z {g.Average(p => p.Z):0.0}, n {g.Count()}"))),
+        };
+        return NarrateAsync("a data analyst", $"{Title} ({Mode} chart). {facts}");
+    }
+
+    private static double Gauss(Random r) => Math.Sqrt(-2 * Math.Log(1 - r.NextDouble())) * Math.Cos(2 * Math.PI * r.NextDouble());
+}

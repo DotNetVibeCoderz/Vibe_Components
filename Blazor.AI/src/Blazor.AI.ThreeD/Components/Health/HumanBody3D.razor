@@ -1,0 +1,193 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Interactive anatomy viewer: translucent body, organ and skeleton layers, click an organ to focus and learn about it. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked" OnModelLoaded="Loaded">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel">
+                <h4>Layers</h4>
+                <div class="bai-row" style="gap:.35rem">
+                    @foreach (var l in LayerNames)
+                    {
+                        <button type="button" class="bai-chip @(_layers.Contains(l) ? "is-active" : null)" aria-pressed="@_layers.Contains(l)" @onclick="() => ToggleLayer(l)">@l</button>
+                    }
+                </div>
+            </div>
+        </div>
+        @if (_organ is { } o)
+        {
+            <div class="bai3d-panel bai3d-hud-bottom">
+                <h4>@o.Name</h4>
+                <div>@o.System · @o.Size</div>
+            </div>
+        }
+    </Scene3D>
+
+    <AiCard Title="@(_organ?.Name ?? "Explore the body")" Subtitle="@(_organ?.System ?? "Click an organ, or pick one below")" Icon="bi-heart-pulse">
+        <div class="bai-stack">
+            <div class="bai-chips">
+                @foreach (var o in Organs)
+                {
+                    <button type="button" class="bai-chip @(o == _organ ? "is-active" : null)" @onclick="() => Select(o)">@o.Name</button>
+                }
+            </div>
+            @if (_organ is { } organ)
+            {
+                <p class="bai-small" style="margin:0"><b>Function.</b> @organ.Function</p>
+                <p class="bai-small bai-muted" style="margin:0"><b>Common conditions:</b> @organ.Conditions</p>
+                <button type="button" class="bai-btn bai-btn-ai" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain for @Audience</button>
+            }
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+            <p class="bai-small bai-faint" style="margin:0">Educational model, not to scale for diagnosis.</p>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed record Organ(string Id, string Name, string System, string Size, string Function, string Conditions, double[] Position, string Color);
+
+    private static readonly string[] LayerNames = ["Skin", "Organs", "Skeleton"];
+
+    /// <summary>Organ positions are for the bundled 1.75 m mannequin (origin at the feet, facing +Z).</summary>
+    public static readonly IReadOnlyList<Organ> Organs =
+    [
+        new("brain", "Brain", "Nervous system", "≈ 1.4 kg", "Processes senses, controls movement, stores memory and regulates the body through the nervous and endocrine systems.", "Stroke, migraine, epilepsy, dementia", [0, 1.64, 0.0], "#f2a7b8"),
+        new("lungs", "Lungs", "Respiratory system", "≈ 6 L total capacity", "Exchange oxygen and carbon dioxide between air and blood across about 300 million alveoli.", "Asthma, pneumonia, COPD, tuberculosis", [0, 1.36, 0.0], "#f5b3a6"),
+        new("heart", "Heart", "Cardiovascular system", "≈ 300 g, fist-sized", "Pumps about 5 litres of blood per minute through two circuits: lungs and body.", "Coronary artery disease, heart failure, arrhythmia", [0.035, 1.3, 0.035], "#c2414b"),
+        new("liver", "Liver", "Digestive system", "≈ 1.5 kg", "Filters blood, makes bile, stores glycogen and processes drugs and toxins.", "Hepatitis, fatty liver, cirrhosis", [-0.06, 1.16, 0.02], "#8a3b2b"),
+        new("stomach", "Stomach", "Digestive system", "≈ 1 L when full", "Mixes food with acid and enzymes to start protein digestion.", "Gastritis, ulcers, reflux", [0.07, 1.13, 0.03], "#e8b07a"),
+        new("kidneys", "Kidneys", "Urinary system", "≈ 12 cm each", "Filter about 180 L of blood plasma a day, balance salts and water, and make urine.", "Kidney stones, chronic kidney disease", [0, 1.05, -0.06], "#9b4a52"),
+        new("intestines", "Intestines", "Digestive system", "≈ 7.5 m total", "Absorb nutrients (small intestine) and water (large intestine).", "IBS, Crohn's disease, appendicitis", [0, 0.97, 0.02], "#e7a9a0"),
+        new("bladder", "Bladder", "Urinary system", "≈ 400–600 mL", "Stores urine until it is released.", "Urinary tract infection, incontinence", [0, 0.86, 0.04], "#e8c46a"),
+    ];
+
+    private readonly HashSet<string> _layers = ["Skin", "Organs"];
+    private Scene3DOptions _options = new();
+    private Organ? _organ;
+
+    /// <summary>Who explanations are written for, e.g. "a high-school student" or "a nursing student".</summary>
+    [Parameter] public string Audience { get; set; } = "a high-school student";
+
+    [Parameter] public EventCallback<Organ> OnOrganSelected { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0.9, 1.45, 2.2], Target = [0, 1.1, 0], Fov = 40 },
+            Ground = new(4, "#10143a"),
+            Lights = "soft",
+            Controls = new() { MinDistance = 0.4, MaxDistance = 5 },
+            AriaLabel = "Interactive human anatomy model",
+        };
+        Rebuild();
+    }
+
+    private void Rebuild()
+    {
+        var list = new List<Object3D>
+        {
+            new() { Id = "body", Kind = "model", Url = ThreeDAssets.Mannequin, FitHeight = 1.75, Visible = _layers.Contains("Skin"), Pickable = false },
+            new() { Id = "pedestal", Kind = "cylinder", Position = [0, -0.02, 0], Radius = 0.45, Height = 0.04, Color = "#1a2052", Emissive = ThreeDPalette.Nila, EmissiveIntensity = 0.12, Pickable = false },
+        };
+        var showOrgans = _layers.Contains("Organs");
+        foreach (var o in Organs)
+        {
+            var selected = o == _organ;
+            var common = new Object3D { Id = o.Id, Kind = "sphere", Position = o.Position, Color = o.Color, Visible = showOrgans, Tooltip = $"{o.Name}\n{o.System}", Roughness = 0.45, Emissive = selected ? o.Color : null, EmissiveIntensity = selected ? 0.6 : null };
+            list.Add(o.Id switch
+            {
+                "heart" => new Object3D { Id = o.Id, Kind = "model", Url = ThreeDAssets.Heart, FitHeight = 0.11, Position = [o.Position[0], o.Position[1] - 0.055, o.Position[2]], Visible = showOrgans, Tooltip = common.Tooltip, Animate = Animate3D.Pulse(selected ? 0.08 : 0.04, 1.2) },
+                "brain" => common with { Radius = 0.075, Scale = new[] { 1.0, 0.85, 1.15 } },
+                "lungs" => common with { Kind = "group", Color = null },
+                "liver" => common with { Radius = 0.07, Scale = new[] { 1.3, 0.7, 0.9 } },
+                "stomach" => common with { Radius = 0.045, Scale = new[] { 1.2, 0.9, 0.8 } },
+                "kidneys" => common with { Kind = "group", Color = null },
+                "intestines" => common with { Kind = "torus", Radius = 0.075, Tube = 0.03, Rotation = [Math.PI / 2, 0, 0], Scale = new[] { 1.0, 1.0, 1.4 } },
+                _ => common with { Radius = 0.035 },
+            });
+            if (o.Id is "lungs" or "kidneys")
+            {
+                var (r, sx, sy) = o.Id == "lungs" ? (0.06, 0.8, 1.6) : (0.028, 0.7, 1.2);
+                var dx = o.Id == "lungs" ? 0.065 : 0.055;
+                foreach (var side in new[] { -1, 1 })
+                {
+                    list.Add(new Object3D { Id = $"{o.Id}-{(side < 0 ? "r" : "l")}", Parent = o.Id, Kind = "sphere", Position = [dx * side, 0, 0], Radius = r, Scale = new[] { sx, sy, 0.9 }, Color = o.Color, Opacity = o.Id == "lungs" ? 0.85 : 1, Tooltip = common.Tooltip, Emissive = selected ? o.Color : null, EmissiveIntensity = selected ? 0.5 : null });
+                }
+            }
+        }
+
+        if (_layers.Contains("Skeleton"))
+        {
+            AddSkeleton(list);
+        }
+
+        Objects = [.. list];
+    }
+
+    private static void AddSkeleton(List<Object3D> list)
+    {
+        const string bone = "#f1ead8";
+        list.Add(new Object3D { Id = "skull", Kind = "sphere", Position = [0, 1.63, 0], Radius = 0.095, Scale = new[] { 0.9, 1.05, 1.1 }, Color = bone, Wireframe = true, Opacity = 0.6, Pickable = false });
+        list.Add(new Object3D { Id = "spine", Kind = "tube", Points = [[0, 1.5, -0.04], [0, 1.3, -0.06], [0, 1.1, -0.05], [0, 0.95, -0.04]], Radius = 0.014, Color = bone, Pickable = false, Tooltip = "Spine" });
+        for (var i = 0; i < 6; i++)
+        {
+            list.Add(new Object3D { Id = $"rib-{i}", Kind = "torus", Position = [0, 1.42 - i * 0.045, 0], Rotation = [Math.PI / 2, 0, 0], Radius = 0.12 - Math.Abs(i - 2) * 0.006, Tube = 0.006, Scale = new[] { 1.0, 0.7, 1.0 }, Color = bone, Pickable = false });
+        }
+
+        list.Add(new Object3D { Id = "pelvis", Kind = "torus", Position = [0, 0.93, 0], Rotation = [Math.PI / 2.4, 0, 0], Radius = 0.11, Tube = 0.018, Color = bone, Pickable = false });
+        foreach (var s in new[] { -1, 1 })
+        {
+            list.Add(new Object3D { Id = $"femur-{s}", Kind = "tube", Points = [[0.09 * s, 0.9, 0], [0.1 * s, 0.5, 0.01]], Radius = 0.016, Color = bone, Pickable = false });
+            list.Add(new Object3D { Id = $"tibia-{s}", Kind = "tube", Points = [[0.1 * s, 0.48, 0.01], [0.1 * s, 0.08, -0.01]], Radius = 0.013, Color = bone, Pickable = false });
+            list.Add(new Object3D { Id = $"humerus-{s}", Kind = "tube", Points = [[0.17 * s, 1.43, -0.01], [0.23 * s, 1.15, 0]], Radius = 0.012, Color = bone, Pickable = false });
+            list.Add(new Object3D { Id = $"radius-{s}", Kind = "tube", Points = [[0.23 * s, 1.13, 0], [0.27 * s, 0.88, 0.02]], Radius = 0.01, Color = bone, Pickable = false });
+            list.Add(new Object3D { Id = $"clavicle-{s}", Kind = "tube", Points = [[0.02 * s, 1.47, 0.03], [0.16 * s, 1.47, -0.01]], Radius = 0.008, Color = bone, Pickable = false });
+        }
+    }
+
+    private Task Loaded(ModelInfo info) =>
+        info.Id == "body" ? Scene!.UpdateAsync([new ObjectPatch { Id = "body", Opacity = 0.22 }]) : Task.CompletedTask;
+
+    private async Task ToggleLayer(string layer)
+    {
+        if (!_layers.Remove(layer))
+        {
+            _layers.Add(layer);
+        }
+
+        Rebuild();
+        await Task.Yield();
+        if (layer == "Skin" && _layers.Contains("Skin"))
+        {
+            // Model materials are rebuilt only once; reapply the translucent skin.
+            await Scene!.UpdateAsync([new ObjectPatch { Id = "body", Opacity = 0.22 }]);
+        }
+    }
+
+    private async Task Picked(PickEvent e)
+    {
+        var id = e.Id.Split('-')[0];
+        if (Organs.FirstOrDefault(o => o.Id == id) is { } organ)
+        {
+            await Select(organ);
+        }
+    }
+
+    private async Task Select(Organ organ)
+    {
+        _organ = organ;
+        Narration = null;
+        Rebuild();
+        await OnOrganSelected.InvokeAsync(organ);
+        await Scene!.FlyToAsync([organ.Position[0] + 0.35, organ.Position[1] + 0.12, organ.Position[2] + 0.7], organ.Position);
+    }
+
+    private Task Explain()
+    {
+        var o = _organ!;
+        return NarrateAsync($"an anatomy teacher speaking to {Audience}", $"Organ: {o.Name}. System: {o.System}. Size: {o.Size}. Function: {o.Function}. Common conditions: {o.Conditions}. Explain where it sits, what it does, and one tip to keep it healthy.");
+    }
+}

@@ -1,0 +1,200 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Executive KPIs on a globe: position = domain, size = attainment, colour = on/off target, pulse = anomaly. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-panel">
+            <h4>@Title</h4>
+            <div class="bai3d-kpi">
+                <div><b>@_kpis.Count(k => k.Attainment >= 1)</b><span>on target</span></div>
+                <div><b>@_kpis.Count(k => k.Attainment < 0.95)</b><span>at risk</span></div>
+                <div><b>@_kpis.Count(k => k.Anomalous)</b><span>anomalies</span></div>
+            </div>
+        </div>
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            <span><i style="background:@ThreeDPalette.Nila"></i>on target</span>
+            <span><i style="background:@ThreeDPalette.Warning"></i>within 5%</span>
+            <span><i style="background:@ThreeDPalette.Danger"></i>off target</span>
+            <span>size = attainment · pulse = anomaly</span>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="Executive briefing" Subtitle="@(_live ? "Live · updating every 2 s" : "Paused")" Icon="bi-globe2">
+        <div class="bai-stack">
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="ToggleLive"><i class="bi @(_live ? "bi-pause" : "bi-play")" aria-hidden="true"></i>@(_live ? "Pause" : "Resume")</button>
+                <button type="button" class="bai-btn-ghost" @onclick="Shock" title="Simulate a supply disruption"><i class="bi bi-lightning" aria-hidden="true"></i>Simulate disruption</button>
+            </div>
+            @if (_selected is { } k)
+            {
+                <div class="bai-stack" style="gap:.3rem">
+                    <strong>@k.Name</strong>
+                    <span class="bai-small">Now <b>@k.Format()</b> · target @k.Target.ToString("0.##", CultureInfo.InvariantCulture) @k.Unit</span>
+                    <Sparkline Values="@k.History.ToArray()" Width="300" Height="40" />
+                </div>
+            }
+            else
+            {
+                <p class="bai-small bai-muted" style="margin:0">Click a KPI on the globe to see its trend.</p>
+            }
+            <button type="button" class="bai-btn bai-btn-ai" style="width:fit-content" disabled="@IsBusy" @onclick="Brief"><i class="bi bi-stars" aria-hidden="true"></i>Brief me</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private readonly List<LiveMetric> _kpis = EnterpriseSim.ExecutiveKpis();
+    private readonly Random _rng = new(21);
+    private Scene3DOptions _options = new();
+    private CancellationTokenSource? _loop;
+    private LiveMetric? _selected;
+    private bool _live = true;
+
+    [Parameter] public string Title { get; set; } = "Company pulse";
+
+    /// <summary>Supply your own KPIs; defaults to a simulated company.</summary>
+    [Parameter] public IReadOnlyList<LiveMetric>? Kpis { get; set; }
+
+    [Parameter] public int IntervalMs { get; set; } = 2000;
+
+    protected override void OnInitialized()
+    {
+        if (Kpis is { Count: > 0 })
+        {
+            _kpis.Clear();
+            _kpis.AddRange(Kpis);
+        }
+
+        for (var i = 0; i < 12; i++)
+        {
+            foreach (var k in _kpis)
+            {
+                k.Step(_rng);
+            }
+        }
+
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 2.5, 9.5], Target = [0, 0, 0] },
+            Controls = new() { AutoRotate = true, AutoRotateSpeed = 0.5, MinDistance = 6, MaxDistance = 16 },
+            Lights = "night",
+            Shadows = false,
+            AriaLabel = "Globe of company KPIs",
+        };
+        Objects = BuildObjects();
+        _loop = new CancellationTokenSource();
+        _ = RunLoopAsync(_loop.Token);
+    }
+
+    private Object3D[] BuildObjects()
+    {
+        var list = new List<Object3D>
+        {
+            new() { Id = "core", Kind = "sphere", Radius = 2.6, Segments = 48, Color = ThreeDPalette.TarumDeep, Opacity = 0.35, Roughness = 0.2, Pickable = false },
+            new() { Id = "core-wire", Kind = "icosahedron", Radius = 2.62, Detail = 2, Wireframe = true, Color = ThreeDPalette.Tarum, Opacity = 0.35, Pickable = false, Animate = Animate3D.Spin(0.05) },
+            new() { Id = "equator", Kind = "torus", Radius = 3.4, Tube = 0.01, Rotation = [Math.PI / 2, 0, 0], Color = ThreeDPalette.Soga, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 0.6, Pickable = false },
+        };
+        for (var i = 0; i < _kpis.Count; i++)
+        {
+            var k = _kpis[i];
+            var p = Layout3D.Fibonacci(i, _kpis.Count, 3.4);
+            list.Add(new Object3D
+            {
+                Id = Key(i), Kind = "sphere", Position = p, Radius = 0.18, Segments = 24, Scale = Size(k), Color = Status(k), Emissive = Status(k), EmissiveIntensity = 0.45,
+                Roughness = 0.3, Label = k.Name, LabelClass = "is-plain", Tooltip = Tip(k), Animate = k.Anomalous ? Animate3D.Pulse(0.25, 2) : null,
+            });
+            list.Add(new Object3D { Id = $"stem-{i}", Kind = "line", Points = [[p[0] * 0.77, p[1] * 0.77, p[2] * 0.77], p], Color = Status(k), Opacity = 0.5, Pickable = false });
+        }
+
+        return [.. list];
+    }
+
+    private static string Key(int i) => $"kpi-{i}";
+
+    private static double Size(LiveMetric k) => 0.6 + Math.Clamp(k.Attainment, 0.3, 1.4) * 0.9;
+
+    private static string Status(LiveMetric k) => k.Attainment >= 1 ? ThreeDPalette.Nila : k.Attainment >= 0.95 ? ThreeDPalette.Warning : ThreeDPalette.Danger;
+
+    private static string Tip(LiveMetric k) => string.Create(CultureInfo.InvariantCulture,
+        $"{k.Name}\n{k.Format()} (target {k.Target:0.##})\n{(k.Change >= 0 ? "▲" : "▼")} {Math.Abs(k.Change):P1} over window{(k.Anomalous ? "\n⚠ anomaly" : "")}");
+
+    private async Task RunLoopAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(Math.Max(500, IntervalMs)));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                if (!_live || Scene is not { IsReady: true })
+                {
+                    continue;
+                }
+
+                var anomalyChanged = false;
+                foreach (var k in _kpis)
+                {
+                    var was = k.Anomalous;
+                    k.Step(_rng);
+                    anomalyChanged |= was != k.Anomalous;
+                }
+
+                await InvokeAsync(async () =>
+                {
+                    if (anomalyChanged)
+                    {
+                        Objects = BuildObjects(); // pulse animation is part of the object spec
+                    }
+                    else
+                    {
+                        await Scene.UpdateAsync(_kpis.Select((k, i) => new ObjectPatch { Id = Key(i), Scale = Size(k), Color = Status(k), Emissive = Status(k) }), 600);
+                    }
+
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void ToggleLive() => _live = !_live;
+
+    private void Shock()
+    {
+        foreach (var k in _kpis.Where(k => k.Name is "On-time delivery" or "Inventory days" or "Support backlog" or "Revenue"))
+        {
+            k.Drift = k.HigherIsBetter ? -k.Noise * 0.9 : k.Noise * 0.9;
+        }
+
+        _ = Task.Delay(TimeSpan.FromSeconds(20)).ContinueWith(_ =>
+        {
+            foreach (var k in _kpis)
+            {
+                k.Drift = 0;
+            }
+        }, TaskScheduler.Default);
+    }
+
+    private void Picked(PickEvent e)
+    {
+        if (e.Id.StartsWith("kpi-", StringComparison.Ordinal) && int.TryParse(e.Id[4..], out var i) && i < _kpis.Count)
+        {
+            _selected = _kpis[i];
+        }
+    }
+
+    private Task Brief() => NarrateAsync("a chief of staff briefing the CEO",
+        string.Join("; ", _kpis.Select(k => string.Create(CultureInfo.InvariantCulture,
+            $"{k.Name} {k.Format()} vs target {k.Target:0.##} ({(k.Attainment >= 1 ? "on target" : k.Attainment >= 0.95 ? "near" : "off")}, trend {k.Change:+0.0%;-0.0%}{(k.Anomalous ? ", anomaly" : "")})"))));
+
+    public override async ValueTask DisposeAsync()
+    {
+        _loop?.Cancel();
+        _loop?.Dispose();
+        await base.DisposeAsync();
+    }
+}

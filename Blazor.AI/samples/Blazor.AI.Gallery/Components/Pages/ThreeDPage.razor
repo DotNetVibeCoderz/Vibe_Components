@@ -1,0 +1,35 @@
+@page "/3d"
+<PageTitle>3D · Blazor.AI</PageTitle>
+
+<PageHeader Title="AI in 3D" Package="Blazor.AI.ThreeD" Icon="bi-box"
+            Lead="Talking avatars, 3D analytics and digital twins on Three.js. Scenes are declarative C#; the robot, fish and robot arm were generated with Rodin and rigged and animated in Blender." />
+
+<DemoSection Title="Talking avatar" Component="AIAvatar3D" Description="Speak or type; the guide answers, shows an emotion, gestures, and talks back with lip sync." Code="@AvatarCode">
+    <AIAvatar3D />
+</DemoSection>
+
+<DemoSection Title="3D charts" Component="AI3DChart" Description="Bars, scatter, bubbles, surface and box plots you can orbit, hover and ask AI to explain." Code="@ChartCode">
+    <AI3DChart />
+</DemoSection>
+
+<DemoSection Title="Model viewer" Component="ModelViewer3D" Description="Inspect any glTF: animation clips, morph targets, wireframe and screenshots." Code="@ViewerCode">
+    <ModelViewer3D />
+</DemoSection>
+
+@code {
+    private const string AvatarCode = """
+        builder.Services.AddBlazorAIComponents();
+        builder.Services.AddBlazorAIThreeD();
+
+        <AIAvatar3D Name="Kawi" Persona="a museum guide for Borobudur" SpeechLanguage="id-ID" />
+        """;
+
+    private const string ChartCode = """
+        <AI3DChart Title="Sales by island" Mode="Bars"
+                   Categories="@(["Q1","Q2","Q3","Q4"])" Series="@islands" Values="@sales" />
+        """;
+
+    private const string ViewerCode = """
+        <ModelViewer3D Url="@ThreeDAssets.GuideBot" FitHeight="1.7" AutoRotate="true" />
+        """;
+}

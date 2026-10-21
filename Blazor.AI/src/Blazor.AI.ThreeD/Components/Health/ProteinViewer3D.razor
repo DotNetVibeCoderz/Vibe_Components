@@ -1,0 +1,227 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Protein structure viewer: PDB text → Cα trace tube coloured by chain, N→C rainbow or secondary structure; residues are hoverable. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        @if (_pdb is { } p)
+        {
+            <div class="bai3d-panel">
+                <h4>@Clip(p.Title, 48)</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@p.Residues.Count</b><span>residues</span></div>
+                    <div><b>@p.Chains.Count</b><span>chains</span></div>
+                    <div><b>@TwinUi.Pct(Fraction('H'))</b><span>helix</span></div>
+                    <div><b>@TwinUi.Pct(Fraction('E'))</b><span>strand</span></div>
+                </div>
+            </div>
+        }
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            @if (_color == "Secondary structure")
+            {
+                <span><i style="background:@Helix"></i>helix</span><span><i style="background:@Strand"></i>strand</span><span><i style="background:@Coil"></i>coil</span>
+            }
+            else if (_color == "Rainbow")
+            {
+                <span><i style="background:@ThreeDPalette.Ramp(0)"></i>N-terminus</span><span><i style="background:@ThreeDPalette.Ramp(1)"></i>C-terminus</span>
+            }
+            @if (_pdb?.Ligands.Count > 0) { <span><i style="background:#c45ad6; border-radius:50%"></i>ligand / ion</span> }
+        </div>
+    </Scene3D>
+
+    <AiCard Title="@Title" Subtitle="PDB · Cα trace · secondary structure" Icon="bi-bezier2">
+        <div class="bai-stack">
+            <div class="bai-row">
+                <button type="button" class="bai-chip" @onclick="LoadSample">Idealised sample</button>
+                <label class="bai-chip" style="position:relative; cursor:pointer"><i class="bi bi-upload" aria-hidden="true"></i>PDB file<InputFile OnChange="Upload" accept=".pdb,.ent,.txt" style="position:absolute; inset:0; opacity:0; cursor:pointer" aria-label="Load PDB file" /></label>
+            </div>
+            <textarea class="bai-textarea" rows="4" spellcheck="false" style="font-family:var(--bai-font-mono); font-size:.72rem" @bind="Pdb" aria-label="PDB text" placeholder="Paste PDB text (ATOM records)"></textarea>
+            <div class="bai-row">
+                <button type="button" class="bai-btn bai-btn-ai" @onclick="Load"><i class="bi bi-play-fill" aria-hidden="true"></i>Show</button>
+                <select class="bai-select" style="width:auto" @bind="_color" @bind:after="Render" aria-label="Colour by">
+                    @foreach (var c in ColorModes) { <option>@c</option> }
+                </select>
+                <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_atoms" @bind:after="Render" /> atoms</label>
+            </div>
+            <AiError Message="@Error" />
+            @if (_picked is not null) { <p class="bai-small" style="margin:0">Selected: <b>@_picked</b></p> }
+            @if (_pdb is not null)
+            {
+                <code class="bai-small" style="word-break:break-all">@Clip(string.Join(" / ", _pdb.Chains.Select(c => $"{c}: {_pdb.Sequence(c)}")), 220)</code>
+                <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain the fold</button>
+            }
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private const string Helix = "#e5534b", Strand = "#e8b84a", Coil = "#9aa3c7";
+    private static readonly string[] ColorModes = ["Secondary structure", "Rainbow", "Chain"];
+    private const double Scale = 0.12; // 1 Å = 0.12 scene units
+    private Scene3DOptions _options = new();
+    private PdbStructure? _pdb;
+    private string _color = ColorModes[0];
+    private bool _atoms;
+    private string? _picked;
+    private double[] _center = [0, 0, 0];
+
+    [Parameter] public string Title { get; set; } = "Protein viewer";
+
+    /// <summary>PDB text to show; defaults to an idealised synthetic sample.</summary>
+    [Parameter] public string? Pdb { get; set; }
+
+    /// <summary>Residues drawn as pickable markers are capped for large structures.</summary>
+    [Parameter] public int MaxMarkers { get; set; } = 350;
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 1.5, 8], Target = [0, 0, 0] },
+            Controls = new() { AutoRotate = true, AutoRotateSpeed = 0.7, MaxPolarAngle = Math.PI },
+            Shadows = false,
+            Lights = "studio",
+            AriaLabel = "Protein structure",
+        };
+        Pdb ??= PdbStructure.SamplePdb();
+        Load();
+    }
+
+    private void LoadSample()
+    {
+        Pdb = PdbStructure.SamplePdb();
+        Load();
+    }
+
+    private async Task Upload(InputFileChangeEventArgs e)
+    {
+        using var reader = new StreamReader(e.File.OpenReadStream(30 * 1024 * 1024));
+        Pdb = await reader.ReadToEndAsync();
+        Load();
+    }
+
+    private void Load()
+    {
+        Error = null;
+        Narration = null;
+        _picked = null;
+        try
+        {
+            _pdb = PdbStructure.Parse(Pdb ?? string.Empty);
+            if (_pdb.Residues.Count == 0)
+            {
+                throw new FormatException("No Cα atoms found; this viewer draws protein backbones.");
+            }
+
+            _center = [_pdb.Residues.Average(r => r.CA[0]), _pdb.Residues.Average(r => r.CA[1]), _pdb.Residues.Average(r => r.CA[2])];
+            var radius = _pdb.Residues.Max(r => Layout3D.Distance(r.CA, _center)) * Scale;
+            _options = _options with { Camera = new() { Position = [0, radius * 0.4, radius * 2.6 + 1], Target = [0, 0, 0] } };
+            Render();
+        }
+        catch (FormatException ex)
+        {
+            Error = ex.Message;
+        }
+    }
+
+    private double[] P(double[] a) => [(a[0] - _center[0]) * Scale, (a[1] - _center[1]) * Scale, (a[2] - _center[2]) * Scale];
+
+    private string ResidueColor(PdbResidue r, int index, int count) => _color switch
+    {
+        "Rainbow" => ThreeDPalette.Ramp(index / (double)Math.Max(1, count - 1)),
+        "Chain" => ThreeDPalette.Category(_pdb!.Chains.ToList().IndexOf(r.Chain)),
+        _ => r.SecondaryStructure switch { 'H' => Helix, 'E' => Strand, _ => Coil },
+    };
+
+    private void Render()
+    {
+        if (_pdb is null)
+        {
+            return;
+        }
+
+        var list = new List<Object3D>();
+        foreach (var chain in _pdb.Chains)
+        {
+            var res = _pdb.Residues.Where(r => r.Chain == chain).ToList();
+            // Split the trace into segments of equal colour so the tube is coloured per region.
+            var start = 0;
+            for (var i = 1; i <= res.Count; i++)
+            {
+                var all = _pdb.Residues.Count;
+                var idx = _pdb.Residues.ToList().IndexOf(res[Math.Min(i, res.Count - 1)]);
+                if (i < res.Count && ResidueColor(res[i], idx, all) == ResidueColor(res[start], _pdb.Residues.ToList().IndexOf(res[start]), all) && i - start < 12)
+                {
+                    continue;
+                }
+
+                var seg = res.Skip(Math.Max(0, start - 1)).Take(i - Math.Max(0, start - 1) + (i < res.Count ? 1 : 0)).Select(r => P(r.CA)).ToList();
+                if (seg.Count >= 2)
+                {
+                    var ss = res[start].SecondaryStructure;
+                    list.Add(new Object3D
+                    {
+                        Id = $"trace-{chain}-{start}", Kind = "tube", Points = seg, Radius = _color == "Secondary structure" && ss == 'H' ? 0.17 : ss == 'E' ? 0.14 : 0.09,
+                        Color = ResidueColor(res[start], _pdb.Residues.ToList().IndexOf(res[start]), all), Roughness = 0.35, Pickable = false,
+                    });
+                }
+
+                start = i;
+            }
+        }
+
+        var step = Math.Max(1, _pdb.Residues.Count / Math.Max(1, MaxMarkers));
+        for (var i = 0; i < _pdb.Residues.Count; i += step)
+        {
+            var r = _pdb.Residues[i];
+            list.Add(new Object3D { Id = $"res-{i}", Kind = "sphere", Position = P(r.CA), Radius = 0.075, Segments = 10, Color = ResidueColor(r, i, _pdb.Residues.Count), Opacity = 0.9, Tooltip = $"{r.Name} {r.Number} (chain {r.Chain})\n{SsName(r.SecondaryStructure)}" });
+        }
+
+        if (_atoms)
+        {
+            var heavy = _pdb.Atoms.Where(a => !a.Hetero && a.Element != "H").Take(6000).ToList();
+            list.Add(new Object3D { Id = "atoms", Kind = "points", PointSize = 0.06, Pickable = false, Points = heavy.Select(a => P([a.X, a.Y, a.Z])).ToArray(), Colors = heavy.Select(a => a.Element switch { "N" => "#3b6fd8", "O" => "#e5443b", "S" => "#e8c23a", _ => "#9aa3c7" }).ToArray() });
+        }
+
+        var k = 0;
+        foreach (var lig in _pdb.Ligands.Take(200))
+        {
+            list.Add(new Object3D { Id = $"lig-{k++}", Kind = "sphere", Position = P([lig.X, lig.Y, lig.Z]), Radius = lig.Element.Length == 2 ? 0.22 : 0.12, Color = "#c45ad6", Emissive = "#c45ad6", EmissiveIntensity = 0.5, Tooltip = $"{lig.Residue} {lig.ResidueNumber} ({lig.Element})" });
+        }
+
+        Objects = [.. list];
+    }
+
+    private static string SsName(char s) => s switch { 'H' => "α-helix", 'E' => "β-strand", _ => "coil / loop" };
+
+    private double Fraction(char s) => _pdb is null || _pdb.Residues.Count == 0 ? 0 : _pdb.Residues.Count(r => r.SecondaryStructure == s) / (double)_pdb.Residues.Count;
+
+    private void Picked(PickEvent e) => _picked = Objects.FirstOrDefault(o => o.Id == e.Id)?.Tooltip?.Replace('\n', ' ');
+
+    private static string Clip(string s, int n) => s.Length <= n ? s : s[..n] + "…";
+
+    private Task Explain()
+    {
+        var p = _pdb!;
+        var segments = string.Join(", ", Runs(p).Where(r => r.Kind != 'C').Select(r => $"{SsName(r.Kind)} {r.From}-{r.To}"));
+        return NarrateAsync("a structural biologist", string.Create(CultureInfo.InvariantCulture,
+            $"{p.Title}. {p.Residues.Count} residues in {p.Chains.Count} chain(s); helix {Fraction('H'):P0}, strand {Fraction('E'):P0}. Secondary structure (from Cα geometry): {segments}. Ligands/ions: {string.Join(", ", p.Ligands.Select(l => l.Residue).Distinct())}. Sequence: {Clip(p.Sequence(p.Chains[0]), 120)}. Describe the fold and what such a fold often does."));
+    }
+
+    private static IEnumerable<(char Kind, int From, int To)> Runs(PdbStructure p)
+    {
+        var r = p.Residues;
+        for (var i = 0; i < r.Count;)
+        {
+            var j = i;
+            while (j + 1 < r.Count && r[j + 1].SecondaryStructure == r[i].SecondaryStructure && r[j + 1].Chain == r[i].Chain)
+            {
+                j++;
+            }
+
+            yield return (r[i].SecondaryStructure, r[i].Number, r[j].Number);
+            i = j + 1;
+        }
+    }
+}

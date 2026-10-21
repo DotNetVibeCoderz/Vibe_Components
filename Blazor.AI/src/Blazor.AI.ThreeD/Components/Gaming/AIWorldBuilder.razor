@@ -1,0 +1,176 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Prompt → world plan (biome, landmarks, settlements) → procedural 3D world with forests, villages and a temple. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-panel">
+            <h4>@(_plan.Name)</h4>
+            <div class="bai3d-kpi">
+                <div><b>@_plan.Biome</b><span>biome</span></div>
+                <div><b>@_plan.Settlements.Count</b><span>settlements</span></div>
+                <div><b>@_plan.Landmarks.Count</b><span>landmarks</span></div>
+            </div>
+        </div>
+        @if (_selected is not null)
+        {
+            <div class="bai3d-panel bai3d-hud-bottom"><h4>@_selected.Value.Name</h4>@_selected.Value.Lore</div>
+        }
+    </Scene3D>
+
+    <AiCard Title="AI world builder" Subtitle="Describe a world; AI plans it, .NET builds it" Icon="bi-map">
+        <div class="bai-stack">
+            <img src="@ThreeDAssets.WorldConcept" alt="Concept art: a tropical archipelago kingdom" style="width:100%; border-radius:10px; border:1px solid var(--bai-line)" />
+            <textarea class="bai-textarea" rows="3" @bind="_prompt" aria-label="World prompt"></textarea>
+            <div class="bai-row">
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="BuildWorld"><i class="bi bi-stars" aria-hidden="true"></i>Build world</button>
+                <label class="bai-small">Seed <input type="number" class="bai-input" style="width:6rem" @bind="_seed" @bind:after="RenderWorld" /></label>
+            </div>
+            @if (IsBusy) { <AiThinking Label="Planning the world…" /> }
+            <AiError Message="@Error" />
+            <p class="bai-small bai-muted" style="margin:0">@_plan.Summary</p>
+            <ul class="bai-small" style="margin:0; padding-left:1.1rem">
+                @foreach (var l in _plan.Landmarks) { <li><b>@l.Name</b>: @l.Lore</li> }
+                @foreach (var s in _plan.Settlements) { <li><b>@s.Name</b> (village): @s.Lore</li> }
+            </ul>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private const double World = 14;
+    private Scene3DOptions _options = new();
+    private string _prompt = "A tropical archipelago kingdom with a volcano, terraced rice fields, a hilltop stone temple and fishing villages by the harbour.";
+    private int _seed = 42;
+    private WorldPlan _plan = WorldPlan.Fallback("A tropical archipelago kingdom", 42);
+    private Terrain? _terrain;
+    private (string Name, string Lore)? _selected;
+    private readonly Dictionary<string, (string, string)> _lore = [];
+
+    /// <summary>A planned place in the world.</summary>
+    public sealed record Place(string Name, string Lore);
+
+    /// <summary>The world plan returned by the model (or the local planner).</summary>
+    public sealed record WorldPlan(string Name, string Biome, string Summary, List<Place> Landmarks, List<Place> Settlements, TerrainSettings Terrain)
+    {
+        public static WorldPlan Fallback(string prompt, int seed)
+        {
+            var t = ProceduralWorldStudio.FromWords(prompt) with { Seed = seed, Size = 80 };
+            var lower = prompt.ToLowerInvariant();
+            var biome = lower.Contains("desert") ? "desert" : lower.Contains("snow") || lower.Contains("ice") ? "tundra" : lower.Contains("forest") || lower.Contains("jungle") || lower.Contains("tropical") ? "tropical" : "temperate";
+            List<Place> landmarks = [new("Candi Awan", "A hilltop stone temple where pilgrims watch the sunrise over the sea.")];
+            if (lower.Contains("volcan") || lower.Contains("gunung")) landmarks.Add(new("Gunung Api Raya", "A smoking volcano whose ash makes the terraces fertile."));
+            if (lower.Contains("tower") || lower.Contains("castle") || lower.Contains("keraton")) landmarks.Add(new("Keraton Bayu", "The royal palace of the wind kings."));
+            List<Place> villages = [new("Desa Pesisir", "Fishing village with outrigger boats."), new("Kampung Sawah", "Rice farmers on stepped terraces."), new("Pasar Rempah", "A spice market town on the trade route.")];
+            return new WorldPlan("Nusa Kawung", biome, "An archipelago of green islands around a central volcano, linked by trade and pilgrimage.", landmarks, villages, t);
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [11, 10, 13], Target = [0, 0.5, 0] },
+            Lights = "day",
+            Fog = new("#9fc5e8", 22, 48),
+            Background = "#9fc5e8",
+            AriaLabel = "Generated 3D world",
+        };
+        RenderWorld();
+    }
+
+    private Task BuildWorld() => RunAsync(async ct =>
+    {
+        var plan = WorldPlan.Fallback(_prompt, _seed);
+        try
+        {
+            var json = await PlanAsync("You are a game world designer. Plan a small explorable world from the description. Use evocative names.", _prompt,
+                """{"name":"world name","biome":"tropical","summary":"one sentence","landmarks":[{"name":"","lore":""}],"settlements":[{"name":"","lore":""}]}""", ct);
+            if (json is not null)
+            {
+                List<Place> Places(string key) => json[key] is System.Text.Json.Nodes.JsonArray a
+                    ? a.Select(n => new Place(n?["name"]?.ToString() ?? string.Empty, n?["lore"]?.ToString() ?? string.Empty)).Where(p => p.Name.Length > 1).Take(5).ToList()
+                    : [];
+                var landmarks = Places("landmarks");
+                var settlements = Places("settlements");
+                plan = plan with
+                {
+                    Name = json["name"]?.ToString() is { Length: > 1 } n ? n : plan.Name,
+                    Biome = json["biome"]?.ToString() is { Length: > 1 } b ? b : plan.Biome,
+                    Summary = json["summary"]?.ToString() is { Length: > 10 } s ? s : plan.Summary,
+                    Landmarks = landmarks.Count > 0 ? landmarks : plan.Landmarks,
+                    Settlements = settlements.Count > 0 ? settlements : plan.Settlements,
+                };
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Keep the local plan.
+        }
+
+        _plan = plan;
+        RenderWorld();
+    });
+
+    private void RenderWorld()
+    {
+        _plan = _plan with { Terrain = _plan.Terrain with { Seed = _seed } };
+        var biome = _plan.Biome.ToLowerInvariant();
+        var terrain = _plan.Terrain;
+        if (biome.Contains("desert")) terrain = terrain with { SeaLevel = Math.Min(terrain.SeaLevel, 0.15) };
+        _terrain = TerrainGenerator.Generate(terrain);
+        var t = _terrain;
+        var list = TerrainGenerator.ToObjects(t, World).ToList();
+        _lore.Clear();
+
+        // Forest: cones on mid-altitude land.
+        var treeColor = biome.Contains("tundra") ? "#cfe3e0" : biome.Contains("desert") ? "#9a8f4a" : "#2f6b37";
+        var i = 0;
+        foreach (var (x, z) in TerrainGenerator.Sample(t, 0.05, 0.45, biome.Contains("desert") ? 25 : 110, _seed + 1, 2))
+        {
+            var p = t.WorldPos(x, z, World);
+            var h = 0.25 + (i % 5) * 0.05;
+            list.Add(new Object3D { Id = $"tree{i++}", Kind = "cone", Radius = 0.11, Height = h, Segments = 7, Position = [p[0], p[1] + h / 2, p[2]], Color = treeColor, FlatShading = true, Pickable = false });
+        }
+
+        // Settlements: clusters of houses near the coast.
+        var spots = TerrainGenerator.Sample(t, 0.02, 0.2, _plan.Settlements.Count, _seed + 2, 10);
+        for (var s = 0; s < spots.Count; s++)
+        {
+            var c = t.WorldPos(spots[s].X, spots[s].Z, World);
+            var rng = new Random(_seed + s * 31);
+            for (var k = 0; k < 6; k++)
+            {
+                double dx = (rng.NextDouble() - 0.5) * 0.7, dz = (rng.NextDouble() - 0.5) * 0.7;
+                list.Add(new Object3D { Id = $"house{s}-{k}", Kind = "box", Size = [0.16, 0.12, 0.2], Position = [c[0] + dx, c[1] + 0.06, c[2] + dz], Rotation = [0, rng.NextDouble() * 3, 0], Color = "#e8dcc4", Pickable = false });
+                list.Add(new Object3D { Id = $"roof{s}-{k}", Kind = "cone", Radius = 0.15, Height = 0.1, Segments = 4, Position = [c[0] + dx, c[1] + 0.17, c[2] + dz], Rotation = [0, Math.PI / 4, 0], Color = "#a8442e", Pickable = false });
+            }
+
+            var id = $"village{s}";
+            _lore[id] = (_plan.Settlements[s].Name, _plan.Settlements[s].Lore);
+            list.Add(new Object3D { Id = id, Kind = "cylinder", Radius = 0.45, Height = 0.02, Position = [c[0], c[1] + 0.01, c[2]], Color = ThreeDPalette.Soga, Opacity = 0.35, Label = _plan.Settlements[s].Name, Tooltip = _plan.Settlements[s].Lore });
+        }
+
+        // Landmarks: the stupa on the highest reachable ground, others as glowing markers.
+        var peaks = TerrainGenerator.Sample(t, 0.35, 0.8, _plan.Landmarks.Count, _seed + 3, 14);
+        for (var l = 0; l < peaks.Count; l++)
+        {
+            var p = t.WorldPos(peaks[l].X, peaks[l].Z, World);
+            var id = $"landmark{l}";
+            _lore[id] = (_plan.Landmarks[l].Name, _plan.Landmarks[l].Lore);
+            if (l == 0)
+            {
+                list.Add(new Object3D { Id = id, Kind = "model", Url = ThreeDAssets.Stupa, FitHeight = 0.7, Position = p, Label = _plan.Landmarks[l].Name, LabelClass = "is-soga", Tooltip = _plan.Landmarks[l].Lore });
+            }
+            else
+            {
+                list.Add(new Object3D { Id = id, Kind = "icosahedron", Radius = 0.18, Position = [p[0], p[1] + 0.35, p[2]], Color = ThreeDPalette.Soga, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 0.8,
+                    Animate = Animate3D.Bob(0.08, 0.8), Label = _plan.Landmarks[l].Name, LabelClass = "is-soga", Tooltip = _plan.Landmarks[l].Lore });
+            }
+        }
+
+        Objects = list;
+    }
+
+    private void Picked(PickEvent e) => _selected = _lore.TryGetValue(e.Id, out var v) ? v : null;
+}

@@ -1,0 +1,230 @@
+@namespace Blazor.AI.ThreeD
+@inherits TwinComponentBase
+@* Factory digital twin: production lines with robot cells, live OEE, predictive maintenance (remaining useful life) and an AI copilot. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel">
+                <h4>@Title</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@TwinUi.Pct(_oee)</b><span>OEE</span></div>
+                    <div><b>@TwinUi.N(_throughput, "0")</b><span>units / h</span></div>
+                    <div><b>@_alerts</b><span>alerts</span></div>
+                </div>
+            </div>
+            @if (_selected is { } sel)
+            {
+                <div class="bai3d-panel">
+                    <h4>@sel</h4>
+                    @foreach (var s in Sim.ForAsset(sel))
+                    {
+                        <div style="color:@TwinUi.LevelColor(s.Level)">@s.Spec.Name: @s.Format()</div>
+                    }
+                    <div class="bai-faint">RUL @Rul(sel)</div>
+                </div>
+            }
+        </div>
+        @if (Sim.Events.Count > 0)
+        {
+            <div class="bai3d-panel bai3d-hud-bottom" aria-live="polite">
+                @foreach (var e in Sim.Events.TakeLast(3).Reverse())
+                {
+                    <div style="color:@(e.Severity == "anomaly" ? ThreeDPalette.Danger : e.Severity == "fault" ? ThreeDPalette.Warning : "#c9cff5")">t@(e.Tick) · @e.Message</div>
+                }
+            </div>
+        }
+    </Scene3D>
+
+    <AiCard Title="Plant copilot" Subtitle="Live readings, predictive maintenance, optimisation" Icon="bi-gear-wide-connected">
+        <div class="bai-stack">
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="Toggle"><i class="bi @(Running ? "bi-pause-fill" : "bi-play-fill")" aria-hidden="true"></i>@(Running ? "Pause" : "Resume")</button>
+                <button type="button" class="bai-btn-ghost" @onclick="Fault"><i class="bi bi-lightning" aria-hidden="true"></i>Inject fault</button>
+            </div>
+            <div class="bai-table-wrap">
+                <table class="bai-table" style="font-size:.8rem">
+                    <thead><tr><th>Station</th><th>Vib mm/s</th><th>Temp °C</th><th>Cycle s</th><th>RUL</th></tr></thead>
+                    <tbody>
+                        @foreach (var st in _stations)
+                        {
+                            var v = Sim[$"{st}-vib"]; var t = Sim[$"{st}-temp"]; var c = Sim[$"{st}-cycle"];
+                            <tr style="cursor:pointer; @(st == _selected ? "background:var(--bai-soga-soft)" : null)" @onclick="() => Select(st)">
+                                <td style="white-space:nowrap"><span style="color:@TwinUi.LevelColor(Math.Max(v.Level, t.Level))">●</span> @st</td>
+                                <td class="bai-num">@v.Short()</td><td class="bai-num">@t.Short()</td><td class="bai-num">@c.Short()</td><td class="bai-num" style="white-space:nowrap">@Rul(st)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <p class="bai-small bai-muted" style="margin:0"><b>Bottleneck:</b> @_bottleneck. @_optimisation</p>
+            <TwinCopilot Simulator="@Sim" Provider="@Provider" Language="@Language" Role="a plant reliability engineer" Context="@Kpis"
+                         Suggestions="@(["Why is line 2 slowing down?", "Which machine needs maintenance first?", "How can we raise OEE?"])" />
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private const double VibrationLimit = 11; // ISO 10816 zone D for medium machines, mm/s
+    private const double MinutesPerTick = 10;
+    private readonly List<string> _stations = [];
+    private Scene3DOptions _options = new();
+    private string? _selected;
+    private double _oee, _throughput;
+    private int _alerts;
+    private string _bottleneck = "—", _optimisation = string.Empty;
+
+    [Parameter] public string Title { get; set; } = "Plant Cikarang · Assembly";
+
+    /// <summary>Number of production lines (1–3).</summary>
+    [Parameter] public int Lines { get; set; } = 2;
+
+    /// <summary>Robot cells per line (2–4).</summary>
+    [Parameter] public int StationsPerLine { get; set; } = 3;
+
+    /// <summary>Ideal cycle time per station in seconds (OEE performance baseline).</summary>
+    [Parameter] public double IdealCycleSeconds { get; set; } = 42;
+
+    protected override void OnInitialized()
+    {
+        var lines = Math.Clamp(Lines, 1, 3);
+        var per = Math.Clamp(StationsPerLine, 2, 4);
+        var specs = new List<SensorSpec>();
+        for (var l = 1; l <= lines; l++)
+        {
+            for (var s = 1; s <= per; s++)
+            {
+                var id = $"L{l}-S{s}";
+                _stations.Add(id);
+                // Line 2 station 2 wears out: rising vibration and cycle time make the predictive-maintenance story.
+                var wearing = l == 2 && s == 2;
+                specs.Add(new SensorSpec($"{id}-vib", "Vibration", "mm/s", wearing ? 5.5 : 3.2, 0.18, 0, 20) { Asset = id, WarnHigh = 7.1, Drift = wearing ? 0.012 : 0 });
+                specs.Add(new SensorSpec($"{id}-temp", "Spindle temp", "°C", 58, 0.6, 20, 120) { Asset = id, WarnHigh = 78, CycleAmplitude = 3, Drift = wearing ? 0.02 : 0 });
+                specs.Add(new SensorSpec($"{id}-cycle", "Cycle time", "s", IdealCycleSeconds * (1.05 + 0.03 * s), 0.6, 20, 120) { Asset = id, WarnHigh = IdealCycleSeconds * 1.35, Drift = wearing ? 0.02 : 0 });
+            }
+        }
+
+        Sim = new TwinSimulator(specs, seed: 7);
+        Sim.Step(30);
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [6.5, 6, 9], Target = [0, 0.6, 0] },
+            Grid = new(26, 26, "#3d4fb8", 0.15),
+            Ground = new(22, "#0f1338"),
+            Lights = "studio",
+            AriaLabel = "Factory digital twin with production lines and robot cells",
+        };
+        Objects = BuildScene();
+        Recompute();
+    }
+
+    private Object3D[] BuildScene()
+    {
+        var list = new List<Object3D>();
+        var lines = _stations.Select(s => s[..2]).Distinct().ToList();
+        var per = _stations.Count / lines.Count;
+        for (var li = 0; li < lines.Count; li++)
+        {
+            var z = (li - (lines.Count - 1) / 2.0) * 4.5;
+            var length = per * 3.2 + 1.5;
+            list.Add(new Object3D { Id = $"conv-{li}", Kind = "box", Position = [0, 0.35, z], Size = [length, 0.12, 0.7], Color = "#2a3150", Metalness = 0.6, Roughness = 0.4, Tooltip = $"Line {li + 1} conveyor" });
+            list.Add(new Object3D { Id = $"belt-{li}", Kind = "box", Position = [0, 0.42, z], Size = [length, 0.02, 0.55], Color = "#171b33", Roughness = 0.9, Pickable = false });
+            list.Add(Object3D.Text($"line-{li}", [-length / 2 - 0.6, 0.6, z], $"Line {li + 1}", "is-big"));
+            var path = new[] { new[] { -length / 2, 0.52, z }, [length / 2, 0.52, z] };
+            for (var c = 0; c < 4; c++)
+            {
+                list.Add(new Object3D
+                {
+                    Id = $"part-{li}-{c}", Kind = "box", Position = path[0], Size = [0.3, 0.2, 0.3], Color = "#e9e4d8", Pickable = false,
+                    Animate = new Animate3D { Type = "path", Points = path, Speed = 0.7, Loop = true, Face = false, Phase = c * length / 4 / 0.7 },
+                });
+            }
+
+            for (var s = 0; s < per; s++)
+            {
+                var id = _stations[li * per + s];
+                var x = (s - (per - 1) / 2.0) * 3.2;
+                list.Add(new Object3D { Id = $"arm-{id}", Kind = "model", Url = ThreeDAssets.RobotArm, Position = [x, 0, z + 0.95], Clip = "PickPlace", ClipSpeed = 1, Tooltip = $"{id} robot cell" });
+                list.Add(new Object3D { Id = $"cnc-{id}", Kind = "box", Position = [x + 1.1, 0.6, z - 1.2], Size = [1.1, 1.2, 0.9], Color = "#56608f", Metalness = 0.3, Roughness = 0.45, Edges = "#8a8fb0", Tooltip = $"{id} CNC" });
+                list.Add(new Object3D { Id = $"lamp-{id}", Kind = "sphere", Position = [x + 1.1, 1.45, z - 1.2], Radius = 0.12, Segments = 16, Color = ThreeDPalette.Nila, Emissive = ThreeDPalette.Nila, EmissiveIntensity = 2, Label = id, LabelClass = "is-mono", Tooltip = $"{id} status" });
+            }
+        }
+
+        return [.. list];
+    }
+
+    protected override IEnumerable<ObjectPatch> OnTick()
+    {
+        Recompute();
+        foreach (var st in _stations)
+        {
+            var level = Sim.ForAsset(st).Max(s => s.Level);
+            var color = TwinUi.LevelColor(level);
+            yield return new ObjectPatch { Id = $"lamp-{st}", Color = color, Emissive = color, EmissiveIntensity = level == 0 ? 1.6 : 3 };
+            yield return new ObjectPatch { Id = $"cnc-{st}", Color = level == 2 ? "#f2b8b4" : level == 1 ? "#f3dfae" : "#cfd5ee" };
+        }
+    }
+
+    private void Recompute()
+    {
+        var cycles = _stations.Select(st => Sim[$"{st}-cycle"].Value).ToList();
+        var down = _stations.Count(st => Sim.ForAsset(st).Any(s => s.IsAnomalous));
+        var availability = 1 - down / (double)_stations.Count * 0.5;
+        var performance = Math.Clamp(IdealCycleSeconds / cycles.Average(), 0, 1);
+        var quality = Math.Clamp(0.985 - 0.01 * _stations.Count(st => Sim.ForAsset(st).Any(s => s.IsWarning)), 0.8, 1);
+        _oee = availability * performance * quality;
+        // A line runs at the pace of its slowest station.
+        _throughput = _stations.GroupBy(s => s[..2]).Sum(g => 3600 / g.Max(st => Sim[$"{st}-cycle"].Value));
+        _alerts = _stations.Sum(st => Sim.ForAsset(st).Count(s => s.Level > 0));
+        var slow = _stations.OrderByDescending(st => Sim[$"{st}-cycle"].Value).First();
+        var slowCycle = Sim[$"{slow}-cycle"].Value;
+        _bottleneck = $"{slow} at {TwinUi.N(slowCycle)} s";
+        var lineMates = _stations.Where(s => s[..2] == slow[..2] && s != slow).ToList();
+        var spare = lineMates.Count == 0 ? 0 : slowCycle - lineMates.Average(s => Sim[$"{s}-cycle"].Value);
+        _optimisation = spare > 3
+            ? $"Move ~{TwinUi.N(spare / 2, "0")} s of work from {slow} to its neighbours, or schedule maintenance on {slow}; that would lift line throughput by about {TwinUi.Pct(spare / 2 / slowCycle)}."
+            : "Stations are balanced; focus on availability (keep alerts at zero).";
+    }
+
+    private string Rul(string station)
+    {
+        var vib = Sim[$"{station}-vib"];
+        // Ignore noise-level slopes; only a sustained upward trend predicts a failure date.
+        var ticks = vib.Slope(60) > 0.004 ? vib.TicksUntil(VibrationLimit, 60) : null;
+        if (ticks is null || ticks > 100_000)
+        {
+            return "> 30 d";
+        }
+
+        var hours = ticks.Value * MinutesPerTick / 60;
+        return hours < 48 ? $"{TwinUi.N(hours, "0")} h" : $"{TwinUi.N(hours / 24, "0")} d";
+    }
+
+    private string Kpis() =>
+        $"KPIs: OEE {TwinUi.Pct(_oee)}, throughput {TwinUi.N(_throughput, "0")} units/h, bottleneck {_bottleneck}. Remaining useful life (vibration to {VibrationLimit} mm/s): " +
+        string.Join(", ", _stations.Select(s => $"{s} {Rul(s)}")) + $". One tick = {MinutesPerTick} minutes.";
+
+    private void Select(string station)
+    {
+        _selected = station;
+        _ = Scene?.FocusAsync($"arm-{station}", 5);
+    }
+
+    private void Picked(PickEvent e)
+    {
+        var st = _stations.FirstOrDefault(s => e.Id.EndsWith(s, StringComparison.Ordinal));
+        if (st is not null)
+        {
+            _selected = st;
+        }
+    }
+
+    private async Task Fault()
+    {
+        var st = _selected ?? _stations[Sim.Random.Next(_stations.Count)];
+        Sim.InjectRandomFault($"{st}-vib", 8, 30);
+        Sim.InjectRandomFault($"{st}-temp", 6, 30);
+        _selected = st;
+        await StepOnceAsync();
+    }
+}

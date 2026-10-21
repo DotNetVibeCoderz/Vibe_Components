@@ -19,6 +19,7 @@
     <ProjectReference Include="..\..\src\Blazor.AI.Components\Blazor.AI.Components.csproj" />
     <ProjectReference Include="..\..\src\Blazor.AI.Decision\Blazor.AI.Decision.csproj" />
     <ProjectReference Include="..\..\src\Blazor.AI.Bio\Blazor.AI.Bio.csproj" />
+    <ProjectReference Include="..\..\src\Blazor.AI.ThreeD\Blazor.AI.ThreeD.csproj" />
   </ItemGroup>
 
   <ItemGroup>

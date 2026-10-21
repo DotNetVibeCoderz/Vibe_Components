@@ -1,0 +1,80 @@
+@page "/3d/enterprise"
+<PageTitle>3D enterprise · Blazor.AI</PageTitle>
+
+<PageHeader Title="Enterprise command in 3D" Package="Blazor.AI.ThreeD" Icon="bi-buildings"
+            Lead="Premium operations views: a multi-site digital twin, a company-wide knowledge graph, AgentOps, an executive KPI globe, multi-agent mission control and closed-loop autonomy with a human in the loop. Data is simulated live; plug in your own metrics." />
+
+<DemoSection Title="Digital twin platform" Component="DigitalTwinPlatform" Description="Sites, areas and assets with live health, temperature and load. Inject a fault, watch the alarm, ask the copilot what to fix first." Code="@TwinCode">
+    <DigitalTwinPlatform />
+</DemoSection>
+
+<DemoSection Title="Enterprise knowledge graph" Component="EnterpriseKnowledgeGraph3D" Description="Teams, systems, datasets, documents, people and processes. Search, filter by domain, click to focus, ask questions answered from the graph." Code="@GraphCode">
+    <EnterpriseKnowledgeGraph3D />
+</DemoSection>
+
+<DemoSection Title="Agent operations center" Component="EnterpriseAgentOperationsCenter" Description="Throughput, error rate, latency SLO and cost per agent. Scale replicas, inject failures and get an SRE summary." Code="@OpsCode">
+    <EnterpriseAgentOperationsCenter />
+</DemoSection>
+
+<DemoSection Title="Executive analytics sphere" Component="ExecutiveAnalyticsSphere" Description="Sixteen KPIs on a globe: size is attainment, colour is status, pulsing means anomaly. Simulate a disruption and ask for a briefing." Code="@SphereCode">
+    <ExecutiveAnalyticsSphere />
+</DemoSection>
+
+<DemoSection Title="Multi-agent command center" Component="MultiAgentCommandCenter" Description="Give a mission; it is planned into tasks, dispatched to specialist agents and executed in order, each building on the last." Code="@CommandCode">
+    <MultiAgentCommandCenter />
+</DemoSection>
+
+<DemoSection Title="Autonomous operations" Component="AutonomousOperationsDashboard" Description="Sense, analyse, decide, act. Confident decisions run on their own; the rest wait for approval, with an AI explanation on request." Code="@AutoCode">
+    <AutonomousOperationsDashboard />
+</DemoSection>
+
+@code {
+    private const string TwinCode = """
+        builder.Services.AddBlazorAIThreeD();
+
+        <DigitalTwinPlatform IntervalMs="1500" Height="560px" />
+        """;
+
+    private const string GraphCode = """
+        <EnterpriseKnowledgeGraph3D Nodes="@nodes" Edges="@edges" />
+
+        @code {
+            EnterpriseKnowledgeGraph3D.EnterpriseNode[] nodes =
+            [
+                new("Finance", "Team", "Finance"),
+                new("ERP", "System", "Finance"),
+                new("Invoices", "Dataset", "Finance"),
+            ];
+            EnterpriseKnowledgeGraph3D.EnterpriseLink[] edges =
+            [
+                new("Finance", "owns", "ERP"),
+                new("ERP", "stores", "Invoices"),
+            ];
+        }
+        """;
+
+    private const string OpsCode = """
+        <EnterpriseAgentOperationsCenter LatencySloMs="2000" />
+        """;
+
+    private const string SphereCode = """
+        <ExecutiveAnalyticsSphere Title="Board pulse" Kpis="@kpis" IntervalMs="5000" />
+
+        @code {
+            List<LiveMetric> kpis =
+            [
+                new("Revenue", "Rp bn", baseline: 128, noise: 3, target: 135),
+                new("Churn", "%", baseline: 2.4, noise: 0.15, target: 2.0, higherIsBetter: false),
+            ];
+        }
+        """;
+
+    private const string CommandCode = """
+        <MultiAgentCommandCenter Agents="@(["Researcher", "Planner", "Analyst", "Writer", "Reviewer"])"
+                                 Language="Bahasa Indonesia" />
+        """;
+
+    private const string AutoCode = """
+        <AutonomousOperationsDashboard Threshold="0.9" IntervalMs="3000" />
+        """;
+}

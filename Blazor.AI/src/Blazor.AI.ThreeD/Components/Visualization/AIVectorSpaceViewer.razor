@@ -1,0 +1,289 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@using Blazor.AI.Core.Embeddings
+@* Embedding space in 3-D: documents, questions and answers projected with PCA; a query shows its nearest neighbours. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-panel">
+            <h4>Vector space</h4>
+            <div class="bai3d-kpi">
+                <div><b>@Items.Count</b><span>items</span></div>
+                <div><b>@_dimensions</b><span>dimensions</span></div>
+                <div><b>@_engine</b><span>embeddings</span></div>
+            </div>
+        </div>
+        @if (_selectedText is not null)
+        {
+            <div class="bai3d-panel bai3d-hud-bottom">@_selectedText</div>
+        }
+        <div class="bai3d-legend bai3d-hud-right" style="color:#c9cff5">
+            @foreach (var kind in Items.Select(i => i.Kind).Distinct())
+            {
+                <span><i style="background:@KindColor(kind)"></i>@kind</span>
+            }
+            @if (_hits.Count > 0) { <span><i style="background:#ffffff"></i>query</span> }
+        </div>
+    </Scene3D>
+
+    <AiCard Title="@Title" Subtitle="Semantic neighbourhoods of your content" Icon="bi-stars">
+        <div class="bai-stack">
+            <form class="bai-row" @onsubmit="Query" @onsubmit:preventDefault="true">
+                <input class="bai-input bai-spacer" @bind="_query" placeholder="Ask a question…" aria-label="Query" />
+                <button type="submit" class="bai-btn bai-btn-ai" disabled="@IsBusy">Search</button>
+            </form>
+            <AiError Message="@Error" />
+            @if (_hits.Count > 0)
+            {
+                <div class="bai-stack" style="gap:.3rem">
+                    <span class="bai-label">Nearest neighbours (cosine)</span>
+                    @foreach (var (item, score) in _hits)
+                    {
+                        <div class="bai-score-row">
+                            <span title="@item.Text" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap"><i class="bi @KindIcon(item.Kind)" aria-hidden="true"></i> @item.Text</span>
+                            <div class="bai-meter"><span style="width:@((Math.Max(0, score) * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div>
+                            <span class="bai-num bai-small">@score.ToString("0.00", CultureInfo.InvariantCulture)</span>
+                        </div>
+                    }
+                </div>
+                <button type="button" class="bai-btn-ghost" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain the neighbourhood</button>
+            }
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+            <details>
+                <summary class="bai-small">Add an item</summary>
+                <div class="bai-stack" style="margin-top:.5rem">
+                    <select class="bai-select" @bind="_newKind" aria-label="Kind">
+                        <option>Document</option><option>Question</option><option>Answer</option><option>Image</option>
+                    </select>
+                    <textarea class="bai-textarea" rows="2" @bind="_newText" placeholder="Text (or an image caption)" aria-label="Item text"></textarea>
+                    <button type="button" class="bai-btn-ghost" @onclick="AddItem">Add and re-embed</button>
+                </div>
+            </details>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private Scene3DOptions _options = new();
+    private readonly List<VectorItem> _items = [];
+    private float[][] _vectors = [];
+    private double[][] _positions = [];
+    private List<(VectorItem Item, double Score)> _hits = [];
+    private double[]? _queryPos;
+    private string? _query = "Bagaimana cara memperpanjang SIM?";
+    private string? _selectedText;
+    private string _engine = "…";
+    private int _dimensions;
+    private string _newKind = "Document";
+    private string? _newText;
+
+    /// <summary>An item to embed: its kind (Document, Question, Answer, Image) and text (or image caption).</summary>
+    public sealed record VectorItem(string Kind, string Text);
+
+    [Parameter] public string Title { get; set; } = "Vector space viewer";
+
+    [Parameter] public IReadOnlyList<VectorItem>? Source { get; set; }
+
+    /// <summary>Neighbours shown for a query.</summary>
+    [Parameter] public int TopK { get; set; } = 5;
+
+    private IReadOnlyList<VectorItem> Items => _items;
+
+    private static readonly VectorItem[] Samples =
+    [
+        new("Document", "Perpanjangan SIM dapat dilakukan di Satpas atau SIM keliling dengan membawa KTP dan SIM lama."),
+        new("Document", "Pembuatan paspor kini bisa didaftarkan lewat aplikasi M-Paspor sebelum datang ke kantor imigrasi."),
+        new("Document", "BPJS Kesehatan menanggung rawat inap di rumah sakit mitra sesuai kelas kepesertaan."),
+        new("Document", "Pajak kendaraan bermotor tahunan dapat dibayar melalui aplikasi SIGNAL atau Samsat online."),
+        new("Document", "Kartu Indonesia Pintar memberi bantuan biaya pendidikan bagi siswa dari keluarga kurang mampu."),
+        new("Document", "Rice terraces in Bali use the subak irrigation system, a UNESCO World Heritage cultural landscape."),
+        new("Document", "Borobudur is a ninth-century Mahayana Buddhist temple in Magelang, Central Java."),
+        new("Question", "Apa saja syarat membuat paspor baru?"),
+        new("Question", "Is hospital care covered by BPJS?"),
+        new("Question", "Where is Borobudur located?"),
+        new("Question", "Bagaimana membayar pajak motor secara online?"),
+        new("Answer", "Bawa KTP, Kartu Keluarga dan akta kelahiran, lalu daftar antrean lewat M-Paspor."),
+        new("Answer", "Yes, inpatient care at partner hospitals is covered according to your membership class."),
+        new("Answer", "Borobudur stands in Magelang Regency, about 40 km north-west of Yogyakarta."),
+        new("Answer", "Gunakan aplikasi SIGNAL untuk membayar PKB dan mengesahkan STNK secara digital."),
+        new("Image", "Photo: a farmer walking through green terraced rice fields at sunrise."),
+        new("Image", "Photo: the bell-shaped stupas on the upper terrace of a stone temple."),
+        new("Image", "Scan: a driving licence card with a photo and an expiry date."),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [6.5, 5.5, 7.5], Target = [0, 2.8, 0] },
+            Grid = new(10, 10, "#5b6bd6", 0.14),
+            Controls = new() { AutoRotate = true, AutoRotateSpeed = 0.35 },
+            AriaLabel = "3D projection of text embeddings",
+        };
+        _items.AddRange(Source ?? Samples);
+        await EmbedAllAsync();
+    }
+
+    private async Task<float[][]> EmbedAsync(IReadOnlyList<string> texts, CancellationToken ct)
+    {
+        try
+        {
+            var generator = ClientFactory.GetEmbeddingGenerator(Provider);
+            var result = await generator.GenerateAsync(texts, null, ct);
+            _engine = generator.GetService<EmbeddingGeneratorMetadata>()?.DefaultModelId ?? generator.GetType().Name.Replace("EmbeddingGenerator", string.Empty);
+            return result.Select(e => e.Vector.ToArray()).ToArray();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Providers without an embedding endpoint (e.g. Anthropic) fall back to offline hashing embeddings.
+            using var local = new HashingEmbeddingGenerator();
+            _engine = "offline hashing";
+            return texts.Select(t => local.Embed(t)).ToArray();
+        }
+    }
+
+    private Task EmbedAllAsync() => RunAsync(async ct =>
+    {
+        _vectors = await EmbedAsync(_items.Select(i => i.Text).ToArray(), ct);
+        _dimensions = _vectors.FirstOrDefault()?.Length ?? 0;
+        Layout(null);
+        Build();
+    });
+
+    private void Layout(float[]? query)
+    {
+        var rows = _vectors.Select(v => Normalize(v).Select(f => (double)f).ToArray()).ToList();
+        if (query is not null)
+        {
+            rows.Add(Normalize(query).Select(f => (double)f).ToArray());
+        }
+
+        var pts = Layout3D.Normalize(Layout3D.Pca3(rows), 3);
+        foreach (var p in pts)
+        {
+            p[1] += 3;
+        }
+
+        _positions = pts.Take(_vectors.Length).ToArray();
+        _queryPos = query is null ? null : pts[^1];
+    }
+
+    private void Build()
+    {
+        var list = new List<Object3D>();
+        for (var i = 0; i < _items.Count && i < _positions.Length; i++)
+        {
+            var item = _items[i];
+            var hit = _hits.Any(h => ReferenceEquals(h.Item, item));
+            list.Add(new Object3D
+            {
+                Id = $"v{i}", Kind = item.Kind == "Question" ? "cone" : item.Kind == "Image" ? "box" : "sphere",
+                Radius = 0.13, Height = 0.3, Size = [0.24, 0.24, 0.24], Segments = 16,
+                Position = _positions[i], Color = KindColor(item.Kind), Emissive = KindColor(item.Kind), EmissiveIntensity = hit ? 0.9 : 0.15,
+                Tooltip = $"{item.Kind}\n{item.Text}", Scale = hit ? 1.5 : null,
+            });
+        }
+
+        if (_queryPos is { } q)
+        {
+            list.Add(new Object3D { Id = "query", Kind = "icosahedron", Radius = 0.22, Position = q, Color = "#ffffff", Emissive = "#ffffff", EmissiveIntensity = 0.6, Label = "Query", LabelClass = "is-soga", Tooltip = _query, Animate = Animate3D.Spin(1.2) });
+            var idx = 0;
+            foreach (var (item, score) in _hits)
+            {
+                var i = _items.IndexOf(item);
+                if (i < 0 || i >= _positions.Length)
+                {
+                    continue;
+                }
+
+                list.Add(new Object3D
+                {
+                    Id = $"hit{idx++}", Kind = "line", Points = [q, _positions[i]], Color = ThreeDPalette.Soga, Opacity = 0.35 + Math.Max(0, score) * 0.6, Pickable = false,
+                });
+                list.Add(Object3D.Text($"score{idx}", [(q[0] + _positions[i][0]) / 2, (q[1] + _positions[i][1]) / 2 + 0.1, (q[2] + _positions[i][2]) / 2], score.ToString("0.00", CultureInfo.InvariantCulture), "is-mono"));
+            }
+        }
+
+        Objects = list;
+    }
+
+    private Task Query() => RunAsync(async ct =>
+    {
+        if (string.IsNullOrWhiteSpace(_query) || _vectors.Length == 0)
+        {
+            return;
+        }
+
+        Narration = null;
+        var q = (await EmbedAsync([_query], ct))[0];
+        _hits = _items.Select((item, i) => (item, score: Cosine(q, _vectors[i])))
+            .OrderByDescending(x => x.score).Take(Math.Max(1, TopK)).Select(x => (x.item, x.score)).ToList();
+        Layout(q);
+        Build();
+        if (Scene is not null)
+        {
+            await Scene.FocusAsync("query", 5);
+        }
+    });
+
+    private async Task AddItem()
+    {
+        if (string.IsNullOrWhiteSpace(_newText))
+        {
+            return;
+        }
+
+        _items.Add(new VectorItem(_newKind, _newText.Trim()));
+        _newText = null;
+        _hits = [];
+        await EmbedAllAsync();
+    }
+
+    private void Picked(PickEvent e)
+    {
+        if (e.Id.StartsWith('v') && int.TryParse(e.Id[1..], out var i) && i < _items.Count)
+        {
+            _selectedText = $"{_items[i].Kind}: {_items[i].Text}";
+        }
+    }
+
+    private Task Explain() => NarrateAsync("a search relevance engineer",
+        $"Query: \"{_query}\". Embedding model: {_engine}. Nearest items by cosine similarity: " +
+        string.Join("; ", _hits.Select(h => string.Create(CultureInfo.InvariantCulture, $"{h.Item.Kind} ({h.Score:0.00}): {h.Item.Text}"))) +
+        ". Explain why these are close in meaning, whether the best answer is among them, and how retrieval could improve.");
+
+    private static float[] Normalize(float[] v)
+    {
+        var n = Math.Sqrt(v.Sum(x => (double)x * x));
+        return n < 1e-12 ? v : v.Select(x => (float)(x / n)).ToArray();
+    }
+
+    private static double Cosine(float[] a, float[] b)
+    {
+        double dot = 0, na = 0, nb = 0;
+        for (var i = 0; i < Math.Min(a.Length, b.Length); i++)
+        {
+            dot += a[i] * b[i];
+            na += a[i] * a[i];
+            nb += b[i] * b[i];
+        }
+
+        return na < 1e-12 || nb < 1e-12 ? 0 : dot / Math.Sqrt(na * nb);
+    }
+
+    private static string KindColor(string kind) => kind switch
+    {
+        "Question" => ThreeDPalette.Soga,
+        "Answer" => ThreeDPalette.Nila,
+        "Image" => "#c45ad6",
+        _ => "#7b8cff",
+    };
+
+    private static string KindIcon(string kind) => kind switch
+    {
+        "Question" => "bi-question-circle",
+        "Answer" => "bi-chat-left-text",
+        "Image" => "bi-image",
+        _ => "bi-file-text",
+    };
+}

@@ -1,0 +1,82 @@
+@namespace Blazor.AI.ThreeD
+@* glTF/GLB viewer: orbit, animation clips, morph targets, wireframe, triangle count and screenshot. *@
+
+<AiCard Title="@Title" Subtitle="@(_info is null ? "Loading model…" : $"{_info.Triangles:N0} triangles · {_info.Clips.Count} clips · {_info.Morphs.Count} morphs")" Icon="bi-box" Class="@Class">
+    <div class="bai-stack">
+        <Scene3D @ref="_scene" Objects="@_objects" Options="@_options" Height="@Height" OnModelLoaded="Loaded" />
+        @if (_info is { } info)
+        {
+            <div class="bai-row">
+                @foreach (var clip in info.Clips)
+                {
+                    <button type="button" class="bai-chip @(clip == _clip ? "is-active" : null)" @onclick="() => Play(clip)">@clip</button>
+                }
+                <span class="bai-spacer"></span>
+                <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_wire" @bind:after="Wire" /> wireframe</label>
+                <button type="button" class="bai-btn-ghost" @onclick="Shot"><i class="bi bi-camera" aria-hidden="true"></i>Screenshot</button>
+            </div>
+            @if (info.Morphs.Count > 0)
+            {
+                <div class="bai-row">
+                    @foreach (var m in info.Morphs)
+                    {
+                        <label class="bai-small" style="display:flex; gap:.4rem; align-items:center">@m
+                            <input type="range" min="0" max="1" step="0.05" value="0" @oninput="e => Morph(m, e.Value)" aria-label="@($"Morph {m}")" />
+                        </label>
+                    }
+                </div>
+            }
+        }
+        @if (_shot is not null)
+        {
+            <img src="@_shot" alt="Screenshot of the model" style="max-width:240px; border-radius:10px; border:1px solid var(--bai-line)" />
+        }
+    </div>
+</AiCard>
+
+@code {
+    private Scene3D? _scene;
+    private ModelInfo? _info;
+    private string? _clip;
+    private bool _wire;
+    private string? _shot;
+    private Object3D[] _objects = [];
+    private Scene3DOptions _options = new();
+
+    [Parameter] public string Title { get; set; } = "Model viewer";
+    [Parameter] public string Url { get; set; } = ThreeDAssets.GuideBot;
+    [Parameter] public double FitHeight { get; set; } = 1.7;
+    [Parameter] public string Height { get; set; } = "420px";
+    [Parameter] public bool AutoRotate { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _objects = [new Object3D { Id = "model", Kind = "model", Url = Url, FitHeight = FitHeight, Tooltip = Url.Split('/')[^1] }];
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [FitHeight * 1.6, FitHeight * 0.9, FitHeight * 2.2], Target = [0, FitHeight * 0.5, 0] },
+            Controls = new() { AutoRotate = AutoRotate },
+            Ground = new(FitHeight * 4, "#0e1236"),
+        };
+    }
+
+    private void Loaded(ModelInfo info)
+    {
+        _info = info;
+        _clip = info.Clips.FirstOrDefault(c => c.Contains("idle", StringComparison.OrdinalIgnoreCase)) ?? info.Clips.FirstOrDefault();
+    }
+
+    private async Task Play(string clip)
+    {
+        _clip = clip;
+        await _scene!.PlayClipAsync("model", clip);
+    }
+
+    private Task Wire() => _scene!.SetWireframeAsync("model", _wire);
+
+    private Task Morph(string name, object? value) =>
+        _scene!.SetMorphAsync("model", name, double.TryParse(value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0);
+
+    private async Task Shot() => _shot = await _scene!.ScreenshotAsync();
+}

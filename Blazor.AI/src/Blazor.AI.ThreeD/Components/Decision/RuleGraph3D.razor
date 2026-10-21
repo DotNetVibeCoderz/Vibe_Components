@@ -1,0 +1,254 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@using Blazor.AI.Decision
+@* Business rules as a 3D graph: facts feed rules, rules write outcomes. Fired rules glow; variables written by several rules are flagged as conflicts. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel">
+                <h4>Policy graph</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@Rules.Count(r => r.Enabled)</b><span>active rules</span></div>
+                    <div><b>@(_eval?.Fired.Count() ?? 0)</b><span>fired</span></div>
+                    <div><b style="@(_conflicts.Count > 0 ? "color:#f08a84" : null)">@_conflicts.Count</b><span>conflicts</span></div>
+                </div>
+            </div>
+            @if (_selected is not null)
+            {
+                <div class="bai3d-panel bai3d-hud-right" style="white-space:pre-line">@_selected</div>
+            }
+        </div>
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            <span><i style="background:@ThreeDPalette.Soga"></i>rule (fired glows)</span><span><i style="background:@ThreeDPalette.Nila"></i>input fact</span>
+            <span><i style="background:#c45ad6"></i>derived outcome</span><span><i style="background:@ThreeDPalette.Danger"></i>conflict</span>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="@Title" Subtitle="Reads and writes of every rule" Icon="bi-bezier2">
+        <div class="bai-stack">
+            <div class="bai-stack" style="gap:.3rem">
+                @foreach (var r in Rules)
+                {
+                    var fired = _eval?.Fired.Contains(r) == true;
+                    <label class="bai-small" style="display:flex; gap:.45rem; align-items:center">
+                        <input type="checkbox" class="form-check-input" checked="@r.Enabled" @onchange="e => Toggle(r, e)" />
+                        <span style="@(fired ? "color:var(--bai-soga); font-weight:600" : null)">@r.Name</span>
+                        <span class="bai-faint">p@(r.Priority)</span>
+                        @if (fired) { <span class="bai-badge bai-badge-ai">fired</span> }
+                    </label>
+                }
+            </div>
+            <FactsEditor Facts="@Facts" FactsChanged="FactsChanged" Label="Test facts" />
+            @if (_conflicts.Count > 0)
+            {
+                <div class="bai-small" style="color:var(--bai-danger)"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> @string.Join("; ", _conflicts.Select(c => $"{c.Key} is written by {string.Join(" and ", c.Value)}"))</div>
+            }
+            @if (_eval is not null)
+            {
+                <div class="bai-small"><span class="bai-label" style="margin:0">Result</span>@string.Join(", ", Outputs().Select(kv => $"{kv.Key} = {kv.Value}"))</div>
+            }
+            <AiError Message="@Error" />
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Summarize"><i class="bi bi-stars" aria-hidden="true"></i>Summarise the policy</button>
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private readonly RuleEngine _engine = new();
+    private Scene3DOptions _options = new();
+    private RuleEvaluation? _eval;
+    private Dictionary<string, List<string>> _conflicts = [];
+    private Dictionary<string, (HashSet<string> Reads, HashSet<string> Writes)> _io = [];
+    private string? _selected;
+
+    [Parameter] public string Title { get; set; } = "Rule graph";
+
+    [Parameter] public List<BusinessRule> Rules { get; set; } = RuleGraph3DSamples.Rules();
+
+    [Parameter] public IDictionary<string, object?> Facts { get; set; } = RuleEditor.SampleFacts();
+
+    [Parameter] public RuleMode Mode { get; set; } = RuleMode.AllMatches;
+
+    [Parameter] public EventCallback<RuleEvaluation> OnEvaluated { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 3.2, 10], Target = [0, 0, 0], Fov = 45 },
+            Controls = new() { AutoRotate = true, AutoRotateSpeed = 0.5 },
+            Lights = "night",
+            Shadows = false,
+            AriaLabel = "Graph of business rules and the variables they use",
+        };
+    }
+
+    protected override void OnParametersSet() => Evaluate();
+
+    private void Evaluate()
+    {
+        Error = null;
+        _io = Rules.ToDictionary(r => r.Id, Analyze);
+        _conflicts = _io.SelectMany(kv => kv.Value.Writes.Select(w => (Var: w, Rule: Rules.First(r => r.Id == kv.Key))))
+            .Where(x => x.Rule.Enabled)
+            .GroupBy(x => x.Var, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Rule.Name).ToList(), StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            _eval = _engine.Evaluate(Rules, new Dictionary<string, object?>(Facts, StringComparer.OrdinalIgnoreCase), Mode);
+            _ = OnEvaluated.InvokeAsync(_eval);
+        }
+        catch (FormatException ex)
+        {
+            Error = ex.Message;
+            _eval = null;
+        }
+
+        Build();
+    }
+
+    private (HashSet<string> Reads, HashSet<string> Writes) Analyze(BusinessRule rule)
+    {
+        var reads = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var writes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Read(string expression)
+        {
+            if (Expression.TryParse(expression, out var parsed, out _) && parsed is not null)
+            {
+                reads.UnionWith(parsed.Variables);
+            }
+        }
+
+        Read(rule.Condition);
+        foreach (var part in rule.Actions.Split([';', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var i = AssignmentIndex(part);
+            if (i <= 0)
+            {
+                continue;
+            }
+
+            writes.Add(part[..i].Trim());
+            Read(part[(i + 1)..]);
+        }
+
+        return (reads, writes);
+    }
+
+    private static int AssignmentIndex(string s)
+    {
+        for (var i = 1; i < s.Length - 1; i++)
+        {
+            if (s[i] == '=' && s[i - 1] is not ('=' or '!' or '<' or '>') && s[i + 1] != '=')
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private IEnumerable<KeyValuePair<string, object?>> Outputs() =>
+        _eval is null ? [] : _eval.Facts.Where(kv => !Facts.ContainsKey(kv.Key));
+
+    private void Build()
+    {
+        var variables = _io.Values.SelectMany(v => v.Reads.Concat(v.Writes)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var derived = _io.Values.SelectMany(v => v.Writes).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var nodes = Rules.Select(r => "r:" + r.Id).Concat(variables.Select(v => "v:" + v)).ToList();
+        var edges = _io.SelectMany(kv => kv.Value.Reads.Select(v => ("v:" + v, "r:" + kv.Key, 1.0)).Concat(kv.Value.Writes.Select(v => ("r:" + kv.Key, "v:" + v, 1.0)))).ToList();
+        var pos = Layout3D.Force(nodes, edges, radius: 3.6);
+        var fired = _eval?.Fired.Select(r => r.Id).ToHashSet() ?? [];
+        var list = new List<Object3D>();
+        foreach (var r in Rules)
+        {
+            var on = fired.Contains(r.Id);
+            list.Add(new Object3D
+            {
+                Id = "r:" + r.Id, Kind = "icosahedron", Radius = 0.3 + r.Priority / 400.0, Detail = 0, FlatShading = true, Position = pos["r:" + r.Id],
+                Color = r.Enabled ? ThreeDPalette.Soga : "#5a5f80", Emissive = on ? ThreeDPalette.Soga : null, EmissiveIntensity = on ? 0.9 : null, Opacity = r.Enabled ? 1 : 0.45,
+                Label = r.Name, LabelClass = on ? "is-soga" : "is-plain", Animate = on ? Animate3D.Pulse(0.07, 1) : null,
+                Tooltip = $"{r.Name} (priority {r.Priority})\nwhen {r.Condition}\nthen {r.Actions}",
+            });
+        }
+
+        foreach (var v in variables)
+        {
+            var isOut = derived.Contains(v);
+            var conflict = _conflicts.ContainsKey(v);
+            var value = _eval?.Facts.TryGetValue(v, out var x) == true ? x : null;
+            list.Add(new Object3D
+            {
+                Id = "v:" + v, Kind = "sphere", Radius = 0.2, Segments = 20, Position = pos["v:" + v], Color = isOut ? "#c45ad6" : ThreeDPalette.Nila,
+                Emissive = conflict ? ThreeDPalette.Danger : null, EmissiveIntensity = conflict ? 0.6 : null,
+                Label = value is null ? v : $"{v} = {value}", LabelClass = conflict ? "is-danger" : "is-plain is-mono", Tooltip = $"{v}{(isOut ? " (derived)" : " (input)")}{(value is null ? string.Empty : $"\nvalue {value}")}",
+            });
+            if (conflict)
+            {
+                list.Add(new Object3D { Id = "c:" + v, Kind = "torus", Position = pos["v:" + v], Radius = 0.34, Tube = 0.025, Color = ThreeDPalette.Danger, Emissive = ThreeDPalette.Danger, EmissiveIntensity = 1, Pickable = false, Animate = Animate3D.Spin(1.5, "x") });
+            }
+        }
+
+        foreach (var (a, b, _) in edges)
+        {
+            var write = a.StartsWith("r:", StringComparison.Ordinal);
+            var ruleId = (write ? a : b)[2..];
+            var hot = fired.Contains(ruleId);
+            var arc = Layout3D.Arc(pos[a], pos[b], 0.25, 10);
+            list.Add(new Object3D
+            {
+                Id = $"e:{a}>{b}", Kind = hot ? "tube" : "line", Points = arc, Radius = hot ? 0.025 : null, Pickable = false,
+                Color = write ? ThreeDPalette.Soga : ThreeDPalette.Nila, Emissive = hot ? (write ? ThreeDPalette.Soga : ThreeDPalette.Nila) : null, EmissiveIntensity = hot ? 0.8 : null, Opacity = hot ? 1 : 0.5,
+            });
+            if (write)
+            {
+                var end = arc[^1];
+                var before = arc[^3];
+                list.Add(new Object3D { Id = $"h:{a}>{b}", Kind = "arrow", From = before, To = [before[0] + (end[0] - before[0]) * 0.7, before[1] + (end[1] - before[1]) * 0.7, before[2] + (end[2] - before[2]) * 0.7], Color = ThreeDPalette.Soga, Pickable = false });
+            }
+        }
+
+        Objects = list;
+    }
+
+    private void Toggle(BusinessRule rule, ChangeEventArgs e)
+    {
+        rule.Enabled = e.Value is true || string.Equals(e.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+        Evaluate();
+    }
+
+    private void FactsChanged(IDictionary<string, object?> facts)
+    {
+        Facts = facts;
+        Evaluate();
+    }
+
+    private void Picked(PickEvent e)
+    {
+        if (e.Id.StartsWith("r:", StringComparison.Ordinal) && Rules.FirstOrDefault(r => r.Id == e.Id[2..]) is { } rule)
+        {
+            var io = _io[rule.Id];
+            _selected = $"{rule.Name}\nreads {string.Join(", ", io.Reads)}\nwrites {string.Join(", ", io.Writes)}";
+        }
+        else if (e.Id.StartsWith("v:", StringComparison.Ordinal))
+        {
+            var v = e.Id[2..];
+            var readers = Rules.Where(r => _io[r.Id].Reads.Contains(v)).Select(r => r.Name);
+            var writers = Rules.Where(r => _io[r.Id].Writes.Contains(v)).Select(r => r.Name);
+            _selected = $"{v}\nread by {string.Join(", ", readers)}\nwritten by {string.Join(", ", writers)}";
+        }
+    }
+
+    private Task Summarize()
+    {
+        var rules = string.Join("\n", Rules.Where(r => r.Enabled).OrderByDescending(r => r.Priority).Select(r => $"- {r.Name} (priority {r.Priority}{(r.StopOnMatch ? ", stops evaluation" : string.Empty)}): when {r.Condition} then {r.Actions}"));
+        var conflicts = _conflicts.Count == 0 ? "none" : string.Join("; ", _conflicts.Select(c => $"{c.Key} written by {string.Join(" and ", c.Value)}"));
+        var result = _eval is null ? "not evaluated" : $"fired {string.Join(", ", _eval.Fired.Select(r => r.Name))}; outputs {string.Join(", ", Outputs().Select(kv => $"{kv.Key}={kv.Value}"))}";
+        return NarrateAsync("a policy analyst summarising business rules for a non-technical manager",
+            $"Rules:\n{rules}\nVariables written by more than one rule (potential conflicts): {conflicts}. Test case {string.Join(", ", Facts.Select(kv => $"{kv.Key}={kv.Value}"))}: {result}.",
+            AiTasks.Decision);
+    }
+}

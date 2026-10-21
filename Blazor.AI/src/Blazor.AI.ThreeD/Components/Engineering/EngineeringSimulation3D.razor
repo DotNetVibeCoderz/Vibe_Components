@@ -1,0 +1,247 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* CFD, FEM, thermal and structural analysis computed in C# and shown in 3D, with an AI engineer explaining the results. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height">
+        <div class="bai3d-panel">
+            <h4>@_mode</h4>
+            <div class="bai3d-kpi">
+                @foreach (var (k, v) in _readouts) { <div><b>@v</b><span>@k</span></div> }
+            </div>
+        </div>
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            @if (_mode == "Structural")
+            {
+                <span><i style="background:@ThreeDPalette.Nila"></i>tension</span><span><i style="background:@ThreeDPalette.Danger"></i>compression</span>
+            }
+            else
+            {
+                <span><i style="background:@ThreeDPalette.Ramp(0)"></i>@_lowLabel</span><span><i style="background:@ThreeDPalette.Ramp(1)"></i>@_highLabel</span>
+            }
+        </div>
+    </Scene3D>
+
+    <AiCard Title="Engineering simulation" Subtitle="Solved in .NET, explained by AI" Icon="bi-wind">
+        <div class="bai-stack">
+            <div class="bai-row">
+                @foreach (var m in Modes)
+                {
+                    <button type="button" class="bai-chip @(m == _mode ? "is-active" : null)" @onclick="() => SetMode(m)">@m</button>
+                }
+            </div>
+            @switch (_mode)
+            {
+                case "CFD":
+                    @Slider("Flow speed (m/s)", _flow, 0.5, 5, 0.1, v => _flow = v)
+                    @Slider("Cylinder radius (m)", _radius, 0.3, 1.5, 0.05, v => _radius = v)
+                    break;
+                case "FEM":
+                    @Slider("Tip load (kN)", _load, 0.5, 20, 0.5, v => _load = v)
+                    @Slider("Beam length (m)", _length, 1, 6, 0.1, v => _length = v)
+                    @Slider("Section height (mm)", _sectionH, 60, 300, 5, v => _sectionH = v)
+                    break;
+                case "Thermal":
+                    @Slider("Heater temperature (°C)", _heater, 60, 400, 5, v => _heater = v)
+                    @Slider("Time steps", _steps, 20, 1500, 20, v => _steps = v)
+                    break;
+                default:
+                    @Slider("Load per node (kN)", _trussLoad, 1, 60, 1, v => _trussLoad = v)
+                    @Slider("Truss height (m)", _trussH, 0.8, 3, 0.1, v => _trussH = v)
+                    break;
+            }
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain results</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public static readonly string[] Modes = ["CFD", "FEM", "Thermal", "Structural"];
+    private Scene3DOptions _options = new();
+    private string _mode = "CFD";
+    private double _flow = 2, _radius = 0.8, _load = 5, _length = 3, _sectionH = 120, _heater = 250, _steps = 400, _trussLoad = 20, _trussH = 1.6;
+    private List<(string, string)> _readouts = [];
+    private string _lowLabel = "low", _highLabel = "high";
+    private string _facts = string.Empty;
+
+    /// <summary>Mode to open first: CFD, FEM, Thermal or Structural.</summary>
+    [Parameter] public string InitialMode { get; set; } = "CFD";
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 8, 9], Target = [0, 0, 0] },
+            Lights = "studio",
+            Grid = new(14, 14, "#5b6bd6", 0.15),
+            AriaLabel = "Engineering simulation results",
+        };
+        _mode = Modes.Contains(InitialMode) ? InitialMode : "CFD";
+        Solve();
+    }
+
+    private RenderFragment Slider(string label, double value, double min, double max, double step, Action<double> set) => __builder =>
+    {
+        <label class="bai-small">@label <b>@value.ToString(step >= 1 ? "0" : "0.0#", CultureInfo.InvariantCulture)</b>
+            <input type="range" style="width:100%" min="@Inv(min)" max="@Inv(max)" step="@Inv(step)" value="@Inv(value)" aria-label="@label" @onchange="e => Change(set, e.Value)" />
+        </label>
+    };
+
+    private static string Inv(double v) => v.ToString(CultureInfo.InvariantCulture);
+
+    private void Change(Action<double> set, object? value)
+    {
+        set(double.TryParse(value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0);
+        Solve();
+    }
+
+    private void SetMode(string m)
+    {
+        _mode = m;
+        Narration = null;
+        Solve();
+        _ = Scene?.FlyToAsync(m switch { "FEM" => [1.5, 3, 7], "Structural" => [0, 3, 9], _ => [0, 8, 9] }, m switch { "FEM" => [1.5, 0.5, 0], "Structural" => [0, 1, 0], _ => [0, 0, 0] });
+    }
+
+    private void Solve()
+    {
+        switch (_mode)
+        {
+            case "CFD": Cfd(); break;
+            case "FEM": Fem(); break;
+            case "Thermal": Thermal(); break;
+            default: Truss(); break;
+        }
+    }
+
+    private void Cfd()
+    {
+        var lines = EngineeringSolvers.Streamlines(_flow, _radius, 17);
+        var max = 2 * _flow;
+        var list = new List<Object3D>
+        {
+            new() { Id = "body", Kind = "cylinder", Radius = _radius, Height = 0.8, Position = [0, 0.4, 0], Color = "#c9cff5", Metalness = 0.6, Roughness = 0.3, Tooltip = $"Cylinder, radius {_radius:0.00} m" },
+        };
+        // Pressure coefficient field on the floor: Cp = 1 − (|V|/U)².
+        const int n = 40;
+        var cp = new double[n * n];
+        for (var r = 0; r < n; r++)
+        {
+            for (var c = 0; c < n; c++)
+            {
+                double x = (c / (n - 1.0) - 0.5) * 10, z = (r / (n - 1.0) - 0.5) * 7;
+                var (u, w) = EngineeringSolvers.CylinderFlow(x, z, _flow, _radius);
+                cp[r * n + c] = x * x + z * z < _radius * _radius ? 1 : 1 - (u * u + w * w) / (_flow * _flow);
+            }
+        }
+
+        list.Add(new Object3D { Id = "cp", Kind = "surface", Rows = n, Cols = n, Size = [10, 0, 7], Values = new double[n * n], Colors = cp.Select(v => ThreeDPalette.Ramp((1 - v) / 4)).ToArray(), Opacity = 0.55, Pickable = false, Tooltip = "Pressure coefficient" });
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var pts = lines[i].Where((_, k) => k % 2 == 0).Select(p => new[] { p.X, 0.45, p.Z }).ToArray();
+            if (pts.Length < 2) continue;
+            list.Add(new Object3D { Id = $"s{i}", Kind = "line", Points = pts, Colors = lines[i].Where((_, k) => k % 2 == 0).Select(p => ThreeDPalette.Ramp(p.Speed / max)).ToArray(), Pickable = false });
+            if (i % 2 == 0)
+            {
+                list.Add(new Object3D { Id = $"p{i}", Kind = "sphere", Radius = 0.05, Color = "#ffffff", Emissive = "#ffffff", EmissiveIntensity = 0.6, Pickable = false,
+                    Animate = Animate3D.Path(pts, _flow * 0.8) with { Loop = true, Face = false, Phase = i * 0.37 } });
+            }
+        }
+
+        Objects = list;
+        _lowLabel = "slow / high pressure";
+        _highLabel = "fast / low pressure";
+        _readouts = [("max speed", $"{max:0.0} m/s"), ("stagnation Cp", "1.00"), ("min Cp", "−3.00")];
+        _facts = string.Create(CultureInfo.InvariantCulture, $"Inviscid potential flow at {_flow:0.0} m/s past a cylinder of radius {_radius:0.00} m. Peak surface speed is twice the free stream ({max:0.0} m/s) at the top and bottom; stagnation points front and back (Cp = 1); minimum Cp = −3. No viscosity, so no wake or drag (d'Alembert's paradox).");
+    }
+
+    private void Fem()
+    {
+        const double e = 200e9; // steel
+        double b = 0.06, h = _sectionH / 1000, load = _load * 1000;
+        const int segments = 24;
+        var (tipDef, _) = EngineeringSolvers.Cantilever(_length, _length, load, e, b, h);
+        var (_, rootStress) = EngineeringSolvers.Cantilever(0, _length, load, e, b, h);
+        var exaggeration = Math.Min(400, 0.6 / Math.Max(1e-6, tipDef));
+        var list = new List<Object3D>
+        {
+            new() { Id = "wall", Kind = "box", Size = [0.3, 2.4, 1.6], Position = [-0.15, 0.6, 0], Color = "#5b6bd6", Pickable = false },
+        };
+        for (var s = 0; s < segments; s++)
+        {
+            var x0 = _length * s / segments;
+            var x1 = _length * (s + 1) / segments;
+            var (d0, s0) = EngineeringSolvers.Cantilever((x0 + x1) / 2, _length, load, e, b, h);
+            var y = 0.6 - d0 * exaggeration;
+            list.Add(new Object3D { Id = $"seg{s}", Kind = "box", Size = [x1 - x0 + 0.01, Math.Max(0.06, h * 2.2), 0.4], Position = [(x0 + x1) / 2, y, 0],
+                Color = ThreeDPalette.Ramp(s0 / rootStress), Tooltip = string.Create(CultureInfo.InvariantCulture, $"x = {(x0 + x1) / 2:0.00} m\nσ = {s0 / 1e6:0.0} MPa\nδ = {d0 * 1000:0.00} mm") });
+        }
+
+        list.Add(Object3D.Line("undeformed", [[0, 0.6, 0.25], [_length, 0.6, 0.25]], "#8a8fb0", dashed: true));
+        list.Add(new Object3D { Id = "load", Kind = "arrow", From = [_length, 1.9 - tipDef * exaggeration, 0], To = [_length, 0.75 - tipDef * exaggeration, 0], Color = ThreeDPalette.Danger, Label = $"{_load:0.#} kN", LabelClass = "is-danger", Pickable = false });
+        Objects = list;
+        var safety = 250e6 / Math.Max(1, rootStress);
+        _lowLabel = "low stress";
+        _highLabel = "high stress";
+        _readouts = [("tip deflection", $"{tipDef * 1000:0.00} mm"), ("max stress", $"{rootStress / 1e6:0.0} MPa"), ("safety factor", $"{safety:0.00}")];
+        _facts = string.Create(CultureInfo.InvariantCulture, $"Steel cantilever (E = 200 GPa), length {_length:0.0} m, rectangular section 60 × {_sectionH:0} mm, tip load {_load:0.#} kN. Euler–Bernoulli: tip deflection {tipDef * 1000:0.00} mm, maximum bending stress {rootStress / 1e6:0.0} MPa at the wall, safety factor {safety:0.00} against 250 MPa yield. Deflection drawn exaggerated ×{exaggeration:0}.");
+    }
+
+    private void Thermal()
+    {
+        const int n = 40;
+        var temps = EngineeringSolvers.Heat(n, (int)_steps, _heater, (n / 3, n / 2));
+        var max = temps.Max();
+        Objects =
+        [
+            new() { Id = "plate", Kind = "surface", Rows = n, Cols = n, Size = [8, 0, 8], Values = temps.Select(t => (t - 20) / Math.Max(1, _heater - 20) * 2.2).ToArray(),
+                Colors = temps.Select(t => ThreeDPalette.Ramp((t - 20) / Math.Max(1, _heater - 20))).ToArray(), DoubleSided = true, Tooltip = string.Create(CultureInfo.InvariantCulture, $"Max {max:0} °C, edges 20 °C") },
+            new() { Id = "heater", Kind = "cylinder", Radius = 0.25, Height = 0.15, Position = [-8 / 2.0 + 8.0 * (n / 3) / (n - 1), 2.45, 0], Color = ThreeDPalette.Danger, Emissive = ThreeDPalette.Danger, EmissiveIntensity = 1.5, Label = $"{_heater:0} °C", LabelClass = "is-danger", Pickable = false },
+        ];
+        var mean = temps.Average();
+        _lowLabel = "20 °C";
+        _highLabel = $"{_heater:0} °C";
+        _readouts = [("mean", $"{mean:0.0} °C"), ("hottest", $"{max:0} °C"), ("steps", $"{_steps:0}")];
+        _facts = string.Create(CultureInfo.InvariantCulture, $"2-D transient heat conduction on a square plate (explicit finite differences, {n}×{n} grid). Edges held at 20 °C, a heater at {_heater:0} °C. After {_steps:0} steps the mean temperature is {mean:0.0} °C. Height and colour show temperature.");
+    }
+
+    private void Truss()
+    {
+        var r = EngineeringSolvers.WarrenTruss(5, 1.4, _trussH, _trussLoad * 1000);
+        var maxF = r.Forces.Max(Math.Abs);
+        var offset = 5 * 1.4 / 2;
+        double[] P(int i) => [r.Nodes[i][0] - offset, r.Nodes[i][1] + 0.3, 0];
+        var list = new List<Object3D>();
+        for (var m = 0; m < r.Members.Length; m++)
+        {
+            var (a, b) = r.Members[m];
+            var f = r.Forces[m];
+            var tension = f >= 0;
+            list.Add(new Object3D { Id = $"m{m}", Kind = "tube", Points = [P(a), P(b)], Radius = 0.025 + Math.Abs(f) / maxF * 0.06, Color = tension ? ThreeDPalette.Nila : ThreeDPalette.Danger,
+                Tooltip = string.Create(CultureInfo.InvariantCulture, $"Member {m + 1}: {Math.Abs(f) / 1000:0.0} kN {(tension ? "tension" : "compression")}") });
+        }
+
+        for (var i = 0; i < r.Nodes.Length; i++)
+        {
+            list.Add(new Object3D { Id = $"n{i}", Kind = "sphere", Radius = 0.08, Position = P(i), Color = "#e8ebff", Pickable = false });
+        }
+
+        list.Add(new Object3D { Id = "pin", Kind = "cone", Radius = 0.2, Height = 0.3, Position = [-offset, 0.08, 0], Color = ThreeDPalette.Soga, Label = $"R {r.Reactions[1] / 1000:0.0} kN", Pickable = false });
+        list.Add(new Object3D { Id = "roller", Kind = "sphere", Radius = 0.14, Position = [offset, 0.12, 0], Color = ThreeDPalette.Soga, Label = $"R {r.Reactions[2] / 1000:0.0} kN", Pickable = false });
+        for (var i = 0; i < 5; i++)
+        {
+            var top = P(6 + i);
+            list.Add(new Object3D { Id = $"F{i}", Kind = "arrow", From = [top[0], top[1] + 0.9, 0], To = [top[0], top[1] + 0.1, 0], Color = ThreeDPalette.Warning, Pickable = false });
+        }
+
+        Objects = list;
+        var maxT = r.Forces.Max();
+        var maxC = -r.Forces.Min();
+        _readouts = [("max tension", $"{maxT / 1000:0.0} kN"), ("max compression", $"{maxC / 1000:0.0} kN"), ("reactions", $"{r.Reactions[1] / 1000:0} + {r.Reactions[2] / 1000:0} kN")];
+        _facts = string.Create(CultureInfo.InvariantCulture, $"Warren truss, 5 panels of 1.4 m, height {_trussH:0.0} m, {_trussLoad:0} kN at each of 5 top nodes, pinned left and roller right, solved by the method of joints. Max tension {maxT / 1000:0.0} kN (bottom chord), max compression {maxC / 1000:0.0} kN (top chord). Reactions {r.Reactions[1] / 1000:0.0} and {r.Reactions[2] / 1000:0.0} kN.");
+    }
+
+    private Task Explain() => NarrateAsync("a senior structural and mechanical engineer explaining simulation results to a junior engineer", _facts);
+}

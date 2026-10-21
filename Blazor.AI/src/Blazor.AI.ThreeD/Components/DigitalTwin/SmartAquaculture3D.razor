@@ -1,0 +1,241 @@
+@namespace Blazor.AI.ThreeD
+@inherits TwinComponentBase
+@using Blazor.AI.Visualization
+@* Aquaculture digital twin: net cages with swimming fish, water quality, growth prediction and feeding optimisation. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel">
+                <h4>@Title · @_cage</h4>
+                <div class="bai3d-kpi">
+                    @foreach (var key in GaugeKeys)
+                    {
+                        var s = Sim[$"{_cage}-{key}"];
+                        <div><b style="color:@TwinUi.LevelColor(s.Level)">@s.Short()</b><span>@s.Spec.Name @s.Spec.Unit</span></div>
+                    }
+                </div>
+            </div>
+            <div class="bai3d-panel">
+                <h4>Growth</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@TwinUi.N(_weight[_cage], "0")</b><span>g avg weight</span></div>
+                    <div><b>@TwinUi.N(Biomass(_cage) / 1000, "0.0")</b><span>t biomass</span></div>
+                    <div><b>@HarvestDays(_cage)</b><span>days to harvest</span></div>
+                </div>
+            </div>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="Aquaculture copilot" Subtitle="Water quality · growth · feeding" Icon="bi-water">
+        <div class="bai-stack">
+            <div class="bai-row">
+                @foreach (var c in _cages)
+                {
+                    <button type="button" class="bai-chip @(c == _cage ? "is-active" : null)" @onclick="() => _cage = c">@c</button>
+                }
+                <span class="bai-spacer"></span>
+                <button type="button" class="bai-btn-ghost" @onclick="Toggle"><i class="bi @(Running ? "bi-pause-fill" : "bi-play-fill")" aria-hidden="true"></i>@(Running ? "Pause" : "Resume")</button>
+            </div>
+            <Sparkline Values="@Sim[$"{_cage}-do"].History.ToArray()" Width="300" Height="40" Color="var(--bai-nila)" />
+            <div class="bai-small bai-faint">Dissolved oxygen, last @Sim[$"{_cage}-do"].History.Count readings</div>
+            <div class="bai-row">
+                <button type="button" class="bai-btn bai-btn-ai" @onclick="Feed"><i class="bi bi-basket" aria-hidden="true"></i>Feed @TwinUi.N(FeedKg(_cage), "0.0") kg</button>
+                <button type="button" class="bai-btn-ghost @(_aerating.Contains(_cage) ? "is-active" : null)" aria-pressed="@_aerating.Contains(_cage)" @onclick="Aerate"><i class="bi bi-wind" aria-hidden="true"></i>Aerator @(_aerating.Contains(_cage) ? "on" : "off")</button>
+            </div>
+            <p class="bai-small bai-muted" style="margin:0"><b>Feeding plan:</b> @FeedingPlan(_cage)</p>
+            <TwinCopilot Simulator="@Sim" Provider="@Provider" Language="@Language" Role="an aquaculture specialist for tilapia cage farms" Context="@Facts"
+                         Suggestions="@(["Is the water safe for the fish?", "When can cage 2 be harvested?", "Should I feed now?"])" />
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly string[] GaugeKeys = ["do", "ph", "temp", "nh3"];
+    private readonly string[] _cages = ["Cage 1", "Cage 2"];
+    private readonly Dictionary<string, double> _weight = new() { ["Cage 1"] = 285, ["Cage 2"] = 410 };
+    private readonly HashSet<string> _aerating = [];
+    private Scene3DOptions _options = new();
+    private string _cage = "Cage 1";
+    private int _feedingUntil;
+
+    [Parameter] public string Title { get; set; } = "Waduk Jatiluhur";
+
+    /// <summary>Fish per cage (stocking).</summary>
+    [Parameter] public int FishPerCage { get; set; } = 6000;
+
+    /// <summary>Harvest weight in grams.</summary>
+    [Parameter] public double HarvestWeight { get; set; } = 500;
+
+    /// <summary>Fish models rendered per cage (visual sample of the stock).</summary>
+    [Parameter] public int VisibleFish { get; set; } = 9;
+
+    protected override void OnInitialized()
+    {
+        var specs = new List<SensorSpec>();
+        foreach (var c in _cages)
+        {
+            var crowded = c == "Cage 2";
+            specs.Add(new SensorSpec($"{c}-do", "DO", "mg/L", crowded ? 4.6 : 6.2, 0.08, 0, 12) { Asset = c, WarnLow = 4, CycleAmplitude = 1.1, CyclePeriod = 80, Drift = crowded ? -0.004 : 0 });
+            specs.Add(new SensorSpec($"{c}-ph", "pH", "", 7.4, 0.02, 5, 10) { Asset = c, WarnLow = 6.5, WarnHigh = 8.5 });
+            specs.Add(new SensorSpec($"{c}-temp", "Temp", "°C", 28.5, 0.08, 20, 36) { Asset = c, WarnHigh = 32, CycleAmplitude = 1.2, CyclePeriod = 80 });
+            specs.Add(new SensorSpec($"{c}-nh3", "NH₃", "mg/L", crowded ? 0.035 : 0.015, 0.002, 0, 1) { Asset = c, WarnHigh = 0.05, Drift = crowded ? 0.00008 : 0 });
+        }
+
+        Sim = new TwinSimulator(specs, seed: 9);
+        Sim.Step(25);
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [5.5, 3.2, 7], Target = [0, -0.6, 0] },
+            Background = "#0a2238",
+            Fog = new("#0a2238", 8, 24),
+            Lights = "day",
+            Controls = new() { MaxPolarAngle = Math.PI * 0.62 },
+            AriaLabel = "Aquaculture digital twin with fish cages",
+        };
+        Objects = Build();
+    }
+
+    private double CageX(string c) => c == "Cage 1" ? -2.2 : 2.2;
+
+    private Object3D[] Build()
+    {
+        var list = new List<Object3D>
+        {
+            new() { Id = "water", Kind = "plane", Size = [30, 30], Rotation = [-Math.PI / 2, 0, 0], Position = [0, 0, 0], Color = "#2f86c9", Opacity = 0.35, DoubleSided = true, Roughness = 0.1, Metalness = 0.2, Pickable = false },
+            new() { Id = "bed", Kind = "plane", Size = [30, 30], Rotation = [-Math.PI / 2, 0, 0], Position = [0, -2.6, 0], Color = "#1b3b2c", Roughness = 1, Pickable = false },
+            new() { Id = "walkway", Kind = "box", Position = [0, 0.08, 0], Size = [0.6, 0.12, 4.6], Color = "#a8834f", Roughness = 0.9, Tooltip = "Walkway" },
+        };
+        foreach (var c in _cages)
+        {
+            var x = CageX(c);
+            list.Add(new Object3D { Id = $"float-{c}", Kind = "torus", Position = [x, 0.05, 0], Rotation = [Math.PI / 2, 0, 0], Radius = 1.8, Tube = 0.09, Color = "#e8b84a", Roughness = 0.5, Tooltip = c, Label = c, LabelClass = "is-big" });
+            list.Add(new Object3D { Id = $"net-{c}", Kind = "cylinder", Position = [x, -1.1, 0], Radius = 1.75, Height = 2.2, Segments = 24, Color = "#9aa3c7", Wireframe = true, Opacity = 0.35, Pickable = false });
+            var rng = new Random(c.Length * 31 + (int)x);
+            for (var i = 0; i < Math.Clamp(VisibleFish, 1, 16); i++)
+            {
+                var angle = rng.NextDouble() * Math.PI * 2;
+                var r = 0.3 + rng.NextDouble() * 0.6;
+                list.Add(new Object3D
+                {
+                    Id = $"fish-{c}-{i}", Kind = "model", Url = ThreeDAssets.Fish, FitSize = c == "Cage 1" ? 0.4 : 0.48, Clip = "Swim", ClipSpeed = 0.8 + rng.NextDouble() * 0.6,
+                    Position = [x + Math.Cos(angle) * r, -0.5 - rng.NextDouble() * 1.3, Math.Sin(angle) * r],
+                    Animate = Animate3D.Wander(0.7 + rng.NextDouble() * 0.4, 0.25 + rng.NextDouble() * 0.2, rng.NextDouble() * 10),
+                    Pickable = false,
+                });
+            }
+
+            list.Add(new Object3D { Id = $"aer-{c}", Kind = "cylinder", Position = [x + 1.4, 0.15, 1.0], Radius = 0.14, Height = 0.3, Color = _aerating.Contains(c) ? ThreeDPalette.Nila : "#596093", Emissive = _aerating.Contains(c) ? ThreeDPalette.Nila : "#000000", EmissiveIntensity = 0.8, Tooltip = $"{c} aerator" });
+            if (_aerating.Contains(c))
+            {
+                var bub = new Random(7);
+                list.Add(new Object3D { Id = $"bubbles-{c}", Kind = "points", Pickable = false, PointSize = 0.05, Color = "#d6f4ff", Opacity = 0.7, Animate = Animate3D.Bob(0.25, 1.6),
+                    Points = Enumerable.Range(0, 60).Select(_ => new[] { x + 1.4 + (bub.NextDouble() - 0.5) * 0.5, -bub.NextDouble() * 2, 1.0 + (bub.NextDouble() - 0.5) * 0.5 }).ToArray() });
+            }
+
+            if (Sim.Tick < _feedingUntil && c == _cage)
+            {
+                var pel = new Random(3);
+                list.Add(new Object3D { Id = $"feed-{c}", Kind = "points", Pickable = false, PointSize = 0.05, Color = "#d9964f", Animate = Animate3D.Bob(0.15, 0.8),
+                    Points = Enumerable.Range(0, 120).Select(_ => { var a = pel.NextDouble() * Math.PI * 2; var d = Math.Sqrt(pel.NextDouble()) * 1.4; return new[] { x + Math.Cos(a) * d, -pel.NextDouble() * 0.6, Math.Sin(a) * d }; }).ToArray() });
+            }
+        }
+
+        return [.. list];
+    }
+
+    protected override IEnumerable<ObjectPatch> OnTick()
+    {
+        var rebuild = Sim.Tick == _feedingUntil;
+        foreach (var c in _cages)
+        {
+            Sim.SetOffset($"{c}-do", (_aerating.Contains(c) ? 1.6 : 0) - (Sim.Tick < _feedingUntil && c == _cage ? 0.6 : 0));
+            // Daily growth from a thermal growth coefficient, damped by low oxygen and ammonia.
+            var t = Sim[$"{c}-temp"].Value;
+            var oxygen = Math.Clamp((Sim[$"{c}-do"].Value - 3) / 2.5, 0, 1);
+            var ammonia = Math.Clamp(1 - Sim[$"{c}-nh3"].Value / 0.12, 0, 1);
+            _weight[c] += GrowthPerTick(_weight[c], t) * oxygen * ammonia;
+        }
+
+        return rebuild ? RebuildAndReturnNone() : _cages.Select(c => new ObjectPatch { Id = $"float-{c}", Color = Sim.ForAsset(c).Any(s => s.Level > 0) ? ThreeDPalette.Danger : "#e8b84a" });
+    }
+
+    private IEnumerable<ObjectPatch> RebuildAndReturnNone()
+    {
+        Objects = Build();
+        return [];
+    }
+
+    // Thermal-unit growth model for tilapia, scaled so one tick ≈ 6 hours.
+    private static double GrowthPerTick(double w, double temp) => 0.25 * Math.Pow(w, 0.6) * Math.Clamp((temp - 18) / 11, 0, 1.1) * 0.06;
+
+    private double Biomass(string c) => _weight[c] * FishPerCage * 0.95 / 1000;
+
+    private string HarvestDays(string c)
+    {
+        if (_weight[c] >= HarvestWeight)
+        {
+            return "ready";
+        }
+
+        double w = _weight[c], ticks = 0;
+        var t = Sim[$"{c}-temp"].Value;
+        while (w < HarvestWeight && ticks < 4000)
+        {
+            w += GrowthPerTick(w, t);
+            ticks++;
+        }
+
+        return TwinUi.N(ticks / 4, "0");
+    }
+
+    // Feed rate (% body weight / day) falls with size, and with low oxygen or off-optimal temperature.
+    private double FeedRate(string c)
+    {
+        var w = _weight[c];
+        var rate = w < 100 ? 4 : w < 300 ? 3 : 2;
+        var doFactor = Math.Clamp((Sim[$"{c}-do"].Value - 3) / 2, 0, 1);
+        var t = Sim[$"{c}-temp"].Value;
+        var tFactor = t is >= 26 and <= 31 ? 1 : 0.7;
+        return rate * doFactor * tFactor;
+    }
+
+    private double FeedKg(string c) => Biomass(c) * FeedRate(c) / 100 / 3; // three meals a day
+
+    private string FeedingPlan(string c)
+    {
+        var dissolved = Sim[$"{c}-do"].Value;
+        return dissolved < 4
+            ? $"Hold feed: DO is {TwinUi.N(dissolved)} mg/L. Run the aerator until it is above 4.5, then feed {TwinUi.N(FeedKg(c), "0.0")} kg."
+            : $"{TwinUi.N(FeedRate(c), "0.0")} % body weight per day in 3 meals ({TwinUi.N(FeedKg(c), "0.0")} kg each). Feed in the morning when DO is rising.";
+    }
+
+    private string Facts() =>
+        string.Join(" ", _cages.Select(c => $"{c}: avg weight {TwinUi.N(_weight[c], "0")} g, biomass {TwinUi.N(Biomass(c) / 1000, "0.0")} t, harvest in {HarvestDays(c)} days at {HarvestWeight} g; feeding plan: {FeedingPlan(c)}"));
+
+    private void Feed()
+    {
+        _feedingUntil = Sim.Tick + 6;
+        Sim.Log("action", $"Fed {TwinUi.N(FeedKg(_cage), "0.0")} kg to {_cage}", _cage);
+        Objects = Build();
+    }
+
+    private void Aerate()
+    {
+        if (!_aerating.Remove(_cage))
+        {
+            _aerating.Add(_cage);
+        }
+
+        Objects = Build();
+    }
+
+    private void Picked(PickEvent e)
+    {
+        var c = _cages.FirstOrDefault(x => e.Id.EndsWith(x, StringComparison.Ordinal));
+        if (c is not null)
+        {
+            _cage = c;
+        }
+    }
+}

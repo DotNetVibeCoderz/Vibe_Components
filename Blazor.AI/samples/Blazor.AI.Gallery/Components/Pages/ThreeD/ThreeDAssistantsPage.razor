@@ -1,0 +1,130 @@
+@page "/3d/assistants-data"
+<PageTitle>3D assistants, data and agents · Blazor.AI</PageTitle>
+
+<PageHeader Title="3D assistants, data and agents" Package="Blazor.AI.ThreeD" Icon="bi-badge-3d"
+            Lead="Companions that remember you, guides that walk you through places, knowledge and embeddings you can fly through, and agent teams you can watch think." />
+
+<DemoSection Title="AI companion" Component="AICompanion3D" Description="Remembers facts and goals from your messages, has a tunable personality, and shows its mood. Memories orbit the robot; hover one to read it." Code="@CompanionCode">
+    <AICompanion3D />
+</DemoSection>
+
+<DemoSection Title="Virtual tour guide" Component="AITourGuide3D" Description="The guide walks to each stop, points, and narrates from your facts with lip-synced speech. Presets: museum (Borobudur), smart city, campus, factory, tourism." Code="@TourCode">
+    <AITourGuide3D />
+</DemoSection>
+
+<DemoSection Title="Knowledge graph" Component="AIKnowledgeGraph3D" Description="Paste text; AI extracts entities and relations (a local extractor works offline). Switch between knowledge graph, entity relationship, semantic and concept-map views." Code="@GraphCode">
+    <AIKnowledgeGraph3D />
+</DemoSection>
+
+<DemoSection Title="Vector space viewer" Component="AIVectorSpaceViewer" Description="Documents, questions, answers and image captions embedded and projected to 3-D. Search to see the nearest neighbours and their cosine scores." Code="@VectorCode">
+    <AIVectorSpaceViewer />
+</DemoSection>
+
+<DemoSection Title="Cluster explorer" Component="AIClusterExplorer" Description="K-Means, DBSCAN, HDBSCAN and hierarchical clustering with GraviLearn, silhouette score, and AI-named segments." Code="@ClusterCode">
+    <AIClusterExplorer />
+</DemoSection>
+
+<DemoSection Title="Agent studio" Component="AgentStudio3D" Description="Agents as nodes, tools as satellites. Click to edit an agent's role and tools, then run a task and watch which tools light up." Code="@StudioCode">
+    <AgentStudio3D />
+</DemoSection>
+
+<DemoSection Title="Multi-agent arena" Component="MultiAgentArena" Description="Research, planning, coding and evaluation agents collaborate on a goal; message packets fly between them as they hand off." Code="@ArenaCode">
+    <MultiAgentArena />
+</DemoSection>
+
+<DemoSection Title="Agent mind map" Component="AgentMindMap3D" Description="A goal decomposed into a reasoning tree, a dependency graph and an execution graph you can run step by step." Code="@MindCode">
+    <AgentMindMap3D />
+</DemoSection>
+
+@code {
+    private const string CompanionCode = """
+        // Program.cs
+        builder.Services.AddBlazorAIThreeD();   // registers CompanionMemoryStore (per user)
+
+        <AICompanion3D Name="Sekar" SpeechLanguage="id-ID"
+                       Greeting="Halo! Aku Sekar. Siapa namamu?" />
+
+        @inject CompanionMemoryStore Memory
+        @code {
+            // Read what the companion learned, e.g. to personalise other pages.
+            IEnumerable<string> facts => Memory.Memories.Select(m => m.Text);
+        }
+        """;
+
+    private const string TourCode = """
+        <AITourGuide3D Tour="Museum" Name="Kawi" SpeechLanguage="id-ID"
+                       OnStopReached="stop => Log(stop.Name)" />
+
+        // Your own venue: scenery objects plus stops with facts for the narration.
+        var tour = new TourPreset("Gedung Sate", "bi-bank", "#3f4a3a",
+            [Object3D.Model("hall", "models/gedung-sate.glb", [0, 0, -3], fitHeight: 6)],
+            [
+                new TourStop("Front lawn", Stand: [0, 0, 6], Focus: [0, 2, -3],
+                    Facts: "Built 1920–1924 as the Dutch colonial public works office in Bandung..."),
+            ]);
+        <AITourGuide3D Preset="@tour" />
+        """;
+
+    private const string GraphCode = """
+        <AIKnowledgeGraph3D Mode="Knowledge graph" Text="@article"
+                            OnEntitySelected="e => selected = e.Name" />
+
+        // Or render a graph you already have:
+        var graph = new ExtractedGraph(
+            [new("Bank Indonesia", "Organization"), new("BI-Rate", "Concept"), new("Inflation", "Concept")],
+            [new("Bank Indonesia", "BI-Rate", "sets"), new("BI-Rate", "Inflation", "influences")],
+            FromModel: false);
+        <AIKnowledgeGraph3D Graph="@graph" Mode="Concept map" />
+        """;
+
+    private const string VectorCode = """
+        // Uses the provider's embedding model; falls back to offline hashing embeddings.
+        <AIVectorSpaceViewer Source="@items" TopK="5" Provider="azure" />
+
+        @code {
+            List<AIVectorSpaceViewer.VectorItem> items =
+            [
+                new("Document", "Perpanjangan SIM dapat dilakukan di Satpas..."),
+                new("Question", "Bagaimana cara memperpanjang SIM?"),
+                new("Answer", "Bawa KTP dan SIM lama ke Satpas terdekat."),
+            ];
+        }
+        """;
+
+    private const string ClusterCode = """
+        builder.Services.AddBlazorAIAnalytics();
+
+        <AIClusterExplorer Algorithm="ClusterAlgorithm.Hdbscan" MinClusterSize="15"
+                           Dataset="@SampleDatasets.Segments()"
+                           OnClustered="r => silhouette = r.Silhouette" />
+
+        // Same engine without UI:
+        var layout = ClusterEngine.Run(myDataset, ClusterAlgorithm.KMeans, k: 5);
+        foreach (var c in layout.Summaries) Console.WriteLine($"{c.AutoName}: {c.Size}");
+        """;
+
+    private const string StudioCode = """
+        builder.Services.AddBlazorAIAgents(tools =>
+            tools.Register(CekOngkir, "cek_ongkir", "Shipping cost between two cities", "Logistics"));
+
+        <AgentStudio3D OnAgentSaved="a => Console.WriteLine($"Saved {a.Name}")" />
+        """;
+
+    private const string ArenaCode = """
+        <MultiAgentArena Goal="Rancang aplikasi antrean puskesmas"
+                         Mode="OrchestrationMode.RoundRobin"
+                         OnCompleted="msgs => transcript = msgs" />
+
+        // Bring your own team (any AgentDefinition works):
+        <MultiAgentArena Team="@([legal, finance, product])" />
+        """;
+
+    private const string MindCode = """
+        <AgentMindMap3D Goal="Digitalise 120 village cooperatives in NTT"
+                        View="Execution graph" StepDelayMs="500"
+                        OnStepSelected="s => Console.WriteLine(s.Title)" />
+
+        // The planner is reusable: model JSON with an offline fallback.
+        var steps = MindMapPlan.FromJson(json) ?? MindMapPlan.Local(goal);
+        """;
+}

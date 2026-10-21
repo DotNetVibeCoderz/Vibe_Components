@@ -1,0 +1,172 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Quest chains (steps, objectives, rewards, branches) from a theme, laid out as waypoints on a 3D quest map. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-panel">
+            <h4>@_quest.Title</h4>
+            <div class="bai3d-kpi">
+                <div><b>@_quest.Steps.Count</b><span>steps</span></div>
+                <div><b>@_quest.Steps.Sum(s => s.Xp)</b><span>XP</span></div>
+                <div><b>@_quest.Steps.Count(s => s.Branch is not null)</b><span>branches</span></div>
+            </div>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="AI quest generator" Subtitle="Theme in, playable quest chain out" Icon="bi-signpost-split">
+        <div class="bai-stack">
+            <div class="bai-row">
+                <input class="bai-input bai-spacer" @bind="_theme" aria-label="Quest theme" placeholder="Theme, e.g. lost kris of the sultan" />
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="Generate"><i class="bi bi-stars" aria-hidden="true"></i>Generate</button>
+            </div>
+            <AiError Message="@Error" />
+            @if (IsBusy) { <AiThinking Label="Writing the quest…" /> }
+            <p class="bai-small bai-muted" style="margin:0">@_quest.Hook</p>
+            <ol class="bai-small" style="margin:0; padding-left:1.2rem">
+                @foreach (var (s, i) in _quest.Steps.Select((s, i) => (s, i)))
+                {
+                    <li style="cursor:pointer; @(i == _active ? "color:var(--bai-soga); font-weight:600" : null)" @onclick="() => Focus(i)">
+                        <b>@s.Title</b>, @s.Location. @s.Objective <span class="bai-faint">(+@s.Xp XP@(s.Reward is { Length: > 0 } ? ", " + s.Reward : null))</span>
+                        @if (s.Branch is not null) { <div class="bai-faint">Branch: @s.Branch</div> }
+                    </li>
+                }
+            </ol>
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" @onclick="Export"><i class="bi bi-filetype-json" aria-hidden="true"></i>Export JSON</button>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private const double World = 12;
+    private Scene3DOptions _options = new();
+    private string _theme = "The lost kris of Sultan Agung, hidden among volcanic islands";
+    private Quest _quest = QuestPlanner.Local("The lost kris of Sultan Agung, hidden among volcanic islands");
+    private Terrain? _terrain;
+    private int _active;
+
+    /// <summary>One quest step.</summary>
+    public sealed record QuestStep(string Title, string Objective, string Location, int Xp, string? Reward, string? Branch);
+
+    /// <summary>A quest chain.</summary>
+    public sealed record Quest(string Title, string Hook, List<QuestStep> Steps);
+
+    [Parameter] public EventCallback<Quest> OnGenerated { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 13, 10], Target = [0, 0, 0.5] },
+            Lights = "day",
+            Background = "#1b2a4a",
+            AriaLabel = "Quest map with waypoints",
+        };
+        Layout();
+    }
+
+    private Task Generate() => RunAsync(async ct =>
+    {
+        var quest = QuestPlanner.Local(_theme);
+        try
+        {
+            var json = await PlanAsync("You are a narrative game designer. Write a quest chain of 4-6 steps with clear objectives, a location per step, XP and optional reward, and at most two branching choices.",
+                _theme,
+                """{"title":"","hook":"one sentence","steps":[{"title":"","objective":"","location":"","xp":100,"reward":"","branch":""}]}""", ct);
+            if (json?["steps"] is System.Text.Json.Nodes.JsonArray arr)
+            {
+                var steps = arr.Select(n => new QuestStep(
+                        n?["title"]?.ToString() ?? string.Empty,
+                        n?["objective"]?.ToString() ?? string.Empty,
+                        n?["location"]?.ToString() ?? string.Empty,
+                        (int)Math.Clamp(n?["xp"]?.GetValue<double>() ?? 100, 10, 5000),
+                        n?["reward"]?.ToString() is { Length: > 1 } r ? r : null,
+                        n?["branch"]?.ToString() is { Length: > 3 } b ? b : null))
+                    .Where(s => s.Title.Length > 2 && s.Objective.Length > 5).Take(7).ToList();
+                if (steps.Count >= 3)
+                {
+                    quest = new Quest(json["title"]?.ToString() is { Length: > 2 } t ? t : quest.Title, json["hook"]?.ToString() is { Length: > 8 } h ? h : quest.Hook, steps);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Local chain stands.
+        }
+
+        _quest = quest;
+        _active = 0;
+        Layout();
+        await OnGenerated.InvokeAsync(_quest);
+    });
+
+    private void Layout()
+    {
+        var seed = Math.Abs(_theme.GetHashCode(StringComparison.Ordinal)) % 9999 + 1;
+        _terrain = TerrainGenerator.Generate(ProceduralWorldStudio.FromWords(_theme) with { Seed = seed, Size = 64, MaxHeight = 2 });
+        var list = TerrainGenerator.ToObjects(_terrain, World).ToList();
+        var spots = TerrainGenerator.Sample(_terrain, 0.03, 0.7, _quest.Steps.Count, seed, 9);
+        // Visit the spots in a sensible order (nearest neighbour from the westmost).
+        var ordered = new List<(int X, int Z)>();
+        var left = spots.OrderBy(s => s.X).ToList();
+        if (left.Count > 0)
+        {
+            var cur = left[0];
+            left.RemoveAt(0);
+            ordered.Add(cur);
+            while (left.Count > 0)
+            {
+                var next = left.OrderBy(s => Math.Pow(s.X - cur.X, 2) + Math.Pow(s.Z - cur.Z, 2)).First();
+                left.Remove(next);
+                ordered.Add(next);
+                cur = next;
+            }
+        }
+
+        var pts = ordered.Select(s => { var p = _terrain.WorldPos(s.X, s.Z, World); return new[] { p[0], p[1] + 0.15, p[2] }; }).ToList();
+        for (var i = 0; i < pts.Count && i < _quest.Steps.Count; i++)
+        {
+            var step = _quest.Steps[i];
+            var done = i < _active;
+            var color = i == _active ? ThreeDPalette.Soga : done ? ThreeDPalette.Nila : "#c9cff5";
+            list.Add(new Object3D { Id = $"pin{i}", Kind = "cone", Radius = 0.18, Height = 0.5, Rotation = [Math.PI, 0, 0], Position = [pts[i][0], pts[i][1] + 0.45, pts[i][2]], Color = color, Emissive = color, EmissiveIntensity = i == _active ? 0.6 : 0.15,
+                Animate = i == _active ? Animate3D.Bob(0.08, 1.2) : null, Label = $"{i + 1}. {step.Title}", LabelClass = i == _active ? "is-soga" : null, Tooltip = $"{step.Location}\n{step.Objective}" });
+            if (step.Branch is not null)
+            {
+                list.Add(new Object3D { Id = $"branch{i}", Kind = "torus", Radius = 0.3, Tube = 0.03, Rotation = [Math.PI / 2, 0, 0], Position = [pts[i][0], pts[i][1] + 0.05, pts[i][2]], Color = "#c45ad6", Emissive = "#c45ad6", EmissiveIntensity = 0.6, Pickable = false });
+            }
+        }
+
+        if (pts.Count > 1)
+        {
+            var path = new List<double[]>();
+            for (var i = 0; i < pts.Count - 1; i++)
+            {
+                path.AddRange(Layout3D.Arc(pts[i], pts[i + 1], 0.6, 10).SkipLast(1));
+            }
+
+            path.Add(pts[^1]);
+            list.Add(new Object3D { Id = "trail", Kind = "tube", Points = path, Radius = 0.03, Color = ThreeDPalette.Soga, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 0.5, Pickable = false });
+            list.Add(new Object3D { Id = "hero", Kind = "sphere", Radius = 0.12, Color = "#ffffff", Emissive = ThreeDPalette.Nila, EmissiveIntensity = 1, Pickable = false, Animate = Animate3D.Path(path, 0.8) });
+        }
+
+        Objects = list;
+    }
+
+    private void Picked(PickEvent e)
+    {
+        if (e.Id.StartsWith("pin", StringComparison.Ordinal) && int.TryParse(e.Id[3..], out var i))
+        {
+            Focus(i);
+        }
+    }
+
+    private void Focus(int i)
+    {
+        _active = i;
+        Layout();
+    }
+
+    private async Task Export() =>
+        await Js.DownloadTextAsync("quest.json", System.Text.Json.JsonSerializer.Serialize(_quest, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }), "application/json");
+}

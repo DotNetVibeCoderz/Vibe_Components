@@ -1,0 +1,204 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Ask a building model questions: AI maps the question to a query, .NET computes the answer over the elements and highlights them. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-panel">
+            <h4>@(_answer ?? "Building model")</h4>
+            <div class="bai3d-kpi">
+                <div><b>@_elements.Count</b><span>elements</span></div>
+                <div><b>@_matches.Count</b><span>matched</span></div>
+                <div><b>@_clashes.Count</b><span>clashes</span></div>
+            </div>
+        </div>
+        @if (_picked is { } p)
+        {
+            <div class="bai3d-panel bai3d-hud-bottom">
+                <h4>@p.Name</h4>
+                @p.Type · level @p.Level · @p.Material · fire @p.FireRating<br />
+                @p.Size[0].ToString("0.00", CultureInfo.InvariantCulture) × @p.Size[1].ToString("0.00", CultureInfo.InvariantCulture) × @p.Size[2].ToString("0.00", CultureInfo.InvariantCulture) m · area @p.Area.ToString("0.0", CultureInfo.InvariantCulture) m²
+            </div>
+        }
+    </Scene3D>
+
+    <AiCard Title="BIM assistant" Subtitle="Questions answered by computing over the model" Icon="bi-building">
+        <div class="bai-stack">
+            <form class="bai-row" @onsubmit="Ask" @onsubmit:preventDefault="true">
+                <input class="bai-input bai-spacer" @bind="_question" placeholder="How many doors on level 2?" aria-label="Question about the building" />
+                <button type="submit" class="bai-btn bai-btn-ai" disabled="@IsBusy"><i class="bi bi-stars" aria-hidden="true"></i>Ask</button>
+            </form>
+            <div class="bai-row">
+                @foreach (var s in Suggestions) { <button type="button" class="bai-chip" @onclick="() => Quick(s)">@s</button> }
+            </div>
+            <div class="bai-row">
+                <label class="bai-small">Level
+                    <select class="bai-select" style="width:auto" @bind="_level" @bind:after="Draw" aria-label="Visible levels">
+                        <option value="0">All</option><option value="1">1</option><option value="2">2</option>
+                    </select>
+                </label>
+                <button type="button" class="bai-btn-ghost" @onclick="CheckClashes"><i class="bi bi-exclamation-diamond" aria-hidden="true"></i>Clash check</button>
+                <button type="button" class="bai-btn-ghost" @onclick="Reset">Clear</button>
+            </div>
+            <AiError Message="@Error" />
+            @if (_query is not null) { <p class="bai-small bai-faint" style="margin:0">Query: <code>@_query</code></p> }
+            @if (_clashes.Count > 0)
+            {
+                <ul class="bai-small" style="margin:0; padding-left:1.1rem; color:var(--bai-danger)">
+                    @foreach (var (a, b) in _clashes) { <li>@a.Name ↔ @b.Name (level @a.Level)</li> }
+                </ul>
+            }
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly string[] Suggestions = ["How many doors on level 2?", "Total wall area?", "Berapa jendela di lantai 1?", "Concrete volume?", "Find clashes"];
+    private Scene3DOptions _options = new();
+    private List<BimElement> _elements = BimModel.SampleBuilding();
+    private IReadOnlyList<BimElement> _matches = [];
+    private List<(BimElement A, BimElement B)> _clashes = [];
+    private BimElement? _picked;
+    private BimQuery? _query;
+    private string? _question = "How many doors on level 2?";
+    private string? _answer;
+    private int _level;
+
+    /// <summary>Elements to show; defaults to a two-storey sample building with a deliberate duct clash.</summary>
+    [Parameter] public IReadOnlyList<BimElement>? Elements { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Elements is { Count: > 0 })
+        {
+            _elements = [.. Elements];
+        }
+
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [13, 11, 14], Target = [0, 2.6, 0] },
+            Lights = "day",
+            Ground = new(30, "#3b4a3a"),
+            AriaLabel = "Building information model",
+        };
+        Draw();
+    }
+
+    private static string BaseColor(BimElement e) => e.Type switch
+    {
+        "wall" => e.Material.Contains("Gypsum") ? "#e6e2d8" : "#c98e6a",
+        "door" => e.Material == "Steel" ? "#5b6bd6" : "#8a6a3f",
+        "window" => "#9fd8ff",
+        "column" => "#9aa0aa",
+        "slab" => "#b9b9b4",
+        "duct" => "#d0d4dc",
+        _ => "#cccccc",
+    };
+
+    private void Draw()
+    {
+        var focus = _matches.Count > 0 || _clashes.Count > 0;
+        var hot = _matches.Select(m => m.Id).Concat(_clashes.SelectMany(c => new[] { c.A.Id, c.B.Id })).ToHashSet();
+        var clash = _clashes.SelectMany(c => new[] { c.A.Id, c.B.Id }).ToHashSet();
+        Objects = _elements.Where(e => _level == 0 || e.Level == _level).Select(e =>
+        {
+            var highlighted = hot.Contains(e.Id);
+            var color = clash.Contains(e.Id) ? ThreeDPalette.Danger : highlighted ? ThreeDPalette.Soga : BaseColor(e);
+            return new Object3D
+            {
+                Id = e.Id, Kind = "box", Position = e.Center, Size = e.Size, Color = color,
+                Opacity = focus && !highlighted ? 0.18 : e.Type == "window" ? 0.55 : 1,
+                Emissive = highlighted ? color : null, EmissiveIntensity = highlighted ? 0.35 : null,
+                Edges = e.Type is "wall" or "slab" ? "#5e554d" : null, Roughness = e.Type == "window" ? 0.1 : 0.8,
+                Tooltip = $"{e.Name}\n{e.Type} · L{e.Level} · {e.Material}",
+            };
+        }).ToArray();
+    }
+
+    private void Quick(string q)
+    {
+        _question = q;
+        _ = Ask();
+    }
+
+    private Task Ask() => RunAsync(async ct =>
+    {
+        var question = _question ?? string.Empty;
+        var query = BimModel.Parse(question);
+        try
+        {
+            var json = await PlanAsync("You convert questions about a building model into a query. action is one of count, area, volume, list, clash. type is one of wall, door, window, column, slab, duct, or null. level is a number or null.",
+                question, """{"action":"count","type":"door","level":2,"material":null}""", ct);
+            // Accept the model's query only when it agrees with what the question is about (guards against template echoes).
+            if (BimModel.FromJson(json) is { } ai && (ai.Type == query.Type || query.Type is null) && (query.Level is null || ai.Level == query.Level))
+            {
+                query = ai with { Material = ai.Material ?? query.Material };
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Keyword query stands.
+        }
+
+        _query = query;
+        if (query.Action == "clash")
+        {
+            CheckClashes();
+            return;
+        }
+
+        _clashes = [];
+        _matches = BimModel.Select(_elements, query);
+        var label = query.Type is null ? "elements" : query.Type + "s";
+        _answer = query.Action switch
+        {
+            "count" => $"{_matches.Count} {label}{(query.Level is { } l ? $" on level {l}" : string.Empty)}",
+            "area" => string.Create(CultureInfo.InvariantCulture, $"{_matches.Sum(m => m.Area):0.0} m² of {label}"),
+            "volume" => string.Create(CultureInfo.InvariantCulture, $"{_matches.Sum(m => m.Volume):0.00} m³ of {label}"),
+            _ => $"{_matches.Count} {label} found",
+        };
+        Draw();
+        var facts = $"Question: {question}\nComputed answer: {_answer}. Matching elements: {string.Join("; ", _matches.Take(12).Select(m => string.Create(CultureInfo.InvariantCulture, $"{m.Name} (L{m.Level}, {m.Material}, {m.Area:0.0} m²)")))}";
+        await StreamAnswer(facts, ct);
+    });
+
+    private async Task StreamAnswer(string facts, CancellationToken ct)
+    {
+        var system = "You are a BIM coordinator. Answer the question in one or two sentences using only the computed answer and elements given, then add one practical note." + (Language is null ? string.Empty : $" Answer in {Language}.");
+        var sb = new StringBuilder();
+        Narration = string.Empty;
+        await foreach (var token in Ai.StreamAsync(system, PromptTags.Wrap(PromptTags.Input, facts), AiTasks.Rag, Provider, null, ct))
+        {
+            sb.Append(token);
+            Narration = sb.ToString();
+            RenderThrottled();
+        }
+    }
+
+    private void CheckClashes()
+    {
+        _clashes = BimModel.Clashes(_elements);
+        _matches = [];
+        _answer = _clashes.Count == 0 ? "No clashes" : $"{_clashes.Count} clash{(_clashes.Count == 1 ? string.Empty : "es")} found";
+        Draw();
+        if (_clashes.Count > 0)
+        {
+            var c = _clashes[0].A.Center;
+            _ = Scene?.FlyToAsync([c[0] + 5, c[1] + 3, c[2] + 7], c);
+        }
+    }
+
+    private void Reset()
+    {
+        _matches = [];
+        _clashes = [];
+        _answer = null;
+        _query = null;
+        _picked = null;
+        Narration = null;
+        Draw();
+    }
+
+    private void Picked(PickEvent e) => _picked = _elements.FirstOrDefault(x => x.Id == e.Id);
+}

@@ -1,0 +1,270 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@using Blazor.AI.Analytics
+@* Policy evolution: per-cell value columns and greedy-action arrows, scrubbed across training snapshots. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-panel">
+            <h4>@(_snapshots.Count == 0 ? "Untrained policy" : $"After {_snapshots[_index].Episode} episodes")</h4>
+            <div class="bai3d-kpi">
+                <div><b>@(_snapshots.Count == 0 ? "–" : _snapshots[_index].GoalRate.ToString("P0", CultureInfo.InvariantCulture))</b><span>greedy reaches goal</span></div>
+                <div><b>@(_snapshots.Count == 0 ? "–" : _snapshots[_index].Changed.ToString(CultureInfo.InvariantCulture))</b><span>arrows changed</span></div>
+            </div>
+        </div>
+        @if (_cell is not null)
+        {
+            <div class="bai3d-panel bai3d-hud-right">@_cell</div>
+        }
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            <span><i style="background:@ThreeDPalette.Ramp(0.05)"></i>low value</span><span><i style="background:@ThreeDPalette.Ramp(0.95)"></i>high value</span><span><i style="background:@ThreeDPalette.Soga"></i>greedy action</span>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="@Title" Subtitle="Watch the policy improve" Icon="bi-signpost-split">
+        <div class="bai-stack">
+            <div class="bai-row">
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@_training" @onclick="TrainAsync"><i class="bi bi-cpu" aria-hidden="true"></i>@(_snapshots.Count == 0 ? "Train" : "Retrain")</button>
+                <button type="button" class="bai-btn-ghost" disabled="@(_snapshots.Count < 2 || _training)" @onclick="PlayAsync"><i class="bi @(_playing ? "bi-pause-fill" : "bi-play-fill")" aria-hidden="true"></i>@(_playing ? "Pause" : "Play")</button>
+            </div>
+            @if (_snapshots.Count > 1)
+            {
+                <div>
+                    <label class="bai-label" for="@($"{_uid}-snap")">Snapshot @(_index + 1) of @_snapshots.Count</label>
+                    <input id="@($"{_uid}-snap")" type="range" min="0" max="@(_snapshots.Count - 1)" value="@_index" @oninput="Scrub" style="width:100%" />
+                </div>
+            }
+            <div>
+                <label class="bai-label" for="@($"{_uid}-alg")">Algorithm</label>
+                <select id="@($"{_uid}-alg")" class="bai-select" @bind="Algorithm" disabled="@_training">
+                    <option value="@GridAlgorithm.QLearning">Q-learning</option>
+                    <option value="@GridAlgorithm.Sarsa">SARSA</option>
+                </select>
+            </div>
+            <p class="bai-small bai-muted" style="margin:0">Column height is the state value max<sub>a</sub> Q(s, a); the amber arrow is the action the agent would take. Click a cell for its Q-values.</p>
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@(IsBusy || _snapshots.Count == 0)" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain the policy</button>
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private readonly string _uid = "rlpv-" + Guid.NewGuid().ToString("N")[..6];
+    private readonly List<Snapshot> _snapshots = [];
+    private Scene3DOptions _options = new();
+    private DesignedGridWorld _world = GridScene.Arena();
+    private int _index;
+    private bool _training, _playing;
+    private string? _cell;
+    private CancellationTokenSource? _play;
+
+    private sealed record Snapshot(int Episode, double[,] Q, double GoalRate, int Changed);
+
+    [Parameter] public string Title { get; set; } = "Policy evolution";
+    [Parameter] public DesignedGridWorld? World { get; set; }
+    [Parameter] public GridAlgorithm Algorithm { get; set; } = GridAlgorithm.QLearning;
+    [Parameter] public int Episodes { get; set; } = 360;
+
+    /// <summary>How many snapshots to keep across training.</summary>
+    [Parameter] public int Snapshots { get; set; } = 24;
+
+    protected override void OnInitialized()
+    {
+        _world = World ?? GridScene.Arena();
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [5.5, 8, 8.5], Target = [0, 0.4, 0.2], Fov = 42 },
+            Lights = "night",
+            AriaLabel = "Grid of value columns and policy arrows",
+        };
+        Show(null);
+    }
+
+    private async Task TrainAsync()
+    {
+        _training = true;
+        _snapshots.Clear();
+        _cell = null;
+        Narration = null;
+        var total = Math.Clamp(Episodes, 40, 3000);
+        var every = Math.Max(1, total / Math.Clamp(Snapshots, 4, 60));
+        var world = World ?? GridScene.Arena();
+        _world = world;
+        var snaps = await Task.Run(() =>
+        {
+            var learner = new GridQLearner(world, Algorithm) { EpsilonDecay = Math.Pow(0.05, 1.0 / (total * 0.7)) };
+            var list = new List<Snapshot> { Capture(learner, 0, null) };
+            for (var e = 1; e <= total; e++)
+            {
+                learner.RunEpisode();
+                if (e % every == 0 || e == total)
+                {
+                    list.Add(Capture(learner, e, list[^1].Q));
+                }
+            }
+
+            return list;
+        });
+        _snapshots.AddRange(snaps);
+        _training = false;
+        _index = _snapshots.Count - 1;
+        Show(_snapshots[_index]);
+    }
+
+    private Snapshot Capture(GridQLearner learner, int episode, double[,]? previous)
+    {
+        var q = learner.Snapshot();
+        var changed = 0;
+        if (previous is not null)
+        {
+            for (var s = 0; s < q.GetLength(0); s++)
+            {
+                if (ArgMax(q, s) != ArgMax(previous, s))
+                {
+                    changed++;
+                }
+            }
+        }
+
+        // Greedy rollouts measure what the policy has learned so far.
+        var probe = new GridQLearner(new DesignedGridWorld(_world.Width, _world.Height, _world.Tiles, _world.Rewards), Algorithm, seed: 99);
+        Array.Copy(q, probe.Q, q.Length);
+        var wins = Enumerable.Range(0, 5).Count(_ => probe.RunEpisode(greedy: true).ReachedGoal);
+        return new Snapshot(episode, q, wins / 5.0, changed);
+    }
+
+    private static int ArgMax(double[,] q, int s)
+    {
+        var best = 0;
+        for (var a = 1; a < 4; a++)
+        {
+            if (q[s, a] > q[s, best])
+            {
+                best = a;
+            }
+        }
+
+        return best;
+    }
+
+    private void Show(Snapshot? snap)
+    {
+        var list = GridScene.Build(_world);
+        double min = 0, max = 1;
+        if (snap is not null)
+        {
+            var values = Cells().Select(c => Max(snap.Q, c.S)).ToList();
+            min = values.Min();
+            max = Math.Max(min + 1e-6, values.Max());
+        }
+
+        foreach (var (x, y, s) in Cells())
+        {
+            var p = GridScene.Cell(_world, x, y);
+            var v = snap is null ? 0 : Max(snap.Q, s);
+            var t = snap is null ? 0 : (v - min) / (max - min);
+            var h = 0.05 + t * 1.4;
+            list.Add(new Object3D
+            {
+                Id = $"v-{x}-{y}", Kind = "box", Size = [0.42, 1, 0.42], Position = [p[0], h / 2, p[2]], Scale = new[] { 1.0, h, 1.0 },
+                Color = ThreeDPalette.Ramp(t), Opacity = 0.9, Roughness = 0.4,
+                Tooltip = snap is null ? "Not trained yet" : string.Create(CultureInfo.InvariantCulture, $"cell ({x}, {y})\nV = {v:0.000}\nbest: {DesignedGridWorld.ActionNames[ArgMax(snap.Q, s)]}"),
+            });
+            if (snap is not null && Math.Abs(Max(snap.Q, s)) > 1e-9)
+            {
+                var a = ArgMax(snap.Q, s);
+                var (dx, dy) = GridQLearner.Move(a);
+                list.Add(new Object3D
+                {
+                    Id = $"arrow-{x}-{y}", Kind = "arrow", From = [p[0] - dx * 0.28, h + 0.12, p[2] - dy * 0.28], To = [p[0] + dx * 0.32, h + 0.12, p[2] + dy * 0.32],
+                    Color = ThreeDPalette.Soga, Pickable = false,
+                });
+            }
+        }
+
+        Objects = list;
+    }
+
+    private IEnumerable<(int X, int Y, int S)> Cells()
+    {
+        for (var y = 0; y < _world.Height; y++)
+        {
+            for (var x = 0; x < _world.Width; x++)
+            {
+                if (_world.At(x, y) is GridTile.Empty or GridTile.Start)
+                {
+                    yield return (x, y, y * _world.Width + x);
+                }
+            }
+        }
+    }
+
+    private static double Max(double[,] q, int s) => Math.Max(Math.Max(q[s, 0], q[s, 1]), Math.Max(q[s, 2], q[s, 3]));
+
+    private void Scrub(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var i) && i >= 0 && i < _snapshots.Count)
+        {
+            _index = i;
+            Show(_snapshots[i]);
+        }
+    }
+
+    private async Task PlayAsync()
+    {
+        if (_playing)
+        {
+            _play?.Cancel();
+            return;
+        }
+
+        _playing = true;
+        _play = new CancellationTokenSource();
+        try
+        {
+            for (_index = 0; _index < _snapshots.Count && !_play.IsCancellationRequested; _index++)
+            {
+                Show(_snapshots[_index]);
+                StateHasChanged();
+                await Task.Delay(450, _play.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        _index = Math.Min(_index, _snapshots.Count - 1);
+        _playing = false;
+    }
+
+    private void Picked(PickEvent e)
+    {
+        if (!e.Id.StartsWith("v-", StringComparison.Ordinal) || _snapshots.Count == 0)
+        {
+            return;
+        }
+
+        var parts = e.Id.Split('-');
+        var x = int.Parse(parts[1], CultureInfo.InvariantCulture);
+        var y = int.Parse(parts[2], CultureInfo.InvariantCulture);
+        var q = _snapshots[_index].Q;
+        var s = y * _world.Width + x;
+        _cell = string.Create(CultureInfo.InvariantCulture, $"Cell ({x}, {y}): ") + string.Join(" · ", Enumerable.Range(0, 4).Select(a => $"{DesignedGridWorld.ActionNames[a]} {q[s, a].ToString("0.00", CultureInfo.InvariantCulture)}"));
+    }
+
+    private Task Explain()
+    {
+        var s = _snapshots[_index];
+        var first = _snapshots[Math.Min(1, _snapshots.Count - 1)];
+        var facts = string.Create(CultureInfo.InvariantCulture,
+            $"{Algorithm} on a {_world.Width}x{_world.Height} maze with walls, two traps and a goal. Snapshot after {s.Episode} episodes: greedy policy reaches the goal in {s.GoalRate:P0} of 5 test runs, {s.Changed} arrows changed since the previous snapshot. " +
+            $"Early snapshot ({first.Episode} episodes): goal rate {first.GoalRate:P0}, {first.Changed} arrows changing. Values are highest near the goal and lowest beside the traps.");
+        return NarrateAsync("a reinforcement learning tutor explaining value functions and greedy policies", facts);
+    }
+
+    public override ValueTask DisposeAsync()
+    {
+        _play?.Cancel();
+        return base.DisposeAsync();
+    }
+}

@@ -1,0 +1,202 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* AgentOps: a fleet of AI agents as towers (height = throughput, colour = error rate, ring = latency SLO), incidents and an AI ops summary. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel">
+                <h4>Agent fleet</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@_agents.Sum(a => a.Tasks).ToString("N0", CultureInfo.InvariantCulture)</b><span>tasks / min</span></div>
+                    <div><b>@((_agents.Sum(a => a.Errors) / Math.Max(1.0, _agents.Sum(a => a.Tasks))).ToString("P1", CultureInfo.InvariantCulture))</b><span>error rate</span></div>
+                    <div><b>@_agents.Average(a => a.LatencyMs).ToString("N0", CultureInfo.InvariantCulture) ms</b><span>p50 latency</span></div>
+                    <div><b>$@_agents.Sum(a => a.CostPerMin).ToString("0.00", CultureInfo.InvariantCulture)</b><span>cost / min</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            <span>height = throughput</span><span><i style="background:@ThreeDPalette.Heat(0)"></i>healthy</span><span><i style="background:@ThreeDPalette.Heat(1)"></i>failing</span><span>red ring = latency SLO breached</span>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="Operations" Subtitle="@($"{_incidents.Count} open incident(s)")" Icon="bi-activity">
+        <div class="bai-stack">
+            @if (_selected is { } a)
+            {
+                <div class="bai-stack" style="gap:.2rem">
+                    <strong>@a.Name</strong>
+                    <span class="bai-small">@a.Tasks tasks/min · @((a.Errors / Math.Max(1.0, a.Tasks)).ToString("P1", CultureInfo.InvariantCulture)) errors · @a.LatencyMs.ToString("N0", CultureInfo.InvariantCulture) ms · $@a.CostPerMin.ToString("0.00", CultureInfo.InvariantCulture)/min</span>
+                    <span class="bai-small bai-muted">Model @a.Model · @a.Replicas replica(s)</span>
+                    <div class="bai-row">
+                        <button type="button" class="bai-btn-ghost" @onclick="() => Scale(a, 1)">Scale up</button>
+                        <button type="button" class="bai-btn-ghost" @onclick="() => Scale(a, -1)">Scale down</button>
+                        <button type="button" class="bai-btn-ghost" @onclick="() => Break(a)">Inject failure</button>
+                    </div>
+                </div>
+            }
+            <div class="bai-stack" style="gap:.3rem; max-height:150px; overflow:auto">
+                @foreach (var i in _incidents.TakeLast(6).Reverse())
+                {
+                    <span class="bai-small"><span class="bai-badge bai-badge-danger">@i.At.ToString("HH:mm:ss", CultureInfo.InvariantCulture)</span> @i.Text</span>
+                }
+                @if (_incidents.Count == 0) { <span class="bai-small bai-muted">No incidents. Inject a failure to see detection.</span> }
+            </div>
+            <button type="button" class="bai-btn bai-btn-ai" style="width:fit-content" disabled="@IsBusy" @onclick="Summarise"><i class="bi bi-stars" aria-hidden="true"></i>Ops summary</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed class FleetAgent(string name, string model)
+    {
+        public string Name { get; } = name;
+        public string Model { get; } = model;
+        public int Replicas { get; set; } = 2;
+        public double Demand { get; set; }
+        public int Tasks { get; set; }
+        public int Errors { get; set; }
+        public double LatencyMs { get; set; }
+        public double CostPerMin { get; set; }
+        public double FailureBoost { get; set; }
+    }
+
+    private readonly List<FleetAgent> _agents = [];
+    private readonly List<(DateTime At, string Text)> _incidents = [];
+    private readonly Random _rng = new(4);
+    private CancellationTokenSource? _loop;
+    private Scene3DOptions _options = new();
+    private FleetAgent? _selected;
+
+    /// <summary>Latency service-level objective in milliseconds.</summary>
+    [Parameter] public double LatencySloMs { get; set; } = 2500;
+
+    protected override void OnInitialized()
+    {
+        string[] models = ["gpt-5-mini", "claude-sonnet-5-5", "deepseek-chat", "llama3.2 (local)"];
+        for (var i = 0; i < EnterpriseSim.AgentRoles.Length; i++)
+        {
+            _agents.Add(new FleetAgent(EnterpriseSim.AgentRoles[i], models[i % models.Length]) { Demand = 20 + _rng.Next(60) });
+        }
+
+        Step();
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 7, 11], Target = [0, 1, 0] },
+            Ground = new(14, "#0e1236"),
+            Lights = "night",
+            AriaLabel = "Agent operations center",
+        };
+        Objects = Build();
+        _loop = new CancellationTokenSource();
+        _ = LoopAsync(_loop.Token);
+    }
+
+    private static double[] Pos(int i, int n) => [Math.Cos(i / (double)n * Math.PI * 2) * 4, 0, Math.Sin(i / (double)n * Math.PI * 2) * 4];
+
+    private Object3D[] Build()
+    {
+        var list = new List<Object3D>
+        {
+            new() { Id = "hub", Kind = "cylinder", Radius = 0.9, Height = 0.5, Position = [0, 0.25, 0], Color = ThreeDPalette.TarumDeep, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 0.3, Label = "Orchestrator", LabelClass = "is-soga", Tooltip = "Routes tasks to agents" },
+            new() { Id = "hub-ring", Kind = "torus", Radius = 1.15, Tube = 0.02, Rotation = [Math.PI / 2, 0, 0], Position = [0, 0.5, 0], Color = ThreeDPalette.Soga, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 1, Pickable = false, Animate = Animate3D.Spin(0.6, "z") },
+        };
+        for (var i = 0; i < _agents.Count; i++)
+        {
+            var a = _agents[i];
+            var p = Pos(i, _agents.Count);
+            var h = TowerHeight(a);
+            var err = Err(a);
+            list.Add(new Object3D { Id = $"agent-{i}", Kind = "box", Position = [p[0], h / 2, p[2]], Size = [0.7, h, 0.7], Color = ThreeDPalette.Heat(err * 8), Emissive = ThreeDPalette.Heat(err * 8), EmissiveIntensity = 0.25, Edges = "#ffffff", Label = a.Name, Tooltip = Tip(a), Roughness = 0.35 });
+            list.Add(new Object3D { Id = $"slo-{i}", Kind = "torus", Radius = 0.62, Tube = 0.03, Rotation = [Math.PI / 2, 0, 0], Position = [p[0], 0.04, p[2]], Color = a.LatencyMs > LatencySloMs ? ThreeDPalette.Danger : ThreeDPalette.Nila, Emissive = a.LatencyMs > LatencySloMs ? ThreeDPalette.Danger : ThreeDPalette.Nila, EmissiveIntensity = 0.9, Pickable = false });
+            list.Add(new Object3D { Id = $"link-{i}", Kind = "line", Points = [[0, 0.3, 0], [p[0] * 0.85, 0.3, p[2] * 0.85]], Color = "#6d78c9", Opacity = 0.6, Dashed = true, Pickable = false });
+            // A task packet flowing hub → agent, speed proportional to throughput.
+            list.Add(new Object3D { Id = $"pkt-{i}", Kind = "sphere", Radius = 0.07, Segments = 12, Color = ThreeDPalette.Soga, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 1.4, Pickable = false,
+                Animate = Animate3D.Path([[0, 0.3, 0], [p[0] * 0.85, 0.3, p[2] * 0.85]], 0.6 + a.Tasks / 60.0) });
+        }
+
+        return [.. list];
+    }
+
+    private static double TowerHeight(FleetAgent a) => 0.3 + a.Tasks / 30.0;
+
+    private static double Err(FleetAgent a) => a.Errors / Math.Max(1.0, a.Tasks);
+
+    private static string Tip(FleetAgent a) => string.Create(CultureInfo.InvariantCulture,
+        $"{a.Name} · {a.Model}\n{a.Tasks} tasks/min · {Err(a):P1} errors\n{a.LatencyMs:N0} ms · ${a.CostPerMin:0.00}/min · {a.Replicas} replicas");
+
+    private void Step()
+    {
+        foreach (var a in _agents)
+        {
+            a.Demand = Math.Clamp(a.Demand + (_rng.NextDouble() - 0.5) * 8, 5, 110);
+            var capacity = a.Replicas * 28;
+            a.Tasks = (int)Math.Min(a.Demand, capacity);
+            var saturation = a.Demand / capacity;
+            a.LatencyMs = 600 + saturation * 1400 + _rng.NextDouble() * 300 + a.FailureBoost * 900;
+            a.Errors = (int)Math.Round(a.Tasks * (0.004 + Math.Max(0, saturation - 1) * 0.08 + a.FailureBoost * 0.12 + _rng.NextDouble() * 0.006));
+            a.CostPerMin = a.Tasks * (a.Model.Contains("local", StringComparison.Ordinal) ? 0.0004 : a.Model.StartsWith("claude", StringComparison.Ordinal) ? 0.003 : 0.0015) + a.Replicas * 0.02;
+            a.FailureBoost = Math.Max(0, a.FailureBoost - 0.08);
+            if (Err(a) > 0.06 && !_incidents.TakeLast(3).Any(x => x.Text.StartsWith(a.Name, StringComparison.Ordinal)))
+            {
+                _incidents.Add((DateTime.Now, $"{a.Name}: error rate {Err(a):P0} (latency {a.LatencyMs:N0} ms)"));
+            }
+        }
+    }
+
+    private async Task LoopAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                if (Scene is not { IsReady: true })
+                {
+                    continue;
+                }
+
+                Step();
+                await InvokeAsync(() =>
+                {
+                    Objects = Build();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void Picked(PickEvent e)
+    {
+        if (e.Id.StartsWith("agent-", StringComparison.Ordinal) && int.TryParse(e.Id[6..], out var i))
+        {
+            _selected = _agents[i];
+        }
+    }
+
+    private void Scale(FleetAgent a, int delta)
+    {
+        a.Replicas = Math.Clamp(a.Replicas + delta, 1, 8);
+        Step();
+        Objects = Build();
+    }
+
+    private void Break(FleetAgent a) => a.FailureBoost = 1;
+
+    private Task Summarise() => NarrateAsync("an SRE for an AI agent platform",
+        $"Latency SLO {LatencySloMs:N0} ms. Agents: " + string.Join("; ", _agents.Select(a => string.Create(CultureInfo.InvariantCulture,
+            $"{a.Name} ({a.Model}, {a.Replicas} replicas): {a.Tasks}/min, errors {Err(a):P1}, {a.LatencyMs:N0} ms, ${a.CostPerMin:0.00}/min"))) +
+        $". Recent incidents: {string.Join("; ", _incidents.TakeLast(5).Select(i => i.Text))}.", AiTasks.Decision);
+
+    public override async ValueTask DisposeAsync()
+    {
+        _loop?.Cancel();
+        _loop?.Dispose();
+        await base.DisposeAsync();
+    }
+}

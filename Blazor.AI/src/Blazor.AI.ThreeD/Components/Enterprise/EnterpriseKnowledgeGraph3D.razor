@@ -1,0 +1,174 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Enterprise knowledge graph: teams, systems, datasets, documents and people, with search, domain filters and graph Q&A. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-panel">
+            <h4>Knowledge graph</h4>
+            <div class="bai3d-kpi">
+                <div><b>@VisibleNodes.Count()</b><span>nodes</span></div>
+                <div><b>@VisibleEdges.Count()</b><span>links</span></div>
+                <div><b>@(_focus ?? "–")</b><span>focus</span></div>
+            </div>
+        </div>
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            @foreach (var (type, i) in Types.Select((t, i) => (t, i))) { <span><i style="background:@ThreeDPalette.Category(i)"></i>@type</span> }
+        </div>
+    </Scene3D>
+
+    <AiCard Title="Explore" Subtitle="Search, filter, ask" Icon="bi-diagram-3">
+        <div class="bai-stack">
+            <input class="bai-input" @bind="_search" @bind:event="oninput" @bind:after="Rebuild" placeholder="Search nodes, e.g. invoice" aria-label="Search the graph" />
+            <div class="bai-chips">
+                <button type="button" class="bai-chip @(_domain is null ? "is-active" : null)" @onclick="() => SetDomain(null)">All domains</button>
+                @foreach (var d in Domains) { <button type="button" class="bai-chip @(d == _domain ? "is-active" : null)" @onclick="() => SetDomain(d)">@d</button> }
+            </div>
+            @if (_focus is { } f && Node(f) is { } n)
+            {
+                <div class="bai-stack" style="gap:.2rem">
+                    <strong>@n.Name</strong>
+                    <span class="bai-small bai-muted">@n.Type · @n.Domain</span>
+                    <span class="bai-small">@string.Join(" · ", Edges.Where(e => e.From == f || e.To == f).Select(e => e.From == f ? $"{e.Relation} → {e.To}" : $"{e.From} → {e.Relation}"))</span>
+                </div>
+            }
+            <form class="bai-row" @onsubmit="Ask" @onsubmit:preventDefault="true">
+                <input class="bai-input bai-spacer" @bind="_question" placeholder="Who owns the invoice data?" aria-label="Question about the graph" />
+                <button type="submit" class="bai-btn bai-btn-ai" disabled="@IsBusy"><i class="bi bi-stars" aria-hidden="true"></i>Ask</button>
+            </form>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed record EnterpriseNode(string Name, string Type, string Domain);
+
+    public sealed record EnterpriseLink(string From, string Relation, string To);
+
+    private static readonly string[] Types = ["Team", "System", "Dataset", "Document", "Person", "Process"];
+    private Dictionary<string, double[]> _layout = [];
+    private Scene3DOptions _options = new();
+    private string? _search, _domain, _focus, _question;
+
+    [Parameter] public IReadOnlyList<EnterpriseNode> Nodes { get; set; } = DefaultNodes;
+    [Parameter] public IReadOnlyList<EnterpriseLink> Edges { get; set; } = DefaultEdges;
+
+    private IEnumerable<string> Domains => Nodes.Select(n => n.Domain).Distinct();
+
+    private IEnumerable<EnterpriseNode> VisibleNodes => Nodes.Where(n => _domain is null || n.Domain == _domain || Edges.Any(e => (e.From == n.Name || e.To == n.Name) && Nodes.Any(m => m.Domain == _domain && (m.Name == e.From || m.Name == e.To))));
+
+    private IEnumerable<EnterpriseLink> VisibleEdges
+    {
+        get
+        {
+            var names = VisibleNodes.Select(n => n.Name).ToHashSet();
+            return Edges.Where(e => names.Contains(e.From) && names.Contains(e.To));
+        }
+    }
+
+    private EnterpriseNode? Node(string name) => Nodes.FirstOrDefault(n => n.Name == name);
+
+    protected override void OnParametersSet()
+    {
+        _layout = Layout3D.Force(Nodes.Select(n => n.Name).ToList(), Edges.Select(e => (e.From, e.To, 1.0)).ToList(), radius: 5.5);
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 3, 14], Target = [0, 0, 0] },
+            Controls = new() { AutoRotate = true, AutoRotateSpeed = 0.35 },
+            Lights = "night",
+            Shadows = false,
+            AriaLabel = "Enterprise knowledge graph",
+        };
+        Rebuild();
+    }
+
+    private void Rebuild()
+    {
+        var list = new List<Object3D>();
+        var visible = VisibleNodes.ToList();
+        var hits = string.IsNullOrWhiteSpace(_search) ? null : visible.Where(n => n.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)).Select(n => n.Name).ToHashSet();
+        var degree = Edges.SelectMany(e => new[] { e.From, e.To }).GroupBy(x => x).ToDictionary(g => g.Key, g => g.Count());
+        foreach (var n in visible)
+        {
+            var p = _layout[n.Name];
+            var type = Array.IndexOf(Types, n.Type);
+            var lit = hits is null || hits.Contains(n.Name);
+            var focus = n.Name == _focus;
+            list.Add(new Object3D
+            {
+                Id = "n:" + n.Name, Kind = n.Type is "Document" ? "box" : n.Type is "Dataset" ? "cylinder" : n.Type is "Process" ? "torus" : "sphere",
+                Position = p, Radius = n.Type is "Process" ? 0.22 : 0.16 + Math.Min(degree.GetValueOrDefault(n.Name), 8) * 0.03, Tube = 0.07, Height = 0.4, Size = [0.32, 0.4, 0.06], Segments = 20,
+                Color = ThreeDPalette.Category(type), Emissive = ThreeDPalette.Category(type), EmissiveIntensity = focus ? 1.2 : lit ? 0.35 : 0.05,
+                Opacity = lit ? 1 : 0.2, Label = focus || (hits?.Contains(n.Name) ?? degree.GetValueOrDefault(n.Name) >= 4) ? n.Name : null, LabelClass = focus ? "is-soga" : "is-plain",
+                Tooltip = $"{n.Name}\n{n.Type} · {n.Domain}", Animate = focus ? Animate3D.Pulse(0.15, 1.5) : null,
+            });
+        }
+
+        foreach (var e in VisibleEdges)
+        {
+            var hot = e.From == _focus || e.To == _focus;
+            list.Add(new Object3D { Id = $"e:{e.From}>{e.To}", Kind = "line", Points = Layout3D.Arc(_layout[e.From], _layout[e.To], 0.25, 10), Color = hot ? ThreeDPalette.Soga : "#6d78c9", Opacity = hot ? 1 : 0.45, Pickable = false });
+        }
+
+        Objects = [.. list];
+    }
+
+    private void SetDomain(string? d)
+    {
+        _domain = d;
+        Rebuild();
+    }
+
+    private async Task Picked(PickEvent e)
+    {
+        if (!e.Id.StartsWith("n:", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _focus = e.Id[2..];
+        Rebuild();
+        await Scene!.FocusAsync(e.Id, 5);
+    }
+
+    private Task Ask()
+    {
+        var q = _question ?? "Summarise the graph.";
+        // Ground the answer in the subgraph around the best-matching nodes.
+        var words = q.ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length > 3).ToArray();
+        var seeds = Nodes.Where(n => words.Any(w => n.Name.Contains(w, StringComparison.OrdinalIgnoreCase) || n.Domain.Contains(w, StringComparison.OrdinalIgnoreCase))).Select(n => n.Name).ToHashSet();
+        if (_focus is not null)
+        {
+            seeds.Add(_focus);
+        }
+
+        var facts = Edges.Where(e => seeds.Count == 0 || seeds.Contains(e.From) || seeds.Contains(e.To)).Take(40).Select(e => $"{e.From} {e.Relation} {e.To}");
+        return NarrateAsync("an enterprise architect answering from a knowledge graph", $"Question: {q}\nGraph facts: {string.Join("; ", facts)}", AiTasks.Rag);
+    }
+
+    private static readonly EnterpriseNode[] DefaultNodes =
+    [
+        new("Finance", "Team", "Finance"), new("Sales", "Team", "Commercial"), new("Logistics", "Team", "Operations"), new("Data platform", "Team", "Technology"),
+        new("ERP", "System", "Finance"), new("CRM", "System", "Commercial"), new("WMS", "System", "Operations"), new("Lakehouse", "System", "Technology"), new("Payment gateway", "System", "Finance"),
+        new("Invoices", "Dataset", "Finance"), new("Customers", "Dataset", "Commercial"), new("Shipments", "Dataset", "Operations"), new("Inventory", "Dataset", "Operations"),
+        new("Credit policy", "Document", "Finance"), new("Pricing playbook", "Document", "Commercial"), new("SOP pengiriman", "Document", "Operations"), new("Data retention policy", "Document", "Technology"),
+        new("Rina (CFO)", "Person", "Finance"), new("Budi (Head of Sales)", "Person", "Commercial"), new("Sari (Ops lead)", "Person", "Operations"), new("Dimas (Data lead)", "Person", "Technology"),
+        new("Order to cash", "Process", "Finance"), new("Procure to pay", "Process", "Finance"), new("Lead to order", "Process", "Commercial"), new("Fulfilment", "Process", "Operations"),
+    ];
+
+    private static readonly EnterpriseLink[] DefaultEdges =
+    [
+        new("Rina (CFO)", "leads", "Finance"), new("Budi (Head of Sales)", "leads", "Sales"), new("Sari (Ops lead)", "leads", "Logistics"), new("Dimas (Data lead)", "leads", "Data platform"),
+        new("Finance", "owns", "ERP"), new("Finance", "owns", "Invoices"), new("Finance", "owns", "Credit policy"), new("Finance", "runs", "Order to cash"), new("Finance", "runs", "Procure to pay"),
+        new("Sales", "owns", "CRM"), new("Sales", "owns", "Customers"), new("Sales", "owns", "Pricing playbook"), new("Sales", "runs", "Lead to order"),
+        new("Logistics", "owns", "WMS"), new("Logistics", "owns", "Shipments"), new("Logistics", "owns", "SOP pengiriman"), new("Logistics", "runs", "Fulfilment"),
+        new("Data platform", "owns", "Lakehouse"), new("Data platform", "owns", "Data retention policy"),
+        new("ERP", "stores", "Invoices"), new("CRM", "stores", "Customers"), new("WMS", "stores", "Shipments"), new("WMS", "stores", "Inventory"), new("Payment gateway", "feeds", "ERP"),
+        new("Lakehouse", "replicates", "Invoices"), new("Lakehouse", "replicates", "Customers"), new("Lakehouse", "replicates", "Shipments"),
+        new("Order to cash", "uses", "Invoices"), new("Order to cash", "uses", "Customers"), new("Order to cash", "governed by", "Credit policy"), new("Lead to order", "uses", "Customers"),
+        new("Lead to order", "governed by", "Pricing playbook"), new("Fulfilment", "uses", "Shipments"), new("Fulfilment", "uses", "Inventory"), new("Fulfilment", "governed by", "SOP pengiriman"),
+        new("Procure to pay", "uses", "Payment gateway"), new("Invoices", "governed by", "Data retention policy"), new("Customers", "governed by", "Data retention policy"),
+    ];
+}

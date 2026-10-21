@@ -1,0 +1,278 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@using Blazor.AI.Agents
+@inject AgentCatalog Catalog
+@inject ToolRegistry Tools
+@inject AgentRuntime Runtime
+@* The agent ecosystem in 3-D: agents as nodes, tools as satellites. Edit in the side panel; run a task and watch the flow. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-panel">
+            <h4>Agent ecosystem</h4>
+            <div class="bai3d-kpi">
+                <div><b>@Catalog.Agents.Count</b><span>agents</span></div>
+                <div><b>@UsedTools.Count</b><span>tools in use</span></div>
+                <div><b>@(_run?.ToolCalls ?? 0)</b><span>tool calls</span></div>
+            </div>
+        </div>
+        @if (_run is { } r)
+        {
+            <div class="bai3d-panel bai3d-hud-bottom" aria-live="polite">
+                <h4>@r.AgentName · @(r.CompletedAt is null ? "running" : r.Failed ? "failed" : $"{r.Elapsed.TotalSeconds:0.0}s")</h4>
+                @foreach (var s in r.Steps.TakeLast(4)) { <div class="bai-small"><b>@s.Kind</b> @s.Title</div> }
+            </div>
+        }
+    </Scene3D>
+
+    <AiCard Title="@(_editing is null ? "Agent studio" : _editing.Name)" Subtitle="@(_editing is null ? "Click an agent or a tool in the scene" : "Edit, then save to the catalog")" Icon="bi-robot">
+        <div class="bai-stack">
+            @if (_editing is { } a)
+            {
+                <div><label class="bai-label" for="@($"{_uid}-n")">Name</label><input id="@($"{_uid}-n")" class="bai-input" @bind="a.Name" /></div>
+                <div><label class="bai-label" for="@($"{_uid}-r")">Role</label><input id="@($"{_uid}-r")" class="bai-input" @bind="a.Role" /></div>
+                <div><label class="bai-label" for="@($"{_uid}-i")">Instructions</label><textarea id="@($"{_uid}-i")" class="bai-textarea" rows="3" @bind="a.Instructions"></textarea></div>
+                <div>
+                    <span class="bai-label">Tools</span>
+                    <div class="bai-chips" style="max-height:120px; overflow:auto">
+                        @foreach (var t in Tools.Tools)
+                        {
+                            var on = a.Tools.Contains(t.Name);
+                            <button type="button" class="bai-chip @(on ? "is-active" : null)" title="@t.Description" @onclick="() => ToggleTool(a, t.Name)">@t.Name</button>
+                        }
+                    </div>
+                </div>
+                <div class="bai-row">
+                    <button type="button" class="bai-btn bai-btn-ai" @onclick="Save">Save agent</button>
+                    <button type="button" class="bai-btn-ghost" @onclick="() => _editing = null">Close</button>
+                    <span class="bai-spacer"></span>
+                    <button type="button" class="bai-btn-ghost" style="color:var(--bai-danger)" @onclick="Remove">Remove</button>
+                </div>
+            }
+            else
+            {
+                <button type="button" class="bai-btn-ghost" @onclick="AddAgent"><i class="bi bi-plus-lg" aria-hidden="true"></i>New agent</button>
+                @if (_tool is { } t)
+                {
+                    <div class="bai-small"><b>@t.Name</b> <span class="bai-faint">· @t.Category</span><br />@t.Description</div>
+                }
+            }
+            <hr style="margin:.2rem 0; opacity:.2" />
+            <span class="bai-label">Run a task</span>
+            <select class="bai-select" @bind="_runAgentId" aria-label="Agent to run">
+                @foreach (var ag in Catalog.Agents) { <option value="@ag.Id">@ag.Name</option> }
+            </select>
+            <textarea class="bai-textarea" rows="2" @bind="_task" aria-label="Task"></textarea>
+            <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="RunTask"><i class="bi bi-play-fill" aria-hidden="true"></i>Run</button>
+            <AiError Message="@Error" />
+            @if (_run is { Output.Length: > 0 } run) { <AiOutput Text="@run.Output" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private readonly string _uid = "bai-as3-" + Guid.NewGuid().ToString("N")[..6];
+    private Scene3DOptions _options = new();
+    private AgentDefinition? _editing;
+    private ToolInfo? _tool;
+    private AgentRun? _run;
+    private string? _runAgentId;
+    private string _task = "Berapa cicilan bulanan pinjaman Rp 150 juta, bunga 9% per tahun, tenor 5 tahun?";
+    private Dictionary<string, double[]> _agentPos = [];
+    private Dictionary<string, double[]> _toolPos = [];
+    private string? _activeAgent;
+    private readonly HashSet<string> _activeTools = [];
+
+    [Parameter] public EventCallback<AgentDefinition> OnAgentSaved { get; set; }
+
+    private IReadOnlyList<string> UsedTools => Catalog.Agents.SelectMany(a => a.Tools).Distinct(StringComparer.OrdinalIgnoreCase).Where(t => Tools.Get(t) is not null).ToList();
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 6, 11], Target = [0, 0.5, 0] },
+            Lights = "night",
+            Shadows = false,
+            AriaLabel = "3D map of agents and their tools",
+        };
+        _runAgentId = Catalog.Agents.FirstOrDefault(a => a.Tools.Contains("loan_payment"))?.Id ?? Catalog.Agents.FirstOrDefault()?.Id;
+        Catalog.Changed += OnCatalogChanged;
+        Build();
+    }
+
+    private void OnCatalogChanged() => InvokeAsync(() =>
+    {
+        Build();
+        StateHasChanged();
+    });
+
+    private void Build()
+    {
+        var agents = Catalog.Agents;
+        var tools = UsedTools;
+        _agentPos = agents.Select((a, i) => (a.Id, i)).ToDictionary(x => x.Id, x =>
+        {
+            var ang = x.i * 2 * Math.PI / Math.Max(1, agents.Count);
+            return new[] { Math.Cos(ang) * 3, 1.0, Math.Sin(ang) * 3 };
+        });
+        _toolPos = tools.Select((t, i) => (t, i)).ToDictionary(x => x.t, x =>
+        {
+            var p = Layout3D.Fibonacci(x.i, Math.Max(2, tools.Count), 5.4);
+            return new[] { p[0], 1 + p[1] * 0.45, p[2] };
+        }, StringComparer.OrdinalIgnoreCase);
+
+        var list = new List<Object3D>
+        {
+            new() { Id = "hub", Kind = "torus", Radius = 3, Tube = 0.015, Rotation = [Math.PI / 2, 0, 0], Position = [0, 1, 0], Color = "#5b6bd6", Opacity = 0.5, Pickable = false },
+        };
+        for (var i = 0; i < agents.Count; i++)
+        {
+            var a = agents[i];
+            var color = ThreeDPalette.Category(i);
+            var active = a.Id == _activeAgent;
+            var editing = a.Id == _editing?.Id;
+            list.Add(new Object3D
+            {
+                Id = $"agent:{a.Id}", Kind = "capsule", Radius = 0.28, Height = 0.4, Position = _agentPos[a.Id], Color = color, Emissive = color,
+                EmissiveIntensity = active ? 1.1 : editing ? 0.7 : 0.25, Label = a.Name, LabelClass = active || editing ? "is-soga" : null,
+                Tooltip = $"{a.Name}\n{a.Role}\nTools: {(a.Tools.Count == 0 ? "none" : string.Join(", ", a.Tools))}",
+                Animate = active ? Animate3D.Bob(0.15, 3) : null,
+            });
+            foreach (var t in a.Tools.Where(_toolPos.ContainsKey))
+            {
+                var hot = active && _activeTools.Contains(t);
+                list.Add(new Object3D
+                {
+                    Id = $"edge:{a.Id}:{t}", Kind = hot ? "tube" : "line", Radius = 0.03, Pickable = false,
+                    Points = Layout3D.Arc(_agentPos[a.Id], _toolPos[t], 0.4), Color = hot ? ThreeDPalette.Warning : color, Opacity = active || editing ? 0.85 : 0.3,
+                    Emissive = hot ? ThreeDPalette.Warning : null,
+                });
+            }
+        }
+
+        foreach (var t in tools)
+        {
+            var info = Tools.Get(t)!;
+            var hot = _activeTools.Contains(t);
+            list.Add(new Object3D
+            {
+                Id = $"tool:{t}", Kind = "box", Size = [0.3, 0.3, 0.3], Position = _toolPos[t], Color = hot ? ThreeDPalette.Warning : "#9aa3c7", Edges = "#ffffff",
+                Emissive = hot ? ThreeDPalette.Warning : null, EmissiveIntensity = hot ? 1 : null, Label = t, LabelClass = "is-mono is-plain",
+                Tooltip = $"{t} ({info.Category})\n{info.Description}", Animate = Animate3D.Spin(hot ? 3 : 0.3),
+            });
+        }
+
+        Objects = list;
+    }
+
+    private void Picked(PickEvent e)
+    {
+        if (e.Id.StartsWith("agent:") && Catalog.Get(e.Id[6..]) is { } a)
+        {
+            _editing = a.Copy();
+            _tool = null;
+            _runAgentId = a.Id;
+        }
+        else if (e.Id.StartsWith("tool:"))
+        {
+            _tool = Tools.Get(e.Id[5..]);
+            _editing = null;
+        }
+
+        Build();
+    }
+
+    private void ToggleTool(AgentDefinition a, string tool)
+    {
+        if (!a.Tools.Remove(tool))
+        {
+            a.Tools.Add(tool);
+        }
+    }
+
+    private void AddAgent()
+    {
+        _editing = new AgentDefinition { Name = "New agent", Role = "Describe what this agent is good at", Tools = ["calculate"], Icon = "bi-stars" };
+    }
+
+    private async Task Save()
+    {
+        if (_editing is null)
+        {
+            return;
+        }
+
+        Catalog.Save(_editing.Copy());
+        await OnAgentSaved.InvokeAsync(_editing);
+        _editing = null;
+    }
+
+    private void Remove()
+    {
+        if (_editing is not null)
+        {
+            Catalog.Remove(_editing.Id);
+            _editing = null;
+        }
+    }
+
+    private Task RunTask() => RunAsync(async ct =>
+    {
+        var agent = Catalog.Get(_runAgentId ?? string.Empty) ?? Catalog.Agents.FirstOrDefault();
+        if (agent is null || string.IsNullOrWhiteSpace(_task))
+        {
+            return;
+        }
+
+        _activeAgent = agent.Id;
+        _activeTools.Clear();
+        Build();
+        if (Scene is not null && _agentPos.TryGetValue(agent.Id, out var p))
+        {
+            await Scene.FlyToAsync([p[0] * 2.2, 5, p[2] * 2.2 + 3], [p[0] * 0.5, 1, p[2] * 0.5]);
+        }
+
+        var run = new AgentRun { AgentName = agent.Name, Input = _task };
+        void OnStep(AgentStep step)
+        {
+            if (step.Kind == AgentStepKind.ToolCall)
+            {
+                var name = step.Title.Split([' ', '('], 2)[0];
+                _activeTools.Add(name);
+                _ = InvokeAsync(() =>
+                {
+                    Build();
+                    StateHasChanged();
+                });
+            }
+        }
+
+        var builder = new StringBuilder();
+        await foreach (var token in Runtime.StreamAsync(agent, _task, onRun: r =>
+                       {
+                           _run = r;
+                           r.StepAdded += OnStep;
+                       }, cancellationToken: ct))
+        {
+            builder.Append(token);
+            if (_run is not null)
+            {
+                _run.Output = builder.ToString();
+            }
+
+            RenderThrottled();
+        }
+
+        _run ??= run;
+        _run.CompletedAt ??= DateTimeOffset.Now;
+        _activeAgent = null;
+        Build();
+    });
+
+    public override ValueTask DisposeAsync()
+    {
+        Catalog.Changed -= OnCatalogChanged;
+        return base.DisposeAsync();
+    }
+}

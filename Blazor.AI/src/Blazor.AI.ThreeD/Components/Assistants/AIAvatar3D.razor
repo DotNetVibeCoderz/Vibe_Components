@@ -1,0 +1,273 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* A talking 3D avatar: speech in (browser STT), AI reply, emotion and gesture animation, speech out with lip sync. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnSpeechEnded="SpeechEnded" OnModelLoaded="Loaded" OnPick="Picked">
+        <div class="bai3d-panel">
+            <h4>@Name</h4>
+            <div class="bai3d-kpi">
+                <div><b>@_emotion</b><span>emotion</span></div>
+                <div><b>@(_speaking ? "Speaking" : _listening ? "Listening" : IsBusy ? "Thinking" : "Ready")</b><span>state</span></div>
+            </div>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="@($"Talk to {Name}")" Subtitle="@Persona" Icon="bi-person-bounding-box">
+        <div class="bai-stack">
+            <div class="bai-stack" style="max-height:300px; overflow:auto" aria-live="polite">
+                @foreach (var (who, text) in _log)
+                {
+                    <div class="bai-small" style="@(who == "you" ? "text-align:right" : null)">
+                        <span class="bai-faint">@(who == "you" ? "You" : Name)</span>
+                        @if (who == "you") { <p style="margin:.1rem 0">@text</p> } else { <AiMarkdown Text="@text" /> }
+                    </div>
+                }
+                @if (IsBusy && Narration is { Length: > 0 }) { <AiMarkdown Text="@Narration" /> }
+                @if (IsBusy && string.IsNullOrEmpty(Narration)) { <AiThinking /> }
+            </div>
+            <AiError Message="@Error" />
+            <form class="bai-row" @onsubmit="Send" @onsubmit:preventDefault="true">
+                <input class="bai-input bai-spacer" @bind="_input" placeholder="@Placeholder" aria-label="Message" disabled="@IsBusy" />
+                @if (_sttSupported)
+                {
+                    <button type="button" class="bai-icon-btn" title="@(_listening ? "Stop listening" : "Speak")" aria-label="@(_listening ? "Stop listening" : "Speak")" @onclick="ToggleMic">
+                        <i class="bi @(_listening ? "bi-mic-fill" : "bi-mic")" aria-hidden="true"></i>
+                    </button>
+                }
+                <button type="submit" class="bai-btn bai-btn-ai" disabled="@IsBusy">Send</button>
+            </form>
+            <div class="bai-row bai-small">
+                <label><input type="checkbox" class="form-check-input" @bind="_voice" /> voice</label>
+                <span class="bai-spacer"></span>
+                @foreach (var g in Gestures)
+                {
+                    <button type="button" class="bai-chip" @onclick="() => Gesture(g)">@g</button>
+                }
+            </div>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly string[] Gestures = ["Wave", "Nod", "Point", "Think", "Happy"];
+    private readonly List<(string Who, string Text)> _log = [];
+    private DotNetObjectReference<AIAvatar3D>? _self;
+    private Scene3DOptions _options = new();
+    private string? _input;
+    private bool _voice = true, _speaking, _listening, _sttSupported;
+    private AvatarEmotion _emotion = AvatarEmotion.Neutral;
+
+    [Parameter] public string Name { get; set; } = "Kawi";
+    [Parameter] public string Persona { get; set; } = "A friendly guide who answers briefly and warmly";
+    [Parameter] public string? SystemPrompt { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Say hello, ask anything…";
+    [Parameter] public string? Greeting { get; set; } = "Hi! I'm Kawi. Ask me anything, or press the mic and talk to me.";
+
+    /// <summary>BCP-47 language for speech in and out, e.g. "id-ID" or "en-US".</summary>
+    [Parameter] public string SpeechLanguage { get; set; } = "en-US";
+
+    [Parameter] public string ModelUrl { get; set; } = ThreeDAssets.GuideBot;
+
+    /// <summary>Raised with each reply so hosts can log or display it.</summary>
+    [Parameter] public EventCallback<string> OnReply { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0.3, 1.35, 3.3], Target = [0, 0.95, 0], Fov = 38 },
+            Controls = new() { MinDistance = 1.2, MaxDistance = 5 },
+            Ground = new(6, "#0e1236"),
+            Lights = "studio",
+            AriaLabel = $"{Name}, a 3D guide robot",
+        };
+        Objects =
+        [
+            new Object3D { Id = "avatar", Kind = "model", Url = ModelUrl, FitHeight = 1.7, Clip = "Idle", Tooltip = $"{Name}: click to wave" },
+            new Object3D { Id = "pad", Kind = "cylinder", Radius = 0.62, Height = 0.04, Position = [0, 0.02, 0], Color = ThreeDPalette.TarumDeep, Emissive = ThreeDPalette.Nila, EmissiveIntensity = 0.15, Pickable = false },
+            new Object3D { Id = "ring", Kind = "torus", Radius = 0.64, Tube = 0.012, Rotation = [Math.PI / 2, 0, 0], Position = [0, 0.045, 0], Color = ThreeDPalette.Nila, Emissive = ThreeDPalette.Nila, EmissiveIntensity = 1.2, Pickable = false, Animate = Animate3D.Pulse(0.02, 0.6) },
+        ];
+        if (Greeting is not null)
+        {
+            _log.Add(("bot", Greeting));
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var support = await Js.SpeechSupportedAsync();
+                _sttSupported = support.Recognition;
+                StateHasChanged();
+            }
+            catch (JSException)
+            {
+            }
+        }
+    }
+
+    private async Task Loaded(ModelInfo info)
+    {
+        if (Greeting is not null)
+        {
+            await Scene!.PlayClipAsync("avatar", "Wave", loop: false);
+        }
+    }
+
+    private Task Picked(PickEvent e) => e.Id == "avatar" ? Scene!.PlayClipAsync("avatar", "Wave", loop: false) : Task.CompletedTask;
+
+    private Task Gesture(string clip) => Scene!.PlayClipAsync("avatar", clip, loop: false);
+
+    private async Task Send()
+    {
+        var text = _input?.Trim();
+        if (string.IsNullOrEmpty(text) || IsBusy)
+        {
+            return;
+        }
+
+        _input = null;
+        await AskAsync(text);
+    }
+
+    /// <summary>Sends a message programmatically (e.g. from a host page).</summary>
+    public async Task AskAsync(string text)
+    {
+        _log.Add(("you", text));
+        if (AvatarBrain.GestureFor(text) is { } gesture)
+        {
+            await Scene!.PlayClipAsync("avatar", gesture, loop: false);
+        }
+        else
+        {
+            await Scene!.PlayClipAsync("avatar", "Think");
+        }
+
+        await SetEmotion(AvatarEmotion.Thinking);
+        var history = string.Join("\n", _log.TakeLast(8).Select(l => $"{(l.Who == "you" ? "User" : Name)}: {l.Text}"));
+        var system = SystemPrompt ?? $"You are {Name}, {Persona}. You appear as a friendly 3D robot. Reply in 1-3 short spoken sentences, no lists or markdown." +
+                     (SpeechLanguage.StartsWith("id", StringComparison.OrdinalIgnoreCase) ? " Answer in Bahasa Indonesia." : string.Empty);
+        await NarrateAsyncRaw(system, history);
+        if (Error is not null || string.IsNullOrWhiteSpace(Narration))
+        {
+            await SetEmotion(AvatarEmotion.Sad);
+            await Scene.PlayClipAsync("avatar", "Idle");
+            return;
+        }
+
+        var reply = Narration!;
+        Narration = null;
+        _log.Add(("bot", reply));
+        await OnReply.InvokeAsync(reply);
+
+        var emotion = AvatarBrain.Guess(reply);
+        try
+        {
+            var c = await Ai.ClassifyAsync(reply, AvatarBrain.EmotionLabels, "The emotion a friendly guide should show while saying this.", Provider);
+            if (c.Confidence >= 0.45)
+            {
+                emotion = AvatarBrain.Parse(c.Label);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Keep the local guess.
+        }
+
+        await SetEmotion(emotion);
+        await Scene.PlayClipAsync("avatar", AvatarBrain.ClipFor(emotion), loop: emotion is AvatarEmotion.Neutral or AvatarEmotion.Sad);
+        if (_voice)
+        {
+            _speaking = true;
+            await Scene.SpeakAsync("avatar", AvatarBrain.ForSpeech(reply), SpeechLanguage);
+        }
+        else
+        {
+            await Scene.PlayClipAsync("avatar", "Idle");
+        }
+    }
+
+    private Task NarrateAsyncRaw(string system, string history) => RunAsync(async ct =>
+    {
+        var builder = new StringBuilder();
+        Narration = string.Empty;
+        await foreach (var token in Ai.StreamAsync(system, history, AiTasks.Chat, Provider, null, ct))
+        {
+            builder.Append(token);
+            Narration = builder.ToString();
+            RenderThrottled();
+        }
+    });
+
+    private async Task SetEmotion(AvatarEmotion e)
+    {
+        _emotion = e;
+        var (smile, sad) = AvatarBrain.Morphs(e);
+        await Scene!.SetMorphAsync("avatar", "Smile", smile);
+        await Scene.SetMorphAsync("avatar", "Sad", sad);
+        await Scene.UpdateAsync([new ObjectPatch { Id = "ring", Color = AvatarBrain.VisorColor(e), Emissive = AvatarBrain.VisorColor(e) }]);
+    }
+
+    private async Task SpeechEnded(string id)
+    {
+        _speaking = false;
+        await Scene!.PlayClipAsync("avatar", "Idle");
+        await SetEmotion(AvatarEmotion.Neutral);
+    }
+
+    private async Task ToggleMic()
+    {
+        if (_listening)
+        {
+            await Js.StopRecognitionAsync();
+            _listening = false;
+            return;
+        }
+
+        _self ??= DotNetObjectReference.Create(this);
+        _listening = await Js.StartRecognitionAsync(_self, SpeechLanguage);
+        if (_listening)
+        {
+            await Scene!.PlayClipAsync("avatar", "Nod", loop: false);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnSpeechResult(string final, string interim)
+    {
+        _input = string.IsNullOrWhiteSpace(final) ? interim : final;
+        if (!string.IsNullOrWhiteSpace(final))
+        {
+            _listening = false;
+            await Js.StopRecognitionAsync();
+            await InvokeAsync(Send);
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task OnSpeechError(string error)
+    {
+        _listening = false;
+        Error = error == "not-allowed" ? "Microphone access was blocked. Allow it in the browser and try again." : $"Speech recognition stopped ({error}).";
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task OnSpeechEnd()
+    {
+        _listening = false;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    public override ValueTask DisposeAsync()
+    {
+        _self?.Dispose();
+        return base.DisposeAsync();
+    }
+}

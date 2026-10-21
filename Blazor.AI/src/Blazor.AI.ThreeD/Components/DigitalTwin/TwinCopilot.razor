@@ -1,0 +1,79 @@
+@namespace Blazor.AI.ThreeD
+@inherits AiComponentBase
+@using Blazor.AI.Abstractions.Providers
+@* Ask questions about a live digital twin. The model sees a snapshot of readings, trends and events; offline, a local diagnosis answers. *@
+
+<div class="bai-stack">
+    <form class="bai-row" @onsubmit="AskAsync" @onsubmit:preventDefault="true">
+        <input class="bai-input bai-spacer" @bind="_question" placeholder="@Placeholder" aria-label="Question for the copilot" disabled="@IsBusy" />
+        <button type="submit" class="bai-btn bai-btn-ai" disabled="@IsBusy"><i class="bi bi-stars" aria-hidden="true"></i>Ask</button>
+    </form>
+    @if (Suggestions.Count > 0)
+    {
+        <div class="bai-chips">
+            @foreach (var s in Suggestions)
+            {
+                <button type="button" class="bai-chip" disabled="@IsBusy" @onclick="() => Ask(s)">@s</button>
+            }
+        </div>
+    }
+    <AiError Message="@Error" />
+    @if (_answer is not null) { <AiOutput Text="@_answer" IsBusy="@IsBusy" /> }
+</div>
+
+@code {
+    private string? _question;
+    private string? _answer;
+
+    [Parameter, EditorRequired] public TwinSimulator Simulator { get; set; } = default!;
+
+    /// <summary>Who the copilot is, e.g. "a plant reliability engineer".</summary>
+    [Parameter] public string Role { get; set; } = "an operations engineer for this digital twin";
+
+    /// <summary>Extra facts appended to the snapshot (KPIs computed by the host component).</summary>
+    [Parameter] public Func<string>? Context { get; set; }
+
+    [Parameter] public string Placeholder { get; set; } = "Ask about the live readings…";
+    [Parameter] public IReadOnlyList<string> Suggestions { get; set; } = [];
+    [Parameter] public string? Language { get; set; }
+
+    private bool IsOffline() =>
+        (ClientFactory.Providers.FirstOrDefault(p => string.Equals(p.Name, Provider, StringComparison.OrdinalIgnoreCase)) ?? ClientFactory.DefaultProvider).Kind == AiProviderKind.Simulated;
+
+    private Task Ask(string q)
+    {
+        _question = q;
+        return AskAsync();
+    }
+
+    private Task AskAsync()
+    {
+        var question = _question?.Trim();
+        if (string.IsNullOrEmpty(question))
+        {
+            return Task.CompletedTask;
+        }
+
+        var facts = Simulator.Snapshot() + (Context is null ? string.Empty : " " + Context());
+        return RunAsync(async ct =>
+        {
+            var system = $"You are {Role}. Answer the operator's question using only the live readings provided. " +
+                         "Name the asset and sensor, say why, and recommend one concrete action. 3-5 sentences or a short list." +
+                         (Language is null ? string.Empty : $" Answer in {Language}.");
+            var builder = new StringBuilder();
+            _answer = string.Empty;
+            await foreach (var token in Ai.StreamAsync(system, PromptTags.Wrap(PromptTags.Context, facts) + "\n" + PromptTags.Wrap(PromptTags.Input, question), AiTasks.Insight, Provider, null, ct))
+            {
+                builder.Append(token);
+                _answer = builder.ToString();
+                RenderThrottled();
+            }
+
+            // The offline model does not read sensor data; give a grounded local diagnosis instead.
+            if (IsOffline() || string.IsNullOrWhiteSpace(_answer))
+            {
+                _answer = TwinUi.LocalDiagnosis(Simulator, question);
+            }
+        });
+    }
+}

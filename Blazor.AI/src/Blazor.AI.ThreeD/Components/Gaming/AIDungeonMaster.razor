@@ -1,0 +1,226 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* AI game master: a tabletop dungeon in 3D, dice rolled locally, outcomes decided by rules, narration by the model. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel">
+                <h4>Room @(_room + 1) of @_dungeon.Rooms.Count</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@_hp</b><span>party HP</span></div>
+                    <div><b>@_gold</b><span>gold</span></div>
+                    <div><b>@(_lastRoll?.ToString() ?? "–")</b><span>last d20</span></div>
+                </div>
+            </div>
+            @if (_lastRoll is not null)
+            {
+                <div class="bai3d-panel" aria-live="polite"><h4>@(_lastSuccess ? "Success" : "Failure")</h4>@_lastAction: d20 @_lastRoll + @_lastBonus vs DC @_lastDc</div>
+            }
+        </div>
+    </Scene3D>
+
+    <AiCard Title="AI dungeon master" Subtitle="@_dungeon.Rooms[_room].Name" Icon="bi-dice-5">
+        <div class="bai-stack">
+            <div class="bai-stack" style="max-height:260px; overflow:auto" aria-live="polite">
+                @foreach (var line in _log.TakeLast(6)) { <AiMarkdown Text="@line" /> }
+                @if (IsBusy) { @if (Narration is { Length: > 0 }) { <AiMarkdown Text="@Narration" /> } else { <AiThinking Label="The DM considers…" /> } }
+            </div>
+            <AiError Message="@Error" />
+            @if (_hp <= 0)
+            {
+                <p class="bai-small" style="color:var(--bai-danger)">The party has fallen. Start a new delve to try again.</p>
+            }
+            else if (_room >= _dungeon.Rooms.Count - 1 && _cleared)
+            {
+                <p class="bai-small" style="color:var(--bai-nila)">The dungeon is conquered!</p>
+            }
+            else
+            {
+                <div class="bai-row">
+                    @foreach (var a in Actions)
+                    {
+                        <button type="button" class="bai-chip" disabled="@IsBusy" @onclick="() => Act(a)">@a.Name (@a.Stat)</button>
+                    }
+                </div>
+            }
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" @onclick="NewDelve"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>New delve</button>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private Scene3DOptions _options = new();
+    private Dungeon _dungeon = Dungeon.Generate(7);
+    private readonly List<string> _log = [];
+    private int _room, _hp = 30, _gold, _seed = 7;
+    private int? _lastRoll;
+    private int _lastBonus, _lastDc;
+    private bool _lastSuccess, _cleared;
+    private string? _lastAction;
+    private readonly Random _dice = new();
+
+    private sealed record DmAction(string Name, string Stat, int Bonus);
+
+    private static readonly DmAction[] Actions = [new("Fight", "STR", 3), new("Sneak past", "DEX", 2), new("Persuade", "CHA", 1), new("Search", "INT", 2)];
+
+    /// <summary>Party members shown as tokens.</summary>
+    [Parameter] public IReadOnlyList<string> Party { get; set; } = ["Arjuna the archer", "Sinta the healer", "Bima the warrior"];
+
+    /// <summary>A generated dungeon: rooms on a grid joined by corridors.</summary>
+    public sealed record Room(string Name, int X, int Z, int W, int D, string Encounter, int Dc);
+
+    public sealed record Dungeon(List<Room> Rooms)
+    {
+        private static readonly string[] Names = ["Hall of Echoes", "Flooded Crypt", "Shrine of the Naga", "Collapsed Armoury", "Spider Gallery", "Throne of Bones", "Moonwell Chamber"];
+        private static readonly string[] Encounters = ["a pack of cave rats", "a riddle-carved door", "a sleeping stone guardian", "a collapsing bridge", "giant spiders", "the Bone King", "a whispering spirit"];
+
+        public static Dungeon Generate(int seed)
+        {
+            var rng = new Random(seed);
+            var rooms = new List<Room>();
+            int x = 0, z = 0;
+            for (var i = 0; i < 6; i++)
+            {
+                var w = rng.Next(3, 5);
+                var d = rng.Next(3, 5);
+                rooms.Add(new Room(Names[(i + seed) % Names.Length], x, z, w, d, Encounters[(i * 3 + seed) % Encounters.Length], 10 + i + rng.Next(0, 3)));
+                // Next room to the east or south, snaking across the table.
+                if (i % 2 == 0) x += w + 2; else z += d + 2;
+                if (x > 14) { x = 0; z += 6; }
+            }
+
+            return new Dungeon(rooms);
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [6, 14, 18], Target = [7, 0, 6] },
+            Lights = "night",
+            Background = "#0b0f29",
+            Shadows = true,
+            AriaLabel = "Dungeon map with party tokens",
+        };
+        NewDelve();
+    }
+
+    private void NewDelve()
+    {
+        _seed = Random.Shared.Next(1, 999);
+        _dungeon = Dungeon.Generate(_seed);
+        _room = 0;
+        _hp = 30;
+        _gold = 0;
+        _cleared = false;
+        _lastRoll = null;
+        _log.Clear();
+        _log.Add($"**The DM:** You stand at the entrance of the *{_dungeon.Rooms[0].Name}*. Ahead: {_dungeon.Rooms[0].Encounter}. What do you do?");
+        Draw();
+    }
+
+    private void Draw()
+    {
+        var list = new List<Object3D>();
+        var rooms = _dungeon.Rooms;
+        for (var i = 0; i < rooms.Count; i++)
+        {
+            var r = rooms[i];
+            var cx = r.X + r.W / 2.0;
+            var cz = r.Z + r.D / 2.0;
+            var state = i < _room ? "done" : i == _room ? "here" : "fog";
+            list.Add(new Object3D { Id = $"floor{i}", Kind = "box", Size = [r.W, 0.2, r.D], Position = [cx, 0.1, cz],
+                Color = state == "fog" ? "#20264f" : state == "here" ? "#5a4a3a" : "#3e4466", Edges = state == "here" ? ThreeDPalette.Soga : "#5b6bd6",
+                Label = state == "fog" ? "?" : r.Name, LabelClass = state == "here" ? "is-soga" : null, Tooltip = state == "fog" ? "Unexplored" : $"{r.Name}\nEncounter: {r.Encounter}\nDC {r.Dc}" });
+            // Low walls around explored rooms.
+            if (state != "fog")
+            {
+                list.Add(new Object3D { Id = $"wallN{i}", Kind = "box", Size = [r.W, 0.5, 0.15], Position = [cx, 0.35, r.Z], Color = "#6b6f86", Pickable = false });
+                list.Add(new Object3D { Id = $"wallS{i}", Kind = "box", Size = [r.W, 0.5, 0.15], Position = [cx, 0.35, r.Z + r.D], Color = "#6b6f86", Pickable = false });
+                list.Add(new Object3D { Id = $"torch{i}", Kind = "sphere", Radius = 0.09, Position = [r.X + 0.2, 0.7, r.Z + 0.2], Color = "#ffb45c", Emissive = "#ff9a3c", EmissiveIntensity = 2.5, Pickable = false, Animate = Animate3D.Pulse(0.15, 2.5) });
+            }
+
+            if (i < rooms.Count - 1)
+            {
+                var n = rooms[i + 1];
+                list.Add(new Object3D { Id = $"cor{i}", Kind = "line", Points = [[cx, 0.22, cz], [n.X + n.W / 2.0, 0.22, n.Z + n.D / 2.0]], Color = i < _room ? ThreeDPalette.Nila : "#5b6bd6", Dashed = i >= _room, Pickable = false });
+            }
+
+            if (i == _room && !_cleared)
+            {
+                list.Add(new Object3D { Id = "foe", Kind = "icosahedron", Radius = 0.35, Position = [cx + 0.6, 0.6, cz - 0.3], Color = ThreeDPalette.Danger, Emissive = ThreeDPalette.Danger, EmissiveIntensity = 0.5, FlatShading = true,
+                    Animate = Animate3D.Bob(0.12, 1.4), Tooltip = r.Encounter });
+            }
+        }
+
+        var here = rooms[_room];
+        for (var p = 0; p < Party.Count; p++)
+        {
+            var color = ThreeDPalette.Category(p + 1);
+            var px = here.X + 0.8 + p * 0.55;
+            var pz = here.Z + here.D - 0.8;
+            list.Add(new Object3D { Id = $"hero{p}", Kind = "cylinder", RadiusTop = 0.12, RadiusBottom = 0.2, Height = 0.45, Position = [px, 0.42, pz], Color = color, Metalness = 0.3, Tooltip = Party[p] });
+            list.Add(new Object3D { Id = $"head{p}", Kind = "sphere", Radius = 0.12, Position = [px, 0.76, pz], Color = color, Pickable = false });
+        }
+
+        Objects = list;
+    }
+
+    private async Task Act(DmAction action)
+    {
+        var room = _dungeon.Rooms[_room];
+        var roll = _dice.Next(1, 21);
+        var success = roll == 20 || (roll != 1 && roll + action.Bonus >= room.Dc);
+        _lastRoll = roll;
+        _lastBonus = action.Bonus;
+        _lastDc = room.Dc;
+        _lastSuccess = success;
+        _lastAction = action.Name;
+        int damage = 0, loot = 0;
+        if (success)
+        {
+            loot = 10 + _dice.Next(0, 25);
+            _gold += loot;
+            _cleared = true;
+        }
+        else
+        {
+            damage = 2 + _dice.Next(0, 6) + (roll == 1 ? 4 : 0);
+            _hp = Math.Max(0, _hp - damage);
+        }
+
+        _log.Add($"**You:** {action.Name} ({action.Stat}). *d20 = {roll}{(roll == 20 ? ", critical!" : roll == 1 ? ", fumble!" : string.Empty)}*");
+        var facts = $"Room: {room.Name}. Encounter: {room.Encounter}. The party ({string.Join(", ", Party)}) chose to {action.Name.ToLowerInvariant()} using {action.Stat}. " +
+                    $"Roll {roll} + {action.Bonus} vs DC {room.Dc}: {(success ? $"SUCCESS, found {loot} gold" : $"FAILURE, the party takes {damage} damage (HP now {_hp})")}. " +
+                    (success && _room < _dungeon.Rooms.Count - 1 ? $"The way to the {_dungeon.Rooms[_room + 1].Name} opens." : string.Empty);
+        await RunAsync(async ct =>
+        {
+            var system = "You are a dramatic but concise tabletop game master. Narrate the outcome in 2-3 vivid sentences in second person. The outcome is already decided: never change it." +
+                         (Language is null ? string.Empty : $" Answer in {Language}.");
+            var sb = new StringBuilder();
+            Narration = string.Empty;
+            await foreach (var token in Ai.StreamAsync(system, PromptTags.Wrap(PromptTags.Input, facts), AiTasks.Generate, Provider, null, ct))
+            {
+                sb.Append(token);
+                Narration = sb.ToString();
+                RenderThrottled();
+            }
+        });
+        var story = string.IsNullOrWhiteSpace(Narration) ? (success ? "You prevail, and the path ahead opens." : "The dungeon bites back.") : Narration;
+        _log.Add($"**The DM:** {story}");
+        Narration = null;
+
+        if (success && _room < _dungeon.Rooms.Count - 1)
+        {
+            _room++;
+            _cleared = false;
+            _log.Add($"*You enter the {_dungeon.Rooms[_room].Name}: {_dungeon.Rooms[_room].Encounter}.*");
+        }
+
+        Draw();
+        var here = _dungeon.Rooms[_room];
+        await Scene!.FlyToAsync([here.X + here.W / 2.0 - 2, 9, here.Z + here.D / 2.0 + 9], [here.X + here.W / 2.0, 0, here.Z + here.D / 2.0], 1400);
+    }
+}

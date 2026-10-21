@@ -1,0 +1,166 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Mesh decimation side by side (original vs optimised), triangle budgets, LOD measurement and AI recommendations. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnModelLoaded="Loaded">
+        <div class="bai3d-hud-row" style="justify-content:space-between">
+            <div class="bai3d-panel"><h4>Original</h4><b>@(_before?.ToString("N0") ?? "…")</b> triangles</div>
+            <div class="bai3d-panel"><h4>Optimised</h4><b>@(_after?.ToString("N0") ?? "…")</b> triangles @if (_before is > 0 && _after is { } a) { <span>(@((a / (double)_before.Value).ToString("P0", CultureInfo.InvariantCulture)))</span> }</div>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="Mesh optimisation studio" Subtitle="Edge-collapse decimation in the browser" Icon="bi-triangle">
+        <div class="bai-stack">
+            <label class="bai-small">Model
+                <select class="bai-select" @bind="_url" @bind:after="Reload" aria-label="Model">
+                    @foreach (var (name, url) in Models) { <option value="@url">@name</option> }
+                </select>
+            </label>
+            <label class="bai-small">Keep <b>@_ratio.ToString("P0", CultureInfo.InvariantCulture)</b> of the vertices
+                <input type="range" min="0.05" max="1" step="0.05" style="width:100%" @bind="_ratio" @bind:culture="CultureInfo.InvariantCulture" aria-label="Keep ratio" />
+            </label>
+            <div class="bai-row">
+                <button type="button" class="bai-btn" disabled="@(_busy || !_loaded)" @onclick="Apply"><i class="bi bi-magic" aria-hidden="true"></i>Simplify</button>
+                <button type="button" class="bai-btn-ghost" disabled="@(_busy || !_loaded)" @onclick="MeasureLods"><i class="bi bi-layers" aria-hidden="true"></i>Measure LODs</button>
+                <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_wire" @bind:after="Wire" /> wireframe</label>
+            </div>
+            @if (_busy) { <AiThinking Label="Decimating…" /> }
+            @if (_lods.Count > 0)
+            {
+                <table class="bai-table">
+                    <thead><tr><th>LOD</th><th>Keep</th><th class="bai-num">Triangles</th><th>Suggested use</th></tr></thead>
+                    <tbody>
+                        @foreach (var (l, i) in _lods.Select((l, i) => (l, i)))
+                        {
+                            <tr><td>LOD@i</td><td>@l.Ratio.ToString("P0", CultureInfo.InvariantCulture)</td><td class="bai-num">@l.Triangles.ToString("N0")</td><td>@Use(l.Triangles)</td></tr>
+                        }
+                    </tbody>
+                </table>
+                <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Recommend"><i class="bi bi-stars" aria-hidden="true"></i>Recommend LODs</button>
+            }
+            @if (_skinned)
+            {
+                <p class="bai-small bai-muted" style="margin:0">Rigged (skinned) meshes are skipped: decimating them would break the skin weights. Try the stupa, car or heart.</p>
+            }
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly (string Name, string Url)[] Models =
+    [
+        ("Stupa (Rodin)", ThreeDAssets.Stupa), ("City car", ThreeDAssets.Car), ("Heart", ThreeDAssets.Heart), ("Maize plant", ThreeDAssets.Corn), ("Mannequin", ThreeDAssets.Mannequin), ("Guide robot (rigged)", ThreeDAssets.GuideBot),
+    ];
+
+    private Scene3DOptions _options = new();
+    private string _url = ThreeDAssets.Stupa;
+    private double _ratio = 0.3;
+    private bool _wire, _busy, _loaded, _skinned;
+    private int? _before, _after;
+    private readonly List<(double Ratio, int Triangles)> _lods = [];
+
+    /// <summary>Model to open (any glTF/GLB URL).</summary>
+    [Parameter] public string? Url { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _url = Url ?? ThreeDAssets.Stupa;
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 1.6, 4.6], Target = [0, 0.75, 0] },
+            Lights = "studio",
+            Ground = new(8, "#0e1236"),
+            AriaLabel = "Original and optimised mesh side by side",
+        };
+        Reload();
+    }
+
+    private void Reload()
+    {
+        _loaded = false;
+        _before = _after = null;
+        _lods.Clear();
+        _skinned = false;
+        Narration = null;
+        Objects =
+        [
+            new Object3D { Id = "original", Kind = "model", Url = _url, FitHeight = 1.5, Position = [-1.1, 0, 0], Label = "Original", Pickable = false },
+            new Object3D { Id = "optimised", Kind = "model", Url = _url, FitHeight = 1.5, Position = [1.1, 0, 0], Label = "Optimised", LabelClass = "is-soga", Pickable = false },
+        ];
+    }
+
+    private void Loaded(ModelInfo info)
+    {
+        if (info.Id == "original")
+        {
+            _before = info.Triangles;
+            _after ??= info.Triangles;
+        }
+
+        _skinned = info.Clips.Count > 0 && _url == ThreeDAssets.GuideBot;
+        _loaded = _before is not null;
+    }
+
+    private async Task Apply()
+    {
+        _busy = true;
+        StateHasChanged();
+        await Task.Yield();
+        var r = await Scene!.SimplifyAsync("optimised", _ratio);
+        if (r is { Before: > 0 })
+        {
+            _after = r.After;
+        }
+        else if (r is { Before: 0 })
+        {
+            _skinned = true;
+        }
+
+        if (_wire)
+        {
+            await Wire();
+        }
+
+        _busy = false;
+    }
+
+    private async Task MeasureLods()
+    {
+        _busy = true;
+        _lods.Clear();
+        StateHasChanged();
+        foreach (var ratio in new[] { 1.0, 0.5, 0.25, 0.1 })
+        {
+            var r = await Scene!.SimplifyAsync("optimised", ratio);
+            _lods.Add((ratio, r is { Before: > 0 } ? r.After : _before ?? 0));
+        }
+
+        var current = await Scene!.SimplifyAsync("optimised", _ratio);
+        _after = current?.After ?? _after;
+        _busy = false;
+    }
+
+    private async Task Wire()
+    {
+        await Scene!.SetWireframeAsync("original", _wire);
+        await Scene.SetWireframeAsync("optimised", _wire);
+    }
+
+    private static string Use(int triangles) => triangles switch
+    {
+        > 50_000 => "Desktop hero / close-up",
+        > 15_000 => "Desktop default",
+        > 5_000 => "Mobile / mid distance",
+        _ => "Far distance, thumbnails",
+    };
+
+    private Task Recommend()
+    {
+        var name = Models.FirstOrDefault(m => m.Url == _url).Name;
+        var facts = $"Model: {name}. Measured LODs: {string.Join("; ", _lods.Select(l => string.Create(CultureInfo.InvariantCulture, $"keep {l.Ratio:P0} → {l.Triangles:N0} triangles")))}. Targets: web desktop and mid-range Android phones in a Blazor app.";
+        return NarrateAsync("a real-time 3D technical artist recommending levels of detail, switch distances and texture sizes", facts);
+    }
+}

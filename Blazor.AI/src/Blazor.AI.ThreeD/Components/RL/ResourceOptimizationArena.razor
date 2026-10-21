@@ -1,0 +1,208 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* RL for resource allocation: zones as towers (height = expected demand), stacked cubes = units allocated; RL policy vs. baselines. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel">
+                <h4>@_scenario.Name · @_scenario.Periods[_period]</h4>
+                <div class="bai3d-kpi">
+                    @foreach (var s in _scores)
+                    {
+                        <div><b style="@(s.Policy == _view ? "color:#f3b57a" : null)">@s.ServedShare.ToString("P1", CultureInfo.InvariantCulture)</b><span>@s.Policy served</span></div>
+                    }
+                    @if (_scores.Count == 0) { <div><b>–</b><span>train to compare</span></div> }
+                </div>
+            </div>
+        </div>
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            <span><i style="background:rgba(123,140,255,.5)"></i>expected demand</span><span><i style="background:@ThreeDPalette.Soga"></i>@_scenario.Unit allocated</span><span><i style="background:@ThreeDPalette.Danger"></i>short</span><span><i style="background:@ThreeDPalette.Nila"></i>covered</span>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="@Title" Subtitle="Learning where to place limited resources" Icon="bi-truck">
+        <div class="bai-stack">
+            <div>
+                <label class="bai-label" for="@($"{_uid}-s")">Scenario</label>
+                <select id="@($"{_uid}-s")" class="bai-select" value="@_scenarioKey" @onchange="ChangeScenario" disabled="@_training">
+                    <option value="ambulance">Ambulance dispatch (Jakarta)</option>
+                    <option value="energy">Battery storage (microgrids)</option>
+                    <option value="servers">Cloud servers (regions)</option>
+                </select>
+            </div>
+            <div class="bai-row">
+                @foreach (var (p, i) in _scenario.Periods.Select((p, i) => (p, i)))
+                {
+                    <button type="button" class="bai-chip @(i == _period ? "is-active" : null)" @onclick="() => SetPeriod(i)">@p</button>
+                }
+            </div>
+            <div class="bai-row">
+                @foreach (var v in Views)
+                {
+                    <button type="button" class="bai-chip @(v == _view ? "is-active" : null)" disabled="@(v == "Q-learning" && _learner is null)" @onclick="() => SetView(v)">@v</button>
+                }
+            </div>
+            <div class="bai-row">
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@_training" @onclick="TrainAsync"><i class="bi bi-cpu" aria-hidden="true"></i>@(_training ? $"Training… {_progress:P0}" : "Train RL policy")</button>
+            </div>
+            @if (_scores.Count > 0)
+            {
+                <table class="bai-table">
+                    <thead><tr><th>Policy</th><th>Served</th><th>Unmet / period</th><th>Idle / period</th></tr></thead>
+                    <tbody>
+                        @foreach (var s in _scores)
+                        {
+                            <tr><td>@s.Policy</td><td class="bai-num">@s.ServedShare.ToString("P1", CultureInfo.InvariantCulture)</td><td class="bai-num">@s.Unmet.ToString("0.00", CultureInfo.InvariantCulture)</td><td class="bai-num">@s.Idle.ToString("0.00", CultureInfo.InvariantCulture)</td></tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@(IsBusy || _scores.Count == 0)" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain the allocation</button>
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly string[] Views = ["Equal split", "Static plan", "Q-learning"];
+    private readonly string _uid = "roa-" + Guid.NewGuid().ToString("N")[..6];
+    private Scene3DOptions _options = new();
+    private AllocationScenario _scenario = AllocationScenario.Ambulance();
+    private string _scenarioKey = "ambulance";
+    private DispatchLearner? _learner;
+    private List<AllocationScore> _scores = [];
+    private string _view = "Static plan";
+    private int _period;
+    private bool _training;
+    private double _progress;
+
+    [Parameter] public string Title { get; set; } = "Resource optimisation arena";
+
+    /// <summary>Custom scenario; overrides the built-in presets.</summary>
+    [Parameter] public AllocationScenario? Scenario { get; set; }
+
+    [Parameter] public int TrainingDays { get; set; } = 3000;
+
+    protected override void OnInitialized()
+    {
+        _scenario = Scenario ?? AllocationScenario.Ambulance();
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [6.5, 7, 8], Target = [0, 1, 0], Fov = 42 },
+            Lights = "night",
+            Ground = new(9, "#10143a"),
+            AriaLabel = "Demand zones with allocated resources",
+        };
+        Build();
+    }
+
+    private int[] CurrentAllocation() => _view switch
+    {
+        "Equal split" => DispatchLearner.EqualSplit(_scenario),
+        "Q-learning" when _learner is not null => _learner.Allocate(_period),
+        _ => DispatchLearner.StaticProportional(_scenario),
+    };
+
+    private void Build()
+    {
+        var alloc = CurrentAllocation();
+        var list = new List<Object3D>();
+        var maxDemand = _scenario.Zones.Max(z => z.MeanDemand.Max());
+        for (var i = 0; i < _scenario.Zones.Count; i++)
+        {
+            var z = _scenario.Zones[i];
+            var demand = z.MeanDemand[_period];
+            var h = demand / maxDemand * 3.2;
+            var covered = alloc[i] >= Math.Round(demand);
+            list.Add(new Object3D { Id = $"pad-{i}", Kind = "cylinder", Position = [z.X, 0.03, z.Z], Radius = 0.85, Height = 0.06, Color = covered ? ThreeDPalette.Nila : ThreeDPalette.Danger, Emissive = covered ? ThreeDPalette.Nila : ThreeDPalette.Danger, EmissiveIntensity = 0.35, Pickable = false });
+            list.Add(new Object3D
+            {
+                Id = $"demand-{i}", Kind = "cylinder", Position = [z.X, h / 2 + 0.06, z.Z], Radius = 0.62, Height = 1, Scale = new[] { 1.0, h, 1.0 }, Color = "#7b8cff", Opacity = 0.28, Roughness = 0.2,
+                Tooltip = string.Create(CultureInfo.InvariantCulture, $"{z.Name}\nexpected demand {demand:0.0} · {alloc[i]} {_scenario.Unit}(s)"),
+                Label = $"{z.Name} · {alloc[i]}", LabelClass = covered ? "is-nila" : "is-danger",
+            });
+            for (var u = 0; u < _scenario.Units; u++)
+            {
+                list.Add(new Object3D
+                {
+                    Id = $"unit-{i}-{u}", Kind = "box", Size = [0.42, 0.24, 0.42], Position = [z.X, 0.2 + u * 0.3, z.Z], Visible = u < alloc[i],
+                    Color = u < Math.Round(demand) ? ThreeDPalette.Soga : "#8a8fb0", Edges = "#ffffff", Pickable = false,
+                });
+            }
+        }
+
+        Objects = list;
+    }
+
+    private void SetPeriod(int p)
+    {
+        _period = p;
+        Narration = null;
+        Build();
+    }
+
+    private void SetView(string v)
+    {
+        _view = v;
+        Build();
+    }
+
+    private void ChangeScenario(ChangeEventArgs e)
+    {
+        _scenarioKey = e.Value?.ToString() ?? "ambulance";
+        _scenario = _scenarioKey switch { "energy" => AllocationScenario.Energy(), "servers" => AllocationScenario.Servers(), _ => AllocationScenario.Ambulance() };
+        _learner = null;
+        _scores = [];
+        _period = 0;
+        _view = "Static plan";
+        Narration = null;
+        Build();
+    }
+
+    private async Task TrainAsync()
+    {
+        _training = true;
+        _progress = 0;
+        var learner = new DispatchLearner(_scenario);
+        var days = Math.Clamp(TrainingDays, 200, 20000);
+        learner.Epsilon = 1;
+        var decay = Math.Pow(0.03, 1.0 / (days * 0.75));
+        const int chunks = 10;
+        for (var c = 0; c < chunks; c++)
+        {
+            await Task.Run(() =>
+            {
+                for (var d = 0; d < days / chunks; d++)
+                {
+                    learner.TrainEpisode();
+                    learner.Epsilon = Math.Max(0.03, learner.Epsilon * decay);
+                }
+            });
+            _progress = (c + 1) / (double)chunks;
+            StateHasChanged();
+        }
+
+        _learner = learner;
+        _scores = await Task.Run(() => new List<AllocationScore>
+        {
+            learner.Score("Equal split", _ => DispatchLearner.EqualSplit(_scenario)),
+            learner.Score("Static plan", _ => DispatchLearner.StaticProportional(_scenario)),
+            learner.Score("Q-learning", learner.Allocate),
+        });
+        _training = false;
+        _view = "Q-learning";
+        Build();
+    }
+
+    private Task Explain()
+    {
+        var rl = _scores.First(s => s.Policy == "Q-learning");
+        var table = string.Join("; ", _scores.Select(s => string.Create(CultureInfo.InvariantCulture, $"{s.Policy}: served {s.ServedShare:P1}, unmet {s.Unmet:0.00}/period, idle {s.Idle:0.00}/period")));
+        var plan = string.Join(" | ", _scenario.Periods.Select((p, i) => $"{p}: " + string.Join(", ", _scenario.Zones.Select((z, k) => $"{z.Name} {rl.Allocation[i][k]}"))));
+        var demand = string.Join(" | ", _scenario.Zones.Select(z => $"{z.Name} " + string.Join("/", z.MeanDemand.Select(d => d.ToString("0.0", CultureInfo.InvariantCulture)))));
+        var facts = $"{_scenario.Name}: {_scenario.Units} {_scenario.Unit}s placed each period across {_scenario.Zones.Count} zones; demand is Poisson with means per period ({string.Join("/", _scenario.Periods)}): {demand}. " +
+                    $"Results over 400 simulated days: {table}. RL allocation by period: {plan}.";
+        return NarrateAsync("an operations research advisor", facts);
+    }
+}

@@ -1,0 +1,139 @@
+@page "/3d/twins-health"
+<PageTitle>3D digital twins & health · Blazor.AI</PageTitle>
+
+<PageHeader Title="Digital twins & health in 3D" Package="Blazor.AI.ThreeD" Icon="bi-buildings"
+            Lead="Live twins of a factory, building, farm, fish farm and city, driven by a sensor simulator with anomaly detection and forecasting, plus anatomy, molecules, proteins, gene networks and a resuscitation trainer. Ask each copilot about what it sees." />
+
+<div class="bai-alert is-info" style="margin-bottom:1.5rem"><i class="bi bi-info-circle" aria-hidden="true"></i>The twins run a local simulator (2 updates per second) so they work offline. Swap in your own telemetry by feeding sensor values to <code>TwinSimulator</code> or by building <code>Object3D</code> lists from your data.</div>
+
+<DemoSection Title="Smart factory" Component="SmartFactory3D" Description="Production lines with animated robot cells, live OEE and throughput, remaining useful life from vibration trends, a bottleneck finder and a plant copilot. Inject a fault to watch the anomaly detector react." Code="@FactoryCode">
+    <SmartFactory3D />
+</DemoSection>
+
+<DemoSection Title="Smart building" Component="SmartBuilding3D" Description="Floors and rooms coloured by energy, temperature or occupancy, people moving between rooms, security alerts you can acknowledge, and energy-saving suggestions." Code="@BuildingCode">
+    <SmartBuilding3D />
+</DemoSection>
+
+<DemoSection Title="Smart farm" Component="SmartFarm3D" Description="Irrigation zones with soil-moisture tiles, growing maize, vision-based disease flags (click a flagged plant to treat it) and a yield forecast that responds to water and disease." Code="@FarmCode">
+    <SmartFarm3D />
+</DemoSection>
+
+<DemoSection Title="Smart aquaculture" Component="SmartAquaculture3D" Description="Net cages with swimming tilapia, dissolved oxygen, pH, temperature and ammonia, growth-to-harvest prediction and a feeding plan that holds feed when oxygen is low." Code="@AquaCode">
+    <SmartAquaculture3D />
+</DemoSection>
+
+<DemoSection Title="Smart city" Component="SmartCity3D" Description="Buildings sized by data, roads coloured by congestion with cars driving the grid, bridge strain and water-main pressure, and air-quality stations. Report an incident and watch the traffic respond." Code="@CityCode">
+    <SmartCity3D />
+</DemoSection>
+
+<DemoSection Title="Human body" Component="HumanBody3D" Description="A translucent body with organ and skeleton layers. Click an organ to fly to it and get an explanation pitched at your audience." Code="@BodyCode">
+    <HumanBody3D />
+</DemoSection>
+
+<DemoSection Title="3D molecules" Component="MoleculeExplorer3D" Description="SMILES to a 3-D conformer with Biotech.Net: ball-and-stick, space-filling or wire, CPK colours and drug-likeness numbers." Code="@MoleculeCode">
+    <MoleculeExplorer3D />
+</DemoSection>
+
+<DemoSection Title="Protein structures" Component="ProteinViewer3D" Description="Load PDB text and see the Cα backbone coloured by secondary structure, N→C rainbow or chain, with ligands and hoverable residues." Code="@ProteinCode">
+    <ProteinViewer3D />
+</DemoSection>
+
+<DemoSection Title="Gene networks" Component="GeneNetwork3D" Description="Co-expression network of the most variable genes from an RNA-seq count matrix, coloured by fold change. Click a gene to see its neighbours and ask what the cluster may do." Code="@GeneCode">
+    <GeneNetwork3D />
+</DemoSection>
+
+<DemoSection Title="Medical training" Component="MedicalTrainingSimulator" Description="Adult basic life support with an AED: choose actions, set compression rate and depth, watch the monitor respond, then get an AI debrief." Code="@TrainingCode">
+    <MedicalTrainingSimulator />
+</DemoSection>
+
+@code {
+    private const string FactoryCode = """
+        // Program.cs
+        builder.Services.AddBlazorAIComponents();
+        builder.Services.AddBlazorAIThreeD();
+
+        <SmartFactory3D Title="Plant Karawang · Line A/B" Lines="2" StationsPerLine="3"
+                        IdealCycleSeconds="40" UpdatesPerSecond="2" Language="Bahasa Indonesia" />
+
+        // Use the simulator on its own, e.g. to test alert rules:
+        var sim = new TwinSimulator([
+            new SensorSpec("press-vib", "Vibration", "mm/s", 3.2, 0.2, 0, 20) { WarnHigh = 7.1, Drift = 0.01 },
+        ]);
+        sim.Step(100);
+        var hoursLeft = sim["press-vib"].TicksUntil(11) * 10 / 60; // 10 min per tick
+        """;
+
+    private const string BuildingCode = """
+        <SmartBuilding3D Title="Menara Kawung · HQ" Floors="5" RoomArea="140" UpdatesPerSecond="1" />
+
+        @* The copilot works with any provider; offline it answers from the readings. *@
+        """;
+
+    private const string FarmCode = """
+        <SmartFarm3D Title="Kebun Jagung Sleman" SeasonDays="110" PotentialYield="9.5" />
+
+        @* Click "Auto-irrigate" to apply the moisture rule (on below 26 %, off above 38 %). *@
+        """;
+
+    private const string AquaCode = """
+        <SmartAquaculture3D Title="Keramba Waduk Jatiluhur" FishPerCage="6000"
+                            HarvestWeight="500" VisibleFish="9" />
+        """;
+
+    private const string CityCode = """
+        <SmartCity3D Title="Bandung Smart City" BlockValues="@densityIndex" />
+
+        @code {
+            // One value per city block (row-major), e.g. population density.
+            double[] densityIndex = [92, 75, 60, 81, 100, 66, 48, 58, 71];
+        }
+        """;
+
+    private const string BodyCode = """
+        <HumanBody3D Audience="a nursing student" Language="Bahasa Indonesia"
+                     OnOrganSelected="o => selected = o.Name" />
+
+        // Organ facts and positions are public if you want your own UI:
+        foreach (var organ in HumanBody3D.Organs) Console.WriteLine($"{organ.Name}: {organ.Function}");
+        """;
+
+    private const string MoleculeCode = """
+        <MoleculeExplorer3D Smiles="CC(=O)Oc1ccccc1C(=O)O" />
+
+        // The same 3-D embedding in code (Biotech.Net.Chemistry):
+        var mol = Molecule.FromSmiles("Cn1cnc2c1c(=O)n(C)c(=O)n2C").AddHydrogens();
+        var conformer = ConformerGenerator.Embed(mol, new ConformerOptions { RandomSeed = 42 });
+        Point3[] xyz = conformer.Coordinates;
+        """;
+
+    private const string ProteinCode = """
+        <ProteinViewer3D Pdb="@pdbText" MaxMarkers="300" />
+
+        @code {
+            string pdbText = await http.GetStringAsync("https://files.rcsb.org/download/1CRN.pdb");
+        }
+
+        // Parse and inspect without UI:
+        var s = PdbStructure.Parse(pdbText);
+        var helixFraction = s.Residues.Count(r => r.SecondaryStructure == 'H') / (double)s.Residues.Count;
+        """;
+
+    private const string GeneCode = """
+        <GeneNetwork3D Counts="@counts" Reference="control" Treatment="treated" />
+
+        @code {
+            // genes × samples, annotated with a "condition" per sample
+            Dataset counts = BioCounts.Parse(await File.ReadAllTextAsync("counts.csv"));
+        }
+        """;
+
+    private const string TrainingCode = """
+        <MedicalTrainingSimulator Audience="a first-year medical student"
+                                  OnFinished="s => SaveScore(s.Score, s.Log)" />
+
+        // The scenario is a plain state machine you can unit test:
+        var cpr = new CprScenario();
+        cpr.Do("safety"); cpr.Do("respond"); cpr.Do("help"); cpr.Do("breathing"); cpr.Do("compress");
+        Console.WriteLine($"{cpr.Score} points, phase {cpr.Phase}");
+        """;
+}

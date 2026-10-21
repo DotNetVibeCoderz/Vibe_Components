@@ -1,0 +1,264 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@inject CompanionMemoryStore Memory
+@* An AI companion with memory, personality, goals and a visible emotional state. Memories orbit the robot. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnSpeechEnded="SpeechEnded" OnPick="Picked">
+        <div class="bai3d-panel">
+            <h4>@Name's state</h4>
+            @foreach (var (label, value, color) in Meters)
+            {
+                <div class="bai-small" style="display:grid; grid-template-columns:4.6rem 1fr 2.6rem; gap:.4rem; align-items:center">
+                    <span>@label</span>
+                    <div class="bai-meter" style="height:6px"><span style="width:@value.ToString("0", CultureInfo.InvariantCulture)%; background:@color"></span></div>
+                    <span class="bai-num">@value.ToString("0", CultureInfo.InvariantCulture)</span>
+                </div>
+            }
+            <div class="bai-small" style="margin-top:.35rem">Mood: <b>@Memory.Mood</b> · @Memory.Memories.Count memories</div>
+        </div>
+        @if (_pickedMemory is not null)
+        {
+            <div class="bai3d-panel bai3d-hud-bottom"><i class="bi bi-lightbulb" aria-hidden="true"></i> @_pickedMemory</div>
+        }
+    </Scene3D>
+
+    <div class="bai-stack">
+        <AiCard Title="@($"Chat with {Name}")" Subtitle="@_personality.Describe()" Icon="bi-heart">
+            <div class="bai-stack">
+                <div class="bai-stack" style="max-height:240px; overflow:auto" aria-live="polite">
+                    @foreach (var (who, text) in _log)
+                    {
+                        <div class="bai-small" style="@(who == "you" ? "text-align:right" : null)">
+                            <span class="bai-faint">@(who == "you" ? "You" : Name)</span>
+                            @if (who == "you") { <p style="margin:.1rem 0">@text</p> } else { <AiMarkdown Text="@text" /> }
+                        </div>
+                    }
+                    @if (IsBusy && Narration is { Length: > 0 }) { <AiMarkdown Text="@Narration" /> }
+                    @if (IsBusy && string.IsNullOrEmpty(Narration)) { <AiThinking /> }
+                </div>
+                <AiError Message="@Error" />
+                <form class="bai-row" @onsubmit="Send" @onsubmit:preventDefault="true">
+                    <input class="bai-input bai-spacer" @bind="_input" placeholder="Tell me about yourself…" aria-label="Message" disabled="@IsBusy" />
+                    <button type="submit" class="bai-btn bai-btn-ai" disabled="@IsBusy">Send</button>
+                </form>
+                <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_voice" /> speak replies</label>
+            </div>
+        </AiCard>
+        <AiCard Title="Personality & goals" Icon="bi-sliders">
+            <div class="bai-stack">
+                @foreach (var (label, get, set) in Traits)
+                {
+                    <label class="bai-small">@label
+                        <input type="range" min="0" max="1" step="0.05" class="form-range" value="@get().ToString(CultureInfo.InvariantCulture)"
+                               @oninput="e => SetTrait(set, e)" />
+                    </label>
+                }
+                <span class="bai-label">Goals</span>
+                @if (Memory.Goals.Count == 0) { <span class="bai-small bai-faint">Say “I want to …” and @Name will help you work towards it.</span> }
+                @foreach (var g in Memory.Goals)
+                {
+                    <div class="bai-score-row">
+                        <span title="@g.Title" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">@g.Title</span>
+                        <div class="bai-meter"><span style="width:@((g.Progress * 100).ToString("0", CultureInfo.InvariantCulture))%"></span></div>
+                        <button type="button" class="bai-icon-btn" title="Mark progress" aria-label="@($"Mark progress on {g.Title}")" @onclick="() => Memory.Progress(g.Title, 0.25)"><i class="bi bi-plus" aria-hidden="true"></i></button>
+                    </div>
+                }
+                <form class="bai-row" @onsubmit="AddGoal" @onsubmit:preventDefault="true">
+                    <input class="bai-input bai-spacer" @bind="_goal" placeholder="Add a goal" aria-label="New goal" />
+                    <button type="submit" class="bai-btn-ghost">Add</button>
+                </form>
+                <button type="button" class="bai-btn-ghost" style="width:fit-content" @onclick="Forget"><i class="bi bi-eraser" aria-hidden="true"></i>Forget everything</button>
+            </div>
+        </AiCard>
+    </div>
+</div>
+
+@code {
+    private readonly List<(string Who, string Text)> _log = [];
+    private readonly CompanionPersonality _personality = new();
+    private Scene3DOptions _options = new();
+    private string? _input, _goal, _pickedMemory;
+    private bool _voice = true;
+
+    [Parameter] public string Name { get; set; } = "Sekar";
+    [Parameter] public string SpeechLanguage { get; set; } = "en-US";
+    [Parameter] public string Greeting { get; set; } = "Hi, I'm Sekar. I remember what you tell me and help with your goals. What should I call you?";
+
+    private IEnumerable<(string Label, double Value, string Color)> Meters =>
+    [
+        ("Valence", (Memory.Valence + 1) * 50, Memory.Valence >= 0 ? ThreeDPalette.Soga : "#7b8cff"),
+        ("Arousal", Memory.Arousal * 100, ThreeDPalette.Warning),
+        ("Rapport", Memory.Rapport * 100, ThreeDPalette.Nila),
+    ];
+
+    private IEnumerable<(string Label, Func<double> Get, Action<double> Set)> Traits =>
+    [
+        ("Warmth", () => _personality.Warmth, v => _personality.Warmth = v),
+        ("Humour", () => _personality.Humor, v => _personality.Humor = v),
+        ("Curiosity", () => _personality.Curiosity, v => _personality.Curiosity = v),
+        ("Formality", () => _personality.Formality, v => _personality.Formality = v),
+    ];
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [1.2, 1.5, 3.8], Target = [0, 1.0, 0], Fov = 40 },
+            Controls = new() { MinDistance = 1.5, MaxDistance = 7 },
+            Ground = new(6, "#0e1236"),
+            AriaLabel = $"{Name}, an AI companion robot surrounded by memory orbs",
+        };
+        Memory.Changed += OnMemoryChanged;
+        _log.Add(("bot", Greeting));
+        Build();
+    }
+
+    private void OnMemoryChanged() => InvokeAsync(() =>
+    {
+        Build();
+        StateHasChanged();
+    });
+
+    private void Build()
+    {
+        var mood = Memory.Mood;
+        var color = AvatarBrain.VisorColor(mood);
+        var list = new List<Object3D>
+        {
+            new() { Id = "companion", Kind = "model", Url = ThreeDAssets.GuideBot, FitHeight = 1.6, Tooltip = $"{Name} feels {mood.ToString().ToLowerInvariant()}" },
+            new() { Id = "pad", Kind = "cylinder", Radius = 0.62, Height = 0.04, Position = [0, 0.02, 0], Color = ThreeDPalette.TarumDeep, Emissive = color, EmissiveIntensity = 0.2, Pickable = false },
+            new() { Id = "aura", Kind = "torus", Radius = 0.66, Tube = 0.014, Rotation = [Math.PI / 2, 0, 0], Position = [0, 0.05, 0], Color = color, Emissive = color, EmissiveIntensity = 0.8 + Memory.Arousal, Pickable = false, Animate = Animate3D.Pulse(0.02 + Memory.Arousal * 0.06, 0.6 + Memory.Arousal * 2) },
+        };
+        var memories = Memory.Memories;
+        for (var i = 0; i < memories.Count; i++)
+        {
+            var m = memories[i];
+            var orbColor = m.Kind == "goal" ? ThreeDPalette.Soga : ThreeDPalette.Category(i + 1);
+            list.Add(new Object3D
+            {
+                Id = $"mem{i}", Kind = "sphere", Radius = 0.06 + Math.Min(0.06, m.Recalls * 0.015), Segments = 16, Color = orbColor, Emissive = orbColor, EmissiveIntensity = 0.9,
+                Tooltip = m.Text, CastShadow = false,
+                Animate = Animate3D.Orbit(0.95 + (i % 3) * 0.22, 0.35 + (i % 4) * 0.08, phase: i * 2.399, tilt: 0.25 + (i % 5) * 0.12, center: [0, 1.15 + (i % 3) * 0.18, 0]),
+            });
+        }
+
+        Objects = list;
+    }
+
+    private async Task Send()
+    {
+        var text = _input?.Trim();
+        if (string.IsNullOrEmpty(text) || IsBusy)
+        {
+            return;
+        }
+
+        _input = null;
+        _log.Add(("you", text));
+        await Scene!.PlayClipAsync("companion", "Think");
+
+        // 1. Learn: local extraction, refined by the model when it is grounded in the message.
+        var insight = CompanionMind.Local(text);
+        try
+        {
+            var json = await PlanAsync("You extract durable personal facts and goals from a user's chat message for a companion's memory. Sentiment is -1..1, intensity 0..1.", text, CompanionMind.Schema, CancellationToken.None);
+            insight = CompanionMind.Merge(insight, json, text);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Local insight is enough.
+        }
+
+        foreach (var f in insight.Facts)
+        {
+            Memory.Remember(f);
+        }
+
+        if (insight.Goal is { } goal)
+        {
+            Memory.AddGoal(goal);
+            Memory.Remember($"The user wants to {goal}.", "goal");
+        }
+
+        Memory.Feel(insight.Sentiment, insight.Intensity);
+
+        // 2. Respond with memories, goals, mood and personality in the prompt.
+        var recalled = Memory.Recall(text).Select(m => m.Text).Concat(Memory.Memories.Where(m => m.Text.Contains("name is")).Select(m => m.Text)).Distinct().ToList();
+        var system = $"You are {Name}, a supportive AI companion shown as a small robot. Personality: {_personality.Describe()}. " +
+                     $"Current mood: {Memory.Mood.ToString().ToLowerInvariant()} (rapport {Memory.Rapport:0.00}). " +
+                     (recalled.Count > 0 ? $"You remember: {string.Join(" ", recalled)} " : string.Empty) +
+                     (Memory.Goals.Count > 0 ? $"The user's goals: {string.Join("; ", Memory.Goals.Select(g => $"{g.Title} ({g.Progress:P0} done)"))}. Nudge one goal forward when natural. " : string.Empty) +
+                     "Reply in 1-3 short spoken sentences, no lists. Use what you remember naturally." +
+                     (SpeechLanguage.StartsWith("id", StringComparison.OrdinalIgnoreCase) ? " Answer in Bahasa Indonesia." : string.Empty);
+        var history = string.Join("\n", _log.TakeLast(8).Select(l => $"{(l.Who == "you" ? "User" : Name)}: {l.Text}"));
+        await RunAsync(async ct =>
+        {
+            var builder = new StringBuilder();
+            Narration = string.Empty;
+            await foreach (var token in Ai.StreamAsync(system, history, AiTasks.Chat, Provider, null, ct))
+            {
+                builder.Append(token);
+                Narration = builder.ToString();
+                RenderThrottled();
+            }
+        });
+
+        if (string.IsNullOrWhiteSpace(Narration))
+        {
+            await Scene.PlayClipAsync("companion", "Idle");
+            return;
+        }
+
+        var reply = Narration!;
+        Narration = null;
+        _log.Add(("bot", reply));
+        var mood = Memory.Mood;
+        var (smile, sad) = AvatarBrain.Morphs(mood);
+        await Scene.SetMorphAsync("companion", "Smile", smile);
+        await Scene.SetMorphAsync("companion", "Sad", sad);
+        await Scene.PlayClipAsync("companion", insight.Facts.Count > 0 ? "Nod" : AvatarBrain.ClipFor(mood), loop: false);
+        if (_voice)
+        {
+            await Scene.SpeakAsync("companion", AvatarBrain.ForSpeech(reply), SpeechLanguage);
+        }
+    }
+
+    private Task SpeechEnded(string id) => Scene!.PlayClipAsync("companion", "Idle");
+
+    private void Picked(PickEvent e)
+    {
+        if (e.Id.StartsWith("mem") && int.TryParse(e.Id[3..], out var i) && i < Memory.Memories.Count)
+        {
+            _pickedMemory = Memory.Memories[i].Text;
+        }
+        else if (e.Id == "companion")
+        {
+            _ = Scene!.PlayClipAsync("companion", "Wave", loop: false);
+        }
+    }
+
+    private static void SetTrait(Action<double> set, ChangeEventArgs e) =>
+        set(double.TryParse(e.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0);
+
+    private void AddGoal()
+    {
+        if (!string.IsNullOrWhiteSpace(_goal))
+        {
+            Memory.AddGoal(_goal);
+            _goal = null;
+        }
+    }
+
+    private void Forget()
+    {
+        Memory.Clear();
+        _pickedMemory = null;
+    }
+
+    public override ValueTask DisposeAsync()
+    {
+        Memory.Changed -= OnMemoryChanged;
+        return base.DisposeAsync();
+    }
+}

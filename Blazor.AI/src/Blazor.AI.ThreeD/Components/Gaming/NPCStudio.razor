@@ -1,0 +1,210 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* LLM-generated NPCs: personality, backstory, dialogue and stats, a 3D preview with emotes, and in-character chat. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnSpeechEnded="SpeechEnded">
+        <div class="bai3d-panel">
+            <h4>@_npc.Name</h4>
+            <div class="bai3d-kpi">
+                @foreach (var (k, v) in _npc.Stats) { <div><b>@v</b><span>@k</span></div> }
+            </div>
+        </div>
+        <div class="bai3d-hud-bottom bai-row">
+            @foreach (var e in Emotes) { <button type="button" class="bai-chip" @onclick="() => Scene!.PlayClipAsync(NpcId, e, false)">@e</button> }
+        </div>
+    </Scene3D>
+
+    <AiCard Title="NPC studio" Subtitle="@($"{_npc.Role} · {_npc.Personality}")" Icon="bi-person-badge">
+        <div class="bai-stack">
+            <div class="bai-row" role="group" aria-label="Presets">
+                @foreach (var p in Presets)
+                {
+                    <button type="button" class="bai-chip @(p.Name == _npc.Name ? "is-active" : null)" @onclick="() => Use(p)" style="display:flex; gap:.35rem; align-items:center">
+                        <img src="@p.Portrait" alt="" width="22" height="22" style="border-radius:50%" />@p.Name
+                    </button>
+                }
+            </div>
+            <div class="bai-row">
+                <input class="bai-input bai-spacer" @bind="_concept" placeholder="Concept, e.g. a nervous ferryman who knows a secret" aria-label="NPC concept" />
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="Generate"><i class="bi bi-stars" aria-hidden="true"></i>Generate</button>
+            </div>
+            <AiError Message="@Error" />
+            <div style="display:grid; grid-template-columns:96px 1fr; gap:.75rem; align-items:start">
+                <img class="bai3d-portrait" src="@_npc.Portrait" alt="@($"Portrait of {_npc.Name}")" />
+                <div class="bai-small">
+                    <p style="margin:0 0 .3rem">@_npc.Backstory</p>
+                    @foreach (var line in _npc.Lines.Take(3)) { <div class="bai-faint">“@line”</div> }
+                </div>
+            </div>
+            <div class="bai-stack" style="max-height:180px; overflow:auto" aria-live="polite">
+                @foreach (var (who, text) in _chat) { <div class="bai-small"><b>@who:</b> @text</div> }
+                @if (IsBusy && Narration is { Length: > 0 }) { <div class="bai-small"><b>@_npc.Name:</b> @Narration</div> }
+            </div>
+            <form class="bai-row" @onsubmit="Talk" @onsubmit:preventDefault="true">
+                <input class="bai-input bai-spacer" @bind="_say" placeholder="@($"Say something to {_npc.Name}…")" aria-label="Message to the NPC" />
+                <button type="submit" class="bai-btn" disabled="@IsBusy">Talk</button>
+            </form>
+            <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_voice" /> voice</label>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private const string NpcId = "npc";
+    private static readonly string[] Emotes = ["Wave", "Nod", "Happy", "Think", "Point"];
+    private Scene3DOptions _options = new();
+    private Npc _npc = Presets[0];
+    private string? _concept = "a nervous ferryman who knows where the pirate treasure is buried";
+    private string? _say;
+    private bool _voice;
+    private readonly List<(string Who, string Text)> _chat = [];
+
+    /// <summary>A generated non-player character.</summary>
+    public sealed record Npc(string Name, string Role, string Personality, string Backstory, string[] Lines, Dictionary<string, int> Stats, string Tint, string Portrait);
+
+    public static readonly Npc[] Presets =
+    [
+        new("Pak Darma", "Village blacksmith", "warm, proud, stubborn", "Forged kris blades for three generations; secretly hides a meteorite-iron blade meant for a true hero.",
+            ["Steel remembers the hand that shaped it.", "Bring me star-iron and I'll make you a legend.", "No haggling before breakfast!"], new() { ["STR"] = 16, ["DEX"] = 9, ["INT"] = 11, ["CHA"] = 13 }, "#e7b98a", ThreeDAssets.NpcBlacksmith),
+        new("Sari", "Spice merchant", "clever, charming, ambitious", "Runs the busiest stall in Pasar Rempah and trades rumours as eagerly as cloves.",
+            ["Nutmeg, cinnamon, or secrets? All have a price.", "The harbour master owes me a favour, if you ask nicely.", "Sail with me and we'll both get rich."], new() { ["STR"] = 9, ["DEX"] = 13, ["INT"] = 15, ["CHA"] = 17 }, "#f0c06a", ThreeDAssets.NpcMerchant),
+        new("Sang Penjaga", "Temple guardian spirit", "solemn, ancient, just", "Bound to Candi Awan for a thousand years, it tests every pilgrim who seeks the inner sanctum.",
+            ["Speak truly, or do not speak.", "Many came for gold. Few left with wisdom.", "The sanctum opens to the humble."], new() { ["STR"] = 18, ["DEX"] = 10, ["INT"] = 14, ["CHA"] = 12 }, "#7fe3d0", ThreeDAssets.NpcGuardian),
+    ];
+
+    [Parameter] public EventCallback<Npc> OnGenerated { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0.4, 1.3, 3.2], Target = [0, 0.9, 0], Fov = 38 },
+            Lights = "studio",
+            Ground = new(5, "#0e1236"),
+            AriaLabel = "NPC preview",
+        };
+        Draw();
+    }
+
+    private void Draw() => Objects =
+    [
+        new Object3D { Id = NpcId, Kind = "model", Url = ThreeDAssets.GuideBot, FitHeight = 1.7, Clip = "Idle", Color = _npc.Tint, Tooltip = $"{_npc.Name}, {_npc.Role}" },
+        new Object3D { Id = "plinth", Kind = "cylinder", Radius = 0.6, Height = 0.05, Position = [0, 0.025, 0], Color = ThreeDPalette.TarumDeep, Emissive = _npc.Tint, EmissiveIntensity = 0.12, Pickable = false },
+    ];
+
+    private async Task Use(Npc npc)
+    {
+        _npc = npc;
+        _chat.Clear();
+        Draw();
+        await Tint();
+        await Scene!.PlayClipAsync(NpcId, "Wave", false);
+    }
+
+    private Task Generate() => RunAsync(async ct =>
+    {
+        var concept = _concept ?? "a mysterious traveller";
+        var npc = Local(concept);
+        try
+        {
+            var json = await PlanAsync("You are a game writer. Create a memorable NPC for an Indonesian-inspired fantasy RPG.", concept,
+                """{"name":"","role":"","personality":"three adjectives","backstory":"two sentences","lines":["",""],"stats":{"STR":10,"DEX":10,"INT":10,"CHA":10}}""", ct);
+            if (json is not null && json["name"]?.ToString() is { Length: > 1 } name && json["backstory"]?.ToString() is { Length: > 20 } back)
+            {
+                var stats = new Dictionary<string, int>();
+                foreach (var k in new[] { "STR", "DEX", "INT", "CHA" })
+                {
+                    stats[k] = (int)Math.Clamp(json["stats"]?[k]?.GetValue<double>() ?? npc.Stats[k], 3, 20);
+                }
+
+                var lines = (json["lines"] as System.Text.Json.Nodes.JsonArray)?.Select(l => l?.ToString() ?? string.Empty).Where(l => l.Length > 3).ToArray() ?? [];
+                npc = npc with
+                {
+                    Name = name,
+                    Role = json["role"]?.ToString() is { Length: > 1 } r ? r : npc.Role,
+                    Personality = json["personality"]?.ToString() is { Length: > 1 } p ? p : npc.Personality,
+                    Backstory = back,
+                    Lines = lines.Length > 0 ? lines : npc.Lines,
+                    Stats = stats,
+                };
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Local NPC stands.
+        }
+
+        _npc = npc;
+        _chat.Clear();
+        Draw();
+        await Tint();
+        await OnGenerated.InvokeAsync(_npc);
+    });
+
+    // A model's tint is applied when it loads; later changes go through a patch.
+    private async Task Tint()
+    {
+        await Task.Yield();
+        await Scene!.UpdateAsync([new ObjectPatch { Id = NpcId, Color = _npc.Tint }]);
+    }
+
+    /// <summary>Deterministic NPC from a concept, used offline and as the model's fallback.</summary>
+    public static Npc Local(string concept)
+    {
+        var rng = new Random(Math.Abs(concept.GetHashCode(StringComparison.Ordinal)));
+        string[] names = ["Wayan", "Laras", "Bayu", "Ratri", "Gede", "Anjani", "Surya", "Kirana"];
+        string[] traits = ["curious", "nervous", "boastful", "kind", "secretive", "loyal", "greedy", "wise"];
+        var preset = Presets[rng.Next(Presets.Length)];
+        var words = concept.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var role = words.Length > 2 ? string.Join(' ', words.Skip(1).Take(2)) : "wanderer";
+        var name = names[rng.Next(names.Length)];
+        return new Npc(name, CultureInfo.InvariantCulture.TextInfo.ToTitleCase(role), $"{traits[rng.Next(traits.Length)]}, {traits[rng.Next(traits.Length)]}",
+            $"{name} is {concept.Trim().TrimEnd('.')}. They trust strangers only after a shared meal.",
+            [$"You didn't hear this from me...", "The tide waits for no one.", $"Ask about {words.LastOrDefault() ?? "the secret"} again and I'll leave."],
+            new() { ["STR"] = rng.Next(6, 17), ["DEX"] = rng.Next(6, 17), ["INT"] = rng.Next(6, 17), ["CHA"] = rng.Next(6, 17) },
+            ThreeDPalette.Category(rng.Next(10)), preset.Portrait);
+    }
+
+    private async Task Talk()
+    {
+        var text = _say?.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        _say = null;
+        _chat.Add(("You", text));
+        await Scene!.PlayClipAsync(NpcId, "Think");
+        var history = string.Join("\n", _chat.TakeLast(6).Select(c => $"{c.Who}: {c.Text}"));
+        await RunAsync(async ct =>
+        {
+            var system = $"You are {_npc.Name}, {_npc.Role} ({_npc.Personality}). Backstory: {_npc.Backstory} Stay in character; reply in 1-2 spoken sentences." +
+                         (Language is null ? string.Empty : $" Answer in {Language}.");
+            var sb = new StringBuilder();
+            Narration = string.Empty;
+            await foreach (var token in Ai.StreamAsync(system, history, AiTasks.Chat, Provider, null, ct))
+            {
+                sb.Append(token);
+                Narration = sb.ToString();
+                RenderThrottled();
+            }
+        });
+        var reply = string.IsNullOrWhiteSpace(Narration) ? _npc.Lines[0] : Narration!;
+        Narration = null;
+        _chat.Add((_npc.Name, reply));
+        await Scene.PlayClipAsync(NpcId, "Talk");
+        if (_voice)
+        {
+            await Scene.SpeakAsync(NpcId, AvatarBrain.ForSpeech(reply));
+        }
+        else
+        {
+            await Task.Delay(1500);
+            await Scene.PlayClipAsync(NpcId, "Idle");
+        }
+    }
+
+    private Task SpeechEnded(string id) => Scene!.PlayClipAsync(NpcId, "Idle");
+}

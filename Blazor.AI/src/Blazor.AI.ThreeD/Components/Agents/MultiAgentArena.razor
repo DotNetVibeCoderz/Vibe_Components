@@ -1,0 +1,213 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@using Blazor.AI.Agents
+@inject MultiAgentOrchestrator Orchestrator
+@* Research, planning, coding and evaluation agents on a round arena; messages fly between them as glowing packets. *@
+
+<div class="@CssClass("bai-stack")">
+    <form class="bai-row" @onsubmit="Run" @onsubmit:preventDefault="true">
+        <input class="bai-input bai-spacer" @bind="Goal" placeholder="Goal for the team…" aria-label="Team goal" disabled="@IsBusy" />
+        <select class="bai-select" style="width:auto" @bind="Mode" aria-label="Collaboration mode" disabled="@IsBusy">
+            @foreach (var m in Enum.GetValues<OrchestrationMode>()) { <option value="@m">@ModeLabel(m)</option> }
+        </select>
+        @if (IsBusy)
+        {
+            <button type="button" class="bai-btn-ghost" @onclick="CancelCurrent">Stop</button>
+        }
+        else
+        {
+            <button type="submit" class="bai-btn bai-btn-ai"><i class="bi bi-play-fill" aria-hidden="true"></i>Run team</button>
+        }
+    </form>
+    <AiError Message="@Error" />
+    <div class="bai3d-split">
+        <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+            <div class="bai3d-panel">
+                <h4>Arena</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@(_active ?? "Idle")</b><span>speaking</span></div>
+                    <div><b>@_messages.Count(m => m.IsComplete)</b><span>messages</span></div>
+                    <div><b>@_packets</b><span>hand-offs</span></div>
+                </div>
+            </div>
+        </Scene3D>
+        <AiCard Title="Transcript" Subtitle="@($"{Team.Count} agents · {ModeLabel(Mode)}")" Icon="bi-people">
+            <div class="bai-stack" style="max-height:@Height; overflow:auto" aria-live="polite">
+                @if (_messages.Count == 0)
+                {
+                    <p class="bai-small bai-muted" style="margin:0">Give the team a goal. Click an agent to see its role.</p>
+                    @if (_picked is { } p) { <p class="bai-small" style="margin:0"><b>@p.Name</b>: @p.Role</p> }
+                }
+                @foreach (var m in _messages)
+                {
+                    var idx = Team.ToList().FindIndex(a => a.Name == m.Agent);
+                    <div>
+                        <span class="bai-small" style="color:@(idx >= 0 ? ThreeDPalette.Category(idx) : ThreeDPalette.Soga); font-weight:700"><i class="bi @m.Icon" aria-hidden="true"></i> @m.Agent</span>
+                        @if (m.Note is not null) { <span class="bai-small bai-faint"> · @m.Note</span> }
+                        <AiMarkdown Text="@(string.IsNullOrEmpty(m.Text) ? "…" : m.Text)" />
+                    </div>
+                }
+            </div>
+        </AiCard>
+    </div>
+</div>
+
+@code {
+    private Scene3DOptions _options = new();
+    private readonly List<AgentMessage> _messages = [];
+    private string? _active;
+    private string? _previous;
+    private int _packets;
+    private AgentDefinition? _picked;
+
+    [Parameter] public string Goal { get; set; } = "Design a mobile app that helps Jakarta commuters avoid floods during rainy season";
+    [Parameter] public OrchestrationMode Mode { get; set; } = OrchestrationMode.Sequential;
+
+    /// <summary>The team, in speaking order. Defaults to research, planning, coding and evaluation agents.</summary>
+    [Parameter] public IReadOnlyList<AgentDefinition> Team { get; set; } = DefaultTeam;
+
+    [Parameter] public EventCallback<IReadOnlyList<AgentMessage>> OnCompleted { get; set; }
+
+    public static IReadOnlyList<AgentDefinition> DefaultTeam { get; } =
+    [
+        new() { Id = "arena-research", Name = "Researcher", Role = "research: facts, user needs, prior art", Icon = "bi-search", Instructions = "You research. Give 3-5 key findings with assumptions marked. Be brief." },
+        new() { Id = "arena-plan", Name = "Planner", Role = "planning: scope, milestones, risks", Icon = "bi-kanban", Instructions = "You plan. Turn findings into a short plan with milestones and risks. Be brief." },
+        new() { Id = "arena-code", Name = "Coder", Role = "coding: architecture and key code", Icon = "bi-code-slash", Instructions = "You are a software engineer. Propose the architecture and one key code snippet. Be brief." },
+        new() { Id = "arena-eval", Name = "Evaluator", Role = "evaluation: quality, gaps, verdict", Icon = "bi-clipboard-check", Instructions = "You evaluate. Score the plan 1-10, list gaps and give a verdict. Be brief." },
+    ];
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 5.2, 8.5], Target = [0, 0.8, 0] },
+            Controls = new() { MaxDistance = 16 },
+            Lights = "night",
+            AriaLabel = "Multi-agent arena with four robots",
+        };
+        Build();
+    }
+
+    private double[] Seat(int i)
+    {
+        var a = Math.PI / 2 + i * 2 * Math.PI / Math.Max(1, Team.Count);
+        return [Math.Cos(a) * 3, 0, Math.Sin(a) * 3];
+    }
+
+    private void Build()
+    {
+        var list = new List<Object3D>
+        {
+            new() { Id = "floor", Kind = "cylinder", Radius = 4.4, Height = 0.12, Segments = 64, Position = [0, -0.06, 0], Color = "#141a46", Roughness = 0.9, Pickable = false },
+            new() { Id = "rim", Kind = "torus", Radius = 4.4, Tube = 0.04, Rotation = [Math.PI / 2, 0, 0], Position = [0, 0.02, 0], Color = ThreeDPalette.Soga, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 0.8, Pickable = false },
+            new() { Id = "core", Kind = "icosahedron", Radius = 0.35, Position = [0, 0.9, 0], Color = ThreeDPalette.Tarum, Emissive = ThreeDPalette.Tarum, EmissiveIntensity = IsBusy ? 1 : 0.3, FlatShading = true, Animate = Animate3D.Spin(IsBusy ? 2 : 0.5), Tooltip = "Shared task" },
+            new() { Id = "packet", Kind = "sphere", Radius = 0.12, Position = [0, -1, 0], Color = "#ffffff", Emissive = ThreeDPalette.Warning, EmissiveIntensity = 2, Pickable = false, CastShadow = false },
+        };
+        for (var i = 0; i < Team.Count; i++)
+        {
+            var seat = Seat(i);
+            var color = ThreeDPalette.Category(i);
+            var speaking = Team[i].Name == _active;
+            var yaw = Math.Atan2(-seat[0], -seat[2]);
+            list.Add(new Object3D { Id = $"pad{i}", Kind = "cylinder", Radius = 0.7, Height = 0.06, Position = [seat[0], 0.03, seat[2]], Color = "#1d2459", Emissive = color, EmissiveIntensity = speaking ? 0.9 : 0.15, Pickable = false });
+            list.Add(new Object3D
+            {
+                Id = $"bot{i}", Kind = "model", Url = ThreeDAssets.GuideBot, FitHeight = 1.3, Position = [seat[0], 0.06, seat[2]], Rotation = [0, yaw, 0],
+                Clip = speaking ? "Talk" : _active is not null ? "Think" : "Idle", Label = Team[i].Name, LabelClass = speaking ? "is-soga" : null,
+                Tooltip = $"{Team[i].Name}\n{Team[i].Role}",
+            });
+            list.Add(Object3D.Line($"link{i}", [[seat[0], 0.1, seat[2]], [0, 0.6, 0]], color, dashed: !speaking));
+        }
+
+        Objects = list;
+    }
+
+    private async Task Run()
+    {
+        if (string.IsNullOrWhiteSpace(Goal))
+        {
+            return;
+        }
+
+        _messages.Clear();
+        _packets = 0;
+        _previous = null;
+        await RunAsync(async ct =>
+        {
+            await foreach (var message in Orchestrator.RunAsync(Goal, Team, Mode, rounds: 1, Provider, m => OnUpdate(m), ct))
+            {
+                if (!_messages.Contains(message))
+                {
+                    _messages.Add(message);
+                }
+
+                await InvokeAsync(StateHasChanged);
+            }
+        });
+        _active = null;
+        Build();
+        await OnCompleted.InvokeAsync(_messages);
+    }
+
+    private void OnUpdate(AgentMessage m)
+    {
+        if (!_messages.Contains(m))
+        {
+            _messages.Add(m);
+        }
+
+        if (_active != m.Agent)
+        {
+            var from = _previous ?? _active;
+            _previous = _active;
+            _active = m.Agent;
+            _ = InvokeAsync(async () =>
+            {
+                Build();
+                StateHasChanged();
+                await FlyPacket(from, m.Agent);
+            });
+        }
+        else
+        {
+            RenderThrottled(120);
+        }
+    }
+
+    private async Task FlyPacket(string? from, string to)
+    {
+        if (Scene is null)
+        {
+            return;
+        }
+
+        var ti = Team.ToList().FindIndex(a => a.Name == to);
+        if (ti < 0)
+        {
+            return;
+        }
+
+        var fi = from is null ? -1 : Team.ToList().FindIndex(a => a.Name == from);
+        double[] start = fi < 0 ? [0, 0.9, 0] : [Seat(fi)[0], 1.5, Seat(fi)[2]];
+        var target = Seat(ti);
+        await Scene.UpdateAsync([new ObjectPatch { Id = "packet", Position = start, Emissive = ThreeDPalette.Category(Math.Max(0, fi)) }]);
+        await Scene.UpdateAsync([new ObjectPatch { Id = "packet", Position = [target[0], 1.5, target[2]] }], 900);
+        _packets++;
+    }
+
+    private void Picked(PickEvent e)
+    {
+        if (e.Id.StartsWith("bot") && int.TryParse(e.Id[3..], out var i) && i < Team.Count)
+        {
+            _picked = Team[i];
+            _ = Scene?.PlayClipAsync(e.Id, "Wave", loop: false);
+        }
+    }
+
+    private static string ModeLabel(OrchestrationMode m) => m switch
+    {
+        OrchestrationMode.RoundRobin => "Round-robin discussion",
+        OrchestrationMode.Supervisor => "Supervisor picks",
+        _ => "Pipeline",
+    };
+}

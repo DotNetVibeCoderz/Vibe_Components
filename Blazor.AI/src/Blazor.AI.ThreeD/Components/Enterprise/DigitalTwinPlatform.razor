@@ -1,0 +1,203 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Multi-site digital twin: site → area → asset, live health and temperature, alarms, RUL and an AI maintenance copilot. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel">
+                <h4>Fleet</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@Visible.Count()</b><span>assets</span></div>
+                    <div><b>@Visible.Count(a => a.Alarm)</b><span>alarms</span></div>
+                    <div><b>@Visible.Average(a => a.Health).ToString("P0", CultureInfo.InvariantCulture)</b><span>avg health</span></div>
+                    <div><b>@Visible.Average(a => a.Load).ToString("P0", CultureInfo.InvariantCulture)</b><span>avg load</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            <span><i style="background:@ThreeDPalette.Heat(0)"></i>healthy</span><span><i style="background:@ThreeDPalette.Heat(0.5)"></i>degrading</span><span><i style="background:@ThreeDPalette.Heat(1)"></i>critical</span><span>height = load</span>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="Twin control" Subtitle="@string.Join(" · ", _sites)" Icon="bi-buildings">
+        <div class="bai-stack">
+            <div class="bai-chips">
+                <button type="button" class="bai-chip @(_site is null ? "is-active" : null)" @onclick="() => Filter(null)">All sites</button>
+                @foreach (var s in _sites) { <button type="button" class="bai-chip @(s == _site ? "is-active" : null)" @onclick="() => Filter(s)">@s</button> }
+            </div>
+            @if (_selected is { } a)
+            {
+                <div class="bai-stack" style="gap:.25rem">
+                    <strong>@a.Id · @a.Kind</strong>
+                    <span class="bai-small bai-muted">@a.Site / @a.Area</span>
+                    <span class="bai-small">Health <b>@a.Health.ToString("P0", CultureInfo.InvariantCulture)</b> · load <b>@a.Load.ToString("P0", CultureInfo.InvariantCulture)</b> · <b>@a.Temperature.ToString("0.0", CultureInfo.InvariantCulture) °C</b></span>
+                    <span class="bai-small">Remaining useful life ≈ <b>@a.RulDays.ToString("0", CultureInfo.InvariantCulture) days</b></span>
+                    <div class="bai-row">
+                        <button type="button" class="bai-btn-ghost" @onclick="() => Fault(a)"><i class="bi bi-lightning" aria-hidden="true"></i>Inject fault</button>
+                        <button type="button" class="bai-btn-ghost" @onclick="() => Service(a)"><i class="bi bi-tools" aria-hidden="true"></i>Service</button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <p class="bai-small bai-muted" style="margin:0">Click an asset to inspect it. Alarms pulse.</p>
+            }
+            <form class="bai-row" @onsubmit="Ask" @onsubmit:preventDefault="true">
+                <input class="bai-input bai-spacer" @bind="_question" placeholder="Ask the copilot, e.g. what needs maintenance first?" aria-label="Question for the copilot" />
+                <button type="submit" class="bai-btn bai-btn-ai" disabled="@IsBusy"><i class="bi bi-stars" aria-hidden="true"></i>Ask</button>
+            </form>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private readonly List<TwinAsset> _assets = EnterpriseSim.Assets();
+    private readonly Dictionary<string, double> _stress = [];
+    private readonly Random _rng = new(9);
+    private string[] _sites = [];
+    private string? _site;
+    private TwinAsset? _selected;
+    private string? _question;
+    private CancellationTokenSource? _loop;
+    private Scene3DOptions _options = new();
+
+    [Parameter] public int IntervalMs { get; set; } = 1500;
+
+    private IEnumerable<TwinAsset> Visible => _site is null ? _assets : _assets.Where(a => a.Site == _site);
+
+    protected override void OnInitialized()
+    {
+        _sites = _assets.Select(a => a.Site).Distinct().ToArray();
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 13, 17], Target = [0, 0, 0] },
+            Ground = new(26, "#0e1236"),
+            Lights = "night",
+            AriaLabel = "Digital twin of three industrial sites",
+        };
+        Objects = Build();
+        _loop = new CancellationTokenSource();
+        _ = LoopAsync(_loop.Token);
+    }
+
+    private static double[] SitePos(int s) => s switch { 0 => [-7, 0, 1], 1 => [0, 0, -4], _ => [7, 0, 1] };
+
+    private Object3D[] Build()
+    {
+        var list = new List<Object3D>();
+        for (var s = 0; s < _sites.Length; s++)
+        {
+            var c = SitePos(s);
+            var dim = _site is not null && _sites[s] != _site;
+            list.Add(new Object3D { Id = $"site-{s}", Kind = "cylinder", Position = [c[0], 0.05, c[2]], Radius = 3.4, Height = 0.1, Segments = 6, Color = ThreeDPalette.TarumDeep, Edges = ThreeDPalette.Tarum, Opacity = dim ? 0.3 : 1, Label = _sites[s], LabelClass = "is-big", LabelOffset = 0.25, Pickable = false });
+            var areas = _assets.Where(a => a.Site == _sites[s]).Select(a => a.Area).Distinct().ToList();
+            for (var ai = 0; ai < areas.Count; ai++)
+            {
+                var ang = ai / (double)areas.Count * Math.PI * 2 + 0.3;
+                var ac = new[] { c[0] + Math.Cos(ang) * 1.7, 0.12, c[2] + Math.Sin(ang) * 1.7 };
+                list.Add(new Object3D { Id = $"area-{s}-{ai}", Kind = "cylinder", Position = ac, Radius = 1.05, Height = 0.04, Segments = 32, Color = "#18205a", Opacity = dim ? 0.25 : 0.9, Label = areas[ai], LabelClass = "is-plain", LabelOffset = 0.05, Pickable = false });
+                var items = _assets.Where(a => a.Site == _sites[s] && a.Area == areas[ai]).ToList();
+                for (var i = 0; i < items.Count; i++)
+                {
+                    var a = items[i];
+                    var ia = i / (double)items.Count * Math.PI * 2;
+                    var p = new[] { ac[0] + Math.Cos(ia) * 0.55, 0.14, ac[2] + Math.Sin(ia) * 0.55 };
+                    list.Add(AssetObject(a, p, dim));
+                }
+            }
+        }
+
+        return [.. list];
+    }
+
+    private Object3D AssetObject(TwinAsset a, double[] basePos, bool dim)
+    {
+        var h = 0.3 + a.Load * 1.2;
+        var color = ThreeDPalette.Heat(1 - a.Health);
+        return new Object3D
+        {
+            Id = a.Id, Kind = a.Kind is "Compressor" or "Chiller" ? "cylinder" : "box", Radius = 0.18, Height = h, Size = [0.32, h, 0.32],
+            Position = [basePos[0], basePos[1] + h / 2, basePos[2]], Color = color, Emissive = a.Alarm ? ThreeDPalette.Danger : color, EmissiveIntensity = a.Alarm ? 0.9 : 0.15,
+            Opacity = dim ? 0.25 : 1, Roughness = 0.4, Tooltip = Tip(a), Animate = a.Alarm ? Animate3D.Pulse(0.12, 2.5) : null,
+        };
+    }
+
+    private static string Tip(TwinAsset a) => string.Create(CultureInfo.InvariantCulture,
+        $"{a.Id} · {a.Kind}\n{a.Area}\nhealth {a.Health:P0} · {a.Temperature:0} °C · load {a.Load:P0}{(a.Alarm ? "\n⚠ alarm" : "")}");
+
+    private async Task LoopAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(Math.Max(500, IntervalMs)));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                if (Scene is not { IsReady: true })
+                {
+                    continue;
+                }
+
+                var alarmChanged = false;
+                foreach (var a in _assets)
+                {
+                    var was = a.Alarm;
+                    a.Step(_rng, _stress.GetValueOrDefault(a.Id));
+                    alarmChanged |= was != a.Alarm;
+                }
+
+                await InvokeAsync(async () =>
+                {
+                    if (alarmChanged)
+                    {
+                        Objects = Build();
+                    }
+                    else
+                    {
+                        await Scene.UpdateAsync(_assets.Select(a => new ObjectPatch { Id = a.Id, Color = ThreeDPalette.Heat(1 - a.Health), Emissive = ThreeDPalette.Heat(1 - a.Health) }), 500);
+                    }
+
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void Filter(string? site)
+    {
+        _site = site;
+        Objects = Build();
+    }
+
+    private void Picked(PickEvent e) => _selected = _assets.FirstOrDefault(a => a.Id == e.Id) ?? _selected;
+
+    private void Fault(TwinAsset a) => _stress[a.Id] = 4;
+
+    private void Service(TwinAsset a)
+    {
+        _stress.Remove(a.Id);
+        a.Health = 0.98;
+        a.Temperature = 48;
+        Objects = Build();
+    }
+
+    private Task Ask()
+    {
+        var worst = _assets.OrderBy(a => a.Health).Take(6)
+            .Select(a => string.Create(CultureInfo.InvariantCulture, $"{a.Id} ({a.Kind}, {a.Site}/{a.Area}) health {a.Health:P0}, {a.Temperature:0} °C, load {a.Load:P0}, RUL {a.RulDays:0} days{(a.Alarm ? ", ALARM" : "")}"));
+        var facts = $"Question: {(_question ?? "What needs attention?")}\nFleet: {_assets.Count} assets, {_assets.Count(a => a.Alarm)} alarms, average health {_assets.Average(a => a.Health):P0}.\nLowest-health assets: {string.Join("; ", worst)}.";
+        return NarrateAsync("a reliability engineer's copilot for a digital twin", facts, AiTasks.Decision);
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        _loop?.Cancel();
+        _loop?.Dispose();
+        await base.DisposeAsync();
+    }
+}

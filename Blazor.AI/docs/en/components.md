@@ -15,6 +15,7 @@ This page lists every Razor component in Blazor.AI, grouped by NuGet package. Mo
 - [Blazor.AI.Analytics](#blazoraianalytics)
 - [Blazor.AI.LocalModels](#blazorailocalmodels)
 - [Blazor.AI.Bio](#blazoraibio)
+- [Blazor.AI.ThreeD](#blazoraithreed)
 
 ## Common parameters
 
@@ -2394,4 +2395,900 @@ No AI calls. No `Class` parameter.
 
 ```razor
 <SequenceInput @bind-Value="dna" Samples="@([("EGFP", BioSamples.Egfp)])" />
+```
+
+---
+
+## Blazor.AI.ThreeD
+
+Package: `Blazor.AI.ThreeD` · Namespace: `Blazor.AI.ThreeD`
+
+```csharp
+builder.Services.AddBlazorAIThreeD();
+```
+
+```html
+<link rel="stylesheet" href="_content/Blazor.AI.ThreeD/blazor-ai-3d.css" />
+```
+
+`AddBlazorAIThreeD()` registers the per-user `CompanionMemoryStore` used by `AICompanion3D`. The components build on `AddBlazorAIComponents()`. Components that reuse other packages need those registered too; `AgentStudio3D` and `MultiAgentArena` inject agent services and need `AddBlazorAIAgents()`. Three.js is bundled in the package. See [3D components](threed.md) for the scene model, assets and setup.
+
+```razor
+@using Blazor.AI.ThreeD
+```
+
+### Common 3D parameters
+
+Most components inherit `ThreeDComponentBase`, which inherits `AiComponentBase`. They take the [common parameters](#common-parameters) (`Provider`, `Class`, `OnError`, unmatched attributes) plus:
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Height` | `string` | `"520px"` | CSS height of the 3D viewport. |
+| `Language` | `string?` | `null` | Language of the AI narration. `null` follows the model's default. |
+
+The digital twins inherit `TwinComponentBase`, which adds:
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `UpdatesPerSecond` | `double` | `2` | Simulation steps per second, clamped to 0.5–5. |
+| `AutoStart` | `bool` | `true` | Starts the live simulation after the first render. |
+
+Geometry, physics, statistics and training run in .NET; the model only plans or narrates from computed facts. Each component has a local fallback, so it works with the offline simulated model.
+
+### Core
+
+### Scene3D
+
+The Three.js host every 3D component builds on: declarative objects, picking, camera moves and an HTML overlay. See [The scene model](threed.md#the-scene-model) for its methods.
+
+No AI calls. Does not inherit a base class.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Objects` | `IReadOnlyList<Object3D>` | `[]` | Objects to show. Assign a new list to update; objects are diffed by `Id`. |
+| `Options` | `Scene3DOptions` | `new()` | Background, camera, controls, lights, shadows, ground, grid and fog. |
+| `Height` | `string` | `"480px"` | CSS height. |
+| `Class` | `string?` | `null` | Extra CSS classes for the root element. |
+| `ChildContent` | `RenderFragment?` | `null` | HTML overlay (HUD) drawn on top of the scene. |
+| `OnPick` | `EventCallback<PickEvent>` | | Raised when a pickable object is clicked. |
+| `OnModelLoaded` | `EventCallback<ModelInfo>` | | Raised when a glTF model loads, with its clips, morphs and triangle count. |
+| `OnSpeechEnded` | `EventCallback<string>` | | Raised with the object id when `SpeakAsync` finishes. |
+| `OnReady` | `EventCallback` | | Raised when the scene is initialised. |
+
+Also accepts unmatched attributes.
+
+```razor
+<Scene3D @ref="scene" Objects="@objects" Options="@options" Height="420px" OnPick="Picked">
+    <div class="bai3d-panel">Overlay HTML</div>
+</Scene3D>
+```
+
+### ModelViewer3D
+
+A glTF/GLB viewer with orbit, animation clips, morph targets, wireframe, triangle count and screenshot.
+
+No AI calls. Does not inherit a base class.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Model viewer"` | Card title. |
+| `Url` | `string` | `ThreeDAssets.GuideBot` | Model URL. |
+| `FitHeight` | `double` | `1.7` | Scales the model to this height in scene units. |
+| `Height` | `string` | `"420px"` | CSS height. |
+| `AutoRotate` | `bool` | `false` | Rotates the camera around the model. |
+| `Class` | `string?` | `null` | Extra CSS classes. |
+
+```razor
+<ModelViewer3D Url="@ThreeDAssets.GuideBot" FitHeight="1.7" AutoRotate="true" />
+```
+
+### Assistants
+
+![Talking avatar](../screenshots/3d-aiavatar3d.jpg)
+
+![Tour guide](../screenshots/3d-aitourguide3d.jpg)
+
+### AIAvatar3D
+
+A talking 3D avatar: speech or text in, an AI reply with an emotion and gesture, and speech out with lip sync.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Name` | `string` | `"Kawi"` | Avatar name. |
+| `Persona` | `string` | `"A friendly guide who answers briefly and warmly"` | Personality used in the default system prompt. |
+| `SystemPrompt` | `string?` | `null` | Replaces the default system prompt built from `Name` and `Persona`. |
+| `Placeholder` | `string` | `"Say hello, ask anything…"` | Input placeholder. |
+| `Greeting` | `string?` | `"Hi! I'm Kawi. Ask me anything, or press the mic and talk to me."` | First message. `null` shows none. |
+| `SpeechLanguage` | `string` | `"en-US"` | BCP-47 language for speech in and out, for example `"id-ID"`. |
+| `ModelUrl` | `string` | `ThreeDAssets.GuideBot` | Avatar model. |
+| `OnReply` | `EventCallback<string>` | | Raised with each reply. |
+
+```razor
+<AIAvatar3D Name="Kawi" Persona="a museum guide for Borobudur" SpeechLanguage="id-ID" />
+```
+
+### AICompanion3D
+
+An AI companion with memory, personality, goals and a visible emotional state; memories orbit the robot.
+
+Base: `ThreeDComponentBase`. Uses `CompanionMemoryStore`, registered by `AddBlazorAIThreeD()`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Name` | `string` | `"Sekar"` | Companion name. |
+| `SpeechLanguage` | `string` | `"en-US"` | BCP-47 language for speech. |
+| `Greeting` | `string` | `"Hi, I'm Sekar. I remember what you tell me and help with your goals. What should I call you?"` | First message. |
+
+```razor
+<AICompanion3D Name="Sekar" SpeechLanguage="id-ID" Greeting="Halo! Aku Sekar. Siapa namamu?" />
+```
+
+### AITourGuide3D
+
+A robot guide walks between points of interest, points at each one and narrates it with lip-synced speech.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Name` | `string` | `"Kawi"` | Guide name. |
+| `Tour` | `string` | `"Museum"` | Preset tour: `Museum`, `Smart City`, `Campus`, `Factory` or `Tourism`. |
+| `Preset` | `TourPreset?` | `null` | A custom tour (scenery and stops) used instead of `Tour`. |
+| `SpeechLanguage` | `string` | `"en-US"` | BCP-47 language for speech. |
+| `OnStopReached` | `EventCallback<TourStop>` | | Raised when the guide reaches a stop. |
+
+```razor
+<AITourGuide3D Tour="Museum" SpeechLanguage="id-ID" OnStopReached="stop => Log(stop.Name)" />
+```
+
+### Visualization
+
+### AI3DChart
+
+3D bar, scatter, bubble, surface and box charts with an AI-written insight.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Regional sales"` | Card title. |
+| `Mode` | `string` | `"Bars"` | `Bars`, `Scatter`, `Bubbles`, `Surface` or `Statistical`. |
+| `Categories` | `IReadOnlyList<string>` | `["Q1", "Q2", "Q3", "Q4"]` | Bar categories (X axis). |
+| `Series` | `IReadOnlyList<string>` | four island names | Bar series (Z axis). |
+| `Values` | `double[][]` | sample sales | Bar values as `[series][category]`. |
+| `Points` | `IReadOnlyList<(double X, double Y, double Z, double Size, int Group)>?` | `null` | Points for scatter and bubbles. `null` uses sample points. |
+| `Surface` | `Func<double, double, double>?` | `null` | Surface function z = f(x, y) sampled on [-1, 1]². `null` uses a sample function. |
+| `OnSelect` | `EventCallback<PickEvent>` | | Raised when a bar or point is clicked. |
+
+```razor
+<AI3DChart Title="Sales by island" Mode="Bars"
+           Categories="@(["Q1","Q2","Q3","Q4"])" Series="@islands" Values="@sales" />
+```
+
+### AIClusterExplorer
+
+Runs KMeans, DBSCAN, HDBSCAN or hierarchical clustering, shows the clusters in 3D and asks AI to name them.
+
+Base: `ThreeDComponentBase`. Uses `AnalyticsDataset` from Blazor.AI.Analytics.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Cluster explorer"` | Card title. |
+| `Algorithm` | `ClusterAlgorithm` | `ClusterAlgorithm.KMeans` | `KMeans`, `Dbscan`, `Hdbscan` or `Hierarchical`. |
+| `K` | `int` | `4` | Number of clusters for KMeans and hierarchical. |
+| `Epsilon` | `double` | `0.8` | Neighbourhood radius for DBSCAN. |
+| `MinClusterSize` | `int` | `15` | Minimum cluster size for HDBSCAN. |
+| `Dataset` | `AnalyticsDataset?` | `null` | Your own data; numeric columns are clustered. `null` uses the built-in samples. |
+| `OnClustered` | `EventCallback<ClusterLayout>` | | Raised with labels, positions and the silhouette score. |
+
+```razor
+<AIClusterExplorer Algorithm="ClusterAlgorithm.Hdbscan" MinClusterSize="15"
+                   Dataset="@SampleDatasets.Segments()" OnClustered="r => silhouette = r.Silhouette" />
+```
+
+### AIKnowledgeGraph3D
+
+Extracts entities and relations from text and shows them as a 3D graph, in four views.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Knowledge graph"` | Card title. |
+| `Mode` | `string` | `"Knowledge graph"` | `Knowledge graph`, `Entity relationship`, `Semantic` or `Concept map`. |
+| `Text` | `string` | a short text about Borobudur and Prambanan | Text to extract the graph from. |
+| `Graph` | `ExtractedGraph?` | `null` | A graph to show instead of extracting one from `Text`. |
+| `OnEntitySelected` | `EventCallback<GraphEntity>` | | Raised when an entity is clicked. |
+
+```razor
+<AIKnowledgeGraph3D Mode="Concept map" Text="@article" OnEntitySelected="e => selected = e.Name" />
+```
+
+### AIVectorSpaceViewer
+
+Projects document, question and answer embeddings to 3D with PCA; a query shows its nearest neighbours.
+
+Base: `ThreeDComponentBase`. Uses the provider's embedding model and falls back to offline hashing embeddings.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Vector space viewer"` | Card title. |
+| `Source` | `IReadOnlyList<AIVectorSpaceViewer.VectorItem>?` | `null` | Items as `(Kind, Text)`. `null` uses samples. |
+| `TopK` | `int` | `5` | Neighbours shown for a query. |
+
+```razor
+<AIVectorSpaceViewer Source="@items" TopK="5" />
+```
+
+### Agents
+
+### AgentStudio3D
+
+The agent ecosystem in 3D: agents as nodes and tools as satellites; edit agents in the side panel and run a task to watch the flow.
+
+Base: `ThreeDComponentBase`. Requires `AddBlazorAIAgents()`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `OnAgentSaved` | `EventCallback<AgentDefinition>` | | Raised when an agent is saved. |
+
+```razor
+<AgentStudio3D OnAgentSaved="a => Console.WriteLine(a.Name)" />
+```
+
+### MultiAgentArena
+
+Agents sit on a round arena and pass messages to each other as glowing packets while they work on a goal.
+
+Base: `ThreeDComponentBase`. Requires `AddBlazorAIAgents()`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Goal` | `string` | a sample goal | Task for the team. |
+| `Mode` | `OrchestrationMode` | `OrchestrationMode.Sequential` | `Sequential`, `RoundRobin` or `Supervisor`. |
+| `Team` | `IReadOnlyList<AgentDefinition>` | `MultiAgentArena.DefaultTeam` | Agents in speaking order. The default is research, planning, coding and evaluation agents. |
+| `OnCompleted` | `EventCallback<IReadOnlyList<AgentMessage>>` | | Raised with the transcript. |
+
+```razor
+<MultiAgentArena Goal="Rancang aplikasi antrean puskesmas" Mode="OrchestrationMode.RoundRobin"
+                 OnCompleted="msgs => transcript = msgs" />
+```
+
+### AgentMindMap3D
+
+Shows an agent's plan for a goal as a reasoning tree, a planning graph with dependencies, or a simulated execution graph.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Goal` | `string` | a sample goal | Goal to plan. |
+| `View` | `string` | `"Reasoning tree"` | `Reasoning tree`, `Planning graph` or `Execution graph`. |
+| `StepDelayMs` | `int` | `650` | Delay between steps when simulating execution. |
+| `OnStepSelected` | `EventCallback<MindStep>` | | Raised when a step is clicked. |
+
+```razor
+<AgentMindMap3D Goal="Digitalise 120 village cooperatives in NTT" View="Execution graph" StepDelayMs="500" />
+```
+
+### Decision
+
+![Strategy simulator](../screenshots/3d-strategysimulator3d.jpg)
+
+### DecisionTree3D
+
+An interactive 3D decision tree: edit the case, watch it travel down the tree, and ask AI to explain the outcome.
+
+Base: `ThreeDComponentBase`. Uses `DecisionTreeNode` from Blazor.AI.Decision.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Decision tree"` | Card title. |
+| `Subtitle` | `string` | `"Customer churn risk"` | Card subtitle. |
+| `Tree` | `DecisionTreeNode` | `DecisionTreeNode.ChurnSample()` | The tree. Conditions use the Blazor.AI.Decision expression language. |
+| `Facts` | `IDictionary<string, object?>` | a sample customer | Input facts. |
+| `OnDecided` | `EventCallback<DecisionTreeNode>` | | Raised with the leaf that was reached. |
+
+```razor
+<DecisionTree3D Tree="@loanTree" Facts="@applicant" Subtitle="Loan approval"
+                OnDecided="leaf => outcome = leaf.Outcome" />
+```
+
+### RuleGraph3D
+
+Business rules as a 3D graph: facts feed rules, rules write outcomes, fired rules glow, and variables written by several rules are flagged as conflicts.
+
+Base: `ThreeDComponentBase`. Uses the Blazor.AI.Decision rule engine.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Rule graph"` | Card title. |
+| `Rules` | `List<BusinessRule>` | `RuleGraph3DSamples.Rules()` | Rules to evaluate. |
+| `Facts` | `IDictionary<string, object?>` | `RuleEditor.SampleFacts()` | Input facts. |
+| `Mode` | `RuleMode` | `RuleMode.AllMatches` | `AllMatches` or `FirstMatch`. |
+| `OnEvaluated` | `EventCallback<RuleEvaluation>` | | Raised after evaluation. |
+
+```razor
+<RuleGraph3D Rules="@rules" Facts="@order" OnEvaluated="r => fired = r.Fired.Count()" />
+```
+
+### StrategySimulator3D
+
+Monte-Carlo simulation of a KPI over two levers, shown as a 3D landscape with your chosen point, the best point and scenario towers with P5–P95 risk.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Strategy simulator"` | Card title. |
+| `Preset` | `string` | `"banking"` | `banking`, `insurance`, `healthcare`, `supply` or `retail`. |
+| `Model` | `StrategyPreset?` | `null` | A custom model used instead of the presets. |
+| `Trials` | `int` | `160` | Monte-Carlo trials per grid point. |
+
+```razor
+<StrategySimulator3D Preset="supply" Trials="200" Language="Bahasa Indonesia" />
+```
+
+### Reinforcement learning
+
+### RLTrainingArena
+
+A robot learns a 3D grid world by Q-learning or SARSA; training runs in .NET and the current policy is replayed every few episodes.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"RL training arena"` | Card title. |
+| `World` | `DesignedGridWorld?` | `null` | The grid. `null` uses a 9×7 maze with two traps. |
+| `Algorithm` | `GridAlgorithm` | `GridAlgorithm.QLearning` | `QLearning` or `Sarsa`. |
+| `Episodes` | `int` | `400` | Training episodes (clamped to 20–2000). |
+| `Slip` | `double` | `0` | Probability that a move slips sideways. Applies to the built-in grid only. |
+| `OnEpisode` | `EventCallback<GridEpisode>` | | Raised after each episode. |
+
+```razor
+<RLTrainingArena Algorithm="GridAlgorithm.Sarsa" Episodes="600" Slip="0.1"
+                 OnEpisode="e => returns.Add(e.Return)" />
+```
+
+### RLPolicyViewer
+
+Shows a learned policy as value columns and greedy-action arrows per cell, with a slider across training snapshots.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Policy evolution"` | Card title. |
+| `World` | `DesignedGridWorld?` | `null` | The grid. `null` uses the built-in maze. |
+| `Algorithm` | `GridAlgorithm` | `GridAlgorithm.QLearning` | `QLearning` or `Sarsa`. |
+| `Episodes` | `int` | `360` | Training episodes (clamped to 40–3000). |
+| `Snapshots` | `int` | `24` | Snapshots kept across training (clamped to 4–60). |
+
+```razor
+<RLPolicyViewer Episodes="500" Snapshots="30" Algorithm="GridAlgorithm.QLearning" />
+```
+
+### RLBattleArena
+
+A hunter and a runner learn against each other in a pursuit–evasion game, with a live scoreboard and match replay.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"RL battle arena"` | Card title. |
+| `HunterPolicy` | `BattlePolicy` | `BattlePolicy.Learning` | `Learning`, `Heuristic` or `Random`. |
+| `RunnerPolicy` | `BattlePolicy` | `BattlePolicy.Learning` | `Learning`, `Heuristic` or `Random`. |
+| `Matches` | `int` | `4000` | Training matches (clamped to 200–20000). |
+
+```razor
+<RLBattleArena HunterPolicy="BattlePolicy.Learning" RunnerPolicy="BattlePolicy.Heuristic" Matches="6000" />
+```
+
+### RLEvolutionViewer
+
+Evolves cart-pole controllers and shows generations as stacked rings, fitness as size and colour, the champion's lineage, and the champion balancing live.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Evolution viewer"` | Card title. |
+| `GenerationCount` | `int` | `18` | Generations to evolve (clamped to 2–60). |
+| `Population` | `int` | `24` | Controllers per generation (clamped to 8–60). |
+| `Mutation` | `double` | `0.35` | Mutation sigma (clamped to 0.01–2). |
+
+```razor
+<RLEvolutionViewer GenerationCount="25" Population="32" Mutation="0.3" />
+```
+
+### ResourceOptimizationArena
+
+An RL policy allocates units to zones (towers show expected demand, stacked cubes show units) and is compared with baselines.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Resource optimisation arena"` | Card title. |
+| `Scenario` | `AllocationScenario?` | `null` | A custom scenario used instead of the built-in presets. |
+| `TrainingDays` | `int` | `3000` | Simulated training days. |
+
+```razor
+<ResourceOptimizationArena Scenario="@depots" TrainingDays="4000" />
+```
+
+### Digital twins
+
+![Smart city](../screenshots/3d-smartcity3d.jpg)
+
+Each twin runs a `TwinSimulator` on a timer, colours the scene from the live readings and includes a `TwinCopilot`. The base is `TwinComponentBase`, so they also take `UpdatesPerSecond` and `AutoStart`.
+
+### SmartFactory3D
+
+A factory with production lines and robot cells, live OEE, predictive maintenance (remaining useful life) and an AI copilot.
+
+Base: `TwinComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Plant Cikarang · Assembly"` | Card title. |
+| `Lines` | `int` | `2` | Production lines (1–3). |
+| `StationsPerLine` | `int` | `3` | Robot cells per line (2–4). |
+| `IdealCycleSeconds` | `double` | `42` | Ideal cycle time per station in seconds, the OEE performance baseline. |
+
+```razor
+<SmartFactory3D Title="Plant Karawang · Line A/B" Lines="2" StationsPerLine="3"
+                IdealCycleSeconds="40" Language="Bahasa Indonesia" />
+```
+
+### SmartBuilding3D
+
+A building with floors and rooms coloured by energy, temperature or occupancy, people dots, security alerts and an AI copilot.
+
+Base: `TwinComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Menara Kawung · HQ"` | Card title. |
+| `Floors` | `int` | `4` | Number of floors (1–8). |
+| `RoomArea` | `double` | `120` | Room footprint in square metres, used for energy intensity. |
+
+```razor
+<SmartBuilding3D Floors="5" RoomArea="140" UpdatesPerSecond="1" />
+```
+
+### SmartFarm3D
+
+A farm with irrigation zones, soil-moisture tiles, growing maize, disease detection, yield prediction and an AI agronomist.
+
+Base: `TwinComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Kebun Jagung Sleman"` | Card title. |
+| `SeasonDays` | `int` | `110` | Length of the growing season in days. |
+| `PotentialYield` | `double` | `9.5` | Attainable yield in t/ha under ideal conditions. |
+
+```razor
+<SmartFarm3D SeasonDays="110" PotentialYield="9.5" />
+```
+
+### SmartAquaculture3D
+
+Net cages with swimming fish, water quality, growth prediction and feeding optimisation.
+
+Base: `TwinComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Waduk Jatiluhur"` | Card title. |
+| `FishPerCage` | `int` | `6000` | Fish stocked per cage. |
+| `HarvestWeight` | `double` | `500` | Harvest weight in grams. |
+| `VisibleFish` | `int` | `9` | Fish models drawn per cage, as a visual sample of the stock. |
+
+```razor
+<SmartAquaculture3D Title="Keramba Waduk Jatiluhur" FishPerCage="6000" HarvestWeight="500" />
+```
+
+### SmartCity3D
+
+A city with data-driven building heights, traffic per road, moving cars, bridge and utility health, air-quality bubbles and an AI copilot.
+
+Base: `TwinComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Bandung Smart City"` | Card title. |
+| `BlockValues` | `IReadOnlyList<double>?` | `null` | One value per city block, row-major (for example population density), which sets building heights. The city has 9 blocks; fewer than 9 values uses the sample. |
+
+```razor
+<SmartCity3D BlockValues="@densityIndex" />
+```
+
+### TwinCopilot
+
+Answers questions about a live digital twin from a snapshot of its readings, trends and events; offline, a local diagnosis answers. The twins above include it; use it directly with your own `TwinSimulator`.
+
+Base: `AiComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Simulator` | `TwinSimulator` | | Required. The simulator to read. |
+| `Role` | `string` | `"an operations engineer for this digital twin"` | Who the copilot is. |
+| `Context` | `Func<string>?` | `null` | Extra facts appended to the snapshot, such as KPIs computed by the host. |
+| `Placeholder` | `string` | `"Ask about the live readings…"` | Input placeholder. |
+| `Suggestions` | `IReadOnlyList<string>` | `[]` | Starter questions. |
+| `Language` | `string?` | `null` | Language of the answer. |
+
+```razor
+<TwinCopilot Simulator="@sim" Role="a plant reliability engineer" Context="@Kpis" />
+```
+
+### Health & biotech
+
+![Molecule explorer](../screenshots/3d-moleculeexplorer3d.jpg)
+
+### HumanBody3D
+
+An anatomy viewer with a translucent body, organ and skeleton layers; click an organ to focus on it and learn about it.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Audience` | `string` | `"a high-school student"` | Who the explanations are written for. |
+| `OnOrganSelected` | `EventCallback<HumanBody3D.Organ>` | | Raised when an organ is selected. |
+
+```razor
+<HumanBody3D Audience="a nursing student" Language="Bahasa Indonesia" OnOrganSelected="o => selected = o.Name" />
+```
+
+### MoleculeExplorer3D
+
+Builds a 3D molecule from SMILES (conformer embedding) and shows it as ball-and-stick, space-filling or wire with CPK colours, descriptors and an AI explanation.
+
+Base: `ThreeDComponentBase`. Uses Biotech.Net through Blazor.AI.Bio.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"3D molecule explorer"` | Card title. |
+| `Smiles` | `string?` | `BioSamples.Molecules[1].Smiles` (caffeine) | Molecule as SMILES. |
+
+```razor
+<MoleculeExplorer3D Smiles="CC(=O)Oc1ccccc1C(=O)O" />
+```
+
+### ProteinViewer3D
+
+Shows a PDB structure as a Cα trace tube coloured by chain, N→C rainbow or secondary structure; residues show a tooltip on hover.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Protein viewer"` | Card title. |
+| `Pdb` | `string?` | `null` | PDB text. `null` uses a synthetic sample. |
+| `MaxMarkers` | `int` | `350` | Maximum residues drawn as pickable markers. |
+
+```razor
+<ProteinViewer3D Pdb="@pdbText" MaxMarkers="300" />
+```
+
+### GeneNetwork3D
+
+A gene co-expression network: Pearson correlation of log expression for the most variable genes, laid out in 3D and coloured by fold change.
+
+Base: `ThreeDComponentBase`. Uses Blazor.AI.Bio.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Gene network explorer"` | Card title. |
+| `Counts` | `Dataset?` | `null` | Counts as genes × samples with a `condition` annotation. `null` uses a synthetic stress experiment. |
+| `Reference` | `string` | `"control"` | Reference condition. |
+| `Treatment` | `string` | `"treated"` | Treatment condition. |
+
+```razor
+<GeneNetwork3D Counts="@counts" Reference="control" Treatment="treated" />
+```
+
+### MedicalTrainingSimulator
+
+Resuscitation training with a 3D patient, a vitals monitor driven by a BLS state machine, scoring and an AI debrief.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Resuscitation trainer"` | Card title. |
+| `Briefing` | `string` | a collapsed-patient scenario | Scenario text shown at the start. |
+| `Audience` | `string` | `"a nursing student"` | Who the debrief is written for. |
+| `OnFinished` | `EventCallback<CprScenario>` | | Raised when the scenario ends, with the score and log. |
+
+```razor
+<MedicalTrainingSimulator Audience="a first-year medical student" OnFinished="s => SaveScore(s.Score, s.Log)" />
+```
+
+### Engineering
+
+![CAD copilot](../screenshots/3d-cadcopilot3d.jpg)
+
+### CADCopilot3D
+
+Turns a description into a parametric part: AI (or a local parser) writes a feature list, you edit the dimensions, and you can export JSON.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `OnPartChanged` | `EventCallback<CadPart>` | | Raised when the part changes. |
+
+```razor
+<CADCopilot3D OnPartChanged="part => Save(part.ToJson())" />
+```
+
+### BIMAssistant3D
+
+Ask questions about a building model: AI maps the question to a query, .NET computes the answer over the elements and highlights them.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Elements` | `IReadOnlyList<BimElement>?` | `null` | Building elements. `null` uses a two-storey sample with a deliberate duct clash. |
+
+```razor
+<BIMAssistant3D Elements="@myElements" Language="Bahasa Indonesia" />
+```
+
+### EngineeringSimulation3D
+
+CFD, FEM, thermal and structural analysis computed in C# and shown in 3D, with an AI explanation of the results.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `InitialMode` | `string` | `"CFD"` | Mode to open first: `CFD`, `FEM`, `Thermal` or `Structural`. |
+
+```razor
+<EngineeringSimulation3D InitialMode="FEM" />
+```
+
+### MeshOptimizationStudio
+
+Mesh decimation shown side by side (original and optimised), with triangle budgets, LOD measurement and AI recommendations.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Url` | `string?` | `null` | glTF/GLB model to open. `null` uses `ThreeDAssets.Stupa`. |
+
+```razor
+<MeshOptimizationStudio Url="@ThreeDAssets.Stupa" />
+```
+
+### Education
+
+### AIClassroom3D
+
+A virtual classroom: AI writes a lesson and quiz, and the robot teacher presents each point at the board with lip sync.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `SpeechLanguage` | `string` | `"en-US"` | BCP-47 language for the teacher's voice. |
+
+```razor
+<AIClassroom3D SpeechLanguage="id-ID" Language="Bahasa Indonesia" />
+```
+
+### SolarSystemExplorer
+
+The Sun and eight planets with orbits at relative speeds, readable or true-ratio distances, facts and AI questions and answers per planet.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Focus` | `string?` | `null` | Planet to select first. |
+
+```razor
+<SolarSystemExplorer Focus="Jupiter" Height="560px" />
+```
+
+### HistoryExplorer3D
+
+Historical sites in 3D (Borobudur, Prambanan) with story hotspots, a timeline that rebuilds the site per era, and an AI narrator.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `InitialSite` | `string` | `"Borobudur"` | Site to open first: `Borobudur` or `Prambanan`. |
+
+```razor
+<HistoryExplorer3D InitialSite="Prambanan" Language="Bahasa Indonesia" />
+```
+
+### ScienceLab3D
+
+A virtual lab with a pendulum (RK4), projectile motion and an Ohm's-law circuit, computed in C#, animated in 3D, plotted and explained.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `InitialExperiment` | `string` | `"Pendulum"` | Experiment to open first: `Pendulum`, `Projectile` or `Ohm's law`. |
+
+```razor
+<ScienceLab3D InitialExperiment="Pendulum" />
+```
+
+### Gaming
+
+![World builder](../screenshots/3d-aiworldbuilder.jpg)
+
+### NPCStudio
+
+Generates NPCs with personality, backstory, dialogue and stats, shows a 3D preview with emotes, and lets you chat with them in character.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `OnGenerated` | `EventCallback<NPCStudio.Npc>` | | Raised with each generated NPC. |
+
+```razor
+<NPCStudio OnGenerated="npc => SaveNpc(npc)" />
+```
+
+### AIQuestGenerator
+
+Generates a quest chain (steps, objectives, rewards, branches) from a theme and lays it out as waypoints on a 3D map.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `OnGenerated` | `EventCallback<AIQuestGenerator.Quest>` | | Raised with each generated quest. |
+
+```razor
+<AIQuestGenerator OnGenerated="quest => questLog.Add(quest)" />
+```
+
+### AIWorldBuilder
+
+Turns a prompt into a world plan (biome, landmarks, settlements) and builds a procedural 3D world with forests, villages and a temple.
+
+Base: `ThreeDComponentBase`. No other parameters.
+
+```razor
+<AIWorldBuilder Height="600px" />
+```
+
+### AIDungeonMaster
+
+An AI game master on a 3D tabletop dungeon: dice are rolled locally, rules decide outcomes, and the model narrates.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Party` | `IReadOnlyList<string>` | `["Arjuna the archer", "Sinta the healer", "Bima the warrior"]` | Party members shown as tokens. |
+
+```razor
+<AIDungeonMaster Party="@(["Arjuna the archer", "Sinta the healer"])" />
+```
+
+### ProceduralWorldStudio
+
+Seeded procedural terrain (fBm noise, island falloff, ridges, thermal erosion); AI turns a description into generator settings.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Seed` | `int` | `1337` | Initial random seed. |
+| `OnGenerated` | `EventCallback<Terrain>` | | Raised with each generated terrain. |
+
+```razor
+<ProceduralWorldStudio Seed="2026" OnGenerated="terrain => heightmap = terrain" />
+```
+
+### Enterprise
+
+![Executive analytics sphere](../screenshots/3d-executiveanalyticssphere.jpg)
+
+### DigitalTwinPlatform
+
+A multi-site digital twin (site, area, asset) with live health and temperature, alarms, remaining useful life and an AI maintenance copilot.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `IntervalMs` | `int` | `1500` | Update interval in milliseconds (minimum 500). |
+
+```razor
+<DigitalTwinPlatform IntervalMs="1500" Height="560px" />
+```
+
+### EnterpriseKnowledgeGraph3D
+
+An enterprise knowledge graph of teams, systems, datasets, documents and people, with search, domain filters and graph questions and answers.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Nodes` | `IReadOnlyList<EnterpriseKnowledgeGraph3D.EnterpriseNode>` | a sample company | Nodes as `(Name, Type, Domain)`. |
+| `Edges` | `IReadOnlyList<EnterpriseKnowledgeGraph3D.EnterpriseLink>` | a sample company | Links as `(From, Relation, To)`. |
+
+```razor
+<EnterpriseKnowledgeGraph3D Nodes="@nodes" Edges="@edges" />
+```
+
+### EnterpriseAgentOperationsCenter
+
+A fleet of AI agents shown as towers (height is throughput, colour is error rate, ring is the latency SLO), with incidents and an AI operations summary.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `LatencySloMs` | `double` | `2500` | Latency service-level objective in milliseconds. |
+
+```razor
+<EnterpriseAgentOperationsCenter LatencySloMs="2000" />
+```
+
+### ExecutiveAnalyticsSphere
+
+Executive KPIs on a globe: position is the domain, size is attainment, colour is on or off target, and a pulse marks an anomaly.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Title` | `string` | `"Company pulse"` | Card title. |
+| `Kpis` | `IReadOnlyList<LiveMetric>?` | `null` | Your own KPIs. `null` uses a simulated company. |
+| `IntervalMs` | `int` | `2000` | Update interval in milliseconds (minimum 500). |
+
+```razor
+<ExecutiveAnalyticsSphere Title="Board pulse" Kpis="@kpis" IntervalMs="5000" />
+```
+
+### MultiAgentCommandCenter
+
+Mission control for agent teams: plans a mission into tasks, dispatches them to specialist agents and shows the execution in 3D.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Agents` | `IReadOnlyList<string>` | `["Researcher", "Planner", "Analyst", "Writer", "Reviewer"]` | Specialist roles on the team. |
+
+```razor
+<MultiAgentCommandCenter Language="Bahasa Indonesia" />
+```
+
+### AutonomousOperationsDashboard
+
+A closed loop of sense, analyse, decide and act: decisions at or above the confidence threshold execute automatically, the rest wait for a human.
+
+Base: `ThreeDComponentBase`.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Threshold` | `double` | `0.85` | Confidence at or above which a decision executes automatically. |
+| `IntervalMs` | `int` | `3500` | Length of one loop cycle in milliseconds (minimum 1000). |
+
+```razor
+<AutonomousOperationsDashboard Threshold="0.9" IntervalMs="3000" />
 ```

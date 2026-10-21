@@ -1,0 +1,138 @@
+@page "/3d/decision-rl"
+<PageTitle>3D decisions &amp; RL · Blazor.AI</PageTitle>
+
+<PageHeader Title="Decisions and reinforcement learning in 3D" Package="Blazor.AI.ThreeD" Icon="bi-diagram-2"
+            Lead="Walk a case down a decision tree, see which rules fire and collide, explore strategy landscapes, and watch agents learn, compete and evolve. Every number is computed in .NET; AI explains what you see." />
+
+<DemoSection Title="Decision tree" Component="DecisionTree3D" Description="Edit the case and watch it travel down the tree; the path lights up and AI explains the outcome and the best lever to change it." Code="@TreeCode">
+    <DecisionTree3D />
+</DemoSection>
+
+<DemoSection Title="Rule graph" Component="RuleGraph3D" Description="Facts feed rules, rules write outcomes. Fired rules glow; variables written by more than one rule are flagged as conflicts." Code="@RuleCode">
+    <RuleGraph3D />
+</DemoSection>
+
+<DemoSection Title="Strategy simulator" Component="StrategySimulator3D" Description="Monte-Carlo KPI landscapes for banking, insurance, healthcare, supply chain and retail. Click the surface to move your choice; compare scenario towers with P5–P95 risk." Code="@StrategyCode">
+    <StrategySimulator3D />
+</DemoSection>
+
+<DemoSection Title="RL training arena" Component="RLTrainingArena" Description="Q-learning or SARSA in a 3D maze. Training runs in .NET; the robot replays the current policy as it learns, and the floor heats up where it explores." Code="@ArenaCode">
+    <RLTrainingArena />
+</DemoSection>
+
+<DemoSection Title="Policy evolution" Component="RLPolicyViewer" Description="Value columns and greedy arrows per cell, captured across training. Scrub or play the snapshots to watch the policy improve." Code="@PolicyCode">
+    <RLPolicyViewer />
+</DemoSection>
+
+<DemoSection Title="Battle arena" Component="RLBattleArena" Description="A hunter and a runner learn against each other (pursuit–evasion). Swap either side for a heuristic or random opponent and replay matches." Code="@BattleCode">
+    <RLBattleArena />
+</DemoSection>
+
+<DemoSection Title="Evolution viewer" Component="RLEvolutionViewer" Description="Neuro-evolution of cart–pole controllers: generations stack as rings, the champion's lineage is traced, then the champion balances the pole." Code="@EvolutionCode">
+    <RLEvolutionViewer />
+</DemoSection>
+
+<DemoSection Title="Resource optimisation" Component="ResourceOptimizationArena" Description="Learn where to place ambulances, batteries or servers. Towers show expected demand, cubes the allocation; compare Q-learning with equal and static plans." Code="@ResourceCode">
+    <ResourceOptimizationArena />
+</DemoSection>
+
+@code {
+    private const string TreeCode = """
+        // Program.cs
+        builder.Services.AddBlazorAIComponents();
+        builder.Services.AddBlazorAIDecision();
+        builder.Services.AddBlazorAIThreeD();
+
+        <DecisionTree3D Tree="@loanTree" Facts="@applicant" Subtitle="Loan approval"
+                        OnDecided="leaf => outcome = leaf.Outcome" />
+
+        @code {
+            DecisionTreeNode loanTree = DecisionTreeNode.Question("Score ≥ 650?", "creditScore >= 650",
+                DecisionTreeNode.Question("DTI ≤ 40%?", "dti <= 40", DecisionTreeNode.Leaf("Approve"), DecisionTreeNode.Leaf("Manual review")),
+                DecisionTreeNode.Leaf("Decline"));
+            Dictionary<string, object?> applicant = new() { ["creditScore"] = 702d, ["dti"] = 35d };
+            string? outcome;
+        }
+        """;
+
+    private const string RuleCode = """
+        <RuleGraph3D Rules="@rules" Facts="@order" OnEvaluated="r => fired = r.Fired.Count()" />
+
+        @code {
+            List<BusinessRule> rules =
+            [
+                new() { Name = "VIP", Condition = "annualSpend >= 10000000", Actions = "tier = 'gold'; discount = 0.15", Priority = 30 },
+                new() { Name = "Payday promo", Condition = "orderTotal >= 300000", Actions = "discount = 0.1", Priority = 15 },
+            ];   // both write "discount": shown as a conflict
+            Dictionary<string, object?> order = new() { ["annualSpend"] = 12_500_000d, ["orderTotal"] = 420_000d };
+            int fired;
+        }
+        """;
+
+    private const string StrategyCode = """
+        <StrategySimulator3D Preset="supply" Trials="200" Language="Bahasa Indonesia" />
+
+        // Or bring your own model: two levers, one KPI, a stochastic trial.
+        <StrategySimulator3D Model="@pricing" />
+
+        @code {
+            StrategyPreset pricing = new("pricing", "SaaS pricing", "Monthly profit", "M IDR",
+                new("Price", 50, 400, "k IDR"), new("Free-trial days", 0, 30, "days"),
+                (price, trial, vol, scale, rng) => /* simulate one month */ 0,
+                [new("Cheap", 90, 14), new("Premium", 300, 7)], "Higher price lowers conversion.");
+        }
+        """;
+
+    private const string ArenaCode = """
+        builder.Services.AddBlazorAIAnalytics();   // RL environments (RLNet)
+        builder.Services.AddBlazorAIThreeD();
+
+        <RLTrainingArena Algorithm="GridAlgorithm.Sarsa" Episodes="600" Slip="0.1"
+                         OnEpisode="e => returns.Add(e.Return)" />
+
+        @* Any designed grid works, e.g. the one from EnvironmentDesigner: *@
+        <RLTrainingArena World="@Rl.CreateGrid()" />
+        """;
+
+    private const string PolicyCode = """
+        <RLPolicyViewer Episodes="500" Snapshots="30" Algorithm="GridAlgorithm.QLearning" />
+
+        // The learner behind it is usable on its own:
+        var learner = new GridQLearner(GridScene.Arena());
+        for (var i = 0; i < 400; i++) learner.RunEpisode();
+        var action = learner.Greedy(learner.State(0, 0));   // 0 up, 1 right, 2 down, 3 left
+        """;
+
+    private const string BattleCode = """
+        <RLBattleArena HunterPolicy="BattlePolicy.Learning" RunnerPolicy="BattlePolicy.Heuristic" Matches="6000" />
+
+        // Headless:
+        var game = new PursuitGame { Hunter = BattlePolicy.Learning, Runner = BattlePolicy.Learning };
+        for (var i = 0; i < 5000; i++) game.Play();
+        var match = game.Play(evaluate: true);   // frames for your own replay
+        """;
+
+    private const string EvolutionCode = """
+        <RLEvolutionViewer GenerationCount="25" Population="32" Mutation="0.3" />
+
+        var evo = new PolicyEvolution(population: 32);
+        for (var g = 0; g < 25; g++) evo.Step();
+        var champion = evo.BestLineage()[^1];   // weights for x, x', θ, θ', bias
+        """;
+
+    private const string ResourceCode = """
+        <ResourceOptimizationArena TrainingDays="4000" />
+
+        @* Your own zones and demand profile: *@
+        <ResourceOptimizationArena Scenario="@depots" />
+
+        @code {
+            AllocationScenario depots = new("Delivery vans", "van", ["Morning", "Afternoon", "Evening"], 8,
+            [
+                new("Bandung", -2, 0, [2.5, 1.8, 1.2]),
+                new("Bekasi", 2, -1, [1.6, 2.4, 2.0]),
+                new("Bogor", 0, 2.5, [1.0, 1.5, 2.6]),
+            ]);
+        }
+        """;
+}

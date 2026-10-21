@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Blazor.AI is a .NET 10 Razor component library of AI components (smart forms, chat/copilot, RAG, agents, decision intelligence, ML/data science/RL, Hugging Face, visual analytics, biology), shipped as 11 NuGet packages, plus a gallery app, a WASM sample and a `dotnet new` template. `solution-design.md` and `Blazor.AI.txt` (Indonesian) are the original brief; `PLAN.md` is the roadmap and `Progress.md` tracks status. Keep `Progress.md` updated as work proceeds.
+Blazor.AI is a .NET 10 Razor component library of AI components (smart forms, chat/copilot, RAG, agents, decision intelligence, ML/data science/RL, Hugging Face, visual analytics, biology), shipped as 12 NuGet packages (including the Three.js-based `Blazor.AI.ThreeD`), plus a gallery app, a WASM sample and a `dotnet new` template. `solution-design.md` and `Blazor.AI.txt` (Indonesian) are the original brief; `PLAN.md` is the roadmap and `Progress.md` tracks status. Keep `Progress.md` updated as work proceeds.
 
 ## Commands
 
@@ -28,6 +28,7 @@ The running gallery locks `bin/` DLLs: stop it before rebuilding. Real provider 
 - **Components**: AI components inherit `AiComponentBase` (injects `IAiClientFactory`, `AiTextService`, `BlazorAIJs`; `Provider` parameter; `RunAsync`, `Error`, `IsBusy`, throttled render). Bio components inherit `BioComponentBase` (Biotech.Net work in `AnalyseAsync`, AI only explains computed results). Analytics components inherit `AnalyticsComponentBase`.
 - **Deterministic compute**: ML/statistics use Gravicode.Science (GraviNum/GraviFrame/GraviLearn/GraviProb), RL uses Gravicode.RLNet, decisions use TypeSafe SDK and the in-house safe `Expression` language, biology uses Biotech.Net. The LLM plans (e.g. `SpreadsheetAnalyst`) or explains; it does not produce numbers.
 - **Theme**: `src/Blazor.AI.Components/wwwroot/blazor-ai.css` ("kawung glass": tarum indigo, soga amber for AI, nila teal for local/success; `--bai-*` tokens; light/dark via `data-bs-theme`). Charts are hand-written SVG in Visualization (`ChartMath`, `LinearAxis`).
+- **3D**: `src/Blazor.AI.ThreeD` — `wwwroot/blazor-ai-3d.js` is the only JS engine (vendored Three.js r170 in `wwwroot/lib/three`, imports rewritten to relative paths). C# sends `Object3D[]` JSON (source-generated `ThreeDJsonContext`, nulls dropped); the engine diffs by Id. Components inherit `ThreeDComponentBase` (or `TwinComponentBase` for live twins with a timer). Assets live in `wwwroot/models` (GLB, Draco, WebP) and `wwwroot/art`; `ThreeDAssets` has their URLs; regenerate via `tools/blender`.
 - **Gallery**: `samples/Blazor.AI.Gallery`; each page uses `DemoSection` (Preview / Code tabs) with a `const string …Code` snippet per component; navigation and component counts are in `Services/GalleryNavigation.cs`.
 
 ## Gotchas

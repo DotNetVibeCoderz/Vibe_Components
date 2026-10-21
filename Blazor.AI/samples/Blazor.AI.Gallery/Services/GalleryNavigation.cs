@@ -25,5 +25,16 @@ public static class GalleryNavigation
         new("Industry showcases", "industries", "bi-buildings", "All packages", 0, "Healthcare, agritech, finance, education, manufacturing, government, smart city, gaming, biotech"),
     ];
 
-    public static int TotalComponents => Sections.Sum(s => s.Components);
+    /// <summary>Blazor.AI.ThreeD pages.</summary>
+    public static IReadOnlyList<NavItem> ThreeDSections { get; } =
+    [
+        new("Avatars & 3D charts", "3d", "bi-person-bounding-box", "Blazor.AI.ThreeD", 3, "Talking avatar with lip sync, 3D charts, glTF model viewer"),
+        new("Assistants, data & agents", "3d/assistants-data", "bi-diagram-3", "Blazor.AI.ThreeD", 8, "Companion, tour guide, knowledge graph, vector space, clusters, agent studio, arena, mind map"),
+        new("Decision & RL", "3d/decision-rl", "bi-signpost-split", "Blazor.AI.ThreeD", 8, "Decision trees, rule graphs, strategy simulator, RL training, policy, battle, evolution and resource arenas"),
+        new("Digital twins & health", "3d/twins-health", "bi-buildings", "Blazor.AI.ThreeD", 10, "Factory, building, farm, aquaculture, city; anatomy, molecules, proteins, gene networks, medical training"),
+        new("Engineering, education & games", "3d/engineering-education-games", "bi-controller", "Blazor.AI.ThreeD", 13, "CAD and BIM copilots, simulation, mesh optimisation, classroom, solar system, history, science lab, NPCs, quests, worlds"),
+        new("Enterprise command", "3d/enterprise", "bi-globe2", "Blazor.AI.ThreeD", 6, "Digital twin platform, enterprise knowledge graph, AgentOps, KPI sphere, mission control, autonomy"),
+    ];
+
+    public static int TotalComponents => Sections.Sum(s => s.Components) + ThreeDSections.Sum(s => s.Components);
 }

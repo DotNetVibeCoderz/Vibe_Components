@@ -1,0 +1,236 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@using Biotech.Net.Chemistry
+@using Biotech.Net.DrugDiscovery
+@using Blazor.AI.Bio
+@* 3-D molecule from SMILES: conformer embedding, ball-and-stick / space-filling / wire, CPK colours, descriptors and AI explanation. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height">
+        @if (_info is { } i)
+        {
+            <div class="bai3d-panel">
+                <h4>@i.Formula</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@TwinUi.N(i.Mw, "0.0")</b><span>g/mol</span></div>
+                    <div><b>@TwinUi.N(i.LogP, "0.00")</b><span>cLogP</span></div>
+                    <div><b>@TwinUi.N(i.Qed, "0.00")</b><span>QED</span></div>
+                    <div><b>@i.Atoms</b><span>atoms</span></div>
+                </div>
+                <div class="bai-faint" style="margin-top:.3rem">@(i.Is3D ? "3-D conformer (distance geometry + force field)" : "2-D layout (3-D embedding failed)")</div>
+            </div>
+        }
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            @foreach (var (sym, color) in _legend) { <span><i style="background:@color; border-radius:50%"></i>@sym</span> }
+        </div>
+    </Scene3D>
+
+    <AiCard Title="@Title" Subtitle="Biotech.Net.Chemistry · conformers" Icon="bi-hexagon-half">
+        <div class="bai-stack">
+            <form class="bai-row" @onsubmit="BuildAsync" @onsubmit:preventDefault="true">
+                <input class="bai-input bai-spacer" style="font-family:var(--bai-font-mono)" @bind="Smiles" aria-label="SMILES" placeholder="SMILES" />
+                <button type="submit" class="bai-btn bai-btn-ai"><i class="bi bi-box" aria-hidden="true"></i>Build 3D</button>
+            </form>
+            <div class="bai-chips">
+                @foreach (var (name, smiles) in BioSamples.Molecules)
+                {
+                    <button type="button" class="bai-chip @(smiles == Smiles ? "is-active" : null)" @onclick="() => Pick(smiles)">@name</button>
+                }
+            </div>
+            <div class="bai-row">
+                @foreach (var s in Styles)
+                {
+                    <button type="button" class="bai-chip @(s == _style ? "is-active" : null)" @onclick="() => SetStyle(s)">@s</button>
+                }
+                <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_hydrogens" @bind:after="BuildAsync" /> hydrogens</label>
+            </div>
+            <AiError Message="@Error" />
+            @if (_info is not null)
+            {
+                <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain the shape</button>
+            }
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly string[] Styles = ["Ball & stick", "Space-filling", "Wire"];
+    private sealed record Info(string Formula, double Mw, double LogP, double Qed, int Atoms, bool Is3D, string Smiles, string Summary);
+    private sealed record Atom3(int Z, string Symbol, double[] P);
+    private sealed record Bond3(int A, int B, BondOrder Order);
+
+    private Scene3DOptions _options = new();
+    private string _style = Styles[0];
+    private bool _hydrogens = true;
+    private Info? _info;
+    private List<Atom3> _atoms = [];
+    private List<Bond3> _bonds = [];
+    private List<(string, string)> _legend = [];
+
+    [Parameter] public string Title { get; set; } = "3D molecule explorer";
+    [Parameter] public string? Smiles { get; set; } = BioSamples.Molecules[1].Smiles;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 2.5, 9], Target = [0, 0, 0] },
+            Controls = new() { AutoRotate = true, AutoRotateSpeed = 1.2, MaxPolarAngle = Math.PI },
+            Lights = "studio",
+            Shadows = false,
+            AriaLabel = "3D molecule",
+        };
+        await BuildAsync();
+    }
+
+    private Task Pick(string smiles)
+    {
+        Smiles = smiles;
+        return BuildAsync();
+    }
+
+    private async Task BuildAsync()
+    {
+        Error = null;
+        Narration = null;
+        var smiles = Smiles?.Trim();
+        if (string.IsNullOrEmpty(smiles))
+        {
+            Error = "Enter a SMILES string.";
+            return;
+        }
+
+        var hydrogens = _hydrogens;
+        try
+        {
+            var result = await Task.Run(() => Embed(smiles, hydrogens));
+            (_atoms, _bonds, _info) = result;
+            Render();
+        }
+        catch (Exception ex) when (ex is FormatException or ArgumentException or InvalidOperationException)
+        {
+            Error = $"Could not read that SMILES: {ex.Message}";
+        }
+    }
+
+    private static (List<Atom3>, List<Bond3>, Info) Embed(string smiles, bool hydrogens)
+    {
+        var mol = Molecule.FromSmiles(smiles);
+        var profile = Admet.Profile(mol);
+        var work = hydrogens ? mol.AddHydrogens() : mol;
+        Point3[]? coords;
+        var is3D = true;
+        try
+        {
+            var embedded = ConformerGenerator.Embed(work, new ConformerOptions { RandomSeed = 42 });
+            work = embedded;
+            coords = embedded.Coordinates;
+            if (coords is null || coords.Length != work.AtomCount || coords.All(c => Math.Abs(c.Z) < 1e-6))
+            {
+                throw new InvalidOperationException("no 3-D coordinates");
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            coords = Depiction.Compute2DCoordinates(work);
+            is3D = false;
+        }
+
+        // Centre on the origin.
+        coords ??= [];
+        double cx = coords.Length == 0 ? 0 : coords.Average(c => c.X), cy = coords.Average(c => c.Y), cz = coords.Average(c => c.Z);
+        var atoms = new List<Atom3>(work.AtomCount);
+        for (var i = 0; i < work.AtomCount; i++)
+        {
+            var a = work.AtomAt(i);
+            atoms.Add(new Atom3(a.AtomicNumber, a.Symbol, [coords[i].X - cx, coords[i].Y - cy, coords[i].Z - cz]));
+        }
+
+        var bonds = new List<Bond3>(work.BondCount);
+        for (var b = 0; b < work.BondCount; b++)
+        {
+            var bond = work.BondAt(b);
+            bonds.Add(new Bond3(bond.Begin, bond.End, bond.Order));
+        }
+
+        var d = profile.Descriptors;
+        var info = new Info(d.Formula, d.MolecularWeight, d.LogP, profile.Qed, work.AtomCount, is3D, mol.ToSmiles(),
+            string.Create(CultureInfo.InvariantCulture, $"{d.Formula}, MW {d.MolecularWeight:0.0}, cLogP {d.LogP:0.00}, TPSA {d.Tpsa:0.0}, HBD {d.HBondDonors}, HBA {d.HBondAcceptors}, rotatable bonds {d.RotatableBonds}, rings {d.RingCount} ({d.AromaticRingCount} aromatic), QED {profile.Qed:0.00}"));
+        return (atoms, bonds, info);
+    }
+
+    private void SetStyle(string s)
+    {
+        _style = s;
+        Render();
+    }
+
+    private void Render()
+    {
+        var list = new List<Object3D>();
+        var spaceFill = _style == "Space-filling";
+        var wire = _style == "Wire";
+        for (var i = 0; i < _atoms.Count; i++)
+        {
+            var a = _atoms[i];
+            if (wire)
+            {
+                continue;
+            }
+
+            var r = spaceFill ? VdwRadius(a.Z) : 0.12 + CovalentScale(a.Z) * 0.22;
+            list.Add(new Object3D { Id = $"a{i}", Kind = "sphere", Position = a.P, Radius = r, Segments = spaceFill ? 32 : 20, Color = Cpk(a.Z), Roughness = 0.3, Metalness = 0.05, Tooltip = $"{a.Symbol} (atom {i + 1})" });
+        }
+
+        if (!spaceFill)
+        {
+            for (var b = 0; b < _bonds.Count; b++)
+            {
+                var (ai, bi, order) = _bonds[b];
+                var p = _atoms[ai].P;
+                var q = _atoms[bi].P;
+                var mid = new[] { (p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2 };
+                var n = order switch { BondOrder.Double => 2, BondOrder.Triple => 3, _ => 1 };
+                var radius = wire ? 0.035 : n == 1 ? 0.075 : 0.045;
+                var perp = Stick3D.Perpendicular([q[0] - p[0], q[1] - p[1], q[2] - p[2]]);
+                for (var k = 0; k < n; k++)
+                {
+                    var shift = (k - (n - 1) / 2.0) * 0.12;
+                    double[] off = [perp[0] * shift, perp[1] * shift, perp[2] * shift];
+                    // Two half-bonds, each coloured like its atom.
+                    list.Add(Stick3D.Between($"b{b}-{k}a", p, mid, radius, Cpk(_atoms[ai].Z), off));
+                    list.Add(Stick3D.Between($"b{b}-{k}b", mid, q, radius, Cpk(_atoms[bi].Z), off));
+                }
+
+                if (order == BondOrder.Aromatic && !wire)
+                {
+                    list.Add(Stick3D.Between($"b{b}-ar", p, q, 0.03, "#c9cff5", [perp[0] * 0.13, perp[1] * 0.13, perp[2] * 0.13]) with { Opacity = 0.6 });
+                }
+            }
+        }
+
+        _legend = _atoms.Select(a => (a.Symbol, Cpk(a.Z))).Distinct().OrderBy(x => x.Symbol == "C" ? 0 : x.Symbol == "H" ? 9 : 1).ThenBy(x => x.Symbol).ToList();
+        Objects = [.. list];
+    }
+
+    private static string Cpk(int z) => z switch
+    {
+        1 => "#f2f2f2",
+        6 => "#4a4f5c",
+        7 => "#3b6fd8",
+        8 => "#e5443b",
+        9 or 17 => "#3cc46a",
+        15 => "#ff9a3c",
+        16 => "#e8c23a",
+        35 => "#a5432a",
+        53 => "#8e44ad",
+        _ => "#c45ad6",
+    };
+
+    private static double VdwRadius(int z) => z switch { 1 => 1.1, 6 => 1.7, 7 => 1.55, 8 => 1.52, 9 => 1.47, 15 => 1.8, 16 => 1.8, 17 => 1.75, _ => 1.8 } * 0.9;
+
+    private static double CovalentScale(int z) => z == 1 ? 0.25 : z <= 9 ? 0.6 : 0.85;
+
+    private Task Explain() => NarrateAsync("a medicinal chemist", $"Molecule {_info!.Smiles}: {_info.Summary}. Coordinates are a {(_info.Is3D ? "3-D conformer" : "2-D layout")}. Describe its 3-D shape (flat aromatic parts, flexible chains, polar groups) and what that means for how it binds or dissolves.");
+}

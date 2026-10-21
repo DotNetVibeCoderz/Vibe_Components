@@ -1,0 +1,294 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* An agent's mind in 3-D: reasoning tree, planning graph (dependencies) and execution graph (simulated run). *@
+
+<div class="@CssClass("bai-stack")">
+    <form class="bai-row" @onsubmit="Plan" @onsubmit:preventDefault="true">
+        <input class="bai-input bai-spacer" @bind="Goal" placeholder="Give the agent a goal…" aria-label="Goal" />
+        <button type="submit" class="bai-btn bai-btn-ai" disabled="@IsBusy"><i class="bi bi-diagram-2" aria-hidden="true"></i>Plan</button>
+    </form>
+    <div class="bai-row">
+        @foreach (var v in Views)
+        {
+            <button type="button" class="bai-chip @(v == View ? "is-active" : null)" @onclick="() => SetView(v)">@v</button>
+        }
+        <span class="bai-spacer"></span>
+        @if (View == "Execution graph")
+        {
+            <button type="button" class="bai-btn-ghost" disabled="@_running" @onclick="Execute"><i class="bi bi-play-fill" aria-hidden="true"></i>Run plan</button>
+        }
+        @if (_fromModel is { } m) { <span class="bai-badge @(m ? "bai-badge-ai" : "bai-badge-local")">@(m ? "planned by AI" : "offline plan")</span> }
+    </div>
+    <AiError Message="@Error" />
+    <div class="bai3d-split">
+        <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+            <div class="bai3d-panel">
+                <h4>@View</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@_steps.Count</b><span>steps</span></div>
+                    <div><b>@(_levels.Count == 0 ? 0 : _levels.Values.Max() + 1)</b><span>depth</span></div>
+                    <div><b>@_steps.Count(s => s.Status == StepStatus.Done)</b><span>done</span></div>
+                </div>
+            </div>
+            <div class="bai3d-legend bai3d-hud-bottom" style="color:#c9cff5">
+                @if (View == "Execution graph")
+                {
+                    @foreach (var s in Enum.GetValues<StepStatus>()) { <span><i style="background:@StatusColor(s)"></i>@s</span> }
+                }
+                else
+                {
+                    @foreach (var k in Kinds) { <span><i style="background:@KindColor(k)"></i>@k</span> }
+                }
+            </div>
+        </Scene3D>
+        <AiCard Title="@(_selected?.Title ?? "Plan steps")" Subtitle="@(_selected is null ? "Click a node to see its reasoning" : $"Step {_selected.Id} · {_selected.Kind}")" Icon="bi-signpost-split">
+            @if (_selected is { } s)
+            {
+                <div class="bai-stack">
+                    <p style="margin:0">@s.Detail</p>
+                    @if (s.DependsOn.Count > 0) { <span class="bai-small bai-faint">Depends on: @string.Join(", ", s.DependsOn.Select(d => _steps.FirstOrDefault(x => x.Id == d)?.Title ?? d))</span> }
+                    <button type="button" class="bai-btn-ghost" disabled="@IsBusy" @onclick="() => Elaborate(s)"><i class="bi bi-stars" aria-hidden="true"></i>Elaborate this step</button>
+                    @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+                </div>
+            }
+            else
+            {
+                <ol class="bai-small" style="margin:0; padding-left:1.2rem">
+                    @foreach (var st in _steps) { <li><span style="color:@StatusColor(st.Status)">●</span> @st.Title</li> }
+                </ol>
+            }
+        </AiCard>
+    </div>
+</div>
+
+@code {
+    public static readonly string[] Views = ["Reasoning tree", "Planning graph", "Execution graph"];
+    private static readonly string[] Kinds = ["question", "evidence", "decision", "action", "check"];
+    private Scene3DOptions _options = new();
+    private List<MindStep> _steps = [];
+    private Dictionary<string, int> _levels = [];
+    private Dictionary<string, double[]> _pos = [];
+    private MindStep? _selected;
+    private bool? _fromModel;
+    private bool _running;
+
+    [Parameter] public string Goal { get; set; } = "Launch an online marketplace for Toraja coffee farmers within six months";
+
+    /// <summary>Reasoning tree, Planning graph or Execution graph.</summary>
+    [Parameter] public string View { get; set; } = "Reasoning tree";
+
+    /// <summary>Delay between steps when simulating execution.</summary>
+    [Parameter] public int StepDelayMs { get; set; } = 650;
+
+    [Parameter] public EventCallback<MindStep> OnStepSelected { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 2, 12], Target = [0, 0, 0] },
+            Shadows = false,
+            Lights = "night",
+            AriaLabel = "3D reasoning and plan graph",
+        };
+        _steps = [.. MindMapPlan.Local(Goal)];
+        _fromModel = null;
+        Layout();
+        Build();
+    }
+
+    private Task Plan() => RunAsync(async ct =>
+    {
+        _selected = null;
+        Narration = null;
+        var json = await PlanAsync("You are a planning agent. Decompose the goal into 6-10 steps with dependencies. Kinds: question, evidence, decision, action, check.", Goal, MindMapPlan.Schema, ct);
+        var plan = MindMapPlan.FromJson(json);
+        _fromModel = plan is not null;
+        _steps = [.. plan ?? MindMapPlan.Local(Goal)];
+        Layout();
+        Build();
+    });
+
+    private void SetView(string view)
+    {
+        View = view;
+        Layout();
+        Build();
+    }
+
+    private void Layout()
+    {
+        _levels = MindMapPlan.Levels(_steps);
+        if (_steps.Count == 0)
+        {
+            _pos = [];
+            return;
+        }
+
+        var root = new MindStep("goal", Goal, "The goal", []);
+        switch (View)
+        {
+            case "Reasoning tree":
+            {
+                // Each step hangs under its first dependency; roots hang under the goal.
+                IEnumerable<MindStep> Children(MindStep s) => s.Id == "goal" ? _steps.Where(x => x.DependsOn.Count == 0) : _steps.Where(x => x.DependsOn.Count > 0 && x.DependsOn[0] == s.Id);
+                _pos = Layout3D.Tree(root, s => s.Id, Children, 1.5, 1.7);
+                foreach (var p in _pos.Values)
+                {
+                    p[1] += 3.5;
+                }
+
+                break;
+            }
+
+            case "Planning graph":
+                _pos = Layout3D.Force(["goal", .. _steps.Select(s => s.Id)],
+                    [.. _steps.SelectMany(s => s.DependsOn.Count == 0 ? new[] { ("goal", s.Id, 1.0) } : s.DependsOn.Select(d => (d, s.Id, 1.0)))], radius: 4);
+                break;
+
+            default:
+            {
+                // Time flows left to right; steps on the same level fan out in depth.
+                var maxLevel = _levels.Values.DefaultIfEmpty(0).Max();
+                _pos = new Dictionary<string, double[]> { ["goal"] = [-(maxLevel + 2) * 1.6 / 2, 0, 0] };
+                foreach (var group in _steps.GroupBy(s => _levels[s.Id]))
+                {
+                    var items = group.ToList();
+                    for (var i = 0; i < items.Count; i++)
+                    {
+                        _pos[items[i].Id] = [(group.Key + 1) * 1.6 - (maxLevel + 2) * 1.6 / 2, (i - (items.Count - 1) / 2.0) * 1.4, Math.Sin(i * 1.3) * 0.6];
+                    }
+                }
+
+                break;
+            }
+        }
+    }
+
+    private void Build()
+    {
+        var list = new List<Object3D>();
+        if (_pos.TryGetValue("goal", out var gp))
+        {
+            list.Add(new Object3D { Id = "goal", Kind = "icosahedron", Radius = 0.42, Detail = 0, FlatShading = true, Position = gp, Color = ThreeDPalette.Soga, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 0.5, Label = "Goal", LabelClass = "is-soga is-big", Tooltip = Goal, Animate = Animate3D.Spin(0.4) });
+        }
+
+        foreach (var s in _steps)
+        {
+            if (!_pos.TryGetValue(s.Id, out var p))
+            {
+                continue;
+            }
+
+            var color = View == "Execution graph" ? StatusColor(s.Status) : KindColor(s.Kind);
+            var selected = _selected?.Id == s.Id;
+            list.Add(new Object3D
+            {
+                Id = $"s{s.Id}", Kind = s.Kind is "decision" ? "icosahedron" : s.Kind is "action" ? "box" : "sphere",
+                Radius = 0.26, Size = [0.42, 0.42, 0.42], Segments = 24, Position = p, Color = color, Emissive = color,
+                EmissiveIntensity = s.Status == StepStatus.Running || selected ? 1.0 : 0.25, Edges = s.Kind == "action" ? "#ffffff" : null,
+                Label = $"{s.Id}. {s.Title}", LabelClass = selected ? "is-soga" : "is-plain", Tooltip = $"{s.Title}\n{s.Detail}",
+                Animate = s.Status == StepStatus.Running ? Animate3D.Pulse(0.15, 2) : null,
+            });
+            IReadOnlyList<string> parents = s.DependsOn.Count == 0 ? ["goal"] : View == "Reasoning tree" ? [s.DependsOn[0]] : s.DependsOn;
+            foreach (var d in parents)
+            {
+                var key = d == "goal" ? "goal" : d;
+                if (!_pos.TryGetValue(key, out var a))
+                {
+                    continue;
+                }
+
+                var done = View == "Execution graph" && s.Status is StepStatus.Done or StepStatus.Running;
+                list.Add(new Object3D
+                {
+                    Id = $"l{d}-{s.Id}", Kind = done ? "tube" : "line", Radius = 0.025, Pickable = false,
+                    Points = View == "Reasoning tree" ? [a, [p[0], a[1] - 0.4, p[2]], p] : Layout3D.Arc(a, p, 0.25),
+                    Color = done ? ThreeDPalette.Nila : "#8f9bd9", Opacity = 0.75,
+                });
+            }
+        }
+
+        Objects = list;
+    }
+
+    private async Task Picked(PickEvent e)
+    {
+        var s = _steps.FirstOrDefault(x => $"s{x.Id}" == e.Id);
+        if (s is null)
+        {
+            return;
+        }
+
+        _selected = s;
+        Narration = null;
+        Build();
+        await OnStepSelected.InvokeAsync(s);
+    }
+
+    private Task Elaborate(MindStep s) => NarrateAsync("a planning agent explaining its own reasoning",
+        $"Goal: {Goal}. Step {s.Id} \"{s.Title}\": {s.Detail}. It depends on: {string.Join(", ", s.DependsOn.Select(d => _steps.FirstOrDefault(x => x.Id == d)?.Title ?? d))}. " +
+        $"Following steps: {string.Join(", ", _steps.Where(x => x.DependsOn.Contains(s.Id)).Select(x => x.Title))}. Explain why this step is needed, how to do it well, and how to know it is done.", AiTasks.Plan);
+
+    private async Task Execute()
+    {
+        _running = true;
+        foreach (var s in _steps)
+        {
+            s.Status = StepStatus.Pending;
+        }
+
+        Build();
+        var remaining = _steps.ToList();
+        while (remaining.Count > 0)
+        {
+            var ready = remaining.Where(s => s.DependsOn.All(d => _steps.First(x => x.Id == d).Status == StepStatus.Done)).ToList();
+            if (ready.Count == 0)
+            {
+                foreach (var s in remaining)
+                {
+                    s.Status = StepStatus.Blocked;
+                }
+
+                break;
+            }
+
+            foreach (var s in ready)
+            {
+                s.Status = StepStatus.Running;
+            }
+
+            Build();
+            StateHasChanged();
+            await Task.Delay(StepDelayMs);
+            foreach (var s in ready)
+            {
+                s.Status = StepStatus.Done;
+                remaining.Remove(s);
+            }
+
+            Build();
+            StateHasChanged();
+        }
+
+        _running = false;
+    }
+
+    private static string KindColor(string kind) => kind switch
+    {
+        "question" => "#7b8cff",
+        "evidence" => ThreeDPalette.Nila,
+        "decision" => ThreeDPalette.Soga,
+        "action" => "#5fae5a",
+        "check" => "#c45ad6",
+        _ => "#9aa3c7",
+    };
+
+    private static string StatusColor(StepStatus s) => s switch
+    {
+        StepStatus.Running => ThreeDPalette.Warning,
+        StepStatus.Done => ThreeDPalette.Nila,
+        StepStatus.Blocked => ThreeDPalette.Danger,
+        _ => "#5d6385",
+    };
+}

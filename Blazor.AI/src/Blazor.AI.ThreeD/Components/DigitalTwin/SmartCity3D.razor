@@ -1,0 +1,279 @@
+@namespace Blazor.AI.ThreeD
+@inherits TwinComponentBase
+@* City digital twin: data-driven buildings, traffic per road, moving cars, bridge and utility health, air-quality bubbles, AI copilot. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel">
+                <h4>@Title</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@TwinUi.N(_avgSpeed, "0")</b><span>km/h avg</span></div>
+                    <div><b>@_congested</b><span>congested roads</span></div>
+                    <div><b style="color:@AqiColor(_worstPm)">@TwinUi.N(_worstPm, "0")</b><span>max PM2.5</span></div>
+                    <div><b style="color:@TwinUi.LevelColor(Sim["bridge-strain"].Level)">@Sim["bridge-strain"].Short()</b><span>bridge µε</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            <span><i style="background:@ThreeDPalette.Nila"></i>free flow</span>
+            <span><i style="background:@ThreeDPalette.Warning"></i>busy</span>
+            <span><i style="background:@ThreeDPalette.Danger"></i>congested</span>
+            <span><i style="background:#9aa3c7; border-radius:50%"></i>air-quality station</span>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="City copilot" Subtitle="Traffic · infrastructure · environment" Icon="bi-buildings">
+        <div class="bai-stack">
+            <div class="bai-row">
+                @foreach (var l in Layers)
+                {
+                    <button type="button" class="bai-chip @(l == _layer ? "is-active" : null)" @onclick="() => SetLayer(l)">@l</button>
+                }
+            </div>
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="Toggle"><i class="bi @(Running ? "bi-pause-fill" : "bi-play-fill")" aria-hidden="true"></i>@(Running ? "Pause" : "Resume")</button>
+                <button type="button" class="bai-btn-ghost" @onclick="Incident"><i class="bi bi-cone-striped" aria-hidden="true"></i>Road incident</button>
+            </div>
+            <div class="bai-table-wrap" style="max-height:12rem; overflow:auto">
+                <table class="bai-table" style="font-size:.8rem">
+                    <thead><tr><th>Road</th><th>veh/km</th><th>km/h</th></tr></thead>
+                    <tbody>
+                        @foreach (var r in _roads.OrderByDescending(r => Sim[$"{r.Id}-density"].Value).Take(6))
+                        {
+                            var d = Sim[$"{r.Id}-density"].Value;
+                            <tr><td><span style="color:@TrafficColor(d)">●</span> @r.Name</td><td class="bai-num">@TwinUi.N(d, "0")</td><td class="bai-num">@TwinUi.N(Speed(d), "0")</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <TwinCopilot Simulator="@Sim" Provider="@Provider" Language="@Language" Role="a city operations analyst for Bandung" Context="@Facts"
+                         Suggestions="@(["Where is traffic worst and why?", "Is the bridge safe?", "Which district has poor air quality?"])" />
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly string[] Layers = ["Traffic", "Air quality", "Infrastructure"];
+    private sealed record Road(string Id, string Name, double[] From, double[] To);
+    private readonly List<Road> _roads = [];
+    private readonly (string Id, string Name, double X, double Z)[] _stations =
+        [("aq1", "Dago", -3, -3), ("aq2", "Alun-alun", 3, -3), ("aq3", "Cicaheum", -3, 3), ("aq4", "Kopo", 3, 3)];
+    private Scene3DOptions _options = new();
+    private string _layer = "Traffic";
+    private double _avgSpeed, _worstPm;
+    private int _congested;
+    private string? _incident;
+
+    [Parameter] public string Title { get; set; } = "Bandung Smart City";
+
+    /// <summary>Building heights by block (row-major 3×3, 9 values; fewer falls back to the sample), e.g. population density or floor area. Defaults to a sample.</summary>
+    [Parameter] public IReadOnlyList<double>? BlockValues { get; set; }
+
+    private const double Block = 3;
+
+    protected override void OnInitialized()
+    {
+        string[] avenues = ["Jl. Dago", "Jl. Merdeka", "Jl. Braga", "Jl. Riau"];
+        string[] streets = ["Jl. Asia Afrika", "Jl. Sudirman", "Jl. Pasteur", "Jl. Soekarno-Hatta"];
+        var lines = new[] { -4.5, -1.5, 1.5, 4.5 };
+        for (var i = 0; i < 4; i++)
+        {
+            _roads.Add(new Road($"ns{i}", avenues[i], [lines[i], 0, -6], [lines[i], 0, 6]));
+            _roads.Add(new Road($"ew{i}", streets[i], [-6, 0, lines[i]], [6, 0, lines[i]]));
+        }
+
+        var specs = new List<SensorSpec>();
+        foreach (var r in _roads)
+        {
+            var busy = r.Id is "ew1" or "ns1";
+            specs.Add(new SensorSpec($"{r.Id}-density", "Traffic density", "veh/km", busy ? 52 : 28, 1.5, 0, 140) { Asset = r.Name, WarnHigh = 60, CycleAmplitude = busy ? 14 : 8, CyclePeriod = 100 });
+        }
+
+        foreach (var s in _stations)
+        {
+            specs.Add(new SensorSpec($"{s.Id}-pm", "PM2.5", "µg/m³", s.Id == "aq3" ? 48 : 24, 1.2, 0, 300) { Asset = s.Name, WarnHigh = 55, CycleAmplitude = 8, CyclePeriod = 100 });
+        }
+
+        specs.Add(new SensorSpec("bridge-strain", "Bridge strain", "µε", 180, 4, 0, 800) { Asset = "Pasupati bridge", WarnHigh = 320 });
+        specs.Add(new SensorSpec("water-pressure", "Water main pressure", "bar", 3.8, 0.04, 0, 8) { Asset = "PDAM main", WarnLow = 2.5, WarnHigh = 5.5 });
+        Sim = new TwinSimulator(specs, seed: 21);
+        Sim.Step(20);
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [11, 11, 13], Target = [0, 0, 0] },
+            Background = "#0b1030",
+            Fog = new("#0b1030", 24, 50),
+            Lights = "night",
+            Ground = new(30, "#141a3d"),
+            AriaLabel = "City digital twin with buildings, roads and traffic",
+        };
+        Recompute();
+        Objects = Build();
+    }
+
+    private Object3D[] Build()
+    {
+        var list = new List<Object3D>();
+        var values = BlockValues is { Count: >= 9 } ? BlockValues : SampleBlocks();
+        var max = values.Max();
+        var k = 0;
+        for (var r = 0; r < 4; r++)
+        {
+            for (var c = 0; c < 4; c++)
+            {
+                // Blocks sit between roads; each holds a cluster of buildings.
+                var bx = -4.5 + Block / 2 + c * Block;
+                var bz = -4.5 + Block / 2 + r * Block;
+                if (c == 3 || r == 3)
+                {
+                    continue;
+                }
+
+                var v = values[k++ % values.Count];
+                list.Add(new Object3D { Id = $"lot-{r}-{c}", Kind = "box", Position = [bx, 0.02, bz], Size = [Block - 0.7, 0.04, Block - 0.7], Color = "#1e2550", Pickable = false });
+                var rng = new Random(r * 7 + c);
+                for (var b = 0; b < 4; b++)
+                {
+                    var h = 0.4 + v / max * (1.2 + rng.NextDouble() * 2.6);
+                    var ox = (b % 2 == 0 ? -1 : 1) * 0.55;
+                    var oz = (b < 2 ? -1 : 1) * 0.55;
+                    var heat = ThreeDPalette.Ramp(v / max);
+                    list.Add(new Object3D
+                    {
+                        Id = $"bld-{r}-{c}-{b}", Kind = "box", Position = [bx + ox, h / 2, bz + oz], Size = [0.8, h, 0.8], Color = _layer == "Infrastructure" ? "#3a4170" : "#c9cff5",
+                        Emissive = heat, EmissiveIntensity = 0.18, Roughness = 0.3, Metalness = 0.35, Edges = "#7b8cff",
+                        Tooltip = string.Create(CultureInfo.InvariantCulture, $"Block {r + 1}-{c + 1}\nDensity index {v:0}\nHeight {h * 12:0} m"),
+                    });
+                }
+            }
+        }
+
+        foreach (var road in _roads)
+        {
+            var ns = road.Id.StartsWith("ns", StringComparison.Ordinal);
+            var d = Sim[$"{road.Id}-density"].Value;
+            list.Add(new Object3D
+            {
+                Id = $"road-{road.Id}", Kind = "box", Position = [(road.From[0] + road.To[0]) / 2, 0.03, (road.From[2] + road.To[2]) / 2], Size = ns ? [0.55, 0.03, 12] : [12, 0.031, 0.55],
+                Color = _layer == "Traffic" ? TrafficColor(d) : "#2a3058", Emissive = _layer == "Traffic" ? TrafficColor(d) : "#000000", EmissiveIntensity = 0.35, Roughness = 0.8,
+                Tooltip = $"{road.Name}\n{TwinUi.N(d, "0")} veh/km · {TwinUi.N(Speed(d), "0")} km/h",
+            });
+        }
+
+        // Cars loop around the central blocks.
+        double[][][] loops =
+        [
+            [[-4.5, 0.05, -4.5], [1.5, 0.05, -4.5], [1.5, 0.05, 1.5], [-4.5, 0.05, 1.5]],
+            [[-1.5, 0.05, -1.5], [4.5, 0.05, -1.5], [4.5, 0.05, 4.5], [-1.5, 0.05, 4.5]],
+        ];
+        for (var i = 0; i < 8; i++)
+        {
+            var loop = loops[i % 2];
+            var pts = Enumerable.Range(0, 4).SelectMany(j => new[] { loop[j], Mid(loop[j], loop[(j + 1) % 4]) }).ToArray();
+            list.Add(new Object3D
+            {
+                Id = $"car-{i}", Kind = "model", Url = ThreeDAssets.Car, FitSize = 0.7, Position = loop[0], Pickable = false,
+                Color = ThreeDPalette.Categorical[i % ThreeDPalette.Categorical.Count], KeepModelColors = i % 3 == 0 ? true : null,
+                Animate = new Animate3D { Type = "path", Points = pts, Speed = 1.1 + (i % 3) * 0.2, Loop = true, Phase = i * 3.1 },
+            });
+        }
+
+        // River, bridge and water main.
+        list.Add(new Object3D { Id = "river", Kind = "box", Position = [0, 0.01, 7.4], Size = [16, 0.02, 1.6], Color = "#2f86c9", Opacity = 0.75, Roughness = 0.1, Pickable = false });
+        var strainLevel = Sim["bridge-strain"].Level;
+        list.Add(new Object3D { Id = "bridge", Kind = "box", Position = [1.5, 0.22, 7.4], Size = [0.8, 0.12, 2.4], Color = _layer == "Infrastructure" ? TwinUi.LevelColor(strainLevel) : "#9aa3c7", Emissive = _layer == "Infrastructure" ? TwinUi.LevelColor(strainLevel) : "#000000", EmissiveIntensity = 0.5, Label = _layer == "Infrastructure" ? "Pasupati bridge" : null, Tooltip = $"Pasupati bridge · strain {Sim["bridge-strain"].Format()}" });
+        list.Add(new Object3D { Id = "pipe", Kind = "tube", Points = [[-6, -0.05, -6.2], [6, -0.05, -6.2]], Radius = 0.08, Color = _layer == "Infrastructure" ? TwinUi.LevelColor(Sim["water-pressure"].Level) : "#3d4fb8", Visible = _layer == "Infrastructure", Label = _layer == "Infrastructure" ? $"Water main {Sim["water-pressure"].Format()}" : null, Tooltip = "PDAM water main" });
+
+        foreach (var s in _stations)
+        {
+            var pm = Sim[$"{s.Id}-pm"].Value;
+            var show = _layer == "Air quality";
+            list.Add(new Object3D
+            {
+                Id = $"aq-{s.Id}", Kind = "sphere", Position = [s.X, show ? 2.4 : 0.25, s.Z], Radius = show ? 0.3 + pm / 60 : 0.15, Segments = 24,
+                Color = AqiColor(pm), Opacity = show ? 0.45 : 0.9, Emissive = AqiColor(pm), EmissiveIntensity = 0.6, Label = show ? $"{s.Name} · {TwinUi.N(pm, "0")}" : null,
+                Tooltip = $"{s.Name} air quality\nPM2.5 {TwinUi.N(pm, "0")} µg/m³", Animate = show ? Animate3D.Bob(0.1, 0.7) : null,
+            });
+        }
+
+        if (_incident is { } inc)
+        {
+            var road = _roads.First(r => r.Id == inc);
+            var m = Mid(road.From, road.To);
+            list.Add(new Object3D { Id = "incident", Kind = "cone", Position = [m[0], 0.25, m[2]], Radius = 0.18, Height = 0.45, Color = ThreeDPalette.Warning, Emissive = ThreeDPalette.Warning, EmissiveIntensity = 1.5, Animate = Animate3D.Pulse(0.2, 2), Label = "Incident", LabelClass = "is-danger", Tooltip = $"Incident on {road.Name} (click to clear)" });
+        }
+
+        return [.. list];
+    }
+
+    protected override IEnumerable<ObjectPatch> OnTick()
+    {
+        if (_incident is not null)
+        {
+            Sim.SetOffset($"{_incident}-density", 45);
+        }
+
+        Recompute();
+        if (Sim.Tick % 5 == 0 && _layer == "Air quality")
+        {
+            Objects = Build();
+            return [];
+        }
+
+        return _layer == "Traffic"
+            ? _roads.Select(r => { var c = TrafficColor(Sim[$"{r.Id}-density"].Value); return new ObjectPatch { Id = $"road-{r.Id}", Color = c, Emissive = c }; })
+            : [new ObjectPatch { Id = "bridge", Color = TwinUi.LevelColor(Sim["bridge-strain"].Level) }];
+    }
+
+    private void Recompute()
+    {
+        var densities = _roads.Select(r => Sim[$"{r.Id}-density"].Value).ToList();
+        _avgSpeed = densities.Average(Speed);
+        _congested = densities.Count(d => d > 60);
+        _worstPm = _stations.Max(s => Sim[$"{s.Id}-pm"].Value);
+        // Heavy traffic loads the bridge; mild coupling keeps the story consistent.
+        Sim.SetOffset("bridge-strain", Sim["ew3-density"].Value * 1.2);
+    }
+
+    // Greenshields speed–density model: free flow 60 km/h, jam density 140 veh/km.
+    private static double Speed(double density) => Math.Max(3, 60 * (1 - density / 140));
+
+    private static string TrafficColor(double d) => d > 60 ? ThreeDPalette.Danger : d > 40 ? ThreeDPalette.Warning : ThreeDPalette.Nila;
+
+    private static string AqiColor(double pm) => pm > 55 ? ThreeDPalette.Danger : pm > 35 ? ThreeDPalette.Warning : ThreeDPalette.Nila;
+
+    private static double[] Mid(double[] a, double[] b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+
+    private static IReadOnlyList<double> SampleBlocks() => [92, 75, 60, 81, 100, 66, 48, 58, 71];
+
+    private string Facts() =>
+        $"Average speed {TwinUi.N(_avgSpeed, "0")} km/h, {_congested} congested roads. Air quality: {string.Join(", ", _stations.Select(s => $"{s.Name} PM2.5 {TwinUi.N(Sim[$"{s.Id}-pm"].Value, "0")}"))}. " +
+        $"Bridge strain {Sim["bridge-strain"].Format()} (limit 320). Water main {Sim["water-pressure"].Format()}. Incident: {(_incident is null ? "none" : _roads.First(r => r.Id == _incident).Name)}.";
+
+    private void SetLayer(string l)
+    {
+        _layer = l;
+        Objects = Build();
+    }
+
+    private void Incident()
+    {
+        var road = _roads[Sim.Random.Next(_roads.Count)];
+        _incident = road.Id;
+        Sim.Log("incident", $"Crash reported on {road.Name}", road.Name);
+        _layer = "Traffic";
+        Objects = Build();
+    }
+
+    private void Picked(PickEvent e)
+    {
+        if (e.Id == "incident" && _incident is not null)
+        {
+            Sim.SetOffset($"{_incident}-density", 0);
+            Sim.Log("action", "Incident cleared");
+            _incident = null;
+            Objects = Build();
+        }
+    }
+}

@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>AI components for Blazor</b>: smart forms, copilots, cited document chat, agents, decision engines,
-  machine learning, reinforcement learning, Hugging Face models and biology workbenches.<br/>
+  machine learning, reinforcement learning, Hugging Face models, biology workbenches and AI-powered 3D scenes.<br/>
   .NET 10 · Microsoft.Extensions.AI · works offline without keys
 </p>
 
@@ -22,7 +22,7 @@
 
 ### Why Blazor.AI
 
-- **109 ready-made components** across 11 NuGet packages, all styled by one theme (light and dark).
+- **157 ready-made components** across 12 NuGet packages, all styled by one theme (light and dark), including 48 Three.js components built on a reusable `Scene3D` engine.
 - **Any model**: OpenAI, Azure OpenAI, Anthropic Claude, Gemini, Mistral, Cohere, DeepSeek, Grok, Hugging Face, Ollama, llama.cpp, LocalGen, any OpenAI-compatible endpoint, ONNX and in-process Hugging Face transformers. Every component also runs on a built-in **offline simulated model**, so demos and tests need no keys.
 - **Computation stays deterministic.** Machine learning, statistics, rules, chemistry and sequence analysis run in .NET (GraviLearn, GraviFrame, RLNet, Biotech.Net). The LLM plans and explains; it does not invent the numbers.
 - **Guardrails built in**: PII redaction, content moderation, audit trail, AES-GCM encrypted prompt store and API-key vault, role-based access.
@@ -41,6 +41,7 @@
 | `Blazor.AI.Analytics` | AutoML, six ML workbenches, statistics, Bayesian A/B, hypothesis tests, PCA, time series, signals, RL studio |
 | `Blazor.AI.LocalModels` | Hugging Face hub browser and downloader, local inference: sentiment, NER, embeddings, vision, OCR, speech |
 | `Blazor.AI.Bio` | DNA, restriction maps, alignment, phylogeny, proteins, molecules and ADMET, CRISPR, primers, codon optimisation, RNA-seq, bio copilot |
+| `Blazor.AI.ThreeD` | Three.js scenes in C#: talking avatar with lip sync, 3D charts and graphs, agent and decision visualisers, RL arenas, digital twins, anatomy, molecules and proteins, CAD/BIM copilots, education and game tools |
 | `Blazor.AI.Templates` | `dotnet new blazorai` project template |
 
 ### Quick start
@@ -117,12 +118,26 @@ dotnet run --project samples/Blazor.AI.Gallery    # http://localhost:5180
 | ![Visual analytics](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/visualization.jpg) | ![Hugging Face](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/huggingface.jpg) |
 | Visual analytics | Hugging Face |
 
+### 3D
+
+`Blazor.AI.ThreeD` renders declarative C# scenes with a bundled Three.js engine (no CDN). Its rigged guide robot, fish and robot arm were generated with Rodin and rigged and animated in Blender; the 2-D art was generated with Nano Banana 2.
+
+| | |
+|---|---|
+| ![Talking avatar](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/3d-aiavatar3d.jpg) | ![Virtual tour guide at Borobudur](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/3d-aitourguide3d.jpg) |
+| Talking avatar with lip sync | Virtual tour guide (Borobudur) |
+| ![Smart city digital twin](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/3d-smartcity3d.jpg) | ![AI world builder](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/3d-aiworldbuilder.jpg) |
+| Smart city digital twin | AI world builder |
+| ![Executive analytics sphere](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/3d-executiveanalyticssphere.jpg) | ![3D molecule explorer](https://raw.githubusercontent.com/DotNetVibeCoderz/Vibe_Components/main/Blazor.AI/docs/screenshots/3d-moleculeexplorer3d.jpg) |
+| Executive KPI sphere | 3D molecules from SMILES |
+
 ### Documentation
 
 - [Getting started](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/en/getting-started.md)
 - [Providers and configuration](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/en/providers.md)
 - [Component catalogue](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/en/components.md)
 - [Security and guardrails](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/en/security.md)
+- [3D components](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/en/threed.md)
 
 ### Build and test
 
@@ -140,7 +155,7 @@ Requires the .NET 10 SDK. MIT licensed.
 
 ### Kenapa Blazor.AI
 
-- **109 komponen siap pakai** dalam 11 paket NuGet, dengan satu tema yang konsisten (terang dan gelap).
+- **157 komponen siap pakai** dalam 12 paket NuGet, dengan satu tema yang konsisten (terang dan gelap), termasuk 48 komponen Three.js di atas engine `Scene3D` yang bisa dipakai ulang.
 - **Model apa saja**: OpenAI, Azure OpenAI, Anthropic Claude, Gemini, Mistral, Cohere, DeepSeek, Grok, Hugging Face, Ollama, llama.cpp, LocalGen, endpoint kompatibel OpenAI, ONNX, dan transformer Hugging Face lokal. Semua komponen juga jalan dengan **model simulasi offline**, jadi demo dan tes tidak butuh API key.
 - **Perhitungan tetap deterministik.** Machine learning, statistik, aturan bisnis, kimia, dan analisis sekuens dihitung di .NET (GraviLearn, GraviFrame, RLNet, Biotech.Net). LLM merencanakan dan menjelaskan, bukan mengarang angka.
 - **Guardrail bawaan**: redaksi PII, moderasi konten, jejak audit, penyimpanan prompt dan brankas API key terenkripsi AES-GCM, serta kontrol akses berbasis peran.
@@ -159,6 +174,7 @@ Requires the .NET 10 SDK. MIT licensed.
 | `Blazor.AI.Analytics` | AutoML, enam workbench ML, statistik, A/B Bayesian, uji hipotesis, PCA, deret waktu, sinyal, studio RL |
 | `Blazor.AI.LocalModels` | Browser dan pengunduh Hugging Face Hub, inferensi lokal: sentimen, NER, embedding, visi, OCR, suara |
 | `Blazor.AI.Bio` | DNA, peta restriksi, alignment, filogeni, protein, molekul dan ADMET, CRISPR, primer, optimasi kodon, RNA-seq, bio copilot |
+| `Blazor.AI.ThreeD` | Scene Three.js dari C#: avatar bicara dengan lip sync, grafik dan graf 3D, visualisasi agen dan keputusan, arena RL, digital twin, anatomi, molekul dan protein, copilot CAD/BIM, alat edukasi dan game |
 | `Blazor.AI.Templates` | Template proyek `dotnet new blazorai` |
 
 ### Mulai cepat
@@ -207,6 +223,7 @@ dotnet run --project samples/Blazor.AI.Gallery    # http://localhost:5180
 - [Provider dan konfigurasi](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/id/providers.md)
 - [Katalog komponen](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/id/components.md)
 - [Keamanan dan guardrail](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/id/security.md)
+- [Komponen 3D](https://github.com/DotNetVibeCoderz/Vibe_Components/blob/main/Blazor.AI/docs/id/threed.md)
 
 ### Build dan tes
 

@@ -1,0 +1,194 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Natural language → parametric part: AI (or a local parser) writes a feature list; edit dimensions; export JSON. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-panel">
+            <h4>@_part.Name</h4>
+            <div class="bai3d-kpi">
+                <div><b>@_part.Features.Count(f => !f.IsCut)</b><span>bodies</span></div>
+                <div><b>@_part.Features.Count(f => f.IsCut)</b><span>cuts</span></div>
+                <div><b>@((_part.Volume / 1000).ToString("0.0", CultureInfo.InvariantCulture)) cm³</b><span>volume</span></div>
+                <div><b>@((_part.Volume * 7.85e-6).ToString("0.000", CultureInfo.InvariantCulture)) kg</b><span>steel</span></div>
+            </div>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="CAD copilot" Subtitle="@(_part.Source == "ai" ? "Features written by AI" : "Features from the local parser")" Icon="bi-rulers">
+        <div class="bai-stack">
+            <textarea class="bai-textarea" rows="2" @bind="_prompt" aria-label="Describe the part"></textarea>
+            <div class="bai-row">
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="Design"><i class="bi bi-stars" aria-hidden="true"></i>Design</button>
+                @foreach (var ex in Examples)
+                {
+                    <button type="button" class="bai-chip" @onclick="() => Example(ex)">@ex</button>
+                }
+            </div>
+            <AiError Message="@Error" />
+            <span class="bai-label">Feature tree</span>
+            <div class="bai-table-wrap" style="max-height:260px; overflow:auto">
+                <table class="bai-table">
+                    <thead><tr><th>Feature</th><th>Type</th><th>Dimensions (mm)</th></tr></thead>
+                    <tbody>
+                        @foreach (var (f, i) in _part.Features.Select((f, i) => (f, i)))
+                        {
+                            <tr style="@(i == _selected ? "background:var(--bai-soga-soft)" : null)" @onclick="() => _selected = i">
+                                <td>@f.Name</td>
+                                <td>@(f.IsCut ? "cut" : f.Type)</td>
+                                <td>
+                                    @if (f.Type == "box")
+                                    {
+                                        @for (var k = 0; k < 3; k++)
+                                        {
+                                            var axis = k;
+                                            <input type="number" class="bai-input" style="width:4.6rem; display:inline-block" value="@Inv(f.Size[axis])" @onchange="e => SetSize(f, axis, e.Value)" aria-label="@AxisLabel(f, axis)" />
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="bai-faint">Ø</span><input type="number" class="bai-input" style="width:4.6rem; display:inline-block" value="@Inv(f.Diameter)" @onchange="e => SetDiameter(f, e.Value)" aria-label="@($"{f.Name} diameter")" />
+                                        <span class="bai-faint">h</span><input type="number" class="bai-input" style="width:4.6rem; display:inline-block" value="@Inv(f.Height)" @onchange="e => SetHeight(f, e.Value)" aria-label="@($"{f.Name} height")" />
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="Export"><i class="bi bi-filetype-json" aria-hidden="true"></i>Export JSON</button>
+                <button type="button" class="bai-btn-ghost" disabled="@IsBusy" @onclick="Review"><i class="bi bi-stars" aria-hidden="true"></i>Design review</button>
+            </div>
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly string[] Examples = ["60 mm flange with 6 bolt holes", "bracket 100x40x5 with two holes", "L-bracket 80x50x6 with 3 holes", "tube 40 x 80"];
+    private Scene3DOptions _options = new();
+    private string _prompt = "A 60 mm flange with 6 bolt holes";
+    private CadPart _part = CadParser.Parse("A 60 mm flange with 6 bolt holes");
+    private int _selected = -1;
+
+    [Parameter] public EventCallback<CadPart> OnPartChanged { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [3.2, 3, 4.2], Target = [0, 0.3, 0] },
+            Lights = "studio",
+            Grid = new(10, 20, "#5b6bd6", 0.22),
+            AriaLabel = "Parametric CAD part",
+        };
+        Draw();
+    }
+
+    private static string AxisLabel(CadFeature f, int axis) => $"{f.Name} size {(char)('X' + axis)}";
+
+    private static string Inv(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private static double Parse(object? v, double fallback) =>
+        double.TryParse(v?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var d) && d > 0 ? d : fallback;
+
+    private void SetSize(CadFeature f, int axis, object? v) { f.Size[axis] = Parse(v, f.Size[axis]); Changed(); }
+    private void SetDiameter(CadFeature f, object? v) { f.Diameter = Parse(v, f.Diameter); Changed(); }
+    private void SetHeight(CadFeature f, object? v) { f.Height = Parse(v, f.Height); Changed(); }
+
+    private void Changed()
+    {
+        Draw();
+        _ = OnPartChanged.InvokeAsync(_part);
+    }
+
+    private void Example(string text)
+    {
+        _prompt = text;
+        _part = CadParser.Parse(text);
+        _selected = -1;
+        Changed();
+    }
+
+    private void Draw()
+    {
+        var s = 3.0 / Math.Max(1, _part.MaxDimension); // mm → scene
+        var list = new List<Object3D>();
+        foreach (var (f, i) in _part.Features.Select((f, i) => (f, i)))
+        {
+            var pos = new[] { f.Position[0] * s, f.Position[1] * s, f.Position[2] * s };
+            var selected = i == _selected;
+            if (f.IsCut)
+            {
+                list.Add(new Object3D { Id = $"f{i}", Kind = "cylinder", Radius = f.Diameter / 2 * s, Height = f.Height * s + 0.004, Position = pos, Segments = 40,
+                    Color = selected ? ThreeDPalette.Soga : "#05070f", Roughness = 0.9, Tooltip = $"{f.Name}: Ø{f.Diameter:0.#} mm" });
+            }
+            else if (f.Type == "cylinder")
+            {
+                list.Add(new Object3D { Id = $"f{i}", Kind = "cylinder", Radius = f.Diameter / 2 * s, Height = f.Height * s, Position = pos, Segments = 64,
+                    Color = selected ? ThreeDPalette.Soga : "#b8c0d8", Metalness = 0.75, Roughness = 0.3, Edges = "#6b7399", Tooltip = $"{f.Name}: Ø{f.Diameter:0.#} × {f.Height:0.#} mm" });
+            }
+            else
+            {
+                list.Add(new Object3D { Id = $"f{i}", Kind = "box", Size = [f.Size[0] * s, f.Size[1] * s, f.Size[2] * s], Position = pos,
+                    Color = selected ? ThreeDPalette.Soga : "#b8c0d8", Metalness = 0.75, Roughness = 0.3, Edges = "#6b7399", Tooltip = $"{f.Name}: {f.Size[0]:0.#} × {f.Size[1]:0.#} × {f.Size[2]:0.#} mm" });
+            }
+        }
+
+        // Overall dimension lines along X and Z.
+        var main = _part.Features.FirstOrDefault(f => !f.IsCut);
+        if (main is not null)
+        {
+            var w = (main.Type == "box" ? main.Size[0] : main.Diameter) * s;
+            var d = (main.Type == "box" ? main.Size[2] : main.Diameter) * s;
+            list.Add(new Object3D { Id = "dim-x", Kind = "line", Points = [[-w / 2, 0.01, d / 2 + 0.35], [w / 2, 0.01, d / 2 + 0.35]], Color = ThreeDPalette.Nila, Pickable = false });
+            list.Add(Object3D.Text("dim-x-label", [0, 0.05, d / 2 + 0.5], $"{w / s:0.#} mm", "is-nila is-mono"));
+            list.Add(new Object3D { Id = "dim-z", Kind = "line", Points = [[w / 2 + 0.35, 0.01, -d / 2], [w / 2 + 0.35, 0.01, d / 2]], Color = ThreeDPalette.Nila, Pickable = false });
+            list.Add(Object3D.Text("dim-z-label", [w / 2 + 0.55, 0.05, 0], $"{d / s:0.#} mm", "is-nila is-mono"));
+        }
+
+        Objects = list;
+    }
+
+    private void Picked(PickEvent e)
+    {
+        if (e.Id.StartsWith('f') && int.TryParse(e.Id[1..], out var i))
+        {
+            _selected = i;
+            Draw();
+        }
+    }
+
+    private Task Design() => RunAsync(async ct =>
+    {
+        var part = CadParser.Parse(_prompt);
+        try
+        {
+            var json = await PlanAsync("You are a mechanical CAD assistant. Convert the request into simple features in millimetres, Y up, positions are feature centres. Use type box (size [x,y,z]), cylinder (diameter, height) or hole (a cylindrical cut).",
+                _prompt,
+                """{"name":"","features":[{"name":"Base","type":"box","size":[100,5,40],"diameter":0,"height":0,"position":[0,2.5,0]},{"name":"Hole 1","type":"hole","size":[1,1,1],"diameter":8,"height":7,"position":[-30,2.5,0]}]}""", ct);
+            // Trust the model only if it produced a plausible, non-trivial part; the simulator echoes the template.
+            if (CadParser.FromJson(json) is { } ai && ai.Features.Count >= 1 && !ai.Features.All(f => f.Type == "box" && f.Size.SequenceEqual([100.0, 5, 40])))
+            {
+                part = ai;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Local parse stands.
+        }
+
+        _part = part;
+        _selected = -1;
+        Changed();
+    });
+
+    private async Task Export() => await Js.DownloadTextAsync($"{_part.Name.Replace(' ', '-')}.json", _part.ToJson(), "application/json");
+
+    private Task Review()
+    {
+        var facts = string.Create(CultureInfo.InvariantCulture, $"Part: {_part.Name}. Features: {string.Join("; ", _part.Features.Select(f => f.Type == "box" ? $"{f.Name} box {f.Size[0]:0.#}×{f.Size[1]:0.#}×{f.Size[2]:0.#} mm" : $"{f.Name} {(f.IsCut ? "hole" : "cylinder")} Ø{f.Diameter:0.#} × {f.Height:0.#} mm at ({f.Position[0]:0.#}, {f.Position[2]:0.#})"))}. Volume {_part.Volume / 1000:0.0} cm³.");
+        return NarrateAsync("a senior mechanical design engineer doing a design-for-manufacturing review (edge distances, wall thickness, hole sizes vs standard bolts)", facts);
+    }
+}

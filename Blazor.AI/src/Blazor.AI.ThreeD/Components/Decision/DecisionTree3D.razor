@@ -1,0 +1,194 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@using Blazor.AI.Decision
+@* An interactive 3D decision tree: edit the case, watch it travel down the tree, and ask AI to explain the outcome. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        @if (_leaf is not null)
+        {
+            <div class="bai3d-panel">
+                <h4>Outcome</h4>
+                <div class="bai3d-kpi"><div><b style="color:@OutcomeColor(_leaf.Outcome)">@_leaf.Outcome</b><span>@_path.Count questions asked</span></div></div>
+            </div>
+        }
+        @if (_selected is not null)
+        {
+            <div class="bai3d-panel bai3d-hud-right">@_selected</div>
+        }
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            <span><i style="background:#3d4fb8"></i>question</span><span><i style="background:@ThreeDPalette.Soga"></i>path taken</span>
+            <span><i style="background:@ThreeDPalette.Danger"></i>high risk</span><span><i style="background:@ThreeDPalette.Warning"></i>medium</span><span><i style="background:@ThreeDPalette.Nila"></i>low</span>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="@Title" Subtitle="@Subtitle" Icon="bi-diagram-2">
+        <div class="bai-stack">
+            <FactsEditor Facts="@Facts" FactsChanged="FactsChanged" Label="Case" />
+            <div class="bai-row">
+                <button type="button" class="bai-btn bai-btn-ai" @onclick="Evaluate"><i class="bi bi-play-fill" aria-hidden="true"></i>Decide</button>
+                <button type="button" class="bai-btn-ghost" disabled="@(IsBusy || _leaf is null)" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Explain</button>
+            </div>
+            @if (_path.Count > 0)
+            {
+                <ol class="bai-small" style="margin:0; padding-left:1.1rem">
+                    @foreach (var (node, answer) in _path)
+                    {
+                        <li>@node.Label <b>@(answer ? "yes" : "no")</b> <code class="bai-faint">@node.Condition</code></li>
+                    }
+                </ol>
+            }
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private Scene3DOptions _options = new();
+    private Dictionary<string, double[]> _pos = [];
+    private IReadOnlyList<(DecisionTreeNode Node, bool Answer)> _path = [];
+    private DecisionTreeNode? _leaf;
+    private string? _selected;
+    private int _run;
+
+    [Parameter] public string Title { get; set; } = "Decision tree";
+    [Parameter] public string Subtitle { get; set; } = "Customer churn risk";
+
+    /// <summary>The tree; defaults to a churn-risk sample. Conditions use the Blazor.AI.Decision expression language.</summary>
+    [Parameter] public DecisionTreeNode Tree { get; set; } = DecisionTreeNode.ChurnSample();
+
+    [Parameter] public IDictionary<string, object?> Facts { get; set; } = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["contract"] = "monthly",
+        ["tenureMonths"] = 4d,
+        ["tickets"] = 2d,
+        ["monthlyCharges"] = 95000d,
+    };
+
+    [Parameter] public EventCallback<DecisionTreeNode> OnDecided { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _pos = Layout3D.Tree(Tree, n => n.Id, n => new[] { n.Yes, n.No }.Where(c => c is not null)!, levelGap: 1.7, siblingGap: 1.9);
+        var depth = _pos.Values.Min(p => p[1]);
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [1.5, 4.2 + depth / 2 + 1.2, 7.5 - depth * 0.9], Target = [0, 4.2 + depth / 2, 0], Fov = 45 },
+            Lights = "night",
+            Shadows = false,
+            AriaLabel = $"{Subtitle} decision tree",
+        };
+        Evaluate();
+    }
+
+    private double[] P(DecisionTreeNode n) => [_pos[n.Id][0], _pos[n.Id][1] + 4.2, _pos[n.Id][2]];
+
+    private void Evaluate()
+    {
+        Error = null;
+        try
+        {
+            var (leaf, path) = Tree.Evaluate(new Dictionary<string, object?>(Facts, StringComparer.OrdinalIgnoreCase));
+            _leaf = leaf;
+            _path = path;
+            _run++;
+            Narration = null;
+            _ = OnDecided.InvokeAsync(leaf);
+        }
+        catch (FormatException ex)
+        {
+            Error = ex.Message;
+        }
+
+        Build();
+    }
+
+    private void Build()
+    {
+        var onPath = _path.Select(p => p.Node.Id).Append(_leaf?.Id).Where(id => id is not null).ToHashSet();
+        var list = new List<Object3D>();
+        foreach (var n in Tree.Descendants())
+        {
+            var p = P(n);
+            var hot = onPath.Contains(n.Id);
+            var weight = n.Coverage ?? 0.3;
+            if (n.IsLeaf)
+            {
+                var c = OutcomeColor(n.Outcome);
+                list.Add(new Object3D
+                {
+                    Id = $"n-{n.Id}", Kind = "sphere", Position = p, Radius = 0.22 + weight * 0.35, Color = c, Emissive = c, EmissiveIntensity = hot ? 0.9 : 0.15,
+                    Opacity = hot || _leaf is null ? 1 : 0.55, Label = n.Outcome, LabelClass = hot ? "is-soga" : null, Animate = hot ? Animate3D.Pulse(0.06, 1.2) : null,
+                    Tooltip = $"{n.Outcome}{(n.Coverage is { } cv ? $"\n{cv:P0} of historical cases" : string.Empty)}",
+                });
+            }
+            else
+            {
+                list.Add(new Object3D
+                {
+                    Id = $"n-{n.Id}", Kind = "box", Position = p, Size = [1.15, 0.42, 0.42], Color = hot ? ThreeDPalette.Soga : "#3d4fb8", Emissive = hot ? ThreeDPalette.Soga : null, EmissiveIntensity = hot ? 0.45 : null,
+                    Edges = "#ffffff", Label = n.Label, LabelClass = "is-plain", LabelOffset = 0.42, Tooltip = $"{n.Label}\n{n.Condition}",
+                });
+                foreach (var (child, yes) in new[] { (n.Yes, true), (n.No, false) })
+                {
+                    if (child is null)
+                    {
+                        continue;
+                    }
+
+                    var q = P(child);
+                    var taken = hot && onPath.Contains(child.Id);
+                    list.Add(taken
+                        ? new Object3D { Id = $"e-{n.Id}-{child.Id}", Kind = "tube", Points = [p, [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2 + 0.1, (p[2] + q[2]) / 2], q], Radius = 0.045, Color = ThreeDPalette.Soga, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 0.8, Pickable = false }
+                        : Object3D.Line($"e-{n.Id}-{child.Id}", [p, q], "#8a96d6"));
+                    list.Add(Object3D.Text($"t-{n.Id}-{child.Id}", [(p[0] + q[0]) / 2 + (yes ? -0.25 : 0.25), (p[1] + q[1]) / 2, (p[2] + q[2]) / 2], yes ? "yes" : "no", taken ? "is-soga" : "is-plain"));
+                }
+            }
+        }
+
+        if (_leaf is not null && _path.Count > 0)
+        {
+            var pts = _path.Select(x => P(x.Node)).Append(P(_leaf)).Select(v => new[] { v[0], v[1] + 0.35, v[2] }).ToArray();
+            list.Add(new Object3D
+            {
+                Id = $"token-{_run}", Kind = "sphere", Radius = 0.13, Position = pts[0], Color = "#ffffff", Emissive = ThreeDPalette.Soga, EmissiveIntensity = 1.4, Pickable = false,
+                Animate = Animate3D.Path(pts, speed: 1.6, loop: false),
+            });
+        }
+
+        Objects = list;
+    }
+
+    private static string OutcomeColor(string? outcome)
+    {
+        var o = outcome?.ToLowerInvariant() ?? string.Empty;
+        return o.Contains("high") || o.Contains("decline") || o.Contains("reject") ? ThreeDPalette.Danger
+            : o.Contains("medium") || o.Contains("review") ? ThreeDPalette.Warning
+            : ThreeDPalette.Nila;
+    }
+
+    private void FactsChanged(IDictionary<string, object?> facts)
+    {
+        Facts = facts;
+        Evaluate();
+    }
+
+    private void Picked(PickEvent e)
+    {
+        var id = e.Id.StartsWith("n-", StringComparison.Ordinal) ? e.Id[2..] : null;
+        var node = id is null ? null : Tree.Descendants().FirstOrDefault(n => n.Id == id);
+        _selected = node is null ? null : node.IsLeaf
+            ? $"{node.Outcome}{(node.Coverage is { } c ? $" · {c:P0} of cases" : string.Empty)}"
+            : $"{node.Label} → {node.Condition}";
+    }
+
+    private Task Explain()
+    {
+        var facts = string.Join(", ", Facts.Select(kv => $"{kv.Key} = {kv.Value}"));
+        var path = string.Join("; ", _path.Select(p => $"{p.Node.Label} ({p.Node.Condition}) → {(p.Answer ? "yes" : "no")}"));
+        return NarrateAsync("a decision analyst explaining an automated decision to a customer-success manager",
+            $"{Subtitle}. Case: {facts}. Path: {path}. Outcome: {_leaf?.Outcome}{(_leaf?.Coverage is { } c ? $" (this leaf covers {c:P0} of historical cases)" : string.Empty)}. Suggest the single most effective action to change the outcome.",
+            AiTasks.Decision);
+    }
+}

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <PackageId>Blazor.AI.ThreeD</PackageId>
+    <Title>Blazor.AI.ThreeD</Title>
+    <Description>AI-powered 3D components for Blazor on Three.js: talking avatars and tour guides, 3D charts, knowledge graphs and vector spaces, agent and decision visualisers, RL arenas, digital twins (factory, building, farm, aquaculture, city), anatomy, molecules and proteins, CAD/BIM copilots, education scenes and game tools (NPC studio, quest generator, world builder, dungeon master). Ships with rigged, animated glTF assets.</Description>
+    <PackageTags>$(PackageTags);3d;threejs;webgl;digital-twin;avatar;gltf</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Blazor.AI.Components\Blazor.AI.Components.csproj" />
+    <ProjectReference Include="..\Blazor.AI.Analytics\Blazor.AI.Analytics.csproj" />
+    <ProjectReference Include="..\Blazor.AI.Agents\Blazor.AI.Agents.csproj" />
+    <ProjectReference Include="..\Blazor.AI.Decision\Blazor.AI.Decision.csproj" />
+    <ProjectReference Include="..\Blazor.AI.Bio\Blazor.AI.Bio.csproj" />
+  </ItemGroup>
+
+</Project>

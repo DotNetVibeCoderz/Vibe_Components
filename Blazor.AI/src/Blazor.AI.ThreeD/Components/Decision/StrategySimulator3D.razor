@@ -1,0 +1,265 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Monte-Carlo strategy simulation: a KPI landscape over two levers, your chosen point, the best point and scenario towers with P5–P95 risk. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel">
+                <h4>@_preset.Kpi (@_preset.KpiUnit)</h4>
+                @if (_current is { } c && _best is { } b)
+                {
+                    <div class="bai3d-kpi">
+                        <div><b>@Fmt(c.Mean)</b><span>your choice</span></div>
+                        <div><b>@Fmt(c.P5) … @Fmt(c.P95)</b><span>P5–P95 range</span></div>
+                        <div><b style="color:#f3b57a">@Fmt(b.Mean)</b><span>best mean at @_preset.A.Name.ToLowerInvariant() @b.A.ToString(_preset.A.Format, CultureInfo.InvariantCulture), @_preset.B.Name.ToLowerInvariant() @b.B.ToString(_preset.B.Format, CultureInfo.InvariantCulture)</span></div>
+                    </div>
+                }
+                else
+                {
+                    <span>Simulating…</span>
+                }
+            </div>
+            @if (_picked is not null)
+            {
+                <div class="bai3d-panel bai3d-hud-right" style="white-space:pre-line">@_picked</div>
+            }
+        </div>
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            <span><i style="background:@ThreeDPalette.Ramp(0)"></i>worse</span><span><i style="background:@ThreeDPalette.Ramp(1)"></i>better</span>
+            <span><i style="background:#ffffff"></i>your choice</span><span><i style="background:@ThreeDPalette.Soga"></i>best</span>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="@Title" Subtitle="@_preset.Name" Icon="bi-sliders">
+        <div class="bai-stack">
+            <div>
+                <label class="bai-label" for="@($"{_uid}-p")">Industry</label>
+                <select id="@($"{_uid}-p")" class="bai-select" value="@_preset.Key" @onchange="ChangePreset" disabled="@_running">
+                    @foreach (var p in StrategyPreset.All) { <option value="@p.Key">@p.Name</option> }
+                </select>
+            </div>
+            @Slider(_preset.A, _a, v => { _a = v; UpdateChoice(); })
+            @Slider(_preset.B, _b, v => { _b = v; UpdateChoice(); })
+            <div class="bai-grid-2">
+                <div>
+                    <label class="bai-label" for="@($"{_uid}-v")">Uncertainty × @_volatility.ToString("0.0", CultureInfo.InvariantCulture)</label>
+                    <input id="@($"{_uid}-v")" type="range" min="0" max="2" step="0.1" value="@_volatility" @onchange="e => SetEnv(e, true)" style="width:100%" />
+                </div>
+                <div>
+                    <label class="bai-label" for="@($"{_uid}-s")">Market size × @_scale.ToString("0.0", CultureInfo.InvariantCulture)</label>
+                    <input id="@($"{_uid}-s")" type="range" min="0.5" max="1.5" step="0.1" value="@_scale" @onchange="e => SetEnv(e, false)" style="width:100%" />
+                </div>
+            </div>
+            <p class="bai-small bai-muted" style="margin:0">@_preset.Context Each point is the mean of @Trials simulated trials.</p>
+            <AiError Message="@Error" />
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@(IsBusy || _grid is null)" @onclick="Recommend"><i class="bi bi-stars" aria-hidden="true"></i>Recommend a strategy</button>
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private const int N = 21;
+    private const double Span = 8;
+    private readonly string _uid = "strat-" + Guid.NewGuid().ToString("N")[..6];
+    private Scene3DOptions _options = new();
+    private StrategyPreset _preset = StrategyPreset.Banking();
+    private StrategyCell[,]? _grid;
+    private StrategyCell? _current, _best;
+    private List<StrategyCell> _scenarioCells = [];
+    private double _a, _b, _volatility = 1, _scale = 1, _min, _max = 1;
+    private bool _running;
+    private string? _picked;
+    private int _version;
+
+    [Parameter] public string Title { get; set; } = "Strategy simulator";
+
+    /// <summary>banking, insurance, healthcare, supply or retail.</summary>
+    [Parameter] public string Preset { get; set; } = "banking";
+
+    /// <summary>A custom model instead of the presets.</summary>
+    [Parameter] public StrategyPreset? Model { get; set; }
+
+    /// <summary>Monte-Carlo trials per grid point.</summary>
+    [Parameter] public int Trials { get; set; } = 160;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _preset = Model ?? StrategyPreset.All.FirstOrDefault(p => p.Key == Preset) ?? StrategyPreset.Banking();
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [8.5, 7.5, 10.5], Target = [0, 1.2, 0.8], Fov = 42 },
+            Lights = "studio",
+            Shadows = false,
+            AriaLabel = "KPI landscape over two strategy levers",
+        };
+        Center();
+        await SimulateAsync();
+    }
+
+    private void Center()
+    {
+        _a = Math.Round((_preset.A.Min + _preset.A.Max) / 2, 2);
+        _b = Math.Round((_preset.B.Min + _preset.B.Max) / 2, 2);
+    }
+
+    private RenderFragment Slider(StrategyLever lever, double value, Action<double> set) => __builder =>
+    {
+        var id = $"{_uid}-{lever.Name.GetHashCode():x}";
+        <div>
+            <label class="bai-label" for="@id">@lever.Name: <b>@value.ToString(lever.Format, CultureInfo.InvariantCulture) @lever.Unit</b></label>
+            <input id="@id" type="range" min="@lever.Min.ToString(CultureInfo.InvariantCulture)" max="@lever.Max.ToString(CultureInfo.InvariantCulture)" step="@((lever.Max - lever.Min) / 100).ToString(CultureInfo.InvariantCulture)"
+                   value="@value.ToString(CultureInfo.InvariantCulture)" @oninput="e => set(double.Parse(e.Value?.ToString() ?? lever.Min.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture))" style="width:100%" />
+        </div>
+    };
+
+    private async Task ChangePreset(ChangeEventArgs e)
+    {
+        _preset = StrategyPreset.All.First(p => p.Key == e.Value?.ToString());
+        Center();
+        Narration = null;
+        _picked = null;
+        await SimulateAsync();
+    }
+
+    private async Task SetEnv(ChangeEventArgs e, bool volatility)
+    {
+        var v = double.Parse(e.Value?.ToString() ?? "1", CultureInfo.InvariantCulture);
+        if (volatility)
+        {
+            _volatility = v;
+        }
+        else
+        {
+            _scale = v;
+        }
+
+        await SimulateAsync();
+    }
+
+    private async Task SimulateAsync()
+    {
+        _running = true;
+        var version = ++_version;
+        var (preset, vol, scale, trials) = (_preset, _volatility, _scale, Math.Clamp(Trials, 20, 2000));
+        var (grid, scenarios) = await Task.Run(() =>
+        {
+            var g = StrategySimulation.Grid(preset, N, vol, scale, trials);
+            var s = preset.Scenarios.Select((sc, i) => StrategySimulation.Evaluate(preset, sc.A, sc.B, vol, scale, trials * 3, 50 + i)).ToList();
+            return (g, s);
+        });
+        if (version != _version)
+        {
+            return;
+        }
+
+        _grid = grid;
+        _scenarioCells = scenarios;
+        var cells = grid.Cast<StrategyCell>().ToList();
+        _min = Math.Min(cells.Min(c => c.Mean), scenarios.Min(c => c.Mean));
+        _max = Math.Max(Math.Max(cells.Max(c => c.Mean), scenarios.Max(c => c.Mean)), _min + 1e-9);
+        _best = cells.MaxBy(c => c.Mean);
+        _running = false;
+        UpdateChoice();
+    }
+
+    private void UpdateChoice()
+    {
+        if (_grid is null)
+        {
+            return;
+        }
+
+        _current = StrategySimulation.Evaluate(_preset, _a, _b, _volatility, _scale, Math.Clamp(Trials, 20, 2000) * 2, 7);
+        Build();
+    }
+
+    private double H(double kpi) => (kpi - _min) / (_max - _min) * 3 + 0.05;
+
+    private double X(double a) => (a - _preset.A.Min) / (_preset.A.Max - _preset.A.Min) * Span - Span / 2;
+
+    private double Z(double b) => (b - _preset.B.Min) / (_preset.B.Max - _preset.B.Min) * Span - Span / 2;
+
+    private void Build()
+    {
+        var g = _grid!;
+        var values = new double[N * N];
+        var colors = new string[N * N];
+        for (var i = 0; i < N; i++)
+        {
+            for (var j = 0; j < N; j++)
+            {
+                values[i * N + j] = H(g[i, j].Mean);
+                colors[i * N + j] = ThreeDPalette.Ramp((g[i, j].Mean - _min) / (_max - _min));
+            }
+        }
+
+        var list = new List<Object3D>
+        {
+            new() { Id = "landscape", Kind = "surface", Rows = N, Cols = N, Size = [Span, 0, Span], Values = values, Colors = colors, DoubleSided = true, Roughness = 0.45, Tooltip = $"{_preset.Kpi} landscape" },
+            new() { Id = "base", Kind = "box", Position = [0, -0.03, 0], Size = [Span + 0.2, 0.06, Span + 0.2], Color = ThreeDPalette.TarumDeep, Pickable = false },
+            Object3D.Text("axis-a", [0, 0, Span / 2 + 0.6], $"{_preset.A.Name} →", "is-plain"),
+            Object3D.Text("axis-b", [-Span / 2 - 0.7, 0, 0], $"{_preset.B.Name} →", "is-plain"),
+            Object3D.Text("a-min", [-Span / 2, 0, Span / 2 + 0.25], _preset.A.Min.ToString(_preset.A.Format, CultureInfo.InvariantCulture), "is-plain is-mono"),
+            Object3D.Text("a-max", [Span / 2, 0, Span / 2 + 0.25], _preset.A.Max.ToString(_preset.A.Format, CultureInfo.InvariantCulture), "is-plain is-mono"),
+            Object3D.Text("b-min", [-Span / 2 - 0.3, 0, -Span / 2], _preset.B.Min.ToString(_preset.B.Format, CultureInfo.InvariantCulture), "is-plain is-mono"),
+            Object3D.Text("b-max", [-Span / 2 - 0.3, 0, Span / 2], _preset.B.Max.ToString(_preset.B.Format, CultureInfo.InvariantCulture), "is-plain is-mono"),
+        };
+
+        if (_current is { } c)
+        {
+            var y = H(c.Mean);
+            list.Add(new Object3D { Id = "choice", Kind = "sphere", Radius = 0.18, Position = [X(c.A), y + 0.2, Z(c.B)], Color = "#ffffff", Emissive = "#ffffff", EmissiveIntensity = 0.5, Label = $"you: {Fmt(c.Mean)}", Tooltip = $"Your choice\n{Fmt(c.Mean)} {_preset.KpiUnit} (P5 {Fmt(c.P5)}, P95 {Fmt(c.P95)})" });
+            list.Add(Object3D.Line("choice-stem", [[X(c.A), 0, Z(c.B)], [X(c.A), y + 0.2, Z(c.B)]], "#ffffff", dashed: true));
+        }
+
+        if (_best is { } b)
+        {
+            list.Add(new Object3D { Id = "best", Kind = "icosahedron", Radius = 0.22, Position = [X(b.A), H(b.Mean) + 0.35, Z(b.B)], Color = ThreeDPalette.Soga, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 0.9, FlatShading = true, Animate = Animate3D.Spin(1.4), Label = "best", LabelClass = "is-soga", Tooltip = $"Best mean\n{Fmt(b.Mean)} {_preset.KpiUnit}" });
+        }
+
+        for (var k = 0; k < _scenarioCells.Count; k++)
+        {
+            var s = _scenarioCells[k];
+            var sc = _preset.Scenarios[k];
+            var x = (k - (_scenarioCells.Count - 1) / 2.0) * 2.2;
+            var z = Span / 2 + 2.1;
+            var h = H(s.Mean);
+            list.Add(new Object3D { Id = $"tower-{k}", Kind = "box", Size = [0.8, 1, 0.8], Scale = new[] { 1.0, h, 1.0 }, Position = [x, h / 2, z], Color = ThreeDPalette.Category(k), Edges = "#ffffff", Label = $"{sc.Name} · {Fmt(s.Mean)}", LabelClass = "is-plain",
+                Tooltip = string.Create(CultureInfo.InvariantCulture, $"{sc.Name}\n{_preset.A.Name} {sc.A.ToString(_preset.A.Format, CultureInfo.InvariantCulture)} {_preset.A.Unit}, {_preset.B.Name} {sc.B.ToString(_preset.B.Format, CultureInfo.InvariantCulture)} {_preset.B.Unit}\nmean {Fmt(s.Mean)}, P5 {Fmt(s.P5)}, P95 {Fmt(s.P95)}") });
+            list.Add(new Object3D { Id = $"band-{k}", Kind = "cylinder", Radius = 0.06, Height = Math.Max(0.02, H(s.P95) - H(s.P5)), Position = [x + 0.6, (H(s.P5) + H(s.P95)) / 2, z], Color = "#ffffff", Opacity = 0.6, Pickable = false });
+            list.Add(new Object3D { Id = $"pin-{k}", Kind = "cone", Radius = 0.12, Height = 0.3, Rotation = [Math.PI, 0, 0], Position = [X(sc.A), H(StrategySimulation.Evaluate(_preset, sc.A, sc.B, _volatility, _scale, 40, 3).Mean) + 0.3, Z(sc.B)], Color = ThreeDPalette.Category(k), Tooltip = sc.Name });
+        }
+
+        Objects = list;
+    }
+
+    private void Picked(PickEvent e)
+    {
+        if (e.Id == "landscape" && _grid is not null)
+        {
+            var a = _preset.A.Min + (e.Point[0] + Span / 2) / Span * (_preset.A.Max - _preset.A.Min);
+            var b = _preset.B.Min + (e.Point[2] + Span / 2) / Span * (_preset.B.Max - _preset.B.Min);
+            _a = Math.Clamp(a, _preset.A.Min, _preset.A.Max);
+            _b = Math.Clamp(b, _preset.B.Min, _preset.B.Max);
+            UpdateChoice();
+            _picked = $"Moved your choice to {_preset.A.Name.ToLowerInvariant()} {_a.ToString(_preset.A.Format, CultureInfo.InvariantCulture)}, {_preset.B.Name.ToLowerInvariant()} {_b.ToString(_preset.B.Format, CultureInfo.InvariantCulture)}.";
+        }
+        else
+        {
+            _picked = Objects.FirstOrDefault(o => o.Id == e.Id)?.Tooltip;
+        }
+    }
+
+    private static string Fmt(double v) => Math.Abs(v) >= 100 ? v.ToString("N0", CultureInfo.InvariantCulture) : v.ToString("0.0", CultureInfo.InvariantCulture);
+
+    private Task Recommend()
+    {
+        var scen = string.Join("; ", _preset.Scenarios.Select((s, k) => $"{s.Name} ({_preset.A.Name} {s.A}, {_preset.B.Name} {s.B}): mean {Fmt(_scenarioCells[k].Mean)}, P5 {Fmt(_scenarioCells[k].P5)}, P95 {Fmt(_scenarioCells[k].P95)}"));
+        var facts = $"{_preset.Name}. KPI: {_preset.Kpi} in {_preset.KpiUnit}. Levers: {_preset.A.Name} {_preset.A.Min}-{_preset.A.Max} {_preset.A.Unit}, {_preset.B.Name} {_preset.B.Min}-{_preset.B.Max} {_preset.B.Unit}. Uncertainty x{_volatility:0.0}, market size x{_scale:0.0}. " +
+                    $"Best grid point: {_preset.A.Name} {_best!.A:0.##}, {_preset.B.Name} {_best.B:0.##}, mean {Fmt(_best.Mean)} (P5 {Fmt(_best.P5)}, P95 {Fmt(_best.P95)}). " +
+                    $"User's choice: {_preset.A.Name} {_a:0.##}, {_preset.B.Name} {_b:0.##}, mean {Fmt(_current!.Mean)} (P5 {Fmt(_current.P5)}). Scenarios: {scen}. Context: {_preset.Context}";
+        return NarrateAsync("a strategy consultant who weighs expected value against downside risk", facts, AiTasks.Decision);
+    }
+}

@@ -1,0 +1,290 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* A walking 3D tour guide: the robot walks between points of interest, points, and narrates each stop with lip-synced speech. *@
+
+<div class="@CssClass("bai-stack")">
+    <div class="bai-row">
+        @foreach (var name in TourPresets.Names)
+        {
+            <button type="button" class="bai-chip @(name == Tour ? "is-active" : null)" @onclick="() => SetTour(name)"><i class="bi @TourPresets.Get(name).Icon" aria-hidden="true"></i>@name</button>
+        }
+    </div>
+    <div class="bai3d-split">
+        <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnSpeechEnded="SpeechEnded" OnPick="Picked">
+            <div class="bai3d-panel">
+                <h4>@_preset.Name tour · stop @(_stop + 1)/@_preset.Stops.Count</h4>
+                <div style="font:700 1rem var(--bai-font-display)">@_preset.Stops[_stop].Name</div>
+                <div class="bai-small" style="color:#aab1e6">@(_walking ? "Walking…" : _speaking ? "Speaking" : IsBusy ? "Preparing narration" : "Ready")</div>
+            </div>
+            <div class="bai3d-hud-row bai3d-hud-bottom">
+                <button type="button" class="bai-btn-ghost" style="background:rgba(11,15,41,.6)" disabled="@(_stop == 0 || _walking)" @onclick="Previous" aria-label="Previous stop"><i class="bi bi-skip-backward-fill" aria-hidden="true"></i></button>
+                <button type="button" class="bai-btn bai-btn-ai" @onclick="ToggleAutoplay"><i class="bi @(_autoplay ? "bi-pause-fill" : "bi-play-fill")" aria-hidden="true"></i>@(_autoplay ? "Pause tour" : "Play tour")</button>
+                <button type="button" class="bai-btn-ghost" style="background:rgba(11,15,41,.6)" disabled="@(_stop >= _preset.Stops.Count - 1 || _walking)" @onclick="Next" aria-label="Next stop"><i class="bi bi-skip-forward-fill" aria-hidden="true"></i></button>
+            </div>
+        </Scene3D>
+
+        <AiCard Title="@Name" Subtitle="@($"Your guide · {_preset.Name}")" Icon="bi-signpost-2">
+            <div class="bai-stack">
+                <ol class="bai-small" style="margin:0; padding-left:1.2rem">
+                    @for (var i = 0; i < _preset.Stops.Count; i++)
+                    {
+                        var idx = i;
+                        <li style="@(i == _stop ? "font-weight:700; color:var(--bai-soga)" : null); cursor:pointer" @onclick="() => GoTo(idx)">@_preset.Stops[i].Name</li>
+                    }
+                </ol>
+                @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+                <AiError Message="@Error" />
+                <form class="bai-row" @onsubmit="Ask" @onsubmit:preventDefault="true">
+                    <input class="bai-input bai-spacer" @bind="_question" placeholder="Ask the guide…" aria-label="Question for the guide" disabled="@IsBusy" />
+                    <button type="submit" class="bai-btn-ghost" disabled="@IsBusy">Ask</button>
+                </form>
+                <label class="bai-small"><input type="checkbox" class="form-check-input" @bind="_voice" /> voice narration</label>
+            </div>
+        </AiCard>
+    </div>
+</div>
+
+@code {
+    private const double WalkSpeed = 1.5;
+    private Scene3DOptions _options = new();
+    private TourPreset _preset = TourPresets.Museum();
+    private int _stop;
+    private int _leg;
+    private double[] _guidePos = [0, 0, 0];
+    private bool _walking, _speaking, _autoplay, _voice = true;
+    private string? _question;
+    private int _version;
+
+    [Parameter] public string Name { get; set; } = "Kawi";
+
+    /// <summary>Museum, Smart City, Campus, Factory or Tourism.</summary>
+    [Parameter] public string Tour { get; set; } = "Museum";
+
+    /// <summary>A custom tour instead of the presets.</summary>
+    [Parameter] public TourPreset? Preset { get; set; }
+
+    [Parameter] public string SpeechLanguage { get; set; } = "en-US";
+
+    [Parameter] public EventCallback<TourStop> OnStopReached { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _preset = Preset ?? TourPresets.Get(Tour);
+        Reset();
+    }
+
+    private void Reset()
+    {
+        _stop = 0;
+        _leg++;
+        _version++;
+        _guidePos = _preset.Stops[0].Stand;
+        var s0 = _preset.Stops[0];
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [s0.Stand[0] + 4, 4, s0.Stand[2] + 6.5], Target = [s0.Focus[0], 1, s0.Focus[2]] },
+            Ground = new(16, _preset.Ground),
+            Lights = "day",
+            AriaLabel = $"{_preset.Name} tour with a robot guide",
+        };
+        Narration = null;
+        Build(walking: null);
+    }
+
+    private void SetTour(string name)
+    {
+        Tour = name;
+        _autoplay = false;
+        _ = Scene?.StopSpeakingAsync();
+        _preset = TourPresets.Get(name);
+        Reset();
+    }
+
+    private void Build((double[] From, double[] To)? walking)
+    {
+        var list = _preset.Scenery.ToList();
+        var stop = _preset.Stops[_stop];
+        var yaw = Math.Atan2(stop.Focus[0] - _guidePos[0], stop.Focus[2] - _guidePos[2]);
+        list.Add(walking is { } w
+            ? new Object3D { Id = $"guide{_leg}", Kind = "model", Url = ThreeDAssets.GuideBot, FitHeight = 1.4, Clip = "Walk", Animate = Animate3D.Path([w.From, w.To], WalkSpeed, loop: false), Tooltip = $"{Name} is walking" }
+            : new Object3D { Id = $"guide{_leg}", Kind = "model", Url = ThreeDAssets.GuideBot, FitHeight = 1.4, Clip = "Idle", Position = _guidePos, Rotation = [0, yaw, 0], Tooltip = $"{Name}: click for a wave" });
+        for (var i = 0; i < _preset.Stops.Count; i++)
+        {
+            var s = _preset.Stops[i];
+            var current = i == _stop;
+            list.Add(new Object3D
+            {
+                Id = $"poi{i}", Kind = "cone", Radius = 0.16, Height = 0.36, Rotation = [Math.PI, 0, 0], Position = [s.Focus[0], s.Focus[1] + 1.3, s.Focus[2]],
+                Color = current ? ThreeDPalette.Soga : ThreeDPalette.Nila, Emissive = current ? ThreeDPalette.Soga : ThreeDPalette.Nila, EmissiveIntensity = current ? 1 : 0.4,
+                Label = $"{i + 1}. {s.Name}", LabelClass = current ? "is-soga" : null, Tooltip = $"{s.Name}\nClick to go here", Animate = Animate3D.Bob(0.12, current ? 2 : 1),
+            });
+        }
+
+        Objects = list;
+    }
+
+    private Task Next() => GoTo(Math.Min(_stop + 1, _preset.Stops.Count - 1));
+
+    private Task Previous() => GoTo(Math.Max(_stop - 1, 0));
+
+    private async Task GoTo(int index)
+    {
+        if (index < 0 || index >= _preset.Stops.Count || _walking)
+        {
+            return;
+        }
+
+        var version = ++_version;
+        await Scene!.StopSpeakingAsync();
+        _speaking = false;
+        Narration = null;
+        var target = _preset.Stops[index];
+        var from = _guidePos;
+        _stop = index;
+        var distance = Layout3D.Distance(from, target.Stand);
+        if (distance > 0.05)
+        {
+            _walking = true;
+            _leg++;
+            Build((from, target.Stand));
+            StateHasChanged();
+            await Scene.FlyToAsync([target.Stand[0] + 4, 4, target.Stand[2] + 6.5], [target.Focus[0], 1, target.Focus[2]], (int)(distance / WalkSpeed * 1000));
+            await Task.Delay(TimeSpan.FromSeconds(distance / WalkSpeed));
+            if (version != _version)
+            {
+                return;
+            }
+
+            _walking = false;
+        }
+
+        _guidePos = target.Stand;
+        Build(walking: null);
+        StateHasChanged();
+        await Task.Delay(50);
+        await Scene.PlayClipAsync($"guide{_leg}", "Point", loop: false);
+        await OnStopReached.InvokeAsync(target);
+        await NarrateStop(target, version);
+    }
+
+    private async Task NarrateStop(TourStop stop, int version)
+    {
+        var system = $"You are {Name}, a friendly tour guide robot on a {_preset.Name.ToLowerInvariant()} tour. Speak 2-3 short, vivid sentences for visitors at this stop, using only the facts given, then invite one question." +
+                     (SpeechLanguage.StartsWith("id", StringComparison.OrdinalIgnoreCase) ? " Answer in Bahasa Indonesia." : string.Empty);
+        await RunAsync(async ct =>
+        {
+            var builder = new StringBuilder();
+            Narration = string.Empty;
+            await foreach (var token in Ai.StreamAsync(system, PromptTags.Wrap(PromptTags.Input, $"Stop: {stop.Name}. Facts: {stop.Facts}"), AiTasks.Insight, Provider, null, ct))
+            {
+                builder.Append(token);
+                Narration = builder.ToString();
+                RenderThrottled();
+            }
+        });
+
+        if (version != _version || string.IsNullOrWhiteSpace(Narration))
+        {
+            return;
+        }
+
+        await SpeakOrWait(Narration, version);
+    }
+
+    private async Task SpeakOrWait(string text, int version)
+    {
+        if (_voice)
+        {
+            _speaking = true;
+            await Scene!.PlayClipAsync($"guide{_leg}", "Talk");
+            await Scene.SpeakAsync($"guide{_leg}", AvatarBrain.ForSpeech(text), SpeechLanguage);
+        }
+        else if (_autoplay)
+        {
+            await Task.Delay(3500);
+            if (version == _version)
+            {
+                await AdvanceIfAutoplay();
+            }
+        }
+    }
+
+    private async Task SpeechEnded(string id)
+    {
+        _speaking = false;
+        await Scene!.PlayClipAsync(id, "Idle");
+        await AdvanceIfAutoplay();
+    }
+
+    private async Task AdvanceIfAutoplay()
+    {
+        if (!_autoplay)
+        {
+            return;
+        }
+
+        if (_stop >= _preset.Stops.Count - 1)
+        {
+            _autoplay = false;
+            await Scene!.PlayClipAsync($"guide{_leg}", "Wave", loop: false);
+            StateHasChanged();
+            return;
+        }
+
+        await Task.Delay(1200);
+        await Next();
+    }
+
+    private async Task ToggleAutoplay()
+    {
+        _autoplay = !_autoplay;
+        if (_autoplay && !_walking && !_speaking && !IsBusy)
+        {
+            await GoTo(_stop);
+        }
+    }
+
+    private async Task Ask()
+    {
+        var q = _question?.Trim();
+        if (string.IsNullOrEmpty(q))
+        {
+            return;
+        }
+
+        _question = null;
+        var version = ++_version;
+        await Scene!.StopSpeakingAsync();
+        await Scene.PlayClipAsync($"guide{_leg}", "Think");
+        var context = string.Join(" ", _preset.Stops.Select(s => $"{s.Name}: {s.Facts}"));
+        await RunAsync(async ct =>
+        {
+            var builder = new StringBuilder();
+            Narration = string.Empty;
+            var system = $"You are {Name}, a tour guide on a {_preset.Name.ToLowerInvariant()} tour, currently at \"{_preset.Stops[_stop].Name}\". Answer the visitor in 1-3 short sentences using the tour facts; if they are not enough, say so." +
+                         (SpeechLanguage.StartsWith("id", StringComparison.OrdinalIgnoreCase) ? " Answer in Bahasa Indonesia." : string.Empty);
+            await foreach (var token in Ai.StreamAsync(system, $"Tour facts: {context}\n\nVisitor: {q}", AiTasks.Rag, Provider, null, ct))
+            {
+                builder.Append(token);
+                Narration = builder.ToString();
+                RenderThrottled();
+            }
+        });
+        if (!string.IsNullOrWhiteSpace(Narration))
+        {
+            await SpeakOrWait(Narration, version);
+        }
+    }
+
+    private async Task Picked(PickEvent e)
+    {
+        if (e.Id.StartsWith("poi") && int.TryParse(e.Id[3..], out var i))
+        {
+            await GoTo(i);
+        }
+        else if (e.Id.StartsWith("guide") && !_walking)
+        {
+            await Scene!.PlayClipAsync(e.Id, "Wave", loop: false);
+        }
+    }
+}

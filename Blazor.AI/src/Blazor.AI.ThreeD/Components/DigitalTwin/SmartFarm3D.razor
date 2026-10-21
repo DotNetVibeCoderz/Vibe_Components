@@ -1,0 +1,264 @@
+@namespace Blazor.AI.ThreeD
+@inherits TwinComponentBase
+@* Farm digital twin: irrigation zones with soil-moisture tiles, growing maize, disease detection, yield prediction, AI agronomist. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel">
+                <h4>@Title</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@TwinUi.N(_yield, "0.0")</b><span>t/ha forecast</span></div>
+                    <div><b>@TwinUi.Pct(_avgMoisture / 100)</b><span>soil moisture</span></div>
+                    <div><b>@_sick</b><span>plants flagged</span></div>
+                    <div><b>Day @_day</b><span>of @SeasonDays</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            <span><i style="background:@ThreeDPalette.Ramp(0.15)"></i>dry</span>
+            <span><i style="background:@ThreeDPalette.Ramp(0.55)"></i>optimal</span>
+            <span><i style="background:@ThreeDPalette.Danger"></i>suspected disease</span>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="Agronomist copilot" Subtitle="Irrigation · disease · yield" Icon="bi-flower1">
+        <div class="bai-stack">
+            <div class="bai-table-wrap">
+                <table class="bai-table" style="font-size:.8rem">
+                    <thead><tr><th>Zone</th><th>Moisture %</th><th>NDVI</th><th>Disease</th><th>Water</th></tr></thead>
+                    <tbody>
+                        @foreach (var z in _zones)
+                        {
+                            var m = Sim[$"{z}-moist"];
+                            <tr>
+                                <td><span style="color:@TwinUi.LevelColor(m.Level)">●</span> @z</td>
+                                <td class="bai-num">@m.Short()</td>
+                                <td class="bai-num">@TwinUi.N(Sim[$"{z}-ndvi"].Value, "0.00")</td>
+                                <td class="bai-num" style="color:@(Sim[$"{z}-disease"].Value > DiseaseThreshold ? ThreeDPalette.Danger : "inherit")">@TwinUi.Pct(Sim[$"{z}-disease"].Value)</td>
+                                <td><button type="button" class="bai-chip @(_irrigating.Contains(z) ? "is-active" : null)" @onclick="() => Irrigate(z)" aria-pressed="@_irrigating.Contains(z)">@(_irrigating.Contains(z) ? "On" : "Off")</button></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="bai-row">
+                <button type="button" class="bai-btn-ghost" @onclick="Toggle"><i class="bi @(Running ? "bi-pause-fill" : "bi-play-fill")" aria-hidden="true"></i>@(Running ? "Pause" : "Resume")</button>
+                <button type="button" class="bai-btn-ghost" @onclick="AutoIrrigate"><i class="bi bi-droplet-half" aria-hidden="true"></i>Auto-irrigate</button>
+            </div>
+            <p class="bai-small bai-muted" style="margin:0">@_advice</p>
+            <TwinCopilot Simulator="@Sim" Provider="@Provider" Language="@Language" Role="an agronomist advising a maize farmer in Central Java" Context="@Facts"
+                         Suggestions="@(["Which zone needs water first?", "Is there a disease outbreak?", "How can I raise the yield?"])" />
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private const double DiseaseThreshold = 0.45;
+    private readonly string[] _zones = ["A", "B", "C", "D"];
+    private readonly HashSet<string> _irrigating = [];
+    private readonly Dictionary<string, double> _growth = [];
+    private readonly HashSet<string> _infected = [];
+    private Scene3DOptions _options = new();
+    private double _yield, _avgMoisture;
+    private int _sick, _day = 38;
+    private string _advice = string.Empty;
+
+    [Parameter] public string Title { get; set; } = "Kebun Jagung Sleman";
+    [Parameter] public int SeasonDays { get; set; } = 110;
+
+    /// <summary>Attainable yield in t/ha under ideal conditions.</summary>
+    [Parameter] public double PotentialYield { get; set; } = 9.5;
+
+    private const int Rows = 2, Cols = 3;
+    private const double ZoneW = 3.6, ZoneD = 2.8;
+
+    protected override void OnInitialized()
+    {
+        var specs = new List<SensorSpec>();
+        foreach (var z in _zones)
+        {
+            var dry = z == "C";
+            specs.Add(new SensorSpec($"{z}-moist", "Soil moisture", "%", dry ? 19 : 31, 0.4, 5, 60) { Asset = $"Zone {z}", WarnLow = 22, WarnHigh = 45, Drift = -0.03 });
+            specs.Add(new SensorSpec($"{z}-ndvi", "NDVI", "", dry ? 0.55 : 0.71, 0.006, 0, 1) { Asset = $"Zone {z}", WarnLow = 0.5 });
+            specs.Add(new SensorSpec($"{z}-disease", "Disease score", "", z == "B" ? 0.38 : 0.08, 0.01, 0, 1) { Asset = $"Zone {z}", WarnHigh = DiseaseThreshold, Drift = z == "B" ? 0.002 : 0 });
+            specs.Add(new SensorSpec($"{z}-temp", "Leaf temperature", "°C", 29, 0.3, 15, 45) { Asset = $"Zone {z}", WarnHigh = 35, CycleAmplitude = 3, CyclePeriod = 60 });
+        }
+
+        Sim = new TwinSimulator(specs, seed: 5);
+        Sim.Step(15);
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [6.5, 6.5, 8], Target = [0, 0.4, 0] },
+            Ground = new(20, "#2b2418"),
+            Lights = "day",
+            Background = "#9cc7e8",
+            Fog = new("#9cc7e8", 14, 34),
+            AriaLabel = "Farm digital twin with irrigation zones and maize plants",
+        };
+        foreach (var z in _zones)
+        {
+            for (var r = 0; r < Rows; r++)
+            {
+                for (var c = 0; c < Cols; c++)
+                {
+                    _growth[$"{z}{r}{c}"] = z == "C" ? 0.55 : 0.75;
+                }
+            }
+        }
+
+        Recompute();
+        Objects = Build();
+    }
+
+    private (double X, double Z) ZoneCenter(string z)
+    {
+        var i = Array.IndexOf(_zones, z);
+        return ((i % 2 == 0 ? -1 : 1) * (ZoneW / 2 + 0.2), (i < 2 ? -1 : 1) * (ZoneD / 2 + 0.2));
+    }
+
+    private Object3D[] Build()
+    {
+        var list = new List<Object3D>();
+        foreach (var z in _zones)
+        {
+            var (cx, cz) = ZoneCenter(z);
+            var moist = Sim[$"{z}-moist"].Value;
+            list.Add(new Object3D { Id = $"soil-{z}", Kind = "box", Position = [cx, 0.03, cz], Size = [ZoneW, 0.06, ZoneD], Color = ThreeDPalette.Ramp(moist / 60), Roughness = 1, Tooltip = $"Zone {z}: moisture {TwinUi.N(moist)} %" });
+            list.Add(Object3D.Text($"zl-{z}", [cx - ZoneW / 2 + 0.3, 0.25, cz - ZoneD / 2 + 0.2], $"Zone {z}", "is-big"));
+            for (var r = 0; r < Rows; r++)
+            {
+                for (var c = 0; c < Cols; c++)
+                {
+                    var id = $"{z}{r}{c}";
+                    var px = cx + (c - (Cols - 1) / 2.0) * (ZoneW / Cols);
+                    var pz = cz + (r - (Rows - 1) / 2.0) * (ZoneD / Rows);
+                    list.Add(new Object3D { Id = $"plant-{id}", Kind = "model", Url = ThreeDAssets.Corn, Position = [px, 0.06, pz], FitHeight = 1.0, Scale = Math.Round(_growth[id], 2), Rotation = [0, (r * 3 + c) * 1.1, 0], Tooltip = $"Plant {id}" });
+                }
+            }
+
+            // Sprinkler head; droplets appear while irrigating.
+            list.Add(new Object3D { Id = $"spr-{z}", Kind = "cylinder", Position = [cx, 0.45, cz], Radius = 0.04, Height = 0.8, Color = "#9aa3c7", Metalness = 0.8, Pickable = false });
+            if (_irrigating.Contains(z))
+            {
+                var rng = new Random(z[0]);
+                list.Add(new Object3D
+                {
+                    Id = $"water-{z}", Kind = "points", Pickable = false, PointSize = 0.06, Color = "#8fd3ff", Opacity = 0.8, Animate = Animate3D.Bob(0.12, 2.2),
+                    Points = Enumerable.Range(0, 90).Select(_ => { var a = rng.NextDouble() * Math.PI * 2; var d = Math.Sqrt(rng.NextDouble()) * 1.4; return new[] { cx + Math.Cos(a) * d, 0.3 + rng.NextDouble() * 0.7 - d * 0.25, cz + Math.Sin(a) * d * 0.8 }; }).ToArray(),
+                });
+            }
+        }
+
+        foreach (var id in _infected)
+        {
+            list.Add(new Object3D { Id = $"sick-{id}", Kind = "torus", Parent = $"plant-{id}", Position = [0, 0.05, 0], Radius = 0.35, Tube = 0.03, Rotation = [Math.PI / 2, 0, 0], Color = ThreeDPalette.Danger, Emissive = ThreeDPalette.Danger, EmissiveIntensity = 2, Pickable = false, Animate = Animate3D.Pulse(0.15, 1.5) });
+        }
+
+        // Field border and a small pump house.
+        list.Add(new Object3D { Id = "pump", Kind = "box", Position = [0, 0.4, -(ZoneD + 1.2)], Size = [1.2, 0.8, 0.8], Color = "#c7b38a", Roughness = 0.8, Tooltip = "Pump house" });
+        list.Add(new Object3D { Id = "pipe", Kind = "tube", Points = [[0, 0.08, -(ZoneD + 0.8)], [0, 0.08, 0], [ZoneW / 2 + 0.2, 0.08, 0], [-(ZoneW / 2 + 0.2), 0.08, 0]], Radius = 0.04, Color = "#3d4fb8", Pickable = false });
+        return [.. list];
+    }
+
+    protected override IEnumerable<ObjectPatch> OnTick()
+    {
+        if (Sim.Tick % 3 == 0 && _day < SeasonDays)
+        {
+            _day++;
+        }
+
+        var rebuild = false;
+        foreach (var z in _zones)
+        {
+            // Irrigation raises soil moisture; dryness slows growth and NDVI.
+            Sim.SetOffset($"{z}-moist", _irrigating.Contains(z) ? 14 : 0);
+            var moist = Sim[$"{z}-moist"].Value;
+            var stress = moist < 22 ? (22 - moist) / 22 : moist > 45 ? (moist - 45) / 45 : 0;
+            Sim.SetOffset($"{z}-ndvi", -stress * 0.25);
+            foreach (var key in _growth.Keys.Where(k => k[0] == z[0]).ToList())
+            {
+                _growth[key] = Math.Min(1.15, _growth[key] + 0.004 * (1 - stress));
+            }
+
+            // Vision model: plants in high-disease zones get flagged.
+            var disease = Sim[$"{z}-disease"].Value;
+            foreach (var key in _growth.Keys.Where(k => k[0] == z[0]))
+            {
+                var flagged = disease > DiseaseThreshold && (key.GetHashCode() & 3) != 0 || disease > DiseaseThreshold + 0.15;
+                if (flagged && _infected.Add(key))
+                {
+                    Sim.Log("disease", $"Leaf blight suspected on plant {key}", $"Zone {z}");
+                    rebuild = true;
+                }
+            }
+        }
+
+        Recompute();
+        if (rebuild)
+        {
+            Objects = Build();
+            return [];
+        }
+
+        return _zones.Select(z => new ObjectPatch { Id = $"soil-{z}", Color = ThreeDPalette.Ramp(Sim[$"{z}-moist"].Value / 60) })
+            .Concat(_growth.Select(g => new ObjectPatch { Id = $"plant-{g.Key}", Scale = Math.Round(g.Value, 2) }));
+    }
+
+    private void Recompute()
+    {
+        _avgMoisture = _zones.Average(z => Sim[$"{z}-moist"].Value);
+        _sick = _infected.Count;
+        // Simple yield model: potential × canopy health × water stress × disease loss.
+        var ndvi = _zones.Average(z => Sim[$"{z}-ndvi"].Value);
+        var water = _zones.Average(z => { var m = Sim[$"{z}-moist"].Value; return m < 22 ? 1 - (22 - m) / 30 : m > 45 ? 1 - (m - 45) / 60 : 1; });
+        var loss = _zones.Average(z => Math.Max(0, Sim[$"{z}-disease"].Value - 0.2) * 0.6);
+        _yield = PotentialYield * Math.Clamp(ndvi / 0.8, 0, 1.1) * water * (1 - loss);
+        var dryest = _zones.OrderBy(z => Sim[$"{z}-moist"].Value).First();
+        var sickest = _zones.OrderByDescending(z => Sim[$"{z}-disease"].Value).First();
+        _advice = $"Driest: zone {dryest} ({Sim[$"{dryest}-moist"].Short()} %). " +
+                  (Sim[$"{sickest}-disease"].Value > DiseaseThreshold ? $"Disease pressure in zone {sickest}: scout and treat flagged plants within 48 h. " : "Disease pressure is low. ") +
+                  $"Forecast {TwinUi.N(_yield, "0.0")} t/ha of {TwinUi.N(PotentialYield, "0.0")} potential.";
+    }
+
+    private string Facts() => $"Season day {_day}/{SeasonDays}. Irrigating zones: {(_irrigating.Count == 0 ? "none" : string.Join(", ", _irrigating))}. Flagged plants: {_sick}. Yield forecast {TwinUi.N(_yield, "0.0")} t/ha. {_advice}";
+
+    private void Irrigate(string z)
+    {
+        if (!_irrigating.Remove(z))
+        {
+            _irrigating.Add(z);
+            Sim.Log("action", $"Irrigation on in zone {z}", $"Zone {z}");
+        }
+
+        Objects = Build();
+    }
+
+    private void AutoIrrigate()
+    {
+        foreach (var z in _zones)
+        {
+            var m = Sim[$"{z}-moist"].Value;
+            if (m < 26)
+            {
+                _irrigating.Add(z);
+            }
+            else if (m > 38)
+            {
+                _irrigating.Remove(z);
+            }
+        }
+
+        Sim.Log("action", "Auto-irrigation applied");
+        Objects = Build();
+    }
+
+    private void Picked(PickEvent e)
+    {
+        if (e.Id.StartsWith("plant-", StringComparison.Ordinal) && _infected.Remove(e.Id[6..]))
+        {
+            Sim.Log("action", $"Plant {e.Id[6..]} inspected and treated");
+            Objects = Build();
+        }
+    }
+}

@@ -1,0 +1,171 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Mission control for agent teams: plan a mission into tasks, dispatch them to specialist agents, watch execution in 3D. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-panel">
+            <h4>Mission</h4>
+            <div style="max-width:300px">@(_mission ?? "No mission yet")</div>
+            <div class="bai3d-kpi" style="margin-top:.4rem">
+                <div><b>@_tasks.Count(t => t.State == "done")/@_tasks.Count</b><span>tasks done</span></div>
+                <div><b>@_tasks.Count(t => t.State == "running")</b><span>running</span></div>
+            </div>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="Command" Subtitle="Plan, dispatch, review" Icon="bi-broadcast">
+        <div class="bai-stack">
+            <textarea class="bai-textarea" rows="2" @bind="_goal" aria-label="Mission goal" placeholder="Mission goal"></textarea>
+            <div class="bai-row">
+                <button type="button" class="bai-btn bai-btn-ai" disabled="@IsBusy" @onclick="Launch"><i class="bi bi-rocket-takeoff" aria-hidden="true"></i>Launch mission</button>
+                @if (IsBusy) { <button type="button" class="bai-btn-ghost" @onclick="CancelCurrent">Abort</button> }
+            </div>
+            <AiError Message="@Error" />
+            <div class="bai-stack" style="gap:.35rem; max-height:280px; overflow:auto">
+                @foreach (var t in _tasks)
+                {
+                    <div class="bai-small" style="@(t == _selected ? "outline:1px solid var(--bai-soga); border-radius:8px; padding:.2rem .3rem" : null)">
+                        <span class="bai-badge @(t.State == "done" ? "bai-badge-local" : t.State == "running" ? "bai-badge-ai" : "bai-badge-cloud")">@t.State</span>
+                        <b>@t.Agent</b> · @t.Title
+                        @if (t.Result is { Length: > 0 } && t == _selected) { <AiMarkdown Text="@t.Result" /> }
+                    </div>
+                }
+            </div>
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed class MissionTask(string title, string agent)
+    {
+        public string Title { get; } = title;
+        public string Agent { get; } = agent;
+        public string State { get; set; } = "queued";
+        public string? Result { get; set; }
+    }
+
+    private readonly List<MissionTask> _tasks = [];
+    private Scene3DOptions _options = new();
+    private string _goal = "Launch a durian chips product in Singapore within 8 weeks";
+    private string? _mission;
+    private MissionTask? _selected;
+
+    /// <summary>The specialist roles on the team.</summary>
+    [Parameter] public IReadOnlyList<string> Agents { get; set; } = ["Researcher", "Planner", "Analyst", "Writer", "Reviewer"];
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 8, 10], Target = [0, 0.5, 0] },
+            Ground = new(14, "#0e1236"),
+            Lights = "night",
+            AriaLabel = "Multi-agent command center",
+        };
+        Build();
+    }
+
+    private double[] AgentPos(string agent)
+    {
+        var i = Math.Max(0, Agents.ToList().IndexOf(agent));
+        var a = i / (double)Agents.Count * Math.PI * 2 - Math.PI / 2;
+        return [Math.Cos(a) * 4.2, 0, Math.Sin(a) * 4.2];
+    }
+
+    private void Build()
+    {
+        var list = new List<Object3D>
+        {
+            new() { Id = "core", Kind = "icosahedron", Radius = 0.8, Detail = 1, Position = [0, 1.2, 0], Color = ThreeDPalette.Tarum, Emissive = ThreeDPalette.Soga, EmissiveIntensity = IsBusy ? 0.8 : 0.25, FlatShading = true, Animate = Animate3D.Spin(IsBusy ? 1.2 : 0.3), Label = "Command", LabelClass = "is-soga", Pickable = false },
+            new() { Id = "core-pad", Kind = "cylinder", Radius = 1.3, Height = 0.08, Position = [0, 0.04, 0], Color = ThreeDPalette.TarumDeep, Pickable = false },
+        };
+        foreach (var agent in Agents)
+        {
+            var p = AgentPos(agent);
+            var busy = _tasks.Any(t => t.Agent == agent && t.State == "running");
+            var idx = Agents.ToList().IndexOf(agent);
+            list.Add(new Object3D { Id = "agent:" + agent, Kind = "capsule", Radius = 0.3, Height = 0.6, Position = [p[0], 0.62, p[2]], Color = ThreeDPalette.Category(idx), Emissive = ThreeDPalette.Category(idx), EmissiveIntensity = busy ? 0.9 : 0.15,
+                Label = agent, Tooltip = $"{agent}\n{_tasks.Count(t => t.Agent == agent)} task(s)", Animate = busy ? Animate3D.Bob(0.12, 2) : null });
+            list.Add(new Object3D { Id = "beam:" + agent, Kind = "line", Points = [[0, 1.2, 0], [p[0], 0.9, p[2]]], Color = busy ? ThreeDPalette.Soga : "#4a55a8", Opacity = busy ? 1 : 0.4, Dashed = !busy, Pickable = false });
+        }
+
+        // Tasks stack as small cubes beside their agent.
+        foreach (var g in _tasks.GroupBy(t => t.Agent))
+        {
+            var p = AgentPos(g.Key);
+            var k = 0;
+            foreach (var t in g)
+            {
+                var color = t.State == "done" ? ThreeDPalette.Nila : t.State == "running" ? ThreeDPalette.Soga : "#5b6bd6";
+                list.Add(new Object3D { Id = "task:" + _tasks.IndexOf(t), Kind = "box", Size = [0.26, 0.26, 0.26], Position = [p[0] * 1.22, 0.14 + k++ * 0.3, p[2] * 1.22], Color = color, Emissive = color, EmissiveIntensity = t.State == "running" ? 0.8 : 0.2,
+                    Edges = "#ffffff", Tooltip = $"{t.Title}\n{t.State}", Animate = t.State == "running" ? Animate3D.Spin(2) : null });
+            }
+        }
+
+        Objects = [.. list];
+    }
+
+    private Task Launch() => RunAsync(async ct =>
+    {
+        _tasks.Clear();
+        _selected = null;
+        _mission = _goal;
+        Build();
+        StateHasChanged();
+
+        var plan = await PlanAsync(
+            $"You are a mission commander. Break the mission into 5-8 concrete tasks and assign each to exactly one of these agents: {string.Join(", ", Agents)}.",
+            _goal, """{"tasks":[{"title":"Research competitors","agent":"Researcher"}]}""", ct);
+        foreach (var node in plan?["tasks"]?.AsArray() ?? [])
+        {
+            var title = node?["title"]?.ToString();
+            var agent = node?["agent"]?.ToString();
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                _tasks.Add(new MissionTask(title, Agents.FirstOrDefault(a => string.Equals(a, agent, StringComparison.OrdinalIgnoreCase)) ?? Agents[_tasks.Count % Agents.Count]));
+            }
+        }
+
+        if (_tasks.Count < 3)
+        {
+            // Offline or unusable plan: a deterministic decomposition.
+            _tasks.Clear();
+            string[] steps = ["Gather facts and constraints", "Draft the plan and milestones", "Estimate costs, risks and KPIs", "Write the brief", "Review and sign off"];
+            for (var i = 0; i < steps.Length; i++)
+            {
+                _tasks.Add(new MissionTask($"{steps[i]}: {_goal}", Agents[i % Agents.Count]));
+            }
+        }
+
+        Build();
+        StateHasChanged();
+        var context = new StringBuilder();
+        foreach (var t in _tasks)
+        {
+            ct.ThrowIfCancellationRequested();
+            t.State = "running";
+            _selected = t;
+            Build();
+            StateHasChanged();
+            var system = $"You are the {t.Agent} agent on a mission team. Do your task in at most 4 short bullet points. Mission: {_goal}." + (Language is null ? string.Empty : $" Answer in {Language}.");
+            t.Result = await Ai.CompleteAsync(system, PromptTags.Wrap(PromptTags.Input, t.Title) + "\n" + PromptTags.Wrap(PromptTags.Context, context.ToString()), AiTasks.Agent, Provider, null, ct);
+            context.AppendLine($"{t.Agent}: {t.Title}: {t.Result}");
+            t.State = "done";
+            Build();
+            StateHasChanged();
+        }
+    });
+
+    private void Picked(PickEvent e)
+    {
+        if (e.Id.StartsWith("task:", StringComparison.Ordinal) && int.TryParse(e.Id[5..], out var i) && i < _tasks.Count)
+        {
+            _selected = _tasks[i];
+        }
+        else if (e.Id.StartsWith("agent:", StringComparison.Ordinal))
+        {
+            _selected = _tasks.LastOrDefault(t => t.Agent == e.Id[6..] && t.Result is not null);
+        }
+    }
+}

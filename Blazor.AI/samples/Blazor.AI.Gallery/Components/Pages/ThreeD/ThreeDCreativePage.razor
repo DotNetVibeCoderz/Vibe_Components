@@ -1,0 +1,148 @@
+@page "/3d/engineering-education-games"
+<PageTitle>3D engineering, education & games · Blazor.AI</PageTitle>
+
+<PageHeader Title="Engineering, education & games in 3D" Package="Blazor.AI.ThreeD" Icon="bi-controller"
+            Lead="CAD and BIM copilots, solvers you can see, classrooms and science labs, and game tools that write NPCs, quests and whole worlds. Physics, geometry and terrain are computed in .NET; AI plans and explains." />
+
+<h2 class="g-section-title">Engineering</h2>
+
+<DemoSection Title="CAD copilot" Component="CADCopilot3D" Description="Describe a part in words; get a parametric feature tree you can edit, review and export." Code="@CadCode">
+    <CADCopilot3D />
+</DemoSection>
+
+<DemoSection Title="BIM assistant" Component="BIMAssistant3D" Description="Ask the building model questions in English or Bahasa Indonesia; answers are computed over the elements and highlighted, and clashes are found." Code="@BimCode">
+    <BIMAssistant3D />
+</DemoSection>
+
+<DemoSection Title="Engineering simulation" Component="EngineeringSimulation3D" Description="Potential flow around a cylinder, a cantilever beam, heat spreading through a plate and a Warren truss, solved in C#." Code="@SimCode">
+    <EngineeringSimulation3D />
+</DemoSection>
+
+<DemoSection Title="Mesh optimisation" Component="MeshOptimizationStudio" Description="Decimate a model side by side with the original, measure LOD triangle budgets and get recommendations." Code="@MeshCode">
+    <MeshOptimizationStudio />
+</DemoSection>
+
+<h2 class="g-section-title">Education</h2>
+
+<DemoSection Title="AI classroom" Component="AIClassroom3D" Description="Type a topic; the robot teacher presents an AI-written lesson at the board with lip sync, followed by a quiz." Code="@ClassroomCode">
+    <AIClassroom3D />
+</DemoSection>
+
+<DemoSection Title="Solar System explorer" Component="SolarSystemExplorer" Description="Planets orbiting at relative speeds; switch to true distance ratios, click a planet to fly there and ask questions." Code="@SolarCode">
+    <SolarSystemExplorer />
+</DemoSection>
+
+<DemoSection Title="History explorer" Component="HistoryExplorer3D" Description="Walk through Borobudur and Prambanan across the centuries: construction, burial, rediscovery and restoration." Code="@HistoryCode">
+    <HistoryExplorer3D />
+</DemoSection>
+
+<DemoSection Title="Science lab" Component="ScienceLab3D" Description="Pendulum (RK4), projectile motion and Ohm's law: run, record, plot, and ask the AI lab partner." Code="@LabCode">
+    <ScienceLab3D />
+</DemoSection>
+
+<h2 class="g-section-title">Games</h2>
+
+<DemoSection Title="NPC studio" Component="NPCStudio" Description="Generate characters with personality, backstory, lines and stats, preview them in 3D and chat in character." Code="@NpcCode">
+    <NPCStudio />
+</DemoSection>
+
+<DemoSection Title="AI quest generator" Component="AIQuestGenerator" Description="A theme becomes a branching quest chain, laid out as waypoints on a 3D map." Code="@QuestCode">
+    <AIQuestGenerator />
+</DemoSection>
+
+<DemoSection Title="AI world builder" Component="AIWorldBuilder" Description="A prompt becomes a world plan; .NET builds the terrain, forests, villages and a temple landmark." Code="@WorldCode">
+    <AIWorldBuilder />
+</DemoSection>
+
+<DemoSection Title="AI dungeon master" Component="AIDungeonMaster" Description="Dice and rules decide every outcome locally; the AI game master narrates it." Code="@DmCode">
+    <AIDungeonMaster />
+</DemoSection>
+
+<DemoSection Title="Procedural world studio" Component="ProceduralWorldStudio" Description="Seeded fBm terrain with island falloff, ridges and erosion; describe a world and AI tunes the parameters." Code="@ProcCode">
+    <ProceduralWorldStudio />
+</DemoSection>
+
+@code {
+    private const string CadCode = """
+        // Program.cs
+        builder.Services.AddBlazorAIComponents();
+        builder.Services.AddBlazorAIThreeD();
+
+        <CADCopilot3D OnPartChanged="part => Save(part.ToJson())" />
+
+        // Without the UI: the same parser the copilot falls back to offline.
+        CadPart flange = CadParser.Parse("a 60 mm flange with 6 bolt holes");
+        Console.WriteLine($"{flange.Name}: {flange.Volume / 1000:0.0} cm³");
+        """;
+
+    private const string BimCode = """
+        <BIMAssistant3D Elements="@myElements" Language="Bahasa Indonesia" />
+
+        // Query the model in code:
+        var elements = BimModel.SampleBuilding();
+        var doorsL2 = BimModel.Select(elements, BimModel.Parse("berapa pintu di lantai 2?"));
+        var clashes = BimModel.Clashes(elements);
+        """;
+
+    private const string SimCode = """
+        <EngineeringSimulation3D InitialMode="FEM" />
+
+        // The solvers are plain C#:
+        var (deflection, stress) = EngineeringSolvers.Cantilever(x: 3, length: 3, load: 5000, youngs: 200e9, width: 0.06, height: 0.12);
+        var truss = EngineeringSolvers.WarrenTruss(panels: 5, panelWidth: 1.4, height: 1.6, load: 20_000);
+        """;
+
+    private const string MeshCode = """
+        <MeshOptimizationStudio Url="@ThreeDAssets.Stupa" />
+
+        // In your own scene:
+        var result = await scene.SimplifyAsync("building", ratio: 0.25); // { Before, After }
+        """;
+
+    private const string ClassroomCode = """
+        <AIClassroom3D SpeechLanguage="id-ID" Language="Bahasa Indonesia" />
+        """;
+
+    private const string SolarCode = """
+        <SolarSystemExplorer Focus="Jupiter" Height="560px" />
+        """;
+
+    private const string HistoryCode = """
+        <HistoryExplorer3D InitialSite="Prambanan" Language="Bahasa Indonesia" />
+        """;
+
+    private const string LabCode = """
+        <ScienceLab3D InitialExperiment="Pendulum" />
+
+        // Period of a 1 m pendulum released at 30°, from the RK4 simulation:
+        var t = ScienceLab3D.SimulatedPeriod(length: 1.0, gravity: 9.81, angleDeg: 30); // ≈ 2.04 s
+        """;
+
+    private const string NpcCode = """
+        <NPCStudio OnGenerated="npc => SaveNpc(npc)" />
+
+        // Offline generator used when no model is configured:
+        var npc = NPCStudio.Local("a nervous ferryman who knows a secret");
+        """;
+
+    private const string QuestCode = """
+        <AIQuestGenerator OnGenerated="quest => questLog.Add(quest)" />
+
+        var quest = QuestPlanner.Local("the lost kris of the sultan");
+        """;
+
+    private const string WorldCode = """
+        <AIWorldBuilder Height="600px" />
+        """;
+
+    private const string DmCode = """
+        <AIDungeonMaster Party="@(["Arjuna the archer", "Sinta the healer", "Bima the warrior"])" />
+        """;
+
+    private const string ProcCode = """
+        <ProceduralWorldStudio Seed="2026" OnGenerated="terrain => heightmap = terrain" />
+
+        var terrain = TerrainGenerator.Generate(new TerrainSettings { Seed = 7, Octaves = 6, SeaLevel = 0.42, Island = 0.9 });
+        string csv = TerrainGenerator.ToCsv(terrain);
+        """;
+}

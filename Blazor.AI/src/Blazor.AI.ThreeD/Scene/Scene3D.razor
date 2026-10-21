@@ -1,0 +1,182 @@
+@namespace Blazor.AI.ThreeD
+@using System.Text.Json
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@* The Three.js host every 3D component builds on. Objects are declarative; ChildContent is an HTML overlay (HUD). *@
+
+<div class="bai3d @Class" style="height:@Height" @attributes="AdditionalAttributes">
+    <div class="bai3d-canvas" @ref="_host"></div>
+    @if (!_ready)
+    {
+        <div class="bai3d-loading" aria-hidden="true"><span class="bai3d-loading-glyph"></span>Preparing the scene…</div>
+    }
+    @if (_failed is not null)
+    {
+        <div class="bai3d-loading" role="alert"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>@_failed</div>
+    }
+    @if (ChildContent is not null)
+    {
+        <div class="bai3d-hud">@ChildContent</div>
+    }
+</div>
+
+@code {
+    private ElementReference _host;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<Scene3D>? _self;
+    private int _sceneId;
+    private bool _ready;
+    private string? _failed;
+    private IReadOnlyList<Object3D>? _sent;
+    private Scene3DOptions? _sentOptions;
+
+    [Parameter] public IReadOnlyList<Object3D> Objects { get; set; } = [];
+    [Parameter] public Scene3DOptions Options { get; set; } = new();
+    [Parameter] public string Height { get; set; } = "480px";
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback<PickEvent> OnPick { get; set; }
+    [Parameter] public EventCallback<ModelInfo> OnModelLoaded { get; set; }
+    [Parameter] public EventCallback<string> OnSpeechEnded { get; set; }
+    [Parameter] public EventCallback OnReady { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    /// <summary>True once the WebGL scene exists and the first objects were sent.</summary>
+    public bool IsReady => _ready;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/Blazor.AI.ThreeD/blazor-ai-3d.js");
+                _self = DotNetObjectReference.Create(this);
+                _sentOptions = Options;
+                _sceneId = await _module.InvokeAsync<int>("create", _host, _self, JsonSerializer.Serialize(Options, ThreeDJsonContext.Default.Scene3DOptions));
+                await PushAsync();
+                _ready = true;
+                StateHasChanged();
+                await OnReady.InvokeAsync();
+            }
+            catch (JSException ex)
+            {
+                _failed = "3D is not available in this browser (" + ex.Message.Split('\n')[0] + ").";
+                StateHasChanged();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+
+            return;
+        }
+
+        if (_module is not null && !ReferenceEquals(_sentOptions, Options))
+        {
+            _sentOptions = Options;
+            var patch = new Dictionary<string, object?>
+            {
+                ["background"] = Options.Background,
+                ["autoRotate"] = Options.Controls.AutoRotate,
+                ["exposure"] = Options.Exposure,
+            };
+            await SafeAsync(() => _module.InvokeVoidAsync("setOptions", _sceneId, patch));
+        }
+
+        if (_module is not null && !ReferenceEquals(_sent, Objects))
+        {
+            await PushAsync();
+        }
+    }
+
+    private async Task PushAsync()
+    {
+        _sent = Objects;
+        if (_module is null)
+        {
+            return;
+        }
+
+        var json = JsonSerializer.Serialize(Objects as Object3D[] ?? [.. Objects], ThreeDJsonContext.Default.Object3DArray);
+        await SafeAsync(() => _module.InvokeVoidAsync("setObjects", _sceneId, json));
+    }
+
+    /// <summary>Sends <see cref="Objects"/> again (call after mutating a list in place).</summary>
+    public Task RefreshAsync() => PushAsync();
+
+    /// <summary>Tweens existing objects without re-sending the whole scene.</summary>
+    public Task UpdateAsync(IEnumerable<ObjectPatch> patches, int durationMs = 0) => Call("updateObjects", JsonSerializer.Serialize(patches as ObjectPatch[] ?? [.. patches], ThreeDJsonContext.Default.ObjectPatchArray), durationMs);
+
+    public Task PlayClipAsync(string objectId, string clip, bool loop = true) => Call("playClip", objectId, clip, loop);
+
+    public Task SetMorphAsync(string objectId, string morph, double value) => Call("setMorph", objectId, morph, value);
+
+    public Task FlyToAsync(double[] position, double[] target, int durationMs = 1200) => Call("flyTo", position, target, durationMs);
+
+    public Task FocusAsync(string objectId, double? distance = null) => Call("focusObject", objectId, distance);
+
+    /// <summary>Speaks with the browser's speech synthesis and drives the model's Talk morph (lip sync).</summary>
+    public Task SpeakAsync(string objectId, string text, string? language = null, double rate = 1, string? voice = null) => Call("speak", objectId, text, language, rate, voice);
+
+    public Task StopSpeakingAsync() => Call("stopSpeaking");
+
+    public Task SetWireframeAsync(string objectId, bool on) => Call("setWireframe", objectId, on);
+
+    public async Task<SimplifyResult?> SimplifyAsync(string objectId, double ratio) =>
+        _module is null ? null : await _module.InvokeAsync<SimplifyResult?>("simplify", _sceneId, objectId, ratio);
+
+    public async Task<SceneStats?> StatsAsync() => _module is null ? null : await _module.InvokeAsync<SceneStats?>("stats", _sceneId);
+
+    /// <summary>A PNG data URL of the current frame.</summary>
+    public async Task<string?> ScreenshotAsync() => _module is null ? null : await _module.InvokeAsync<string?>("screenshot", _sceneId);
+
+    private async Task Call(string fn, params object?[] args)
+    {
+        if (_module is null)
+        {
+            return;
+        }
+
+        await SafeAsync(() => _module.InvokeVoidAsync(fn, [_sceneId, .. args]));
+    }
+
+    private static async Task SafeAsync(Func<ValueTask> call)
+    {
+        try
+        {
+            await call();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    [JSInvokable("OnPick")] public Task HandlePick(string id, double[] point) => OnPick.InvokeAsync(new PickEvent(id, point));
+
+    [JSInvokable("OnModelLoaded")] public Task HandleModelLoaded(string id, string[] clips, string[] morphs, int triangles) => OnModelLoaded.InvokeAsync(new ModelInfo(id, clips, morphs, triangles));
+
+    [JSInvokable("OnSpeechEnded")] public Task HandleSpeechEnded(string id) => OnSpeechEnded.InvokeAsync(id);
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            try
+            {
+                await _module.InvokeVoidAsync("dispose", _sceneId);
+                await _module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+            catch (TaskCanceledException)
+            {
+            }
+        }
+
+        _self?.Dispose();
+    }
+}

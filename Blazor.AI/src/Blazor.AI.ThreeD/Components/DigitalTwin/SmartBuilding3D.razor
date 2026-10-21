@@ -1,0 +1,253 @@
+@namespace Blazor.AI.ThreeD
+@inherits TwinComponentBase
+@* Building digital twin: floors and rooms coloured by energy, temperature or occupancy; people dots; security alerts; AI copilot. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel">
+                <h4>@Title</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@TwinUi.N(_totalKw, "0")</b><span>kW now</span></div>
+                    <div><b>@_people</b><span>people</span></div>
+                    <div><b>@TwinUi.N(_intensity, "0.0")</b><span>W / m²</span></div>
+                    <div><b style="color:@(_security > 0 ? ThreeDPalette.Danger : "inherit")">@_security</b><span>security</span></div>
+                </div>
+            </div>
+            @if (_room is { } r)
+            {
+                <div class="bai3d-panel">
+                    <h4>@RoomName(r)</h4>
+                    @foreach (var s in Sim.ForAsset(r)) { <div style="color:@TwinUi.LevelColor(s.Level)">@s.Spec.Name: @s.Format()</div> }
+                </div>
+            }
+        </div>
+        <div class="bai3d-hud-bottom bai3d-legend" style="color:#c9cff5">
+            <span><i style="background:@ThreeDPalette.Ramp(0)"></i>@(_mode == "Occupancy" ? "empty" : "low")</span>
+            <span><i style="background:@ThreeDPalette.Ramp(0.5)"></i>medium</span>
+            <span><i style="background:@ThreeDPalette.Ramp(1)"></i>@(_mode == "Occupancy" ? "full" : "high")</span>
+            <span><i style="background:@ThreeDPalette.Danger"></i>security alert</span>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="Building copilot" Subtitle="Energy · security · occupancy" Icon="bi-building">
+        <div class="bai-stack">
+            <div class="bai-row">
+                @foreach (var m in Modes)
+                {
+                    <button type="button" class="bai-chip @(m == _mode ? "is-active" : null)" @onclick="() => SetMode(m)">@m</button>
+                }
+            </div>
+            <div class="bai-row">
+                <label class="bai-small">Floor
+                    <select class="bai-select" style="width:auto" @bind="_floor" @bind:after="Rebuild" aria-label="Floor">
+                        <option value="0">All</option>
+                        @for (var f = 1; f <= Floors; f++) { <option value="@f">@f</option> }
+                    </select>
+                </label>
+                <button type="button" class="bai-btn-ghost" @onclick="Toggle"><i class="bi @(Running ? "bi-pause-fill" : "bi-play-fill")" aria-hidden="true"></i>@(Running ? "Pause" : "Resume")</button>
+                <button type="button" class="bai-btn-ghost" @onclick="Intrusion"><i class="bi bi-shield-exclamation" aria-hidden="true"></i>Simulate intrusion</button>
+            </div>
+            <p class="bai-small bai-muted" style="margin:0"><b>Saving opportunity:</b> @_saving</p>
+            <TwinCopilot Simulator="@Sim" Provider="@Provider" Language="@Language" Role="a smart-building facilities manager" Context="@Facts"
+                         Suggestions="@(["Where are we wasting energy?", "Any security issues right now?", "Which floor is busiest?"])" />
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private static readonly string[] Modes = ["Energy", "Temperature", "Occupancy"];
+    private readonly List<string> _rooms = [];
+    private readonly HashSet<string> _breaches = [];
+    private Scene3DOptions _options = new();
+    private string _mode = "Energy";
+    private int _floor;
+    private string? _room;
+    private double _totalKw, _intensity;
+    private int _people, _security;
+    private string _saving = "—";
+    private int _tick;
+
+    [Parameter] public string Title { get; set; } = "Menara Kawung · HQ";
+    [Parameter] public int Floors { get; set; } = 4;
+
+    /// <summary>Room footprint in square metres (for energy intensity).</summary>
+    [Parameter] public double RoomArea { get; set; } = 120;
+
+    private const double FloorHeight = 1.6;
+    private const double RoomW = 2.4, RoomD = 1.9;
+
+    protected override void OnInitialized()
+    {
+        string[] uses = ["Office", "Meeting", "Lab", "Lobby"];
+        var specs = new List<SensorSpec>();
+        for (var f = 1; f <= Math.Clamp(Floors, 1, 8); f++)
+        {
+            for (var r = 0; r < 4; r++)
+            {
+                var id = $"F{f}-R{r + 1}";
+                _rooms.Add(id);
+                var use = f == 1 && r == 0 ? "Lobby" : uses[(f + r) % 3];
+                var people = use switch { "Lobby" => 14, "Meeting" => 6, "Lab" => 4, _ => 9 };
+                // A lab on floor 3 keeps HVAC running at night: the energy-waste story.
+                var waste = f == 3 && use == "Lab";
+                specs.Add(new SensorSpec($"{id}-kw", "Power", "kW", waste ? 9 : 3 + people * 0.35, 0.25, 0, 30) { Asset = id, WarnHigh = 10, CycleAmplitude = waste ? 0.4 : 1.6, CyclePeriod = 90 });
+                specs.Add(new SensorSpec($"{id}-temp", "Temperature", "°C", waste ? 21 : 24.5, 0.12, 15, 35) { Asset = id, WarnHigh = 27, WarnLow = 20, CycleAmplitude = 0.8, CyclePeriod = 90 });
+                specs.Add(new SensorSpec($"{id}-occ", "Occupancy", "", people, 0.7, 0, 30) { Asset = id, CycleAmplitude = people * 0.6, CyclePeriod = 90 });
+                specs.Add(new SensorSpec($"{id}-co2", "CO₂", "ppm", 520 + people * 25, 8, 380, 2500) { Asset = id, WarnHigh = 1000 });
+            }
+        }
+
+        Sim = new TwinSimulator(specs, seed: 11);
+        Sim.Step(20);
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [8.5, 7.5, 9.5], Target = [0, Floors * FloorHeight / 2 - 0.4, 0] },
+            Ground = new(18, "#0f1338"),
+            Grid = new(18, 18, "#3d4fb8", 0.12),
+            Lights = "night",
+            AriaLabel = "Building digital twin with floors and rooms",
+        };
+        Recompute();
+        Rebuild();
+    }
+
+    private string RoomName(string id) => $"Floor {id[1..id.IndexOf('-')]} · room {id[^1]}";
+
+    private (double X, double Y, double Z) RoomCenter(string id)
+    {
+        var f = int.Parse(id[1..id.IndexOf('-')], CultureInfo.InvariantCulture);
+        var r = id[^1] - '1';
+        return ((r % 2 == 0 ? -1 : 1) * (RoomW / 2 + 0.05), (f - 1) * FloorHeight + FloorHeight * 0.42, (r < 2 ? -1 : 1) * (RoomD / 2 + 0.05));
+    }
+
+    private void Rebuild()
+    {
+        var list = new List<Object3D>();
+        var floors = Math.Clamp(Floors, 1, 8);
+        for (var f = 1; f <= floors; f++)
+        {
+            var visible = _floor == 0 || _floor == f;
+            var y = (f - 1) * FloorHeight;
+            list.Add(new Object3D { Id = $"slab-{f}", Kind = "box", Position = [0, y, 0], Size = [RoomW * 2 + 0.6, 0.08, RoomD * 2 + 0.6], Color = "#2b3366", Opacity = visible ? 0.85 : 0.18, Pickable = false });
+            if (!visible)
+            {
+                continue;
+            }
+
+            list.Add(Object3D.Text($"flabel-{f}", [-(RoomW + 0.75), y + 0.4, RoomD + 0.3], $"F{f}", "is-plain"));
+            foreach (var room in _rooms.Where(r => r.StartsWith($"F{f}-", StringComparison.Ordinal)))
+            {
+                var (x, cy, z) = RoomCenter(room);
+                list.Add(new Object3D
+                {
+                    Id = $"room-{room}", Kind = "box", Position = [x, cy, z], Size = [RoomW - 0.1, FloorHeight * 0.8, RoomD - 0.1], Color = RoomColor(room), Opacity = 0.55,
+                    Edges = "#c9cff5", Roughness = 0.3, Tooltip = $"{RoomName(room)}\n{string.Join("\n", Sim.ForAsset(room).Select(s => $"{s.Spec.Name} {s.Format()}"))}",
+                });
+                var occ = (int)Math.Round(Sim[$"{room}-occ"].Value);
+                if (occ > 0)
+                {
+                    var rng = new Random(room.GetHashCode() ^ (_tick / 4));
+                    list.Add(new Object3D
+                    {
+                        Id = $"ppl-{room}", Kind = "points", Pickable = false, PointSize = 0.11, Color = "#ffffff",
+                        Points = Enumerable.Range(0, occ).Select(_ => new[] { x + (rng.NextDouble() - 0.5) * (RoomW - 0.4), (f - 1) * FloorHeight + 0.15, z + (rng.NextDouble() - 0.5) * (RoomD - 0.4) }).ToArray(),
+                    });
+                }
+            }
+        }
+
+        // Roof, core and security cameras.
+        list.Add(new Object3D { Id = "roof", Kind = "box", Position = [0, floors * FloorHeight, 0], Size = [RoomW * 2 + 0.6, 0.08, RoomD * 2 + 0.6], Color = "#2b3366", Opacity = _floor == 0 ? 0.85 : 0.15, Pickable = false });
+        list.Add(new Object3D { Id = "core", Kind = "box", Position = [0, floors * FloorHeight / 2, 0], Size = [0.5, floors * FloorHeight, 0.5], Color = "#596093", Opacity = 0.6, Tooltip = "Lift & stair core" });
+        list.Add(new Object3D { Id = "pv", Kind = "box", Position = [0, floors * FloorHeight + 0.15, 0], Size = [RoomW * 1.6, 0.05, RoomD * 1.4], Color = "#1d3a8f", Metalness = 0.7, Roughness = 0.2, Rotation = [-0.12, 0, 0], Tooltip = "Rooftop solar" });
+        foreach (var breach in _breaches)
+        {
+            var (x, cy, z) = RoomCenter(breach);
+            list.Add(new Object3D { Id = $"alert-{breach}", Kind = "sphere", Position = [x, cy + FloorHeight * 0.55, z], Radius = 0.16, Color = ThreeDPalette.Danger, Emissive = ThreeDPalette.Danger, EmissiveIntensity = 3, Animate = Animate3D.Pulse(0.25, 2), Label = "Door forced", LabelClass = "is-danger", Tooltip = $"Security: {RoomName(breach)}" });
+        }
+
+        Objects = [.. list];
+    }
+
+    private string RoomColor(string room)
+    {
+        if (_breaches.Contains(room))
+        {
+            return ThreeDPalette.Danger;
+        }
+
+        return _mode switch
+        {
+            "Temperature" => ThreeDPalette.Ramp((Sim[$"{room}-temp"].Value - 19) / 10),
+            "Occupancy" => ThreeDPalette.Ramp(Sim[$"{room}-occ"].Value / 16),
+            _ => ThreeDPalette.Ramp(Sim[$"{room}-kw"].Value / 11),
+        };
+    }
+
+    protected override IEnumerable<ObjectPatch> OnTick()
+    {
+        _tick++;
+        if (Sim.Random.NextDouble() < 0.01)
+        {
+            _breaches.Add(_rooms[Sim.Random.Next(_rooms.Count)]);
+            Sim.Log("security", "Door forced (simulated)");
+        }
+
+        Recompute();
+        if (_tick % 4 == 0)
+        {
+            // People move: rebuild point clouds occasionally (geometry changes are cheap at this size).
+            Rebuild();
+            return [];
+        }
+
+        return _rooms.Where(r => _floor == 0 || r.StartsWith($"F{_floor}-", StringComparison.Ordinal))
+            .Select(r => new ObjectPatch { Id = $"room-{r}", Color = RoomColor(r) });
+    }
+
+    private void Recompute()
+    {
+        _totalKw = _rooms.Sum(r => Sim[$"{r}-kw"].Value);
+        _people = _rooms.Sum(r => (int)Math.Round(Sim[$"{r}-occ"].Value));
+        _intensity = _totalKw * 1000 / (RoomArea * _rooms.Count);
+        _security = _breaches.Count;
+        var waste = _rooms.Select(r => (r, kw: Sim[$"{r}-kw"].Value, occ: Sim[$"{r}-occ"].Value)).Where(x => x.occ < 1.5 && x.kw > 4).OrderByDescending(x => x.kw).ToList();
+        _saving = waste.Count == 0
+            ? "No large loads in empty rooms right now."
+            : $"{string.Join(", ", waste.Take(3).Select(w => $"{RoomName(w.r)} ({TwinUi.N(w.kw)} kW, nearly empty)"))}: set HVAC back by 2 °C and switch off lighting to save about {TwinUi.N(waste.Sum(w => w.kw) * 0.35, "0.0")} kW.";
+    }
+
+    private string Facts() =>
+        $"Building: {_rooms.Count} rooms on {Floors} floors, {TwinUi.N(_totalKw, "0")} kW total, {_people} people, {TwinUi.N(_intensity, "0.0")} W/m². " +
+        $"Security alerts: {(_breaches.Count == 0 ? "none" : string.Join(", ", _breaches.Select(RoomName)))}. Energy saving analysis: {_saving}";
+
+    private void SetMode(string m)
+    {
+        _mode = m;
+        Rebuild();
+    }
+
+    private void Picked(PickEvent e)
+    {
+        if (e.Id.StartsWith("room-", StringComparison.Ordinal) || e.Id.StartsWith("alert-", StringComparison.Ordinal))
+        {
+            _room = e.Id[(e.Id.IndexOf('-') + 1)..];
+            if (_breaches.Remove(_room))
+            {
+                Sim.Log("security", $"Alert acknowledged: {RoomName(_room)}");
+                Rebuild();
+            }
+        }
+    }
+
+    private void Intrusion()
+    {
+        var room = _rooms[Sim.Random.Next(_rooms.Count)];
+        _breaches.Add(room);
+        _room = room;
+        Sim.Log("security", $"Door forced at {RoomName(room)}", room);
+        Recompute();
+        Rebuild();
+    }
+}

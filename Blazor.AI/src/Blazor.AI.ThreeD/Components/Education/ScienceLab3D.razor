@@ -1,0 +1,320 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@using Blazor.AI.Visualization
+@* Virtual lab: pendulum (RK4), projectile motion and an Ohm's-law circuit, computed in C#, animated in 3D, plotted and explained. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height">
+        <div class="bai3d-panel">
+            <h4>@_experiment</h4>
+            <div class="bai3d-kpi">
+                @foreach (var (k, v) in Readouts()) { <div><b>@v</b><span>@k</span></div> }
+            </div>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="Science lab" Subtitle="Physics computed in .NET, explained by your AI lab partner" Icon="bi-eyedropper">
+        <div class="bai-stack">
+            <div class="bai-row">
+                @foreach (var e in Experiments)
+                {
+                    <button type="button" class="bai-chip @(e == _experiment ? "is-active" : null)" @onclick="() => SetExperiment(e)">@e</button>
+                }
+            </div>
+            @switch (_experiment)
+            {
+                case "Pendulum":
+                    <label class="bai-small">Length <b>@_length.ToString("0.00", CultureInfo.InvariantCulture) m</b><input type="range" min="0.2" max="2" step="0.05" @bind="_length" @bind:culture="CultureInfo.InvariantCulture" @bind:event="oninput" @bind:after="Pendulum" style="width:100%" aria-label="Length" /></label>
+                    <label class="bai-small">Release angle <b>@_angle°</b><input type="range" min="5" max="80" step="1" @bind="_angle" @bind:event="oninput" @bind:after="Pendulum" style="width:100%" aria-label="Angle" /></label>
+                    <div class="bai-row">
+                        <select class="bai-select" style="width:auto" @bind="_gravity" @bind:culture="CultureInfo.InvariantCulture" @bind:after="Pendulum" aria-label="Gravity">
+                            <option value="9.81">Earth (9.81)</option><option value="1.62">Moon (1.62)</option><option value="3.71">Mars (3.71)</option>
+                        </select>
+                        <button type="button" class="bai-btn" @onclick="ToggleRun"><i class="bi @(_running ? "bi-pause-fill" : "bi-play-fill")" aria-hidden="true"></i>@(_running ? "Pause" : "Swing")</button>
+                        <button type="button" class="bai-btn-ghost" @onclick="Record"><i class="bi bi-journal-plus" aria-hidden="true"></i>Record</button>
+                    </div>
+                    break;
+                case "Projectile":
+                    <label class="bai-small">Launch speed <b>@_speed m/s</b><input type="range" min="5" max="30" step="1" @bind="_speed" @bind:culture="CultureInfo.InvariantCulture" @bind:event="oninput" @bind:after="Projectile" style="width:100%" aria-label="Speed" /></label>
+                    <label class="bai-small">Launch angle <b>@_launch°</b><input type="range" min="10" max="80" step="1" @bind="_launch" @bind:culture="CultureInfo.InvariantCulture" @bind:event="oninput" @bind:after="Projectile" style="width:100%" aria-label="Launch angle" /></label>
+                    <button type="button" class="bai-btn-ghost" style="width:fit-content" @onclick="Record"><i class="bi bi-journal-plus" aria-hidden="true"></i>Record</button>
+                    break;
+                default:
+                    <label class="bai-small">Battery <b>@_volts V</b><input type="range" min="1" max="12" step="0.5" @bind="_volts" @bind:culture="CultureInfo.InvariantCulture" @bind:event="oninput" @bind:after="Circuit" style="width:100%" aria-label="Voltage" /></label>
+                    <label class="bai-small">Resistance <b>@_ohms Ω</b><input type="range" min="2" max="100" step="1" @bind="_ohms" @bind:culture="CultureInfo.InvariantCulture" @bind:event="oninput" @bind:after="Circuit" style="width:100%" aria-label="Resistance" /></label>
+                    <button type="button" class="bai-btn-ghost" style="width:fit-content" @onclick="Record"><i class="bi bi-journal-plus" aria-hidden="true"></i>Record</button>
+                    break;
+            }
+            @if (_runs.Count > 1)
+            {
+                <LineChart Title="@ChartTitle()" Series="@([new ChartSeries("Measured", _runs.OrderBy(r => r.X).Select(r => new ChartPoint(r.X, r.Y)).ToArray()) { }])" ShowMarkers="true" ShowLegend="false" Height="180" XLabel="@_runs[0].XName" YLabel="@_runs[0].YName" />
+            }
+            else if (_runs.Count == 1)
+            {
+                <p class="bai-small bai-muted" style="margin:0">Record at least two runs to plot them.</p>
+            }
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@IsBusy" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Ask my lab partner</button>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public static readonly string[] Experiments = ["Pendulum", "Projectile", "Ohm's law"];
+    private Scene3DOptions _options = new();
+    private string _experiment = "Pendulum";
+    private double _length = 1.0, _gravity = 9.81, _speed = 15, _launch = 45, _volts = 6, _ohms = 20;
+    private int _angle = 30;
+    private bool _running;
+    private double _theta, _omega, _measuredPeriod;
+    private CancellationTokenSource? _loop;
+    private readonly List<(double X, double Y, string XName, string YName, string Experiment)> _runs = [];
+
+    /// <summary>Experiment to open first: Pendulum, Projectile or Ohm's law.</summary>
+    [Parameter] public string InitialExperiment { get; set; } = "Pendulum";
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [2.6, 2.0, 4.2], Target = [0, 1.1, 0] },
+            Lights = "soft",
+            Grid = new(10, 20, "#5b6bd6", 0.2),
+            AriaLabel = "Virtual science lab",
+        };
+        _experiment = Experiments.Contains(InitialExperiment) ? InitialExperiment : "Pendulum";
+        SetExperiment(_experiment);
+    }
+
+    private void SetExperiment(string e)
+    {
+        Stop();
+        _experiment = e;
+        _runs.RemoveAll(r => r.Experiment != e);
+        Narration = null;
+        switch (e)
+        {
+            case "Pendulum": Pendulum(); break;
+            case "Projectile": Projectile(); break;
+            default: Circuit(); break;
+        }
+    }
+
+    // ---------- pendulum: nonlinear θ'' = −(g/L) sin θ, integrated with RK4
+
+    private static (double Theta, double Omega) Rk4(double th, double om, double g, double l, double dt)
+    {
+        double F(double t) => -g / l * Math.Sin(t);
+        var k1t = om; var k1o = F(th);
+        var k2t = om + k1o * dt / 2; var k2o = F(th + k1t * dt / 2);
+        var k3t = om + k2o * dt / 2; var k3o = F(th + k2t * dt / 2);
+        var k4t = om + k3o * dt; var k4o = F(th + k3t * dt);
+        return (th + dt / 6 * (k1t + 2 * k2t + 2 * k3t + k4t), om + dt / 6 * (k1o + 2 * k2o + 2 * k3o + k4o));
+    }
+
+    /// <summary>Period measured from the simulated motion (time between zero crossings, ×2).</summary>
+    public static double SimulatedPeriod(double length, double gravity, double angleDeg)
+    {
+        double th = angleDeg * Math.PI / 180, om = 0, t = 0, dt = 0.0005;
+        var crossings = new List<double>();
+        while (t < 30 && crossings.Count < 3)
+        {
+            var (nt, no) = Rk4(th, om, gravity, length, dt);
+            if (Math.Sign(nt) != Math.Sign(th) && th != 0)
+            {
+                crossings.Add(t + dt * Math.Abs(th) / Math.Abs(nt - th));
+            }
+
+            (th, om) = (nt, no);
+            t += dt;
+        }
+
+        return crossings.Count >= 3 ? crossings[2] - crossings[0] : 2 * Math.PI * Math.Sqrt(length / gravity);
+    }
+
+    private void Pendulum()
+    {
+        _theta = _angle * Math.PI / 180;
+        _omega = 0;
+        _measuredPeriod = SimulatedPeriod(_length, _gravity, _angle);
+        Objects = PendulumObjects(_theta);
+    }
+
+    private Object3D[] PendulumObjects(double theta) =>
+    [
+        new() { Id = "stand", Kind = "box", Size = [1.6, 0.06, 0.06], Position = [0, 2.4, 0], Color = "#9aa3c7", Metalness = 0.6, Pickable = false },
+        new() { Id = "post", Kind = "box", Size = [0.06, 2.4, 0.06], Position = [-0.8, 1.2, 0], Color = "#9aa3c7", Metalness = 0.6, Pickable = false },
+        new() { Id = "pivot", Kind = "group", Position = [0, 2.4, 0], Rotation = [0, 0, theta] },
+        new() { Id = "rod", Kind = "cylinder", Parent = "pivot", Radius = 0.008, Height = _length, Position = [0, -_length / 2, 0], Color = "#e8ebff", Pickable = false },
+        new() { Id = "bob", Kind = "sphere", Parent = "pivot", Radius = 0.09, Position = [0, -_length, 0], Color = ThreeDPalette.Soga, Metalness = 0.5, Roughness = 0.3, Tooltip = $"Bob on a {_length:0.00} m string" },
+        new() { Id = "arc", Kind = "line", Points = Enumerable.Range(0, 41).Select(i => { var a = (i / 20.0 - 1) * _angle * Math.PI / 180; return new[] { Math.Sin(a) * _length, 2.4 - Math.Cos(a) * _length, 0 }; }).ToArray(), Color = ThreeDPalette.Nila, Dashed = true, Pickable = false },
+    ];
+
+    private async Task ToggleRun()
+    {
+        if (_running)
+        {
+            Stop();
+            return;
+        }
+
+        _running = true;
+        _loop = new CancellationTokenSource();
+        var ct = _loop.Token;
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(40));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                for (var i = 0; i < 80; i++)
+                {
+                    (_theta, _omega) = Rk4(_theta, _omega, _gravity, _length, 0.0005);
+                }
+
+                await Scene!.UpdateAsync([new ObjectPatch { Id = "pivot", Rotation = [0, 0, _theta] }]);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void Stop()
+    {
+        _running = false;
+        _loop?.Cancel();
+        _loop = null;
+    }
+
+    // ---------- projectile (no drag): x = v cos θ t, y = h + v sin θ t − g t²/2
+
+    private (double Range, double Peak, double Time) Flight()
+    {
+        double a = _launch * Math.PI / 180, vx = _speed * Math.Cos(a), vy = _speed * Math.Sin(a), g = 9.81, h0 = 0.3;
+        var t = (vy + Math.Sqrt(vy * vy + 2 * g * h0)) / g;
+        return (vx * t, h0 + vy * vy / (2 * g), t);
+    }
+
+    private void Projectile()
+    {
+        double a = _launch * Math.PI / 180, vx = _speed * Math.Cos(a), vy = _speed * Math.Sin(a), g = 9.81;
+        var (range, peak, time) = Flight();
+        const double s = 0.12; // metres → scene units
+        var pts = Enumerable.Range(0, 41).Select(i =>
+        {
+            var t = time * i / 40;
+            return new[] { -2.5 + vx * t * s, Math.Max(0, 0.3 + vy * t - g * t * t / 2) * s + 0.05, 0 };
+        }).ToArray();
+        Objects =
+        [
+            new() { Id = "cannon", Kind = "cylinder", Radius = 0.08, Height = 0.5, Position = [-2.5, 0.2, 0], Rotation = [0, 0, a - Math.PI / 2], Color = "#3d4fb8", Metalness = 0.6, Pickable = false },
+            new() { Id = "trail", Kind = "line", Points = pts, Color = ThreeDPalette.Soga, Dashed = true, Pickable = false },
+            new() { Id = "ball", Kind = "sphere", Radius = 0.07, Color = ThreeDPalette.Soga, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 0.4, Animate = Animate3D.Path(pts, Math.Max(0.4, Layout3DLength(pts) / Math.Max(0.5, time))) with { Loop = false, Face = false } },
+            new() { Id = "landing", Kind = "ring", InnerRadius = 0.08, Radius = 0.14, Rotation = [-Math.PI / 2, 0, 0], Position = [pts[^1][0], 0.01, 0], Color = ThreeDPalette.Nila, Label = $"{range:0.0} m", Pickable = false },
+            new() { Id = "peak", Kind = "text", Position = [pts[20][0], peak * s + 0.3, 0], Label = $"peak {peak:0.0} m", LabelClass = "is-plain", Pickable = false },
+        ];
+    }
+
+    private static double Layout3DLength(double[][] pts)
+    {
+        var len = 0.0;
+        for (var i = 1; i < pts.Length; i++)
+        {
+            len += Layout3D.Distance(pts[i - 1], pts[i]);
+        }
+
+        return len;
+    }
+
+    // ---------- Ohm's law: I = V / R, P = V I
+
+    private double Current => _volts / _ohms;
+
+    private void Circuit()
+    {
+        var power = _volts * Current;
+        var loop = new List<double[]> { new[] { -1.2, 0.6, 0 }, new[] { -1.2, 2.0, 0 }, new[] { 1.2, 2.0, 0 }, new[] { 1.2, 0.6, 0 }, new[] { -1.2, 0.6, 0 } };
+        var dense = new List<double[]>();
+        for (var i = 0; i < loop.Count - 1; i++)
+        {
+            for (var k = 0; k < 10; k++)
+            {
+                var t = k / 10.0;
+                dense.Add([loop[i][0] + (loop[i + 1][0] - loop[i][0]) * t, loop[i][1] + (loop[i + 1][1] - loop[i][1]) * t, 0]);
+            }
+        }
+
+        var glow = Math.Clamp(power / 6, 0.05, 4);
+        var list = new List<Object3D>
+        {
+            new() { Id = "wire", Kind = "line", Points = loop, Color = "#c9cff5", Pickable = false },
+            new() { Id = "battery", Kind = "cylinder", Radius = 0.16, Height = 0.6, Position = [-1.2, 1.3, 0], Color = "#3d4fb8", Metalness = 0.4, Label = $"{_volts:0.#} V", Tooltip = "Battery" },
+            new() { Id = "resistor", Kind = "box", Size = [0.5, 0.16, 0.16], Position = [0, 2.0, 0], Color = "#c45ad6", Label = $"{_ohms:0} Ω", Tooltip = "Resistor" },
+            new() { Id = "bulb", Kind = "sphere", Radius = 0.22, Position = [1.2, 1.3, 0], Color = "#fff6d8", Emissive = "#ffcf6b", EmissiveIntensity = glow, Label = $"{power:0.00} W", LabelClass = "is-soga", Tooltip = "Bulb brightness follows power" },
+        };
+        var speed = Math.Clamp(Current * 2.5, 0.05, 3);
+        for (var e = 0; e < 8; e++)
+        {
+            list.Add(new Object3D { Id = $"e{e}", Kind = "sphere", Radius = 0.035, Color = ThreeDPalette.Nila, Emissive = ThreeDPalette.Nila, EmissiveIntensity = 1, Pickable = false,
+                Animate = Animate3D.Path(dense, speed) with { Face = false, Phase = e * (Layout3DLength([.. dense]) / speed) / 8 } });
+        }
+
+        Objects = list;
+    }
+
+    // ---------- results and AI
+
+    private IEnumerable<(string, string)> Readouts()
+    {
+        switch (_experiment)
+        {
+            case "Pendulum":
+                yield return ("period (sim)", $"{_measuredPeriod:0.000} s");
+                yield return ("small-angle", $"{2 * Math.PI * Math.Sqrt(_length / _gravity):0.000} s");
+                yield return ("g", $"{_gravity:0.00}");
+                break;
+            case "Projectile":
+                var (range, peak, time) = Flight();
+                yield return ("range", $"{range:0.0} m");
+                yield return ("peak", $"{peak:0.0} m");
+                yield return ("flight", $"{time:0.00} s");
+                break;
+            default:
+                yield return ("current", $"{Current:0.000} A");
+                yield return ("power", $"{_volts * Current:0.00} W");
+                break;
+        }
+    }
+
+    private void Record()
+    {
+        switch (_experiment)
+        {
+            case "Pendulum": _runs.Add((_length, _measuredPeriod, "Length (m)", "Period (s)", _experiment)); break;
+            case "Projectile": _runs.Add((_launch, Flight().Range, "Angle (°)", "Range (m)", _experiment)); break;
+            default: _runs.Add((_ohms, Current * 1000, "Resistance (Ω)", "Current (mA)", _experiment)); break;
+        }
+    }
+
+    private string ChartTitle() => _experiment switch { "Pendulum" => "Period vs length", "Projectile" => "Range vs angle", _ => "Current vs resistance" };
+
+    private Task Explain()
+    {
+        var reads = string.Join(", ", Readouts().Select(r => $"{r.Item1} {r.Item2}"));
+        var runs = _runs.Count == 0 ? "no recorded runs" : string.Join("; ", _runs.Select(r => string.Create(CultureInfo.InvariantCulture, $"{r.XName} {r.X:0.##} → {r.YName} {r.Y:0.###}")));
+        var setup = _experiment switch
+        {
+            "Pendulum" => $"Simple pendulum, length {_length:0.00} m, release angle {_angle}°, g = {_gravity} m/s², nonlinear equation integrated with RK4.",
+            "Projectile" => $"Projectile without air resistance, launch speed {_speed} m/s at {_launch}°, from 0.3 m height.",
+            _ => $"DC circuit: battery {_volts} V, resistor {_ohms} Ω, bulb brightness proportional to power.",
+        };
+        return NarrateAsync("a friendly physics lab partner for high-school students", string.Create(CultureInfo.InvariantCulture, $"{setup} Readings: {reads}. Recorded runs: {runs}. Explain the physics and what the data shows."));
+    }
+
+    public override ValueTask DisposeAsync()
+    {
+        Stop();
+        return base.DisposeAsync();
+    }
+}

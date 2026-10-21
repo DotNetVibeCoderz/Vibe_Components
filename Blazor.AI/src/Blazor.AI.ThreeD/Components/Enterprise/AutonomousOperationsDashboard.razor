@@ -1,0 +1,200 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@* Closed-loop autonomy: sense → analyse → decide → act. High-confidence decisions execute automatically; the rest wait for a human. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height" OnPick="Picked">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel">
+                <h4>Autonomy</h4>
+                <div class="bai3d-kpi">
+                    <div><b>@_log.Count(d => d.Status == "auto")</b><span>auto-executed</span></div>
+                    <div><b>@_log.Count(d => d.Status == "pending")</b><span>awaiting approval</span></div>
+                    <div><b>@_log.Count(d => d.Status is "approved" or "rejected")</b><span>human decisions</span></div>
+                    <div><b>@Threshold.ToString("P0", CultureInfo.InvariantCulture)</b><span>auto threshold</span></div>
+                </div>
+            </div>
+        </div>
+    </Scene3D>
+
+    <AiCard Title="Decision queue" Subtitle="Human in the loop below the threshold" Icon="bi-cpu">
+        <div class="bai-stack">
+            <label class="bai-small">Auto-execute when confidence ≥ <b>@Threshold.ToString("P0", CultureInfo.InvariantCulture)</b>
+                <input type="range" min="0.5" max="0.99" step="0.01" @bind="Threshold" @bind:event="oninput" style="width:100%" aria-label="Auto-execute threshold" />
+            </label>
+            <div class="bai-stack" style="gap:.35rem; max-height:300px; overflow:auto">
+                @foreach (var d in _log.AsEnumerable().Reverse().Take(10))
+                {
+                    <div class="bai-small" style="border-bottom:1px solid var(--bai-line); padding-bottom:.3rem">
+                        <span class="bai-badge @(d.Status switch { "auto" => "bai-badge-local", "pending" => "bai-badge-ai", "rejected" => "bai-badge-danger", _ => "bai-badge-cloud" })">@d.Status</span>
+                        <b>@d.Event</b> → @d.Action <span class="bai-faint">(@d.Confidence.ToString("P0", CultureInfo.InvariantCulture))</span>
+                        @if (d.Status == "pending")
+                        {
+                            <span class="bai-row" style="margin-top:.2rem">
+                                <button type="button" class="bai-chip" @onclick="() => Decide(d, true)">Approve</button>
+                                <button type="button" class="bai-chip" @onclick="() => Decide(d, false)">Reject</button>
+                                <button type="button" class="bai-chip" @onclick="() => Explain(d)">Why?</button>
+                            </span>
+                        }
+                    </div>
+                }
+            </div>
+            <AiError Message="@Error" />
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    public sealed class AutoDecision(string evt, string action, double confidence, string rationale)
+    {
+        public string Event { get; } = evt;
+        public string Action { get; } = action;
+        public double Confidence { get; } = confidence;
+        public string Rationale { get; } = rationale;
+        public string Status { get; set; } = "pending";
+    }
+
+    private static readonly (string Event, string Action, double Base, string Why)[] Playbook =
+    [
+        ("Stock-out risk: SKU 'Kopi Gayo 250g' at Jakarta DC", "Transfer 400 units from Surabaya DC", 0.93, "forecast demand exceeds on-hand within 3 days; Surabaya has 9 days of cover"),
+        ("Cold-chain excursion: reefer truck B-7 at 9.1 °C", "Reroute to nearest hub and quarantine the load", 0.88, "temperature above 8 °C for 14 minutes"),
+        ("Payment fraud score 0.81 on order #55213", "Hold order and request verification", 0.77, "new device, mismatched address, high basket value"),
+        ("Server CPU 94% on checkout-api", "Scale checkout-api from 4 to 6 replicas", 0.96, "p95 latency rising with traffic; headroom below 10%"),
+        ("Supplier delay: PT Sinar Kemas, 5 days", "Switch 30% of the PO to the backup supplier", 0.64, "contracted lead time breached; backup has capacity but 6% higher cost"),
+        ("Price war detected on 'Sambal Bawang'", "Match competitor price for 7 days", 0.58, "competitor dropped 12%; elasticity estimate is uncertain"),
+        ("Energy price spike 18:00-21:00", "Shift chiller pre-cooling to 15:00", 0.9, "tariff +40% in peak; thermal inertia allows 3 h pre-cool"),
+    ];
+
+    private readonly List<AutoDecision> _log = [];
+    private readonly Random _rng = new(13);
+    private CancellationTokenSource? _loop;
+    private Scene3DOptions _options = new();
+    private int _stage;
+
+    [Parameter] public double Threshold { get; set; } = 0.85;
+
+    [Parameter] public int IntervalMs { get; set; } = 3500;
+
+    private static readonly string[] Stages = ["Sense", "Analyse", "Decide", "Act"];
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 7.5, 9], Target = [0, 0.4, 0] },
+            Ground = new(12, "#0e1236"),
+            Lights = "night",
+            AriaLabel = "Autonomous operations loop",
+        };
+        Build();
+        _loop = new CancellationTokenSource();
+        _ = LoopAsync(_loop.Token);
+    }
+
+    private static double[] StagePos(int i) => [Math.Cos(i * Math.PI / 2 - Math.PI / 2) * 3, 0, Math.Sin(i * Math.PI / 2 - Math.PI / 2) * 3];
+
+    private void Build()
+    {
+        var ring = Enumerable.Range(0, 65).Select(i => new[] { Math.Cos(i / 64.0 * Math.PI * 2) * 3, 0.06, Math.Sin(i / 64.0 * Math.PI * 2) * 3 }).ToArray();
+        var list = new List<Object3D>
+        {
+            new() { Id = "loop", Kind = "tube", Points = ring, Radius = 0.05, Closed = true, Color = ThreeDPalette.Tarum, Emissive = ThreeDPalette.Tarum, EmissiveIntensity = 0.4, Pickable = false },
+            new() { Id = "token", Kind = "sphere", Radius = 0.16, Color = ThreeDPalette.Soga, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 1.5, Pickable = false, Animate = Animate3D.Orbit(3, 0.9, -Math.PI / 2, center: [0, 0.25, 0]) },
+            new() { Id = "brain", Kind = "icosahedron", Radius = 0.7, Detail = 1, Position = [0, 1, 0], FlatShading = true, Color = ThreeDPalette.TarumDeep, Emissive = ThreeDPalette.Nila, EmissiveIntensity = 0.35, Pickable = false, Animate = Animate3D.Spin(0.4), Label = "Policy", LabelClass = "is-nila" },
+        };
+        for (var i = 0; i < Stages.Length; i++)
+        {
+            var p = StagePos(i);
+            var active = i == _stage;
+            list.Add(new Object3D { Id = "stage:" + Stages[i], Kind = "cylinder", Radius = 0.55, Height = active ? 0.7 : 0.35, Position = [p[0], active ? 0.35 : 0.18, p[2]], Segments = 6, Color = active ? ThreeDPalette.Soga : ThreeDPalette.Tarum, Emissive = active ? ThreeDPalette.Soga : ThreeDPalette.Tarum, EmissiveIntensity = active ? 0.8 : 0.2, Label = Stages[i], LabelClass = active ? "is-soga" : null, Tooltip = StageTip(i) });
+        }
+
+        // Pending approvals float above "Decide" as amber shards; auto actions above "Act" as teal.
+        var pending = _log.Where(d => d.Status == "pending").Take(6).ToList();
+        for (var k = 0; k < pending.Count; k++)
+        {
+            var p = StagePos(2);
+            list.Add(new Object3D { Id = "pending:" + _log.IndexOf(pending[k]), Kind = "icosahedron", Radius = 0.16, Position = [p[0] + (k - pending.Count / 2.0) * 0.38, 1.1 + (k % 2) * 0.3, p[2]], Color = ThreeDPalette.Warning, Emissive = ThreeDPalette.Warning, EmissiveIntensity = 0.7, Tooltip = $"{pending[k].Event}\n→ {pending[k].Action}\nconfidence {pending[k].Confidence:P0}", Animate = Animate3D.Bob(0.08, 1.5 + k * 0.2) });
+        }
+
+        var done = _log.Where(d => d.Status is "auto" or "approved").TakeLast(6).ToList();
+        for (var k = 0; k < done.Count; k++)
+        {
+            var p = StagePos(3);
+            list.Add(new Object3D { Id = "done:" + _log.IndexOf(done[k]), Kind = "box", Size = [0.22, 0.22, 0.22], Position = [p[0] + (k - done.Count / 2.0) * 0.32, 0.9, p[2]], Color = ThreeDPalette.Nila, Emissive = ThreeDPalette.Nila, EmissiveIntensity = 0.5, Tooltip = $"{done[k].Action}\n({done[k].Status})" });
+        }
+
+        Objects = [.. list];
+    }
+
+    private string StageTip(int i) => i switch
+    {
+        0 => "Sense: telemetry, orders, prices, sensors",
+        1 => "Analyse: anomaly scores and forecasts",
+        2 => $"Decide: {_log.Count(d => d.Status == "pending")} awaiting approval",
+        _ => $"Act: {_log.Count(d => d.Status is "auto" or "approved")} actions executed",
+    };
+
+    private async Task LoopAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(Math.Max(1000, IntervalMs) / 4));
+        var tick = 0;
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                if (Scene is not { IsReady: true })
+                {
+                    continue;
+                }
+
+                _stage = tick++ % 4;
+                if (_stage == 2)
+                {
+                    var (evt, action, b, why) = Playbook[_rng.Next(Playbook.Length)];
+                    var confidence = Math.Clamp(b + (_rng.NextDouble() - 0.5) * 0.08, 0.3, 0.995);
+                    _log.Add(new AutoDecision(evt, action, confidence, why) { Status = confidence >= Threshold ? "auto" : "pending" });
+                    if (_log.Count > 40)
+                    {
+                        _log.RemoveAt(0);
+                    }
+                }
+
+                await InvokeAsync(() =>
+                {
+                    Build();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void Decide(AutoDecision d, bool approve)
+    {
+        d.Status = approve ? "approved" : "rejected";
+        Build();
+    }
+
+    private void Picked(PickEvent e)
+    {
+        if (e.Id.StartsWith("pending:", StringComparison.Ordinal) && int.TryParse(e.Id[8..], out var i) && i < _log.Count)
+        {
+            _ = Explain(_log[i]);
+        }
+    }
+
+    private Task Explain(AutoDecision d) => NarrateAsync("an operations decision analyst explaining a proposed automated action to a manager",
+        string.Create(CultureInfo.InvariantCulture, $"Event: {d.Event}. Proposed action: {d.Action}. Model confidence {d.Confidence:P0} (auto-execute threshold {Threshold:P0}). Evidence: {d.Rationale}. Say whether to approve and what to check first."),
+        AiTasks.Decision);
+
+    public override async ValueTask DisposeAsync()
+    {
+        _loop?.Cancel();
+        _loop?.Dispose();
+        await base.DisposeAsync();
+    }
+}

@@ -1,0 +1,217 @@
+@namespace Blazor.AI.ThreeD
+@inherits ThreeDComponentBase
+@using Blazor.AI.Visualization
+@* Agent versus agent: a hunter and a runner learn against each other (pursuit–evasion); live scoreboard and match replay. *@
+
+<div class="@CssClass("bai3d-split")">
+    <Scene3D @ref="Scene" Objects="@Objects" Options="@_options" Height="@Height">
+        <div class="bai3d-hud-row">
+            <div class="bai3d-panel">
+                <h4>Scoreboard · @_game.Played matches</h4>
+                <div class="bai3d-kpi">
+                    <div><b style="color:#f3b57a">@_captures</b><span>hunter wins</span></div>
+                    <div><b style="color:#7fe3d4">@_escapes</b><span>runner escapes</span></div>
+                    <div><b>@RecentRate.ToString("P0", CultureInfo.InvariantCulture)</b><span>capture rate (last 200)</span></div>
+                </div>
+                @if (_rates.Count > 1)
+                {
+                    <div style="margin-top:.4rem"><Sparkline Values="@_rates" Width="220" Height="30" Color="#d9964f" /></div>
+                }
+            </div>
+            @if (_replayLabel is not null)
+            {
+                <div class="bai3d-panel bai3d-hud-right"><h4>Replay</h4>@_replayLabel</div>
+            }
+        </div>
+    </Scene3D>
+
+    <AiCard Title="@Title" Subtitle="Two learners, one arena" Icon="bi-trophy">
+        <div class="bai-stack">
+            <div class="bai-grid-2">
+                <div>
+                    <label class="bai-label" for="@($"{_uid}-h")">Hunter</label>
+                    <select id="@($"{_uid}-h")" class="bai-select" @bind="HunterPolicy" disabled="@_training">
+                        @foreach (var p in Enum.GetValues<BattlePolicy>()) { <option value="@p">@p</option> }
+                    </select>
+                </div>
+                <div>
+                    <label class="bai-label" for="@($"{_uid}-r")">Runner</label>
+                    <select id="@($"{_uid}-r")" class="bai-select" @bind="RunnerPolicy" disabled="@_training">
+                        @foreach (var p in Enum.GetValues<BattlePolicy>()) { <option value="@p">@p</option> }
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="bai-label" for="@($"{_uid}-m")">Training matches</label>
+                <input id="@($"{_uid}-m")" type="number" min="200" max="20000" step="200" class="bai-input" @bind="Matches" disabled="@_training" />
+            </div>
+            <div class="bai-row">
+                @if (_training)
+                {
+                    <button type="button" class="bai-btn" @onclick="Stop"><i class="bi bi-stop-fill" aria-hidden="true"></i>Stop</button>
+                }
+                else
+                {
+                    <button type="button" class="bai-btn bai-btn-ai" @onclick="TrainAsync"><i class="bi bi-play-fill" aria-hidden="true"></i>Train</button>
+                    <button type="button" class="bai-btn-ghost" @onclick="ReplayAsync"><i class="bi bi-film" aria-hidden="true"></i>Replay a match</button>
+                }
+            </div>
+            <p class="bai-small bai-muted" style="margin:0">The hunter (robot) starts top-left, the runner (drone) bottom-right. A capture within @_game.MaxSteps steps is a hunter win; surviving is a runner win.</p>
+            <button type="button" class="bai-btn-ghost" style="width:fit-content" disabled="@(IsBusy || _game.Played == 0)" @onclick="Explain"><i class="bi bi-stars" aria-hidden="true"></i>Commentate</button>
+            @if (Narration is not null) { <AiOutput Text="@Narration" IsBusy="@IsBusy" /> }
+        </div>
+    </AiCard>
+</div>
+
+@code {
+    private readonly string _uid = "rlba-" + Guid.NewGuid().ToString("N")[..6];
+    private readonly List<bool> _history = [];
+    private readonly List<double> _rates = [];
+    private Scene3DOptions _options = new();
+    private PursuitGame _game = new();
+    private CancellationTokenSource? _cts;
+    private bool _training;
+    private int _captures, _escapes;
+    private string? _replayLabel;
+
+    [Parameter] public string Title { get; set; } = "RL battle arena";
+    [Parameter] public BattlePolicy HunterPolicy { get; set; } = BattlePolicy.Learning;
+    [Parameter] public BattlePolicy RunnerPolicy { get; set; } = BattlePolicy.Learning;
+    [Parameter] public int Matches { get; set; } = 4000;
+
+    private double RecentRate => _history.Count == 0 ? 0 : _history.TakeLast(200).Count(c => c) / (double)Math.Min(200, _history.Count);
+
+    protected override void OnInitialized()
+    {
+        _options = new Scene3DOptions
+        {
+            Camera = new() { Position = [0, 7.5, 7.2], Target = [0, 0, 0.3], Fov = 42 },
+            Lights = "night",
+            AriaLabel = "Pursuit arena with a hunter robot and a runner drone",
+        };
+        Build();
+    }
+
+    private double[] Cell(int x, int y, double h = 0) => [x - (_game.Size - 1) / 2.0, h, y - (_game.Size - 1) / 2.0];
+
+    private void Build()
+    {
+        var list = new List<Object3D>();
+        for (var y = 0; y < _game.Size; y++)
+        {
+            for (var x = 0; x < _game.Size; x++)
+            {
+                var p = Cell(x, y);
+                list.Add(new Object3D { Id = $"f-{x}-{y}", Kind = "box", Position = [p[0], -0.05, p[2]], Size = [0.96, 0.1, 0.96], Color = (x + y) % 2 == 0 ? "#1d2462" : "#18205a", Pickable = false });
+                if (_game.Walls[y * _game.Size + x])
+                {
+                    list.Add(new Object3D { Id = $"w-{x}-{y}", Kind = "box", Position = [p[0], 0.35, p[2]], Size = [0.9, 0.7, 0.9], Color = "#4a557f", Edges = "#8a96d6", Tooltip = "Pillar" });
+                }
+            }
+        }
+
+        list.Add(new Object3D { Id = "hunter", Kind = "model", Url = ThreeDAssets.GuideBot, FitHeight = 0.62, Position = Cell(0, 0), Clip = "Idle", Tooltip = "Hunter" });
+        list.Add(new Object3D { Id = "hunter-ring", Kind = "ring", Parent = "hunter", Position = [0, 0.012, 0], Rotation = [-Math.PI / 2, 0, 0], InnerRadius = 0.32, Radius = 0.42, Color = ThreeDPalette.Soga, Emissive = ThreeDPalette.Soga, EmissiveIntensity = 0.8, Pickable = false });
+        var rp = Cell(_game.Size - 1, _game.Size - 1, 0.45);
+        list.Add(new Object3D { Id = "runner", Kind = "icosahedron", Radius = 0.22, Detail = 1, Position = rp, Color = ThreeDPalette.Nila, Emissive = ThreeDPalette.Nila, EmissiveIntensity = 0.7, FlatShading = true, Tooltip = "Runner" });
+        list.Add(new Object3D { Id = "runner-halo", Kind = "torus", Parent = "runner", Radius = 0.32, Tube = 0.02, Rotation = [Math.PI / 2, 0, 0], Color = ThreeDPalette.Nila, Emissive = ThreeDPalette.Nila, EmissiveIntensity = 1, Pickable = false, Animate = Animate3D.Spin(2, "z") });
+        Objects = list;
+    }
+
+    private async Task TrainAsync()
+    {
+        Stop();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+        _training = true;
+        _game = new PursuitGame { Hunter = HunterPolicy, Runner = RunnerPolicy };
+        _history.Clear();
+        _rates.Clear();
+        _captures = _escapes = 0;
+        Narration = null;
+        Build();
+        var total = Math.Clamp(Matches, 200, 20000);
+        var chunk = Math.Max(100, total / 30);
+        try
+        {
+            while (_game.Played < total && !ct.IsCancellationRequested)
+            {
+                var n = Math.Min(chunk, total - _game.Played);
+                var results = await Task.Run(() => Enumerable.Range(0, n).Select(_ => _game.Play().Captured).ToList(), ct);
+                _history.AddRange(results);
+                _captures += results.Count(c => c);
+                _escapes += results.Count(c => !c);
+                _rates.Add(RecentRate);
+                StateHasChanged();
+                await Task.Delay(16, ct);
+            }
+
+            if (!ct.IsCancellationRequested)
+            {
+                await ReplayAsync();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _training = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ReplayAsync()
+    {
+        if (Scene is null)
+        {
+            return;
+        }
+
+        _game.Hunter = HunterPolicy;
+        _game.Runner = RunnerPolicy;
+        var match = _game.Play(evaluate: true);
+        _replayLabel = "Playing…";
+        Build();
+        StateHasChanged();
+        await Task.Delay(50);
+        await Scene.PlayClipAsync("hunter", "Walk");
+        for (var i = 1; i < match.Frames.Count; i++)
+        {
+            var (h0, _) = match.Frames[i - 1];
+            var (h, r) = match.Frames[i];
+            await Scene.UpdateAsync(
+            [
+                new ObjectPatch { Id = "hunter", Position = Cell(h.X, h.Y), Rotation = h == h0 ? null : [0, GridScene.YawBetween(h0, h), 0] },
+                new ObjectPatch { Id = "runner", Position = Cell(r.X, r.Y, 0.45) },
+            ], 170);
+            await Task.Delay(180);
+        }
+
+        await Scene.PlayClipAsync("hunter", match.Captured ? "Happy" : "Think", loop: false);
+        _replayLabel = match.Captured ? $"Hunter caught the runner in {match.Steps} steps." : $"Runner escaped for all {match.Steps} steps.";
+        StateHasChanged();
+    }
+
+    private void Stop()
+    {
+        _cts?.Cancel();
+        _cts = null;
+    }
+
+    private Task Explain()
+    {
+        var early = _history.Take(300).ToList();
+        var late = _history.TakeLast(300).ToList();
+        var facts = string.Create(CultureInfo.InvariantCulture,
+            $"Pursuit-evasion on a {_game.Size}x{_game.Size} grid with 6 pillars, step limit {_game.MaxSteps}. Hunter policy {HunterPolicy}, runner policy {RunnerPolicy}. {_game.Played} matches: hunter {_captures} wins, runner {_escapes} escapes. " +
+            $"Capture rate first 300 matches {(early.Count == 0 ? 0 : early.Count(c => c) / (double)early.Count):P0}, last 300 {(late.Count == 0 ? 0 : late.Count(c => c) / (double)late.Count):P0}. Last replay: {_replayLabel ?? "none"}.");
+        return NarrateAsync("an energetic e-sports commentator who also explains multi-agent reinforcement learning", facts);
+    }
+
+    public override ValueTask DisposeAsync()
+    {
+        Stop();
+        return base.DisposeAsync();
+    }
+}

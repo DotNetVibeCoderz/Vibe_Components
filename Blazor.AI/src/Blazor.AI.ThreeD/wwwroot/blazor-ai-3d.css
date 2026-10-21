@@ -1,0 +1,161 @@
+/* Blazor.AI.ThreeD: viewport, labels, HUD. Uses the --bai-* tokens from blazor-ai.css. */
+
+.bai3d {
+    position: relative;
+    width: 100%;
+    border-radius: var(--bai-radius, 16px);
+    overflow: hidden;
+    background:
+        radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--bai-tarum, #3d4fb8) 22%, transparent), transparent 60%),
+        linear-gradient(180deg, #10153a 0%, #070a1f 100%);
+    border: 1px solid var(--bai-line, rgba(30, 42, 107, .12));
+    isolation: isolate;
+}
+
+[data-bs-theme="light"] .bai3d {
+    background:
+        radial-gradient(120% 90% at 50% 0%, rgba(61, 79, 184, .16), transparent 60%),
+        linear-gradient(180deg, #eef1fb 0%, #dde3f5 100%);
+}
+
+.bai3d-canvas,
+.bai3d-canvas > canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    outline: none;
+    touch-action: none;
+}
+
+.bai3d-labels {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.bai3d-label {
+    padding: .18rem .5rem;
+    border-radius: 999px;
+    font: 600 .72rem/1.2 var(--bai-font-body, system-ui, sans-serif);
+    color: #f2f4ff;
+    background: rgba(11, 15, 41, .72);
+    border: 1px solid rgba(255, 255, 255, .14);
+    backdrop-filter: blur(6px);
+    white-space: nowrap;
+    transform: translateY(-50%);
+    letter-spacing: .01em;
+}
+
+.bai3d-label.is-soga { background: rgba(140, 82, 26, .82); border-color: rgba(255, 210, 160, .35); }
+.bai3d-label.is-nila { background: rgba(18, 104, 92, .82); border-color: rgba(160, 255, 236, .3); }
+.bai3d-label.is-danger { background: rgba(150, 30, 40, .85); border-color: rgba(255, 170, 170, .35); }
+.bai3d-label.is-plain { background: transparent; border: 0; backdrop-filter: none; text-shadow: 0 1px 3px rgba(0, 0, 0, .7); }
+.bai3d-label.is-big { font-size: .9rem; padding: .3rem .7rem; }
+.bai3d-label.is-mono { font-family: var(--bai-font-mono, ui-monospace, monospace); font-weight: 500; }
+
+.bai3d-tooltip {
+    position: absolute;
+    z-index: 3;
+    max-width: 260px;
+    padding: .45rem .65rem;
+    border-radius: 10px;
+    font: 500 .78rem/1.35 var(--bai-font-body, system-ui, sans-serif);
+    color: #f2f4ff;
+    background: rgba(11, 15, 41, .9);
+    border: 1px solid rgba(255, 255, 255, .16);
+    pointer-events: none;
+    white-space: pre-line;
+}
+
+.bai3d-hud {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    padding: .8rem;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+}
+
+.bai3d-hud > * { pointer-events: auto; }
+
+.bai3d-panel {
+    width: fit-content;
+    max-width: min(360px, 100%);
+    padding: .65rem .8rem;
+    border-radius: 12px;
+    color: #eef0ff;
+    background: rgba(11, 15, 41, .66);
+    border: 1px solid rgba(255, 255, 255, .12);
+    backdrop-filter: blur(10px);
+    font-size: .82rem;
+}
+
+.bai3d-panel h4 {
+    margin: 0 0 .35rem;
+    font: 700 .8rem/1.2 var(--bai-font-display, system-ui);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #c9cff5;
+}
+
+.bai3d-panel .bai3d-kpi { display: flex; gap: .9rem; flex-wrap: wrap; }
+.bai3d-panel .bai3d-kpi b { display: block; font: 700 1.05rem/1.1 var(--bai-font-display, system-ui); color: #fff; }
+.bai3d-panel .bai3d-kpi span { font-size: .7rem; color: #aab1e6; }
+
+.bai3d-hud-bottom { margin-top: auto; }
+.bai3d-hud-right { align-self: flex-end; }
+.bai3d-hud-row { display: flex; gap: .6rem; align-items: flex-start; flex-wrap: wrap; }
+
+.bai3d-loading {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: .6rem;
+    color: #aab1e6;
+    font-size: .85rem;
+    z-index: 1;
+}
+
+.bai3d-loading-glyph {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 3px solid rgba(217, 150, 79, .25);
+    border-top-color: #d9964f;
+    animation: bai3d-spin 1s linear infinite;
+}
+
+@keyframes bai3d-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+    .bai3d-loading-glyph { animation: none; }
+}
+
+/* Side-by-side layout used by the components: scene + control column. */
+.bai3d-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+    gap: 1rem;
+    align-items: start;
+}
+
+@media (max-width: 900px) {
+    .bai3d-split { grid-template-columns: 1fr; }
+}
+
+.bai3d-legend { display: flex; flex-wrap: wrap; gap: .4rem .8rem; font-size: .75rem; color: var(--bai-ink-muted); }
+.bai3d-legend i { display: inline-block; width: .65rem; height: .65rem; border-radius: 3px; margin-right: .3rem; vertical-align: -1px; }
+
+.bai3d-portrait {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 1px solid var(--bai-line);
+}
