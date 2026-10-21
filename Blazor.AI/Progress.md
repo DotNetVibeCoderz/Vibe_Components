@@ -30,6 +30,7 @@ Roadmap: [PLAN.md](PLAN.md).
 | Monorepo + CI | ✅ | In `Vibe_Components/Blazor.AI`; `.github/workflows/blazor-ai.yml` builds and tests every change and publishes on `blazor-ai-v*` tags |
 | Release 1.0.0 | ✅ | Tagged `blazor-ai-v1.0.0` on 2026-10-21; all 11 packages (+ symbols) pushed to NuGet by CI |
 | Release 1.1.0 (3D) | ✅ | Tagged `blazor-ai-v1.1.0` on 2026-10-21; all 12 packages (+ symbols) pushed to NuGet by CI |
+| Release 1.2.0 (MediaPipe) | ✅ | Tagged `blazor-ai-v1.2.0` on 2026-10-22; all 13 packages (+ symbols) pushed to NuGet by CI |
 
 ## Verified against real services
 
