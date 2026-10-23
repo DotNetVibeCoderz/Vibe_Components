@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>CesiumNet.Gallery.Avalonia</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <!-- Declares Windows 10/11 support; required for NativeWebView's child window. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Cesium.Net.Avalonia\Cesium.Net.Avalonia.csproj" />
+    <ProjectReference Include="..\Cesium.Net.Gallery.Shared\Cesium.Net.Gallery.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

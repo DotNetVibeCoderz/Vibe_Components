@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/Cesium.Net.Gallery.Avalonia/Cesium.Net.Gallery.Avalonia.csproj" />
+    <Project Path="samples/Cesium.Net.Gallery.Blazor/Cesium.Net.Gallery.Blazor.csproj" />
+    <Project Path="samples/Cesium.Net.Gallery.Shared/Cesium.Net.Gallery.Shared.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Cesium.Net.Avalonia/Cesium.Net.Avalonia.csproj" />
+    <Project Path="src/Cesium.Net.Blazor/Cesium.Net.Blazor.csproj" />
+    <Project Path="src/Cesium.Net/Cesium.Net.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Cesium.Net.Tests/Cesium.Net.Tests.csproj" />
+  </Folder>
+</Solution>

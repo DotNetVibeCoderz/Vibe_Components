@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>CesiumNet.Blazor</RootNamespace>
+    <AssemblyName>Cesium.Net.Blazor</AssemblyName>
+    <PackageId>Cesium.Net.Blazor</PackageId>
+    <Description>Blazor components for Cesium.Net — embed a CesiumJS 3D globe/map in Blazor Server, WebAssembly or Web App projects and drive it from C#. Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil.</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cesium.Net\Cesium.Net.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\build\icon.png" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\..\build\PACKAGE.md" Pack="true" PackagePath="\README.md" Visible="false" />
+  </ItemGroup>
+
+</Project>

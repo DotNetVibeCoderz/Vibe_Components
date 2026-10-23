@@ -1,0 +1,239 @@
+@page "/sample/{Id}"
+@implements IAsyncDisposable
+@inject GalleryState State
+@inject IJSRuntime JS
+
+<PageTitle>@(_sample is null ? "Cesium.Net Gallery" : $"{State.T(_sample.Title)} · Cesium.Net Gallery")</PageTitle>
+
+@if (_sample is null)
+{
+    <div class="empty-state">
+        <h1>@State.T(("Sample not found", "Contoh tidak ditemukan"))</h1>
+        <p>@State.T(("Pick a sample from the index on the left.", "Pilih contoh dari indeks di sebelah kiri."))</p>
+    </div>
+}
+else
+{
+    <article class="sample">
+        <header class="sample-head">
+            <p class="eyebrow">
+                <span>@State.T(_category!.Title)</span>
+                @if (_sample.Location is { } loc)
+                {
+                    <span class="eyebrow-coord">@GeoFormat.Short(loc, 4)</span>
+                }
+            </p>
+            <h1 tabindex="-1">@State.T(_sample.Title)</h1>
+            <p class="lede">@State.T(_sample.Summary)</p>
+        </header>
+
+        <div class="workbench">
+            <section class="viewer-card" aria-label="3D viewer">
+                <div class="viewer-frame">
+                    <CesiumViewer @key="_runKey" Options="_options" OnReady="OnReady" OnLeftClick="OnClick"
+                                  OnCameraChanged="OnCamera" OnMouseMove="OnMouseMove" OnError="OnError"
+                                  OnDrawCompleted="OnDraw" OnEntityEdited="OnEdited">
+                        <LoadingContent>
+                            <div class="viewer-loading"><span class="spinner" aria-hidden="true"></span>@State.T(GalleryText.Loading)</div>
+                        </LoadingContent>
+                        <ErrorContent Context="message">
+                            <div class="viewer-error">
+                                <strong>@State.T(GalleryText.LoadFailed)</strong>
+                                <code>@message</code>
+                            </div>
+                        </ErrorContent>
+                    </CesiumViewer>
+                </div>
+                <ReticleStrip Camera="_camera" Cursor="_cursor" />
+            </section>
+
+            <aside class="panel">
+                <div class="tabs" role="tablist">
+                    @foreach (var (key, label) in Tabs)
+                    {
+                        <button role="tab" class="tab" aria-selected="@(_tab == key ? "true" : "false")" @onclick="() => _tab = key">
+                            @State.T(label)
+                            @if (key == "events" && _log.Count > 0)
+                            {
+                                <span class="tab-count">@_log.Count</span>
+                            }
+                        </button>
+                    }
+                </div>
+
+                @if (_tab == "overview")
+                {
+                    <div class="tab-body">
+                        @if (_sample.UsesIon)
+                        {
+                            <p class="ion-note"><strong>@State.T(GalleryText.IonTag).</strong> @State.T(GalleryText.IonHint)</p>
+                        }
+                        @if (_sample.Actions.Count > 0)
+                        {
+                            <h2 class="panel-h">@State.T(GalleryText.Actions)</h2>
+                            <div class="actions">
+                                @foreach (var action in _sample.Actions)
+                                {
+                                    <button class="btn btn-action" disabled="@(_ctx is null || _busy == action.Key)" @onclick="() => RunAction(action)">
+                                        @State.T(action.Label)
+                                    </button>
+                                }
+                            </div>
+                        }
+                        <h2 class="panel-h">@State.T(("Latest event", "Peristiwa terakhir"))</h2>
+                        <p class="last-event">@(_log.Count > 0 ? _log[^1].Message : State.T(GalleryText.NoEvents))</p>
+                        <button class="btn btn-ghost restart" @onclick="Restart">@State.T(GalleryText.Restart)</button>
+                    </div>
+                }
+                else if (_tab == "code")
+                {
+                    <div class="tab-body tab-code">
+                        <CodeView Code="@_sample.SourceCode" FileName="@($"{_sample.GetType().Name}.cs")" />
+                    </div>
+                }
+                else
+                {
+                    <div class="tab-body">
+                        @if (_log.Count == 0)
+                        {
+                            <p class="muted">@State.T(GalleryText.NoEvents)</p>
+                        }
+                        else
+                        {
+                            <ol class="log" @ref="_logEl">
+                                @foreach (var entry in _log)
+                                {
+                                    <li class="@(entry.IsError ? "is-error" : "")"><time>@entry.Time.ToString("HH:mm:ss")</time><span>@entry.Message</span></li>
+                                }
+                            </ol>
+                        }
+                    </div>
+                }
+            </aside>
+        </div>
+    </article>
+}
+
+@code {
+    private static readonly (string Key, Text Label)[] Tabs =
+        [("overview", GalleryText.Overview), ("code", GalleryText.Code), ("events", GalleryText.Events)];
+
+    private GallerySample? _sample;
+    private SampleCategory? _category;
+    private CesiumViewerOptions? _options;
+    private SampleContext? _ctx;
+    private CancellationTokenSource? _cts;
+    private CameraState? _camera;
+    private GeoPoint? _cursor;
+    private string _tab = "overview";
+    private string? _busy;
+    private int _runKey;
+    private ElementReference _logEl;
+    private readonly List<LogEntry> _log = [];
+
+    private sealed record LogEntry(DateTime Time, string Message, bool IsError);
+
+    [Parameter] public string Id { get; set; } = "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var next = SampleCatalog.Find(Id);
+        if (ReferenceEquals(next, _sample) && _options is not null) return;
+        await StopAsync();
+        _sample = next;
+        _category = next is null ? null : SampleCatalog.Categories.First(c => c.Id == next.CategoryId);
+        _tab = "overview";
+        Prepare();
+    }
+
+    private void Prepare()
+    {
+        _log.Clear();
+        _camera = null;
+        _cursor = null;
+        _ctx = null;
+        if (_sample is null) return;
+        _options = _sample.CreateOptions(State.IonToken);
+        _options.Events.MouseMove = true;
+        _options.Events.MouseMoveThrottleMs = 120;
+        _runKey++;
+    }
+
+    private async Task OnReady(CesiumController cesium)
+    {
+        if (_sample is null) return;
+        _cts = new CancellationTokenSource();
+        _ctx = new SampleContext(cesium, Log, _cts.Token) { IonToken = State.IonToken };
+        try
+        {
+            await _sample.RunAsync(_ctx);
+            _camera = await cesium.Camera.GetStateAsync();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { Log("⚠ " + ex.Message, true); }
+    }
+
+    private async Task RunAction(SampleAction action)
+    {
+        if (_ctx is null) return;
+        _busy = action.Key;
+        try { await action.Run(_ctx); }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { Log("⚠ " + ex.Message, true); }
+        finally { _busy = null; }
+    }
+
+    private async Task Restart()
+    {
+        await StopAsync();
+        Prepare();
+    }
+
+    private void OnClick(PickResult pick) => Log(GeoFormat.Describe(pick));
+    private void OnCamera(CameraState state) => _camera = state;
+    private void OnMouseMove(PickResult pick) => _cursor = pick.Position;
+    private void OnError(CesiumError error) => Log("⚠ " + error, true);
+    private void OnDraw(DrawResult r) => Log($"Drawn {r.Mode}: {r.Positions.Count} vertices, length {Geodesy.FormatDistance(r.Length)}, area {Geodesy.FormatArea(r.Area)}");
+    private void OnEdited(EntityEditedResult r) => Log($"Edited {r.EntityId}: {r.Positions.Count} vertices");
+
+    private void Log(string message) => Log(message, false);
+
+    private void Log(string message, bool isError)
+    {
+        // Samples may log from background loops; mutate the list on the renderer's context only.
+        _ = InvokeAsync(() =>
+        {
+            _log.Add(new LogEntry(DateTime.Now, message, isError));
+            if (_log.Count > 200) _log.RemoveAt(0);
+            StateHasChanged();
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_tab == "events" && _log.Count > 0)
+        {
+            try { await JS.InvokeVoidAsync("galleryPrefs.scrollLogToEnd", _logEl); } catch (JSException) { }
+        }
+    }
+
+    private async Task StopAsync()
+    {
+        if (_cts is not null)
+        {
+            await _cts.CancelAsync();
+            _cts.Dispose();
+            _cts = null;
+        }
+        if (_ctx is not null)
+        {
+            foreach (var r in _ctx.Resources)
+            {
+                try { await r.DisposeAsync(); } catch { /* best effort */ }
+            }
+            _ctx = null;
+        }
+    }
+
+    public async ValueTask DisposeAsync() => await StopAsync();
+}

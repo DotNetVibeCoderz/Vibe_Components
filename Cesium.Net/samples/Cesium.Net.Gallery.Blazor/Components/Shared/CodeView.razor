@@ -1,0 +1,44 @@
+@inject IJSRuntime JS
+@inject GalleryState State
+
+<div class="code">
+    <div class="code-bar">
+        <span class="code-file">@FileName</span>
+        <button class="btn btn-ghost" @onclick="CopyAsync">@(_copied ? State.T(GalleryText.Copied) : State.T(GalleryText.Copy))</button>
+    </div>
+    <pre><code>@foreach (var token in _tokens)
+{
+    if (token.Kind == TokenKind.Plain) { @token.Text }
+    else { <span class="@Css(token.Kind)">@token.Text</span> }
+}</code></pre>
+</div>
+
+@code {
+    private List<CodeToken> _tokens = [];
+    private bool _copied;
+
+    [Parameter, EditorRequired] public string Code { get; set; } = "";
+    [Parameter] public string FileName { get; set; } = "Sample.cs";
+
+    protected override void OnParametersSet()
+    {
+        _tokens = CodeTokenizer.Tokenize(Code).ToList();
+        _copied = false;
+    }
+
+    private static string Css(TokenKind kind) => kind switch
+    {
+        TokenKind.Keyword => "tk-kw",
+        TokenKind.Type => "tk-ty",
+        TokenKind.String => "tk-str",
+        TokenKind.Comment => "tk-com",
+        TokenKind.Number => "tk-num",
+        TokenKind.Method => "tk-fn",
+        _ => "",
+    };
+
+    private async Task CopyAsync()
+    {
+        _copied = await JS.InvokeAsync<bool>("galleryPrefs.copy", Code);
+    }
+}

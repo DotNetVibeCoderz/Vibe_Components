@@ -1,0 +1,12 @@
+bin/
+obj/
+artifacts/
+*.user
+*.suo
+.vs/
+.idea/
+*.swp
+TestResults/
+# never commit credentials
+PackageCredentials.txt
+*.snk

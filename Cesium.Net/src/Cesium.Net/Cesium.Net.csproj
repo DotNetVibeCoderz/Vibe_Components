@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>CesiumNet</RootNamespace>
+    <AssemblyName>Cesium.Net</AssemblyName>
+    <PackageId>Cesium.Net</PackageId>
+    <Description>Cesium.Net core: a host-agnostic .NET API for CesiumJS (3D globes, maps, terrain, 3D Tiles, entities, camera, time-dynamic data, geodesy and coordinate math). Use it through Cesium.Net.Blazor (web) or Cesium.Net.Avalonia (desktop). Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Single source of truth for the JS bridge lives in the Blazor package's wwwroot (served as a static web asset there). -->
+    <EmbeddedResource Include="..\Cesium.Net.Blazor\wwwroot\cesium-net.js" LogicalName="CesiumNet.Scripts.cesium-net.js" Link="Scripts\cesium-net.js" />
+    <None Include="..\..\build\icon.png" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\..\build\PACKAGE.md" Pack="true" PackagePath="\README.md" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Cesium.Net.Tests" />
+  </ItemGroup>
+
+</Project>

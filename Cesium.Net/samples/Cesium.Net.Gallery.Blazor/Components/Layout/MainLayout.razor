@@ -1,0 +1,119 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject GalleryState State
+@inject NavigationManager Nav
+
+<div class="shell">
+    <aside class="rail @(_menuOpen ? "is-open" : "")" aria-label="Sample index">
+        <div class="rail-top">
+            <a class="brand" href="" @onclick="CloseMenu">
+                <img src="logo.svg" alt="" width="34" height="34" />
+                <span class="brand-name">Cesium<em>.Net</em></span>
+                <span class="brand-tag">Gallery</span>
+            </a>
+            <button class="menu-toggle" aria-expanded="@(_menuOpen ? "true" : "false")" @onclick="ToggleMenu">
+                @(_menuOpen ? "Close" : State.T(("Samples", "Contoh")))
+            </button>
+        </div>
+
+        <div class="rail-body">
+            <label class="search">
+                <span class="visually-hidden">@State.T(GalleryText.Search)</span>
+                <input type="search" placeholder="@State.T(GalleryText.Search)" @bind="_query" @bind:event="oninput" />
+            </label>
+
+            <nav class="index">
+                @foreach (var category in SampleCatalog.Categories)
+                {
+                    var items = Filter(category).ToList();
+                    if (items.Count == 0) continue;
+                    <section class="index-group">
+                        <h2 class="index-cat">@State.T(category.Title)</h2>
+                        <ul>
+                            @foreach (var s in items)
+                            {
+                                <li>
+                                    <NavLink class="entry" href="@($"sample/{s.Id}")" @onclick="CloseMenu">
+                                        <span class="entry-title">@State.T(s.Title)</span>
+                                        @if (s.Location is { } loc)
+                                        {
+                                            <span class="entry-coord">@GeoFormat.Short(loc)</span>
+                                        }
+                                    </NavLink>
+                                </li>
+                            }
+                        </ul>
+                    </section>
+                }
+            </nav>
+
+            <footer class="rail-foot">
+                <div class="lang" role="group" aria-label="Language">
+                    <button aria-pressed="@(State.Language == GalleryLanguage.En ? "true" : "false")" @onclick="() => State.SetLanguageAsync(GalleryLanguage.En)">EN</button>
+                    <button aria-pressed="@(State.Language == GalleryLanguage.Id ? "true" : "false")" @onclick="() => State.SetLanguageAsync(GalleryLanguage.Id)">ID</button>
+                </div>
+                <details class="settings">
+                    <summary>@State.T(GalleryText.Settings)</summary>
+                    <label>
+                        <span>@State.T(GalleryText.IonToken)</span>
+                        <input type="password" autocomplete="off" @bind="_tokenDraft" placeholder="eyJhbGciOi…" />
+                    </label>
+                    <p class="hint">@State.T(GalleryText.IonHint)</p>
+                    <button class="btn btn-ink" @onclick="SaveToken">@State.T(GalleryText.Save)</button>
+                    @if (_saved)
+                    {
+                        <span class="saved" role="status">@State.T(("Saved — restart a sample to use it.", "Tersimpan — mulai ulang contoh untuk memakainya."))</span>
+                    }
+                </details>
+                <p class="credit">@State.T(GalleryText.Credit)</p>
+            </footer>
+        </div>
+    </aside>
+
+    <main class="stage">
+        @Body
+    </main>
+</div>
+
+@code {
+    private string _query = "";
+    private string? _tokenDraft;
+    private bool _saved;
+    private bool _menuOpen;
+
+    protected override void OnInitialized() => State.Changed += OnStateChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await State.LoadAsync();
+        _tokenDraft = State.IonToken;
+        StateHasChanged();
+    }
+
+    private IEnumerable<GallerySample> Filter(SampleCategory category)
+    {
+        var q = _query.Trim();
+        foreach (var s in SampleCatalog.InCategory(category.Id))
+        {
+            if (q.Length == 0 ||
+                s.Title.En.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                s.Title.Id.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                category.Title[State.Language].Contains(q, StringComparison.OrdinalIgnoreCase))
+                yield return s;
+        }
+    }
+
+    private async Task SaveToken()
+    {
+        await State.SetIonTokenAsync(_tokenDraft);
+        _saved = true;
+    }
+
+    private void ToggleMenu() => _menuOpen = !_menuOpen;
+    private void CloseMenu() => _menuOpen = false;
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => State.Changed -= OnStateChanged;
+}

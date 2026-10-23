@@ -1,0 +1,14 @@
+<Router AppAssembly="typeof(Program).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(Layout.MainLayout)">
+            <div class="empty-state">
+                <h1>Not on the map</h1>
+                <p>This page does not exist. Pick a sample from the index.</p>
+            </div>
+        </LayoutView>
+    </NotFound>
+</Router>

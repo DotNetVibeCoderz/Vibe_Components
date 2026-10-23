@@ -1,0 +1,90 @@
+name: Cesium.Net
+
+# CI for every change under Cesium.Net/, and NuGet publishing when a tag like cesium-net-v1.0.0 is pushed
+# (or when started manually with "publish" ticked). Uses the NUGET_API_KEY repository secret.
+
+on:
+  push:
+    branches: [main]
+    paths: ["Cesium.Net/**", ".github/workflows/cesium-net.yml"]
+    tags: ["cesium-net-v*"]
+  pull_request:
+    paths: ["Cesium.Net/**", ".github/workflows/cesium-net.yml"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish packages to NuGet"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cesium-net-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: Cesium.Net
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: Cesium.Net/global.json
+
+      - name: Version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/cesium-net-v* ]]; then
+            echo "args=-p:Version=${GITHUB_REF#refs/tags/cesium-net-v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "args=-p:VersionSuffix=ci.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore
+        run: dotnet restore Cesium.Net.slnx
+
+      - name: Build
+        run: dotnet build Cesium.Net.slnx -c Release --no-restore ${{ steps.version.outputs.args }}
+
+      - name: Test
+        run: dotnet test tests/Cesium.Net.Tests -c Release --no-build
+
+      - name: Pack
+        run: dotnet pack Cesium.Net.slnx -c Release --no-build -o artifacts ${{ steps.version.outputs.args }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cesium-net-packages
+          path: Cesium.Net/artifacts/*
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/cesium-net-v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: cesium-net-packages
+          path: packages
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Push to NuGet
+        working-directory: packages
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: dotnet nuget push "*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate

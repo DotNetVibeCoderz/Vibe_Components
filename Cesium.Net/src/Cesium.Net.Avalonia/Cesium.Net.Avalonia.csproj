@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>CesiumNet.Avalonia</RootNamespace>
+    <AssemblyName>Cesium.Net.Avalonia</AssemblyName>
+    <PackageId>Cesium.Net.Avalonia</PackageId>
+    <Description>Avalonia UI control for Cesium.Net — a native-WebView hosted CesiumJS 3D globe/map for Windows, macOS and Linux desktop apps, driven entirely from C#. Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil.</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Controls.WebView" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cesium.Net\Cesium.Net.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\build\icon.png" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\..\build\PACKAGE.md" Pack="true" PackagePath="\README.md" Visible="false" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,17 @@
+@namespace CesiumNet.Blazor
+
+<div class="cesium-net-host @Class" style="@Style" @attributes="AdditionalAttributes">
+    <div @ref="_container" class="cesium-net-canvas"></div>
+    @if (!_ready && _error is null && LoadingContent is not null)
+    {
+        <div class="cesium-net-overlay">@LoadingContent</div>
+    }
+    @if (_error is not null && ErrorContent is not null)
+    {
+        <div class="cesium-net-overlay">@ErrorContent(_error)</div>
+    }
+    @if (ChildContent is not null)
+    {
+        <div class="cesium-net-children">@ChildContent</div>
+    }
+</div>

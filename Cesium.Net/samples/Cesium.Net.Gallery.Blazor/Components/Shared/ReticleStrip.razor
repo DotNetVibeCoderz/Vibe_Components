@@ -1,0 +1,18 @@
+@* The gallery's signature: a live survey readout of the camera and cursor, in WGS84. *@
+<div class="reticle" aria-live="off">
+    <span class="reticle-mark" aria-hidden="true"></span>
+    <dl>
+        <div><dt>LAT</dt><dd>@(Camera is null ? "—" : GeoFormat.Lat(Camera.Position.Latitude))</dd></div>
+        <div><dt>LON</dt><dd>@(Camera is null ? "—" : GeoFormat.Lon(Camera.Position.Longitude))</dd></div>
+        <div><dt>ALT</dt><dd>@(Camera is null ? "—" : GeoFormat.Altitude(Camera.Position.Height))</dd></div>
+        <div class="minor"><dt>HDG</dt><dd>@(Camera is null ? "—" : GeoFormat.Degrees(Camera.Heading))</dd></div>
+        <div class="minor"><dt>PITCH</dt><dd>@(Camera is null ? "—" : GeoFormat.Degrees(Camera.Pitch))</dd></div>
+        <div class="cursor"><dt>CURSOR</dt><dd>@(Cursor is { } c ? $"{GeoFormat.Lat(c.Latitude)} {GeoFormat.Lon(c.Longitude)} · {GeoFormat.Altitude(c.Height)}" : "—")</dd></div>
+    </dl>
+    <span class="reticle-datum">WGS84</span>
+</div>
+
+@code {
+    [Parameter] public CameraState? Camera { get; set; }
+    [Parameter] public GeoPoint? Cursor { get; set; }
+}

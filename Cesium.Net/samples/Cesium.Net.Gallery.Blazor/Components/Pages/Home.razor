@@ -1,0 +1,68 @@
+@page "/"
+@inject GalleryState State
+
+<PageTitle>Cesium.Net Gallery</PageTitle>
+
+<section class="hero">
+    <div class="hero-globe">
+        <CesiumViewer Options="_heroOptions" OnReady="OnHeroReady" OnCameraChanged="c => _camera = c" />
+    </div>
+    <div class="hero-copy">
+        <p class="eyebrow"><span>Gravicode Studios</span><span class="eyebrow-coord">v1.0 · CesiumJS @CesiumViewerOptions.DefaultCesiumVersion</span></p>
+        <h1 tabindex="-1">Cesium<em>.Net</em></h1>
+        <p class="lede">@State.T(GalleryText.Tagline)</p>
+        <div class="install">
+            <code>dotnet add package Cesium.Net.Blazor</code>
+            <code>dotnet add package Cesium.Net.Avalonia</code>
+        </div>
+        <a class="btn btn-primary" href="sample/hello-globe">@State.T(("Start with the first sample", "Mulai dari contoh pertama"))</a>
+    </div>
+    <ReticleStrip Camera="_camera" />
+</section>
+
+<section class="catalog" aria-label="@State.T(("All samples", "Semua contoh"))">
+    <header class="catalog-head">
+        <h2>@State.T(("Field guide", "Panduan lapangan"))</h2>
+        <p>@SampleCatalog.Samples.Count @State.T(GalleryText.Samples) · @SampleCatalog.Categories.Count @State.T(("topics", "topik")) · @State.T(("same C# on web and desktop", "C# yang sama di web dan desktop"))</p>
+    </header>
+    <div class="catalog-grid">
+        @foreach (var category in SampleCatalog.Categories)
+        {
+            var samples = SampleCatalog.InCategory(category.Id).ToList();
+            if (samples.Count == 0) continue;
+            <article class="topic">
+                <h3>@State.T(category.Title)</h3>
+                <p>@State.T(category.Blurb)</p>
+                <ul>
+                    @foreach (var s in samples)
+                    {
+                        <li><a href="@($"sample/{s.Id}")">@State.T(s.Title)</a></li>
+                    }
+                </ul>
+            </article>
+        }
+    </div>
+</section>
+
+@code {
+    private CameraState? _camera;
+
+    private readonly CesiumViewerOptions _heroOptions = new()
+    {
+        BaseLayer = ImageryLayerOptions.Satellite(),
+        InitialView = CameraView.At(112, -4, 16_000_000),
+        InfoBox = false,
+        SelectionIndicator = false,
+        EnableLighting = false,
+        Events = new CesiumEventOptions { Click = false, CameraChanged = true },
+    };
+
+    private async Task OnHeroReady(CesiumController cesium)
+    {
+        await cesium.Scene.ConfigureAsync(new SceneSettings { AtmosphereBrightnessShift = 0.05, FogEnabled = true });
+        // Turn the camera slightly so the globe sits to the right of the copy panel.
+        await cesium.Camera.LookAsync(CameraDirection.Left, 13);
+        _camera = await cesium.Camera.GetStateAsync();
+        await cesium.Camera.StartSpinAsync(3);
+    }
+}
