@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>GnuRadio.Hardware</RootNamespace>
+    <PackageId>GnuRadio.Net.Hardware</PackageId>
+    <IsAotCompatible>true</IsAotCompatible>
+    <Description>SDR hardware for GnuRadio.Net: SoapySDR bindings (USRP, PlutoSDR, LimeSDR, HackRF, bladeRF, RTL-SDR, Airspy), a managed rtl_tcp client, and a simulated SDR for development without hardware. Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil.</Description>
+    <PackageTags>$(PackageTags);soapysdr;usrp;plutosdr;limesdr;hackrf;bladerf;rtl-sdr;airspy</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../GnuRadio.Net/GnuRadio.Net.csproj" />
+  </ItemGroup>
+
+</Project>

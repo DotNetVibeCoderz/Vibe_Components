@@ -1,0 +1,88 @@
+@* A rotary control: drag up/down, scroll, or use the arrow keys. *@
+<div class="gr-knob @Class" role="slider" tabindex="0"
+     aria-label="@Label" aria-valuemin="@Min" aria-valuemax="@Max" aria-valuenow="@Value" aria-valuetext="@Display"
+     @onkeydown="OnKey" @onwheel="OnWheel" @onwheel:preventDefault="true"
+     @onpointerdown="OnDown" @onpointermove="OnMove" @onpointerup="OnUp" @onpointercancel="OnUp">
+    <svg viewBox="0 0 64 64" class="gr-knob__dial" aria-hidden="true">
+        <path class="gr-knob__track" d="@Arc(1)" />
+        <path class="gr-knob__value" d="@Arc(Fraction)" />
+        <circle class="gr-knob__cap" cx="32" cy="32" r="19" />
+        <line class="gr-knob__pointer" x1="32" y1="32" x2="@PointerX" y2="@PointerY" />
+    </svg>
+    <div class="gr-knob__text">
+        <span class="gr-knob__label">@Label</span>
+        <span class="gr-knob__readout">@Display</span>
+    </div>
+</div>
+
+@code {
+    private const double Sweep = 270;
+    private double? _dragStartY;
+    private double _dragStartValue;
+
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public double Value { get; set; }
+    [Parameter] public EventCallback<double> ValueChanged { get; set; }
+    [Parameter] public double Min { get; set; }
+    [Parameter] public double Max { get; set; } = 1;
+    [Parameter] public double Step { get; set; } = 0.01;
+    [Parameter] public string Unit { get; set; } = "";
+
+    /// <summary>Optional formatter for the readout.</summary>
+    [Parameter] public Func<double, string>? Format { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    private double Fraction => Max > Min ? Math.Clamp((Value - Min) / (Max - Min), 0, 1) : 0;
+    private string Display => Format?.Invoke(Value) ?? $"{Axis.Format(Value)}{(Unit.Length > 0 ? " " + Unit : "")}";
+
+    private double Angle(double f) => (-135 + f * Sweep) * Math.PI / 180;
+    private string PointerX => (32 + 14 * Math.Sin(Angle(Fraction))).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    private string PointerY => (32 - 14 * Math.Cos(Angle(Fraction))).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    private string Arc(double f)
+    {
+        static string P(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        var a0 = Angle(0);
+        var a1 = Angle(Math.Max(f, 0.0001));
+        const double r = 27;
+        var large = f * Sweep > 180 ? 1 : 0;
+        return $"M {P(32 + r * Math.Sin(a0))} {P(32 - r * Math.Cos(a0))} A {r} {r} 0 {large} 1 {P(32 + r * Math.Sin(a1))} {P(32 - r * Math.Cos(a1))}";
+    }
+
+    private Task Set(double v)
+    {
+        v = Math.Clamp(Math.Round((v - Min) / Step) * Step + Min, Min, Max);
+        if (v == Value) return Task.CompletedTask;
+        Value = v;
+        return ValueChanged.InvokeAsync(v);
+    }
+
+    private Task OnKey(KeyboardEventArgs e) => e.Key switch
+    {
+        "ArrowUp" or "ArrowRight" => Set(Value + Step),
+        "ArrowDown" or "ArrowLeft" => Set(Value - Step),
+        "PageUp" => Set(Value + Step * 10),
+        "PageDown" => Set(Value - Step * 10),
+        "Home" => Set(Min),
+        "End" => Set(Max),
+        _ => Task.CompletedTask,
+    };
+
+    private Task OnWheel(WheelEventArgs e) => Set(Value - Math.Sign(e.DeltaY) * Step);
+
+    private void OnDown(PointerEventArgs e)
+    {
+        _dragStartY = e.ClientY;
+        _dragStartValue = Value;
+    }
+
+    private Task OnMove(PointerEventArgs e)
+    {
+        if (_dragStartY is not { } y0 || e.Buttons == 0) return Task.CompletedTask;
+        // 150 px of travel covers the full range.
+        return Set(_dragStartValue + (y0 - e.ClientY) / 150 * (Max - Min));
+    }
+
+    private void OnUp(PointerEventArgs e) => _dragStartY = null;
+}

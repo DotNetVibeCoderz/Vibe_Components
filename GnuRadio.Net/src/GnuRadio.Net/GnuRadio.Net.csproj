@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>GnuRadio</RootNamespace>
+    <AssemblyName>GnuRadio.Net</AssemblyName>
+    <PackageId>GnuRadio.Net</PackageId>
+    <IsAotCompatible>true</IsAotCompatible>
+    <Description>GnuRadio.Net core: flowgraph runtime, DSP, FFT, analog/digital modulation, FEC, synchronization, channel models, networking and visualization sinks. Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="GnuRadio.Net.Tests" />
+    <InternalsVisibleTo Include="GnuRadio.Net.Benchmarks" />
+  </ItemGroup>
+
+  <!--
+    The optional Rust kernels are built by native/build.ps1 into runtimes/<rid>/native.
+    RecursiveDir is "<rid>/native/", so PackagePath "runtimes/" lands them where NuGet resolves them.
+    When the library is missing the managed SIMD kernels are used, so the package works without it.
+  -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)../../runtimes/**/native/*gnuradio_native*"
+          Link="runtimes/%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest"
+          Pack="true"
+          PackagePath="runtimes/" />
+  </ItemGroup>
+
+</Project>

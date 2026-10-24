@@ -1,0 +1,144 @@
+options:
+  parameters:
+    author: Gravicode Studios
+    description: Live two-tone spectrum with a tunable low-pass, saved by GNU Radio Companion
+    generate_options: qt_gui
+    id: live_spectrum
+    title: Live spectrum
+  states:
+    coordinate: [8, 8]
+    state: enabled
+
+blocks:
+- name: samp_rate
+  id: variable
+  parameters:
+    value: '64000'
+  states:
+    coordinate: [184, 12]
+    state: enabled
+- name: tone
+  id: variable_qtgui_range
+  parameters:
+    label: Tone
+    max_value: samp_rate / 2
+    min_value: '0'
+    step: '100'
+    value: '8000'
+  states:
+    coordinate: [280, 12]
+    state: enabled
+- name: cutoff
+  id: variable_qtgui_range
+  parameters:
+    label: Cutoff
+    max_value: samp_rate / 2
+    min_value: '1000'
+    step: '500'
+    value: samp_rate / 4
+  states:
+    coordinate: [400, 12]
+    state: enabled
+- name: analog_sig_source_x_0
+  id: analog_sig_source_x
+  parameters:
+    amp: '0.8'
+    freq: tone
+    offset: '0'
+    phase: '0'
+    samp_rate: samp_rate
+    type: complex
+    waveform: analog.GR_COS_WAVE
+  states:
+    coordinate: [16, 120]
+    state: enabled
+- name: analog_sig_source_x_1
+  id: analog_sig_source_x
+  parameters:
+    amp: '0.3'
+    freq: -tone * 2.5
+    offset: '0'
+    phase: '0'
+    samp_rate: samp_rate
+    type: complex
+    waveform: analog.GR_COS_WAVE
+  states:
+    coordinate: [16, 230]
+    state: enabled
+- name: analog_noise_source_x_0
+  id: analog_noise_source_x
+  parameters:
+    amp: '0.05'
+    noise_type: analog.GR_GAUSSIAN
+    seed: '0'
+    type: complex
+  states:
+    coordinate: [16, 340]
+    state: enabled
+- name: blocks_add_xx_0
+  id: blocks_add_xx
+  parameters:
+    num_inputs: '3'
+    type: complex
+    vlen: '1'
+  states:
+    coordinate: [256, 220]
+    state: enabled
+- name: blocks_throttle2_0
+  id: blocks_throttle2
+  parameters:
+    samples_per_second: samp_rate
+    type: complex
+    vlen: '1'
+  states:
+    coordinate: [384, 236]
+    state: enabled
+- name: low_pass_filter_0
+  id: low_pass_filter
+  parameters:
+    beta: '6.76'
+    cutoff_freq: cutoff
+    decim: '1'
+    gain: '1'
+    samp_rate: samp_rate
+    type: fir_filter_ccf
+    width: samp_rate / 32
+    win: window.WIN_BLACKMAN
+  states:
+    coordinate: [544, 220]
+    state: enabled
+- name: qtgui_freq_sink_x_0
+  id: qtgui_freq_sink_x
+  parameters:
+    bw: samp_rate
+    fc: '0'
+    fftsize: '2048'
+    name: '"Filtered spectrum"'
+    wintype: window.WIN_BLACKMAN_hARRIS
+  states:
+    coordinate: [760, 200]
+    state: enabled
+- name: qtgui_time_sink_x_0
+  id: qtgui_time_sink_x
+  parameters:
+    name: '"Filtered signal"'
+    nconnections: '1'
+    size: '512'
+    srate: samp_rate
+    type: complex
+  states:
+    coordinate: [760, 300]
+    state: enabled
+
+connections:
+- [analog_sig_source_x_0, '0', blocks_add_xx_0, '0']
+- [analog_sig_source_x_1, '0', blocks_add_xx_0, '1']
+- [analog_noise_source_x_0, '0', blocks_add_xx_0, '2']
+- [blocks_add_xx_0, '0', blocks_throttle2_0, '0']
+- [blocks_throttle2_0, '0', low_pass_filter_0, '0']
+- [low_pass_filter_0, '0', qtgui_freq_sink_x_0, '0']
+- [low_pass_filter_0, '0', qtgui_time_sink_x_0, '0']
+
+metadata:
+  file_format: 1
+  grc_version: 3.10.9.2

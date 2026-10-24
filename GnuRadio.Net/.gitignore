@@ -1,0 +1,27 @@
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+
+# Rust native build output (the built library is staged into runtimes/ by native/build.ps1)
+native/**/target/
+runtimes/**/native/*.so
+runtimes/**/native/*.dll
+runtimes/**/native/*.dylib
+
+# Package output
+artifacts/
+*.nupkg
+*.snupkg
+
+# Test output
+TestResults/
+*.trx
+BenchmarkDotNet.Artifacts/
+
+# never commit credentials
+PackageCredentials.txt
+*.snk
+native-artifacts/

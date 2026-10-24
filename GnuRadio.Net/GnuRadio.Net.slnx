@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/GnuRadio.Net/GnuRadio.Net.csproj" />
+    <Project Path="src/GnuRadio.Net.Avalonia/GnuRadio.Net.Avalonia.csproj" />
+    <Project Path="src/GnuRadio.Net.Blazor/GnuRadio.Net.Blazor.csproj" />
+    <Project Path="src/GnuRadio.Net.Grc/GnuRadio.Net.Grc.csproj" />
+    <Project Path="src/GnuRadio.Net.Hardware/GnuRadio.Net.Hardware.csproj" />
+    <Project Path="src/GnuRadio.Net.ZeroMQ/GnuRadio.Net.ZeroMQ.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/GnuRadio.Net.Gallery.Shared/GnuRadio.Net.Gallery.Shared.csproj" />
+    <Project Path="samples/GnuRadio.Net.Gallery.Web/GnuRadio.Net.Gallery.Web.csproj" />
+    <Project Path="samples/GnuRadio.Net.Gallery.Desktop/GnuRadio.Net.Gallery.Desktop.csproj" />
+    <Project Path="samples/QuickStart/QuickStart.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/GnuRadio.Net.Tests/GnuRadio.Net.Tests.csproj" />
+    <Project Path="tests/GnuRadio.Net.Benchmarks/GnuRadio.Net.Benchmarks.csproj" />
+  </Folder>
+</Solution>

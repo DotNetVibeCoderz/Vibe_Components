@@ -1,0 +1,28 @@
+@implements IDisposable
+<section class="gr-screen text-screen" aria-label="@Title">
+    <header class="gr-screen__bar"><span class="gr-screen__title">@Title</span></header>
+    <pre class="text-screen__body" style="max-height:@(Height)px">@_text</pre>
+</section>
+
+@code {
+    private Timer? _timer;
+    private string _text = "";
+
+    [Parameter, EditorRequired] public Func<string> Content { get; set; } = () => "";
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public int Height { get; set; } = 160;
+
+    protected override void OnInitialized()
+    {
+        _text = Content();
+        _timer = new Timer(_ => InvokeAsync(() =>
+        {
+            var next = Content();
+            if (next == _text) return;
+            _text = next;
+            StateHasChanged();
+        }), null, 400, 400);
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

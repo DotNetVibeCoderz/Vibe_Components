@@ -1,0 +1,74 @@
+@inherits GrCanvasComponent
+
+<section class="gr-screen @Class" aria-label="@(Title ?? "Vector")">
+    @if (Title is not null)
+    {
+        <header class="gr-screen__bar">
+            <span class="gr-screen__title">@Title</span>
+            <span class="gr-screen__meta">@Meta</span>
+        </header>
+    }
+    <canvas @ref="Canvas" class="gr-screen__canvas" style="height:@Height"></canvas>
+</section>
+
+@code {
+    private long _version = -1;
+    private float[] _data = [];
+    private byte[] _bytes = [];
+    private float[]? _lastStatic;
+
+    /// <summary>Live vector source; or set <see cref="Data"/> for a static vector.</summary>
+    [Parameter] public VectorFrameSink? Sink { get; set; }
+
+    /// <summary>Static data (redrawn when the array instance changes).</summary>
+    [Parameter] public float[]? Data { get; set; }
+
+    /// <summary>Polled every frame for live data; redrawn when it returns a new array.</summary>
+    [Parameter] public Func<float[]?>? DataSource { get; set; }
+
+    /// <summary>Polled every frame for live markers (overrides <see cref="Markers"/>).</summary>
+    [Parameter] public Func<IReadOnlyList<(double X, string Label)>>? MarkerSource { get; set; }
+
+    [Parameter] public float Min { get; set; } = -100;
+    [Parameter] public float Max { get; set; } = 0;
+    [Parameter] public double XStart { get; set; }
+    [Parameter] public double XEnd { get; set; } = 1;
+    [Parameter] public string XUnit { get; set; } = "";
+    [Parameter] public string YUnit { get; set; } = "";
+    [Parameter] public bool Fill { get; set; } = true;
+    [Parameter] public string? Meta { get; set; }
+
+    /// <summary>Markers at x positions in data units.</summary>
+    [Parameter] public IReadOnlyList<(double X, string Label)>? Markers { get; set; }
+
+    protected override void OnParametersSet() => _version = -1;
+
+    protected override async ValueTask DrawAsync(IJSObjectReference module, bool force)
+    {
+        float[] data;
+        if (Sink is not null)
+        {
+            if (_data.Length != Sink.Length) _data = new float[Sink.Length];
+            if (!Sink.TryCopy(ref _version, _data) && !force) return;
+            data = _data;
+        }
+        else
+        {
+            var current = DataSource?.Invoke() ?? Data;
+            if (current is null || (ReferenceEquals(current, _lastStatic) && !force)) return;
+            _lastStatic = current;
+            data = current;
+        }
+        var options = new
+        {
+            min = Min,
+            max = Max,
+            fill = Fill,
+            xTicks = GrTicks.Linear(XStart, XEnd, 8, XUnit),
+            yTicks = GrTicks.Linear(Min, Max, 5, YUnit),
+            markers = (MarkerSource?.Invoke() ?? Markers)?.Select((m, i) => new GrMarker((m.X - XStart) / (XEnd - XStart), m.Label, Row: i % 3)).ToArray(),
+            hoverLabels = new { x0 = XStart, dx = (XEnd - XStart) / Math.Max(1, data.Length), kind = "x", unit = YUnit.Trim(), xUnit = XUnit.Trim() },
+        };
+        await module.InvokeVoidAsync("drawTrace", Canvas, ToBytes(data, ref _bytes), options, null);
+    }
+}

@@ -1,0 +1,48 @@
+@inject GalleryState State
+@* Maps a demo view description to the matching GnuRadio.Net.Blazor component. *@
+@switch (View)
+{
+    case SpectrumPanel s:
+        <SpectrumView Title="@State.T(s.Title)" Sink="s.Sink" MinDb="s.MinDb" MaxDb="s.MaxDb" MarkerSource="s.Markers"
+                      ShowMaxHold="s.MaxHold" Height="@Px(s.Height)" OnTune="TuneCallback(s.OnTune)" />
+        break;
+    case WaterfallPanel w:
+        <WaterfallView Title="@State.T(w.Title)" Sink="w.Sink" MinDb="w.MinDb" MaxDb="w.MaxDb" MarkerSource="w.Markers"
+                       Height="@Px(w.Height)" OnTune="TuneCallback(w.OnTune)" />
+        break;
+    case ConstellationPanel c:
+        <ConstellationView Title="@State.T(c.Title)" Sink="c.Sink" Reference="c.Reference" Scale="c.Scale" Height="@Px(c.Height)" />
+        break;
+    case ScopePanel { Sink: TimeSink<float> f } sc:
+        <TimeScope T="float" Title="@State.T(sc.Title)" Sink="f" Min="sc.Min" Max="sc.Max" Traces="sc.Traces" Height="@Px(sc.Height)" />
+        break;
+    case ScopePanel { Sink: TimeSink<Complex32> c } sc:
+        <TimeScope T="Complex32" Title="@State.T(sc.Title)" Sink="c" Min="sc.Min" Max="sc.Max" Traces="sc.Traces" Height="@Px(sc.Height)" />
+        break;
+    case VectorPanel v:
+        <VectorView Title="@State.T(v.Title)" Sink="v.Sink" DataSource="v.Data" Min="v.Min" Max="v.Max" XStart="v.XStart" XEnd="v.XEnd"
+                    XUnit="@v.XUnit" YUnit="@v.YUnit" MarkerSource="v.Markers" Height="@Px(v.Height)" />
+        break;
+    case ChartPanel ch:
+        <LineChart Title="@State.T(ch.Title)" SeriesSource="() => Map(ch)" RevisionSource="ch.Revision" XMin="ch.XMin" XMax="ch.XMax"
+                   YMin="ch.YMin" YMax="ch.YMax" LogY="ch.LogY" XUnit="@ch.XUnit" YUnit="@ch.YUnit" Height="@Px(ch.Height)" Fps="4" />
+        break;
+    case FlowgraphPanel fp:
+        <FlowgraphView Flowgraph="fp.Flowgraph()" Caption="@State.T(fp.Title)" />
+        break;
+    case TextPanel t:
+        <LiveText Title="@State.T(t.Title)" Content="t.Content" Height="t.Height" />
+        break;
+}
+
+@code {
+    [Parameter, EditorRequired] public DemoView View { get; set; } = null!;
+
+    private static string Px(int height) => $"{height}px";
+
+    private EventCallback<double> TuneCallback(Action<double>? tune) =>
+        tune is null ? default : EventCallback.Factory.Create<double>(this, f => Task.Run(() => tune(f)));
+
+    private static IReadOnlyList<ChartSeries> Map(ChartPanel ch) =>
+        [.. ch.Series().Select(l => new ChartSeries(l.Name, l.X, l.Y, l.Dashed, l.Points))];
+}

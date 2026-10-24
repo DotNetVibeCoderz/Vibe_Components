@@ -1,0 +1,76 @@
+@inherits GrCanvasComponent
+
+<section class="gr-screen @Class" aria-label="@(Title ?? "Spectrum")">
+    @if (Title is not null)
+    {
+        <header class="gr-screen__bar">
+            <span class="gr-screen__title">@Title</span>
+            <span class="gr-screen__meta">@Meta</span>
+        </header>
+    }
+    <canvas @ref="Canvas" class="gr-screen__canvas @(OnTune.HasDelegate ? "gr-screen__canvas--tunable" : "")" style="height:@Height"></canvas>
+</section>
+
+@code {
+    private long _version = -1;
+    private float[] _spectrum = [];
+    private float[] _hold = [];
+    private int _lastSize;
+    private byte[] _bytes = [];
+    private byte[] _holdBytes = [];
+
+    /// <summary>The spectrum to display.</summary>
+    [Parameter, EditorRequired] public FrequencySink Sink { get; set; } = null!;
+
+    [Parameter] public float MinDb { get; set; } = -100;
+    [Parameter] public float MaxDb { get; set; } = 0;
+
+    /// <summary>Draw the max-hold trace (enable <see cref="FrequencySink.MaxHold"/> too).</summary>
+    [Parameter] public bool ShowMaxHold { get; set; }
+
+    /// <summary>Markers at absolute frequencies (Hz) with labels.</summary>
+    [Parameter] public IReadOnlyList<(double Frequency, string Label)>? Markers { get; set; }
+
+    /// <summary>Polled every frame for live markers (overrides <see cref="Markers"/>).</summary>
+    [Parameter] public Func<IReadOnlyList<(double Frequency, string Label)>>? MarkerSource { get; set; }
+
+    /// <summary>Raised with the clicked frequency in Hz; enables click-to-tune.</summary>
+    [Parameter] public EventCallback<double> OnTune { get; set; }
+
+    protected override bool Interactive => true;
+
+    private string Meta => $"{Axis.FormatFrequency(Sink.CenterFrequency, 3)} · span {Axis.FormatFrequency(Sink.SampleRate, 1)} · RBW {Axis.FormatFrequency(Sink.SampleRate / Sink.FftSize, 1)}";
+
+    protected override void OnParametersSet() => _version = -1;
+
+    protected override async ValueTask DrawAsync(IJSObjectReference module, bool force)
+    {
+        if (_lastSize != Sink.FftSize)
+        {
+            _spectrum = new float[Sink.FftSize];
+            _hold = new float[Sink.FftSize];
+            _lastSize = Sink.FftSize;
+        }
+        if (!Sink.TryCopy(ref _version, _spectrum, ShowMaxHold ? _hold : default) && !force) return;
+        var start = Sink.CenterFrequency - Sink.SampleRate / 2;
+        var end = Sink.CenterFrequency + Sink.SampleRate / 2;
+        var options = new
+        {
+            min = MinDb,
+            max = MaxDb,
+            xTicks = GrTicks.Frequency(start, end),
+            yTicks = GrTicks.Linear(MinDb, MaxDb, 6, " dB"),
+            markers = (MarkerSource?.Invoke() ?? Markers)?.Select(m => new GrMarker((m.Frequency - start) / (end - start), m.Label)).ToArray(),
+            hoverLabels = new { x0 = start, dx = Sink.SampleRate / Sink.FftSize, kind = "hz", unit = "dB" },
+        };
+        await module.InvokeVoidAsync("drawTrace", Canvas, ToBytes(_spectrum, ref _bytes), options,
+            ShowMaxHold ? ToBytes(_hold, ref _holdBytes) : null);
+    }
+
+    protected override async Task OnCanvasClickAsync(double x, double y)
+    {
+        if (!OnTune.HasDelegate) return;
+        var f = Sink.CenterFrequency - Sink.SampleRate / 2 + x * Sink.SampleRate;
+        await OnTune.InvokeAsync(f);
+    }
+}

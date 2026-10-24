@@ -1,0 +1,41 @@
+@implements IDisposable
+@* Segmented bar meter. Bind a NumberSink for live values or set Value directly. *@
+<div class="gr-meter @Class" role="meter" aria-label="@Label" aria-valuemin="@Min" aria-valuemax="@Max" aria-valuenow="@Current">
+    <div class="gr-meter__head">
+        <span class="gr-meter__label">@Label</span>
+        <span class="gr-meter__value">@Text</span>
+    </div>
+    <div class="gr-meter__bar">
+        @for (var i = 0; i < Segments; i++)
+        {
+            var lit = i < LitSegments;
+            var hot = i >= Segments * 0.8;
+            <span class="gr-meter__seg @(lit ? "is-lit" : "") @(lit && hot ? "is-hot" : "")"></span>
+        }
+    </div>
+</div>
+
+@code {
+    private Timer? _timer;
+
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public NumberSink? Sink { get; set; }
+    [Parameter] public double Value { get; set; }
+    [Parameter] public double Min { get; set; }
+    [Parameter] public double Max { get; set; } = 1;
+    [Parameter] public string Unit { get; set; } = "";
+    [Parameter] public int Segments { get; set; } = 24;
+    [Parameter] public Func<double, string>? Format { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private double Current => Sink?.Value ?? Value;
+    private int LitSegments => (int)Math.Round(Math.Clamp((Current - Min) / (Max - Min), 0, 1) * Segments);
+    private string Text => Format?.Invoke(Current) ?? $"{Axis.Format(Current)} {Unit}";
+
+    protected override void OnInitialized()
+    {
+        if (Sink is not null) _timer = new Timer(_ => InvokeAsync(StateHasChanged), null, 100, 100);
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

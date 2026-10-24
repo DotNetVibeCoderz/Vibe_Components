@@ -1,0 +1,59 @@
+@inherits GrCanvasComponent
+
+<section class="gr-screen @Class" aria-label="@(Title ?? "Chart")">
+    @if (Title is not null)
+    {
+        <header class="gr-screen__bar">
+            <span class="gr-screen__title">@Title</span>
+            <span class="gr-screen__meta">@Meta</span>
+        </header>
+    }
+    <canvas @ref="Canvas" class="gr-screen__canvas" style="height:@Height"></canvas>
+</section>
+
+@code {
+    private int _drawnRevision = -1;
+
+    /// <summary>The series to plot.</summary>
+    [Parameter] public IReadOnlyList<ChartSeries> Series { get; set; } = [];
+
+    /// <summary>Bump to redraw after mutating series in place.</summary>
+    [Parameter] public int Revision { get; set; }
+
+    /// <summary>Polled every frame; when the value changes the chart redraws from <see cref="SeriesSource"/>.</summary>
+    [Parameter] public Func<int>? RevisionSource { get; set; }
+
+    /// <summary>Live series, read when <see cref="RevisionSource"/> changes.</summary>
+    [Parameter] public Func<IReadOnlyList<ChartSeries>>? SeriesSource { get; set; }
+
+    [Parameter] public double XMin { get; set; }
+    [Parameter] public double XMax { get; set; } = 1;
+    [Parameter] public double YMin { get; set; }
+    [Parameter] public double YMax { get; set; } = 1;
+    [Parameter] public bool LogY { get; set; }
+    [Parameter] public string XUnit { get; set; } = "";
+    [Parameter] public string YUnit { get; set; } = "";
+    [Parameter] public string? Meta { get; set; }
+
+    protected override void OnParametersSet() => _drawnRevision = -1;
+
+    protected override async ValueTask DrawAsync(IJSObjectReference module, bool force)
+    {
+        var revision = RevisionSource?.Invoke() ?? Revision;
+        if (_drawnRevision == revision && !force) return;
+        _drawnRevision = revision;
+        var series = SeriesSource?.Invoke() ?? Series;
+        var options = new
+        {
+            series = series.Select(s => new { name = s.Name, x = s.X, y = s.Y, dashed = s.Dashed, points = s.Points, color = s.Color }).ToArray(),
+            xMin = XMin,
+            xMax = XMax,
+            yMin = YMin,
+            yMax = YMax,
+            logY = LogY,
+            xTicks = GrTicks.Linear(XMin, XMax, 8, XUnit),
+            yTicks = LogY ? GrTicks.LogDecades(YMin, YMax) : GrTicks.Linear(YMin, YMax, 5, YUnit),
+        };
+        await module.InvokeVoidAsync("drawLines", Canvas, options);
+    }
+}

@@ -1,0 +1,142 @@
+options:
+  parameters:
+    author: Gravicode Studios
+    category: '[GRC Hier Blocks]'
+    description: Two tones through a low-pass filter, as saved by GNU Radio Companion 3.10
+    generate_options: qt_gui
+    id: tone_filter
+    title: Tone filter demo
+  states:
+    coordinate: [8, 8]
+    state: enabled
+
+blocks:
+- name: samp_rate
+  id: variable
+  parameters:
+    comment: ''
+    value: '48000'
+  states:
+    coordinate: [184, 12]
+    state: enabled
+- name: cutoff
+  id: variable_qtgui_range
+  parameters:
+    comment: ''
+    gui_hint: ''
+    label: Cutoff
+    max_value: samp_rate/2
+    min_value: '100'
+    step: '100'
+    value: samp_rate / 16
+  states:
+    coordinate: [296, 12]
+    state: enabled
+- name: analog_sig_source_x_0
+  id: analog_sig_source_x
+  parameters:
+    amp: '1'
+    freq: '1000'
+    offset: '0'
+    phase: '0'
+    samp_rate: samp_rate
+    type: float
+    waveform: analog.GR_SIN_WAVE
+  states:
+    coordinate: [16, 120]
+    state: enabled
+- name: analog_sig_source_x_1
+  id: analog_sig_source_x
+  parameters:
+    amp: '0.5'
+    freq: 2 * cutoff
+    offset: '0'
+    phase: '0'
+    samp_rate: samp_rate
+    type: float
+    waveform: analog.GR_SIN_WAVE
+  states:
+    coordinate: [16, 240]
+    state: enabled
+- name: blocks_add_xx_0
+  id: blocks_add_xx
+  parameters:
+    num_inputs: '2'
+    type: float
+    vlen: '1'
+  states:
+    coordinate: [240, 176]
+    state: enabled
+- name: blocks_multiply_const_vxx_0
+  id: blocks_multiply_const_vxx
+  parameters:
+    const: '10'
+    type: float
+    vlen: '1'
+  states:
+    coordinate: [336, 176]
+    state: bypassed
+- name: low_pass_filter_0
+  id: low_pass_filter
+  parameters:
+    beta: '6.76'
+    cutoff_freq: cutoff
+    decim: '1'
+    gain: '1'
+    interp: '1'
+    samp_rate: samp_rate
+    type: fir_filter_fff
+    width: '500'
+    win: window.WIN_HAMMING
+  states:
+    coordinate: [440, 144]
+    state: enabled
+- name: blocks_head_0
+  id: blocks_head
+  parameters:
+    num_items: int(samp_rate // 4)
+    type: float
+    vlen: '1'
+  states:
+    coordinate: [624, 176]
+    state: enabled
+- name: blocks_vector_sink_x_0
+  id: blocks_vector_sink_x
+  parameters:
+    reserve_items: '1024'
+    type: float
+    vlen: '1'
+  states:
+    coordinate: [784, 176]
+    state: enabled
+- name: qtgui_time_sink_x_0
+  id: qtgui_time_sink_x
+  parameters:
+    name: '"Filtered"'
+    nconnections: '1'
+    size: '1024'
+    srate: samp_rate
+    type: float
+  states:
+    coordinate: [784, 256]
+    state: disabled
+- name: epy_block_0
+  id: epy_block
+  parameters:
+    _source_code: "import numpy as np"
+  states:
+    coordinate: [16, 360]
+    state: enabled
+
+connections:
+- [analog_sig_source_x_0, '0', blocks_add_xx_0, '0']
+- [analog_sig_source_x_1, '0', blocks_add_xx_0, '1']
+- [blocks_add_xx_0, '0', blocks_multiply_const_vxx_0, '0']
+- [blocks_multiply_const_vxx_0, '0', low_pass_filter_0, '0']
+- [low_pass_filter_0, '0', blocks_head_0, '0']
+- [blocks_head_0, '0', blocks_vector_sink_x_0, '0']
+- [low_pass_filter_0, '0', qtgui_time_sink_x_0, '0']
+
+metadata:
+  file_format: 1
+  grc_version: 3.10.9.2

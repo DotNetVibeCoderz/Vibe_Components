@@ -1,0 +1,73 @@
+@inherits GrCanvasComponent
+
+<section class="gr-screen @Class" aria-label="@(Title ?? "Waterfall")">
+    @if (Title is not null)
+    {
+        <header class="gr-screen__bar">
+            <span class="gr-screen__title">@Title</span>
+            <span class="gr-screen__meta">@MinDb … @MaxDb dB · @Colormap.Name</span>
+        </header>
+    }
+    <canvas @ref="Canvas" class="gr-screen__canvas @(OnTune.HasDelegate ? "gr-screen__canvas--tunable" : "")" style="height:@Height"></canvas>
+</section>
+
+@code {
+    private long _cursor;
+    private float[] _rows = [];
+    private byte[] _rgba = [];
+    private byte[] _flipped = [];
+
+    [Parameter, EditorRequired] public WaterfallSink Sink { get; set; } = null!;
+    [Parameter] public float MinDb { get; set; } = -100;
+    [Parameter] public float MaxDb { get; set; } = -20;
+    [Parameter] public Colormap Colormap { get; set; } = Colormap.Phosphor;
+
+    /// <summary>Markers at absolute frequencies (Hz).</summary>
+    [Parameter] public IReadOnlyList<(double Frequency, string Label)>? Markers { get; set; }
+
+    /// <summary>Polled every frame for live markers (overrides <see cref="Markers"/>).</summary>
+    [Parameter] public Func<IReadOnlyList<(double Frequency, string Label)>>? MarkerSource { get; set; }
+
+    [Parameter] public EventCallback<double> OnTune { get; set; }
+
+    protected override bool Interactive => true;
+
+    private WaterfallSink? _sink;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_sink, Sink)) return;
+        _sink = Sink;
+        _cursor = Math.Max(0, Sink.RowCount - Sink.History);
+    }
+
+    protected override async ValueTask DrawAsync(IJSObjectReference module, bool force)
+    {
+        var bins = Sink.FftSize;
+        if (_rows.Length != bins * Sink.History) _rows = new float[bins * Sink.History];
+        var count = Sink.ReadNewRows(ref _cursor, _rows);
+        if (count == 0 && !force) return;
+        if (_rgba.Length != bins * 4 * Sink.History) _rgba = new byte[bins * 4 * Sink.History];
+        // The renderer expects newest first, so map rows in reverse.
+        for (var r = 0; r < count; r++)
+            Colormap.MapRow(_rows.AsSpan((count - 1 - r) * bins, bins), MinDb, MaxDb, _rgba.AsSpan(r * bins * 4, bins * 4));
+        if (_flipped.Length != count * bins * 4) _flipped = new byte[count * bins * 4];
+        _rgba.AsSpan(0, count * bins * 4).CopyTo(_flipped);
+        var start = Sink.CenterFrequency - Sink.SampleRate / 2;
+        var end = Sink.CenterFrequency + Sink.SampleRate / 2;
+        var options = new
+        {
+            xTicks = GrTicks.Frequency(start, end),
+            markers = (MarkerSource?.Invoke() ?? Markers)?.Select(m => new GrMarker((m.Frequency - start) / (end - start), m.Label, Dashed: true)).ToArray(),
+            left = 26,
+            yLabel = "time ↓",
+        };
+        await module.InvokeVoidAsync("pushWaterfall", Canvas, _flipped, bins, count, Sink.History, options);
+    }
+
+    protected override async Task OnCanvasClickAsync(double x, double y)
+    {
+        if (!OnTune.HasDelegate) return;
+        await OnTune.InvokeAsync(Sink.CenterFrequency - Sink.SampleRate / 2 + x * Sink.SampleRate);
+    }
+}

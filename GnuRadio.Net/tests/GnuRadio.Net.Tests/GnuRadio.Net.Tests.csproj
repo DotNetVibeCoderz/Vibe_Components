@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="GnuRadio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/GnuRadio.Net/GnuRadio.Net.csproj" />
+    <ProjectReference Include="../../src/GnuRadio.Net.ZeroMQ/GnuRadio.Net.ZeroMQ.csproj" />
+    <ProjectReference Include="../../src/GnuRadio.Net.Hardware/GnuRadio.Net.Hardware.csproj" />
+    <ProjectReference Include="../../src/GnuRadio.Net.Grc/GnuRadio.Net.Grc.csproj" />
+    <ProjectReference Include="../../samples/GnuRadio.Net.Gallery.Shared/GnuRadio.Net.Gallery.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../samples/grc/*.grc" Link="grc/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

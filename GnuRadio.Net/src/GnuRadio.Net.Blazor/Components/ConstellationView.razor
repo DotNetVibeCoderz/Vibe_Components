@@ -1,0 +1,49 @@
+@inherits GrCanvasComponent
+
+<section class="gr-screen gr-screen--square @Class" aria-label="@(Title ?? "Constellation")">
+    @if (Title is not null)
+    {
+        <header class="gr-screen__bar">
+            <span class="gr-screen__title">@Title</span>
+            <span class="gr-screen__meta">@Meta</span>
+        </header>
+    }
+    <canvas @ref="Canvas" class="gr-screen__canvas" style="height:@Height"></canvas>
+</section>
+
+@code {
+    private long _version = -1;
+    private Complex32[] _points = [];
+    private float[] _floats = [];
+    private byte[] _bytes = [];
+
+    [Parameter, EditorRequired] public ConstellationSink Sink { get; set; } = null!;
+
+    /// <summary>Half-width of the plot in signal units.</summary>
+    [Parameter] public float Scale { get; set; } = 1.5f;
+
+    /// <summary>Ideal points drawn as rings (for example a constellation's Points).</summary>
+    [Parameter] public IReadOnlyList<Complex32>? Reference { get; set; }
+
+    /// <summary>0…1: how much of the previous frame remains (phosphor afterglow). 1 = no persistence.</summary>
+    [Parameter] public double Persistence { get; set; } = 0.45;
+
+    /// <summary>Extra text for the title bar (for example the EVM).</summary>
+    [Parameter] public string? Meta { get; set; }
+
+    protected override void OnParametersSet() => _version = -1;
+
+    protected override async ValueTask DrawAsync(IJSObjectReference module, bool force)
+    {
+        if (_points.Length != Sink.Size)
+        {
+            _points = new Complex32[Sink.Size];
+            _floats = new float[Sink.Size * 2];
+        }
+        if (!Sink.TryCopy(ref _version, _points) && !force) return;
+        SinkData.Interleaved(_points).CopyTo(_floats);
+        var reference = Reference?.SelectMany(p => new[] { p.Real, p.Imaginary }).ToArray();
+        await module.InvokeVoidAsync("drawConstellation", Canvas, ToBytes(_floats, ref _bytes),
+            new { scale = Scale, reference, persistence = Persistence });
+    }
+}

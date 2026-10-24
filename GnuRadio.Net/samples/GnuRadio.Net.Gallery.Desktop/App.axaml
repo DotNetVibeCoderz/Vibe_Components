@@ -1,0 +1,62 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GnuRadio.Gallery.Desktop.App"
+             RequestedThemeVariant="Light">
+  <Application.Styles>
+    <FluentTheme />
+
+    <!-- Instrument chassis: anodised panels, hard keys, LED accents. -->
+    <Style Selector="Window">
+      <Setter Property="Background" Value="#dde2e7" />
+      <Setter Property="FontFamily" Value="avares://GnuRadio.Net.Gallery.Desktop/Assets/Fonts#Instrument Sans" />
+    </Style>
+    <Style Selector="TextBlock.display">
+      <Setter Property="FontFamily" Value="avares://GnuRadio.Net.Gallery.Desktop/Assets/Fonts#Chakra Petch" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.data, SelectableTextBlock.data">
+      <Setter Property="FontFamily" Value="avares://GnuRadio.Net.Gallery.Desktop/Assets/Fonts#IBM Plex Mono" />
+    </Style>
+    <Style Selector="TextBlock.eyebrow">
+      <Setter Property="FontFamily" Value="avares://GnuRadio.Net.Gallery.Desktop/Assets/Fonts#IBM Plex Mono" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="LetterSpacing" Value="1.4" />
+      <Setter Property="Foreground" Value="#e8611a" />
+    </Style>
+
+    <Style Selector="Button.nav">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Padding" Value="8,5" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Foreground" Value="#13202b" />
+    </Style>
+    <Style Selector="Button.nav:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#dde2e7" />
+    </Style>
+    <Style Selector="Button.nav.active">
+      <Setter Property="Background" Value="#dde2e7" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style Selector="Button.hardkey, ToggleButton.segment">
+      <Setter Property="Background" Value="#f2f4f6" />
+      <Setter Property="BorderBrush" Value="#c3cad2" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="Padding" Value="12,6" />
+      <Setter Property="Foreground" Value="#13202b" />
+      <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+    <Style Selector="ToggleButton.segment">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="10,4" />
+    </Style>
+    <Style Selector="ToggleButton.segment:checked /template/ ContentPresenter">
+      <Setter Property="Background" Value="#13202b" />
+      <Setter Property="Foreground" Value="#e9edf1" />
+    </Style>
+  </Application.Styles>
+</Application>

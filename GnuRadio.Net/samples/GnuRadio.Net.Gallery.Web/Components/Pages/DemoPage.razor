@@ -1,0 +1,101 @@
+@page "/demo/{Id}"
+@implements IAsyncDisposable
+@inject GalleryState State
+
+@if (_info is null)
+{
+    <section class="page-head">
+        <h1>@State.T("Demo not found", "Demo tidak ditemukan")</h1>
+        <p><a href="">@State.T("Back to the gallery", "Kembali ke galeri")</a></p>
+    </section>
+    return;
+}
+
+<PageTitle>@State.T(_info.Title) · GnuRadio.Net Gallery</PageTitle>
+
+<article class="demo">
+    <header class="page-head">
+        <p class="eyebrow">@State.T(Categories.Name(_info.Category))</p>
+        <h1>@State.T(_info.Title)</h1>
+        <p class="lede">@State.T(_info.Summary)</p>
+    </header>
+
+    @if (_demo is not null)
+    {
+        @if (_demo.Error is { } error)
+        {
+            <p class="alert" role="alert">@State.T("The flowgraph stopped:", "Flowgraph berhenti:") @error</p>
+        }
+
+        @if (_demo.Parameters.Count > 0)
+        {
+            <FrontPanel Parameters="_demo.Parameters" />
+        }
+
+        <div class="screens">
+            @foreach (var view in _demo.Views)
+            {
+                <div class="screens__cell screens__cell--@view.Size.ToString().ToLowerInvariant()" @key="view">
+                    <DemoViewHost View="view" />
+                </div>
+            }
+        </div>
+
+        @if (_demo.Readouts.Count > 0)
+        {
+            <ReadoutStrip Readouts="_demo.Readouts" @key="_demo.Readouts" />
+        }
+
+        @if (_demo.Notes is { } notes)
+        {
+            <aside class="note">
+                <h2>@State.T("How it works", "Cara kerjanya")</h2>
+                <p>@State.T(notes)</p>
+            </aside>
+        }
+
+        <section class="demo__code">
+            <h2>@State.T("Build it yourself", "Buat sendiri")</h2>
+            <CodeBlock Code="@_demo.Code" Caption="@($"{_info.Id}.cs")" />
+        </section>
+
+        @if (_demo.Flowgraph is { } fg && fg.Flatten().Blocks.Count is > 0 and < 40 && !_demo.Views.OfType<FlowgraphPanel>().Any())
+        {
+            <section class="demo__graph">
+                <h2>@State.T("Flowgraph", "Flowgraph")</h2>
+                <FlowgraphView Flowgraph="fg" Caption="@State.T("Blocks as they run, after hierarchical blocks are flattened.", "Blok sebagaimana berjalan, setelah blok hierarkis diratakan.")" @key="fg" />
+            </section>
+        }
+    }
+</article>
+
+@code {
+    private DemoInfo? _info;
+    private Demo? _demo;
+
+    [Parameter] public string Id { get; set; } = "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_info?.Id == Id) return;
+        await StopAsync();
+        _info = DemoCatalog.Find(Id);
+        if (_info is null) return;
+        var demo = _info.Create();
+        demo.Changed += OnDemoChanged;
+        await Task.Run(demo.Start);
+        _demo = demo;
+    }
+
+    private void OnDemoChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task StopAsync()
+    {
+        if (_demo is not { } old) return;
+        _demo = null;
+        old.Changed -= OnDemoChanged;
+        await Task.Run(old.Dispose);
+    }
+
+    public async ValueTask DisposeAsync() => await StopAsync();
+}

@@ -1,0 +1,74 @@
+@* Receiver-style frequency display. Scroll over a digit (or focus it and use ↑/↓) to tune by that digit's step. *@
+<div class="gr-freq @Class" aria-label="@(Label ?? "Frequency")">
+    @if (Label is not null)
+    {
+        <span class="gr-freq__label">@Label</span>
+    }
+    <div class="gr-freq__digits">
+        @foreach (var g in Groups)
+        {
+            <span class="gr-freq__group">
+                @foreach (var d in g)
+                {
+                    <span class="gr-freq__digit @(d.Leading ? "gr-freq__digit--dim" : "")" tabindex="@(Tunable ? 0 : -1)"
+                          title="@($"± {Axis.FormatFrequency(d.Step)}")"
+                          @onwheel="e => OnWheel(e, d.Step)" @onwheel:preventDefault="Tunable"
+                          @onkeydown="e => OnKey(e, d.Step)">@d.Char</span>
+                }
+            </span>
+        }
+        <span class="gr-freq__unit">MHz</span>
+    </div>
+</div>
+
+@code {
+    private readonly record struct Digit(char Char, double Step, bool Leading);
+
+    [Parameter] public double Value { get; set; }
+    [Parameter] public EventCallback<double> ValueChanged { get; set; }
+    [Parameter] public double Min { get; set; }
+    [Parameter] public double Max { get; set; } = 6e9;
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private bool Tunable => ValueChanged.HasDelegate;
+
+    // "0099.900000" MHz as groups [0099] [900] [000] with each digit's step in Hz.
+    private IEnumerable<Digit[]> Groups
+    {
+        get
+        {
+            var hz = (long)Math.Round(Value);
+            var mhz = hz / 1_000_000;
+            var rest = hz % 1_000_000;
+            var head = mhz.ToString("D4");
+            var leading = true;
+            var g0 = head.Select((c, i) =>
+            {
+                if (c != '0' || i == head.Length - 1) leading = false;
+                return new Digit(c, Math.Pow(10, 9 - i), leading);
+            }).ToArray();
+            var tail = rest.ToString("D6");
+            var g1 = tail[..3].Select((c, i) => new Digit(c, Math.Pow(10, 5 - i), false)).ToArray();
+            var g2 = tail[3..].Select((c, i) => new Digit(c, Math.Pow(10, 2 - i), false)).ToArray();
+            return [g0, [new Digit('.', 0, false)], g1, g2];
+        }
+    }
+
+    private Task Tune(double delta)
+    {
+        if (!Tunable || delta == 0) return Task.CompletedTask;
+        var v = Math.Clamp(Value + delta, Min, Max);
+        Value = v;
+        return ValueChanged.InvokeAsync(v);
+    }
+
+    private Task OnWheel(WheelEventArgs e, double step) => Tune(-Math.Sign(e.DeltaY) * step);
+
+    private Task OnKey(KeyboardEventArgs e, double step) => e.Key switch
+    {
+        "ArrowUp" => Tune(step),
+        "ArrowDown" => Tune(-step),
+        _ => Task.CompletedTask,
+    };
+}

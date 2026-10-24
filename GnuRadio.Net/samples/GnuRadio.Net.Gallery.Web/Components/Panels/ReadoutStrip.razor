@@ -1,0 +1,33 @@
+@implements IDisposable
+@inject GalleryState State
+<dl class="readouts">
+    @foreach (var r in Readouts)
+    {
+        <div class="readout">
+            <dt>@State.T(r.Label)</dt>
+            <dd>@Safe(r)</dd>
+        </div>
+    }
+</dl>
+
+@code {
+    private Timer? _timer;
+
+    [Parameter, EditorRequired] public IReadOnlyList<Readout> Readouts { get; set; } = [];
+
+    protected override void OnInitialized() => _timer = new Timer(_ => InvokeAsync(StateHasChanged), null, 250, 250);
+
+    private static string Safe(Readout r)
+    {
+        try
+        {
+            return r.Value();
+        }
+        catch (Exception)
+        {
+            return "—";
+        }
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

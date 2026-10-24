@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="512" height="512">
+  <!-- GnuRadio.Net: a spectral line on an instrument screen. Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil. -->
+  <defs>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#123040"/>
+      <stop offset="1" stop-color="#08141b"/>
+    </linearGradient>
+    <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffb23f" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#ffb23f" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="1.1" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#glass)"/>
+  <rect x="2.5" y="2.5" width="59" height="59" rx="13.5" fill="none" stroke="#2a4553"/>
+  <g stroke="#4fd1e8" stroke-opacity=".16" stroke-width=".8">
+    <path d="M10 20 H54 M10 30 H54 M10 40 H54"/>
+    <path d="M21 12 V48 M32 12 V48 M43 12 V48"/>
+  </g>
+  <path d="M10 48 L18 46 L22 47 L26 41 L29 44 L32 13 L35 44 L38 41 L42 47 L46 46 L54 48 Z" fill="url(#fill)"/>
+  <path d="M10 48 L18 46 L22 47 L26 41 L29 44 L32 13 L35 44 L38 41 L42 47 L46 46 L54 48" fill="none" stroke="#ffb23f" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round" filter="url(#glow)"/>
+  <path d="M10 48 H54" stroke="#4fd1e8" stroke-opacity=".55" stroke-width="1.4"/>
+  <circle cx="50" cy="13.5" r="3.4" fill="#e8611a" filter="url(#glow)"/>
+</svg>

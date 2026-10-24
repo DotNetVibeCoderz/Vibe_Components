@@ -1,0 +1,26 @@
+@inject IJSRuntime JS
+@inject GalleryState State
+<figure class="code">
+    <figcaption class="code__bar">
+        <span>@Caption</span>
+        <button type="button" class="hardkey hardkey--small" @onclick="CopyAsync">@(_copied ? State.T("Copied", "Tersalin") : State.T("Copy", "Salin"))</button>
+    </figcaption>
+    <pre class="code__body"><code>@foreach (var (kind, text) in CodeHighlighter.Tokenize(Code)){<span class="@Css(kind)">@text</span>}</code></pre>
+</figure>
+
+@code {
+    private bool _copied;
+
+    [Parameter, EditorRequired] public string Code { get; set; } = "";
+    [Parameter] public string Caption { get; set; } = "C#";
+
+    private static string Css(CodeToken kind) => "tok-" + kind.ToString().ToLowerInvariant();
+
+    private async Task CopyAsync()
+    {
+        _copied = await JS.InvokeAsync<bool>("grGallery.copy", Code);
+        StateHasChanged();
+        await Task.Delay(1500);
+        _copied = false;
+    }
+}

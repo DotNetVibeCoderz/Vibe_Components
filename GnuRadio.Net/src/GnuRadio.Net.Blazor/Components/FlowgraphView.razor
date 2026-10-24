@@ -1,0 +1,102 @@
+@* Draws a flowgraph as a left-to-right block diagram (like GNU Radio Companion's canvas). *@
+<figure class="gr-flowgraph @Class">
+    <svg viewBox="0 0 @_width @_height" role="img" aria-label="@($"Flowgraph {Flowgraph?.Name}")" preserveAspectRatio="xMidYMid meet">
+        <defs>
+            <marker id="gr-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" class="gr-flowgraph__arrowhead" />
+            </marker>
+        </defs>
+        @foreach (var e in _edges)
+        {
+            <path class="gr-flowgraph__edge @(e.Message ? "is-message" : "")" d="@e.Path" marker-end="url(#gr-arrow)" />
+        }
+        @foreach (var n in _nodes)
+        {
+            <g class="gr-flowgraph__node" transform="translate(@n.X @n.Y)">
+                <rect width="@NodeWidth" height="@NodeHeight" rx="6" />
+                <text x="12" y="22" class="gr-flowgraph__name">@n.Block.Name</text>
+                <text x="12" y="40" class="gr-flowgraph__alias">@n.Block.Alias</text>
+            </g>
+        }
+    </svg>
+    @if (Caption is not null)
+    {
+        <figcaption>@Caption</figcaption>
+    }
+</figure>
+
+@code {
+    private const int NodeWidth = 168;
+    private const int NodeHeight = 52;
+    private const int ColumnGap = 64;
+    private const int RowGap = 22;
+    private sealed record Node(Block Block, int X, int Y);
+    private sealed record EdgePath(string Path, bool Message);
+    private List<Node> _nodes = [];
+    private List<EdgePath> _edges = [];
+    private int _width = 400;
+    private int _height = 120;
+
+    [Parameter] public Flowgraph? Flowgraph { get; set; }
+    [Parameter] public string? Caption { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _nodes = [];
+        _edges = [];
+        if (Flowgraph is null) return;
+        var (blocks, edges, messages) = Flowgraph.Flatten();
+
+        // Longest-path layering: a block sits one column right of its furthest upstream block.
+        var layer = blocks.ToDictionary(b => b, _ => 0);
+        for (var pass = 0; pass < blocks.Count; pass++)
+        {
+            var changed = false;
+            foreach (var e in edges)
+            {
+                var want = layer[e.Source.Block] + 1;
+                if (layer[e.Destination.Block] < want)
+                {
+                    layer[e.Destination.Block] = want;
+                    changed = true;
+                }
+            }
+            foreach (var m in messages)
+            {
+                var want = layer[m.Source] + 1;
+                if (layer[m.Destination] < want && !edges.Any(e => e.Destination.Block == m.Source && e.Source.Block == m.Destination))
+                {
+                    layer[m.Destination] = want;
+                    changed = true;
+                }
+            }
+            if (!changed) break;
+        }
+        var position = new Dictionary<Block, Node>();
+        foreach (var group in blocks.GroupBy(b => layer[b]).OrderBy(g => g.Key))
+        {
+            var row = 0;
+            foreach (var b in group)
+            {
+                var node = new Node(b, 16 + group.Key * (NodeWidth + ColumnGap), 16 + row++ * (NodeHeight + RowGap));
+                position[b] = node;
+                _nodes.Add(node);
+            }
+        }
+        foreach (var e in edges) _edges.Add(new EdgePath(Curve(position[e.Source.Block], position[e.Destination.Block], e.Destination.Port), false));
+        foreach (var m in messages) _edges.Add(new EdgePath(Curve(position[m.Source], position[m.Destination], 0), true));
+        _width = _nodes.Count == 0 ? 400 : _nodes.Max(n => n.X) + NodeWidth + 24;
+        _height = _nodes.Count == 0 ? 120 : _nodes.Max(n => n.Y) + NodeHeight + 24;
+    }
+
+    private static string Curve(Node a, Node b, int port)
+    {
+        var x1 = a.X + NodeWidth;
+        var y1 = a.Y + NodeHeight / 2;
+        var x2 = b.X - 2;
+        var y2 = b.Y + 14 + port * 12;
+        var dx = Math.Max(30, (x2 - x1) / 2);
+        return $"M {x1} {y1} C {x1 + dx} {y1}, {x2 - dx} {y2}, {x2} {y2}";
+    }
+}

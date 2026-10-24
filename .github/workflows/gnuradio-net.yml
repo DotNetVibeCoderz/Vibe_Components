@@ -1,0 +1,138 @@
+name: GnuRadio.Net
+
+# CI for every change under GnuRadio.Net/, and NuGet publishing when a tag like gnuradio-net-v0.1.0 is pushed
+# (or when started manually with "publish" ticked). Uses the NUGET_API_KEY repository secret.
+# The optional Rust kernels are built per platform and packed into GnuRadio.Net under runtimes/<rid>/native.
+
+on:
+  push:
+    branches: [main]
+    paths: ["GnuRadio.Net/**", ".github/workflows/gnuradio-net.yml"]
+    tags: ["gnuradio-net-v*"]
+  pull_request:
+    paths: ["GnuRadio.Net/**", ".github/workflows/gnuradio-net.yml"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish packages to NuGet"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gnuradio-net-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  native:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            lib: gnuradio_native.dll
+          - os: ubuntu-latest
+            rid: linux-x64
+            lib: libgnuradio_native.so
+          - os: macos-latest
+            rid: osx-arm64
+            lib: libgnuradio_native.dylib
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: GnuRadio.Net/native/gnuradio-native
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test and build Rust kernels
+        shell: bash
+        run: |
+          cargo test --release
+          cargo build --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: GnuRadio.Net/native/gnuradio-native/target/release/${{ matrix.lib }}
+
+  build:
+    needs: native
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: GnuRadio.Net
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: GnuRadio.Net/global.json
+
+      - name: Native kernels
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: GnuRadio.Net/native-artifacts
+
+      - name: Stage native kernels
+        shell: bash
+        run: |
+          for dir in native-artifacts/native-*; do
+            rid="${dir##*/native-}"
+            mkdir -p "runtimes/$rid/native"
+            cp "$dir"/* "runtimes/$rid/native/"
+          done
+          find runtimes -type f
+
+      - name: Version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/gnuradio-net-v* ]]; then
+            echo "args=-p:Version=${GITHUB_REF#refs/tags/gnuradio-net-v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "args=-p:VersionSuffix=ci.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore
+        run: dotnet restore GnuRadio.Net.slnx
+
+      - name: Build
+        run: dotnet build GnuRadio.Net.slnx -c Release --no-restore ${{ steps.version.outputs.args }}
+
+      - name: Test
+        run: dotnet test tests/GnuRadio.Net.Tests -c Release --no-build
+
+      - name: Pack
+        run: dotnet pack GnuRadio.Net.slnx -c Release --no-build -o artifacts ${{ steps.version.outputs.args }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gnuradio-net-packages
+          path: GnuRadio.Net/artifacts/*
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/gnuradio-net-v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: gnuradio-net-packages
+          path: packages
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Push to NuGet
+        working-directory: packages
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: dotnet nuget push "*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate

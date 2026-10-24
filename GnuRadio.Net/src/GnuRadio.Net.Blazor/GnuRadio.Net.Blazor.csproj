@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>GnuRadio.Blazor</RootNamespace>
+    <PackageId>GnuRadio.Net.Blazor</PackageId>
+    <Description>Blazor components for GnuRadio.Net: spectrum analyser, waterfall, constellation, oscilloscope, line charts, meters, tuning knobs, frequency readout and flowgraph diagrams. Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil.</Description>
+    <PackageTags>$(PackageTags);blazor;components;spectrum;waterfall</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../GnuRadio.Net/GnuRadio.Net.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>GnuRadio.Gallery.Web</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../GnuRadio.Net.Gallery.Shared/GnuRadio.Net.Gallery.Shared.csproj" />
+    <ProjectReference Include="../../src/GnuRadio.Net.Blazor/GnuRadio.Net.Blazor.csproj" />
+  </ItemGroup>
+
+</Project>

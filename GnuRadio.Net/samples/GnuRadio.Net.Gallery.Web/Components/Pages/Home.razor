@@ -1,0 +1,111 @@
+@page "/"
+@implements IAsyncDisposable
+@inject GalleryState State
+
+<PageTitle>GnuRadio.Net Gallery</PageTitle>
+
+<section class="hero" aria-labelledby="hero-title">
+    <div class="hero__copy">
+        <p class="eyebrow">GnuRadio.Net · @State.T("Gallery", "Galeri")</p>
+        <h1 id="hero-title">@State.T("Software radio, written in C#.", "Radio perangkat lunak, ditulis dengan C#.")</h1>
+        <p class="lede">
+            @State.T("Flowgraphs, DSP, modulation, FEC and synchronisation modelled on GNU Radio, with live instrument components for Blazor and Avalonia. This band is being scanned right now — tune it.",
+                     "Flowgraph, DSP, modulasi, FEC dan sinkronisasi mengikuti GNU Radio, dengan komponen instrumen langsung untuk Blazor dan Avalonia. Pita ini sedang dipindai sekarang — silakan tala.")
+        </p>
+        <div class="hero__actions">
+            <a class="hardkey hardkey--primary" href="demo/fm-receiver">@State.T("Listen to the FM receiver", "Coba penerima FM")</a>
+            <a class="hardkey" href="demo/psk-qam">@State.T("Open the QAM modem", "Buka modem QAM")</a>
+        </div>
+    </div>
+    @if (_scanner is not null && _frequency is not null)
+    {
+        <div class="hero__tuner">
+            <FrequencyReadout Value="_frequency.Value" ValueChanged="Tune" Min="_frequency.Min" Max="_frequency.Max"
+                              Label="@State.T("Scanning the simulated 88–108 MHz band — scroll a digit or click the waterfall", "Memindai pita simulasi 88–108 MHz — gulir digit atau klik waterfall")" />
+            <ReadoutStrip Readouts="_scanner.Readouts.Take(2).ToArray()" />
+        </div>
+    }
+</section>
+
+@if (_scanner is not null)
+{
+    <section class="hero__screens" aria-label="@State.T("Live band scan", "Pindaian pita langsung")">
+        @foreach (var view in _scanner.Views)
+        {
+            <div @key="view"><DemoViewHost View="view" /></div>
+        }
+    </section>
+}
+
+<section class="catalog" aria-labelledby="catalog-title">
+    <h2 id="catalog-title" class="catalog__title">@State.T($"{DemoCatalog.All.Count} live use cases", $"{DemoCatalog.All.Count} contoh penggunaan langsung")</h2>
+    @foreach (var group in DemoCatalog.All.GroupBy(d => d.Category))
+    {
+        <div class="catalog__group">
+            <h3>@State.T(Categories.Name(group.Key))</h3>
+            <ul class="catalog__list">
+                @foreach (var d in group)
+                {
+                    <li>
+                        <a class="tile" href="@($"demo/{d.Id}")">
+                            <span class="tile__title">@State.T(d.Title)</span>
+                            <span class="tile__summary">@State.T(d.Summary)</span>
+                        </a>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+</section>
+
+<section class="install" aria-labelledby="install-title">
+    <h2 id="install-title">@State.T("Add it to your project", "Tambahkan ke proyek Anda")</h2>
+    <CodeBlock Caption="terminal" Code="@InstallCode" />
+</section>
+
+@code {
+    private const string InstallCode = """
+        dotnet add package GnuRadio.Net            // runtime, DSP, modulation, FEC, sinks
+        dotnet add package GnuRadio.Net.Blazor     // <SpectrumView/>, <WaterfallView/>, <ConstellationView/>…
+        dotnet add package GnuRadio.Net.Avalonia   // the same displays for desktop
+        dotnet add package GnuRadio.Net.Hardware   // SoapySDR, rtl_tcp, simulated SDR
+        dotnet add package GnuRadio.Net.ZeroMQ     // gr-zeromq compatible streams and messages
+        dotnet add package GnuRadio.Net.Grc        // run and convert .grc files
+        """;
+
+    private Demo? _scanner;
+    private NumberParameter? _frequency;
+    private Timer? _timer;
+    private double _shownFrequency;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var scanner = DemoCatalog.Find("band-scanner")!.Create();
+        scanner.Changed += OnChanged;
+        await Task.Run(scanner.Start);
+        _frequency = scanner.Parameters.OfType<NumberParameter>().First(p => p.IsFrequency);
+        _scanner = scanner;
+        _shownFrequency = _frequency.Value;
+        // A click on the waterfall retunes through the parameter; follow it in the readout.
+        _timer = new Timer(_ => InvokeAsync(() =>
+        {
+            if (_frequency.Value == _shownFrequency) return;
+            _shownFrequency = _frequency.Value;
+            StateHasChanged();
+        }), null, 300, 300);
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    private Task Tune(double f) => Task.Run(() => _frequency?.Set(f));
+
+    public async ValueTask DisposeAsync()
+    {
+        _timer?.Dispose();
+        if (_scanner is { } s)
+        {
+            s.Changed -= OnChanged;
+            await Task.Run(s.Dispose);
+        }
+    }
+}

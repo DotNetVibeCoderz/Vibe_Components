@@ -1,0 +1,88 @@
+@implements IDisposable
+@inject GalleryState State
+@* Renders a demo's parameters as instrument controls. *@
+<div class="front-panel" role="group" aria-label="@State.T("Controls", "Kontrol")">
+    @foreach (var p in Parameters)
+    {
+        switch (p)
+        {
+            case NumberParameter n when n.IsFrequency:
+                <div class="control control--wide">
+                    <FrequencyReadout Value="n.Value" ValueChanged="v => Set(n, v)" Min="n.Min" Max="n.Max" Label="@State.T(n.Label)" />
+                    @if (n.Help is not null)
+                    {
+                        <p class="control__help">@State.T(n.Help)</p>
+                    }
+                </div>
+                break;
+            case NumberParameter n:
+                <div class="control">
+                    <Knob Label="@State.T(n.Label)" Value="n.Value" ValueChanged="v => Set(n, v)" Min="n.Min" Max="n.Max" Step="n.Step" Unit="@n.Unit" Format="n.Format" />
+                    @if (n.Help is not null)
+                    {
+                        <p class="control__help">@State.T(n.Help)</p>
+                    }
+                </div>
+                break;
+            case ChoiceParameter c:
+                <div class="control">
+                    <span class="control__label" id="@($"lbl-{c.Key}")">@State.T(c.Label)</span>
+                    <div class="segmented" role="radiogroup" aria-labelledby="@($"lbl-{c.Key}")">
+                        @foreach (var (value, label) in c.Options)
+                        {
+                            <button type="button" role="radio" aria-checked="@(c.Value == value ? "true" : "false")" class="@(c.Value == value ? "is-on" : "")"
+                                    @onclick="() => Choose(c, value)">@State.T(label)</button>
+                        }
+                    </div>
+                    @if (c.Help is not null)
+                    {
+                        <p class="control__help">@State.T(c.Help)</p>
+                    }
+                </div>
+                break;
+            case ActionParameter a:
+                <div class="control control--action">
+                    <button type="button" class="hardkey" @onclick="() => Invoke(a)">@State.T(a.Label)</button>
+                </div>
+                break;
+        }
+    }
+</div>
+
+@code {
+    private Timer? _timer;
+    private string _shown = "";
+
+    [Parameter, EditorRequired] public IReadOnlyList<DemoParameter> Parameters { get; set; } = [];
+
+    // Values can also change from elsewhere (click-to-tune); re-render only when they did.
+    private string Signature() => string.Join('|', Parameters.Select(p => p switch
+    {
+        NumberParameter n => n.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        ChoiceParameter c => c.Value,
+        _ => "",
+    }));
+
+    protected override void OnInitialized()
+    {
+        _shown = Signature();
+        _timer = new Timer(_ => InvokeAsync(() =>
+        {
+            var now = Signature();
+            if (now == _shown) return;
+            _shown = now;
+            StateHasChanged();
+        }), null, 300, 300);
+    }
+
+    public void Dispose() => _timer?.Dispose();
+
+    // Restarting a flowgraph joins its threads; keep that off the circuit's dispatcher.
+    private static Task Run(Action action) => Task.Run(action);
+
+    private Task Set(NumberParameter p, double v) => Run(() => p.Set(v));
+
+    private Task Choose(ChoiceParameter p, string v) => Run(() => p.Set(v));
+
+    private Task Invoke(ActionParameter a) => Run(a.Invoke);
+}

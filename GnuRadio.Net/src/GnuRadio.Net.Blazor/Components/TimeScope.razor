@@ -1,0 +1,47 @@
+@typeparam T where T : unmanaged
+@inherits GrCanvasComponent
+
+<section class="gr-screen @Class" aria-label="@(Title ?? "Oscilloscope")">
+    @if (Title is not null)
+    {
+        <header class="gr-screen__bar">
+            <span class="gr-screen__title">@Title</span>
+            <span class="gr-screen__meta">@Axis.FormatTime(Sink.Size / Sink.SampleRate) · @Sink.Trigger</span>
+        </header>
+    }
+    <canvas @ref="Canvas" class="gr-screen__canvas" style="height:@Height"></canvas>
+</section>
+
+@code {
+    private long _version = -1;
+    private float[][] _traces = [];
+    private float[] _flat = [];
+    private byte[] _bytes = [];
+
+    [Parameter, EditorRequired] public TimeSink<T> Sink { get; set; } = null!;
+    [Parameter] public float Min { get; set; } = -1.2f;
+    [Parameter] public float Max { get; set; } = 1.2f;
+
+    /// <summary>Show only these trace indices (for example 0 for the real part); null = all.</summary>
+    [Parameter] public int[]? Traces { get; set; }
+
+    protected override void OnParametersSet() => _version = -1;
+
+    protected override async ValueTask DrawAsync(IJSObjectReference module, bool force)
+    {
+        if (_traces.Length != Sink.TraceCount) _traces = Enumerable.Range(0, Sink.TraceCount).Select(_ => new float[Sink.Size]).ToArray();
+        if (!Sink.TryCopy(ref _version, _traces) && !force) return;
+        var shown = Traces ?? Enumerable.Range(0, Sink.TraceCount).ToArray();
+        if (_flat.Length != shown.Length * Sink.Size) _flat = new float[shown.Length * Sink.Size];
+        for (var i = 0; i < shown.Length; i++) _traces[shown[i]].CopyTo(_flat, i * Sink.Size);
+        var options = new
+        {
+            min = Min,
+            max = Max,
+            xTicks = GrTicks.Time(Sink.Size / Sink.SampleRate),
+            yTicks = GrTicks.Linear(Min, Max, 4),
+            names = shown.Select(Sink.TraceName).ToArray(),
+        };
+        await module.InvokeVoidAsync("drawScope", Canvas, ToBytes(_flat, ref _bytes), shown.Length, Sink.Size, options);
+    }
+}

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>GnuRadio.Avalonia</RootNamespace>
+    <PackageId>GnuRadio.Net.Avalonia</PackageId>
+    <Description>Avalonia UI controls for GnuRadio.Net: spectrum analyser, waterfall, constellation, oscilloscope, line charts, knobs, frequency readout and flowgraph diagrams. Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil.</Description>
+    <PackageTags>$(PackageTags);avalonia;desktop;controls;spectrum;waterfall</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.22" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../GnuRadio.Net/GnuRadio.Net.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,67 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject GalleryState State
+@inject NavigationManager Nav
+
+<div class="shell @(_navOpen ? "nav-open" : "")">
+    <aside class="rail" aria-label="@State.T("Demos", "Demo")">
+        <a class="brand" href="" @onclick="CloseNav">
+            <BrandMark />
+            <span class="brand__text">
+                <span class="brand__name">GnuRadio.Net</span>
+                <span class="brand__sub">@State.T("Gallery", "Galeri")</span>
+            </span>
+        </a>
+        <nav class="rail__nav">
+            @foreach (var group in DemoCatalog.All.GroupBy(d => d.Category))
+            {
+                <section class="rail__group">
+                    <h2 class="rail__heading">@State.T(Categories.Name(group.Key))</h2>
+                    <ul>
+                        @foreach (var d in group)
+                        {
+                            <li>
+                                <NavLink class="rail__link" href="@($"demo/{d.Id}")" @onclick="CloseNav">
+                                    <span class="rail__led" aria-hidden="true"></span>@State.T(d.Title)
+                                </NavLink>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            }
+        </nav>
+        <p class="rail__credit">@DemoCatalog.Attribution</p>
+    </aside>
+
+    <div class="main">
+        <header class="topbar">
+            <button class="topbar__menu" type="button" aria-expanded="@_navOpen" @onclick="() => _navOpen = !_navOpen">
+                <span aria-hidden="true">☰</span> @State.T("Demos", "Demo")
+            </button>
+            <span class="topbar__status"><span class="topbar__led" aria-hidden="true"></span>@State.T("Flowgraphs run on the server, frames stream live", "Flowgraph berjalan di server, frame dialirkan langsung")</span>
+            <div class="segmented" role="group" aria-label="Language / Bahasa">
+                <button type="button" class="@(State.Language == Language.En ? "is-on" : "")" aria-pressed="@(State.Language == Language.En)" @onclick="() => State.SetLanguage(Language.En)">EN</button>
+                <button type="button" class="@(State.Language == Language.Id ? "is-on" : "")" aria-pressed="@(State.Language == Language.Id)" @onclick="() => State.SetLanguage(Language.Id)">ID</button>
+            </div>
+        </header>
+        <main class="content">
+            @Body
+        </main>
+        <footer class="foot">
+            <span>@DemoCatalog.Attribution</span>
+            <span>GnuRadio.Net · MIT · .NET 10 · Blazor &amp; Avalonia</span>
+        </footer>
+    </div>
+</div>
+
+@code {
+    private bool _navOpen;
+
+    protected override void OnInitialized() => State.Changed += OnChanged;
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    private void CloseNav() => _navOpen = false;
+
+    public void Dispose() => State.Changed -= OnChanged;
+}

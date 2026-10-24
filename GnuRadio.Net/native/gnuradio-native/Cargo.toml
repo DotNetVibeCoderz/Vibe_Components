@@ -1,0 +1,21 @@
+[package]
+name = "gnuradio-native"
+version = "0.1.0"
+edition = "2021"
+description = "Optional SIMD/FFT kernels for GnuRadio.Net. Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil."
+license = "MIT"
+publish = false
+
+[lib]
+name = "gnuradio_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+rustfft = "6.2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
