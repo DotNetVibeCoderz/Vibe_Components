@@ -1,0 +1,20 @@
+[package]
+name = "gdalnet_kernels"
+version = "1.0.0"
+edition = "2021"
+description = "High-performance raster kernels for GDAL.Net (Gravicode Studios)"
+license = "MIT"
+authors = ["Gravicode Studios (Kang Fadhil)"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+rayon = "1.10"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

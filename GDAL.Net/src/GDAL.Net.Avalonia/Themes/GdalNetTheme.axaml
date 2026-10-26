@@ -1,0 +1,91 @@
+<!--
+  GDAL.Net for Avalonia — default theme for the GDAL.Net controls (light & dark aware).
+  Include it after FluentTheme:
+    <StyleInclude Source="avares://GDAL.Net.Avalonia/Themes/GdalNetTheme.axaml" />
+  Override any GdalNet.* resource in your App to restyle the controls.
+  Created by Gravicode Studios, led by Kang Fadhil.
+-->
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:g="using:GDAL.Net.Avalonia">
+
+  <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+
+  <Styles.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="GdalNet.MapBackground" Color="#E3E9E6" />
+          <SolidColorBrush x:Key="GdalNet.Ink" Color="#12263A" />
+          <SolidColorBrush x:Key="GdalNet.InkMuted" Color="#5B6B73" />
+          <SolidColorBrush x:Key="GdalNet.Panel" Color="#E8FFFFFF" />
+          <SolidColorBrush x:Key="GdalNet.Rule" Color="#C9D3CF" />
+          <SolidColorBrush x:Key="GdalNet.Accent" Color="#2A9D8F" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="GdalNet.MapBackground" Color="#0B1620" />
+          <SolidColorBrush x:Key="GdalNet.Ink" Color="#E6EEEA" />
+          <SolidColorBrush x:Key="GdalNet.InkMuted" Color="#8FA2A8" />
+          <SolidColorBrush x:Key="GdalNet.Panel" Color="#E015283A" />
+          <SolidColorBrush x:Key="GdalNet.Rule" Color="#2A3F52" />
+          <SolidColorBrush x:Key="GdalNet.Accent" Color="#3CC2B1" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </Styles.Resources>
+
+  <Style Selector="g|GdalMapView">
+    <Setter Property="MapBackground" Value="{DynamicResource GdalNet.MapBackground}" />
+    <Setter Property="OverlayForeground" Value="{DynamicResource GdalNet.Ink}" />
+    <Setter Property="OverlayBackground" Value="{DynamicResource GdalNet.Panel}" />
+    <Setter Property="Accent" Value="{DynamicResource GdalNet.Accent}" />
+  </Style>
+
+  <Style Selector="g|GdalHistogramChart">
+    <Setter Property="AxisBrush" Value="{DynamicResource GdalNet.InkMuted}" />
+    <Setter Property="GridBrush" Value="{DynamicResource GdalNet.Rule}" />
+    <Setter Property="BarBrush" Value="{DynamicResource GdalNet.Accent}" />
+  </Style>
+
+  <Style Selector="g|GdalColorLegend">
+    <Setter Property="Foreground" Value="{DynamicResource GdalNet.Ink}" />
+  </Style>
+
+  <Style Selector="g|GdalDatasetInfoPanel TextBlock.gdal-section">
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="LetterSpacing" Value="1.2" />
+    <Setter Property="Foreground" Value="{DynamicResource GdalNet.Accent}" />
+  </Style>
+  <Style Selector="g|GdalDatasetInfoPanel TextBlock.gdal-key">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource GdalNet.InkMuted}" />
+  </Style>
+  <Style Selector="g|GdalDatasetInfoPanel SelectableTextBlock.gdal-value">
+    <Setter Property="FontSize" Value="12.5" />
+  </Style>
+
+  <Style Selector="g|GdalSrsExplorer TextBlock.gdal-title">
+    <Setter Property="FontSize" Value="15" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="g|GdalSrsExplorer TextBox.gdal-code">
+    <Setter Property="FontSize" Value="12" />
+  </Style>
+  <Style Selector="g|GdalSrsExplorer ListBox.gdal-crs-list">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="g|GdalSrsExplorer ListBox.gdal-crs-list ListBoxItem">
+    <Setter Property="Padding" Value="8,5" />
+    <Setter Property="FontSize" Value="12.5" />
+  </Style>
+
+  <Style Selector="g|GdalAttributeGrid DataGrid.gdal-grid">
+    <Setter Property="FontSize" Value="12.5" />
+    <Setter Property="RowHeight" Value="28" />
+  </Style>
+  <Style Selector="g|GdalAttributeGrid DataGridCell.num">
+    <Setter Property="HorizontalContentAlignment" Value="Right" />
+  </Style>
+
+</Styles>

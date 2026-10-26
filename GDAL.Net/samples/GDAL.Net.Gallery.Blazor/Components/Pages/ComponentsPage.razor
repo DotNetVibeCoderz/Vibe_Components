@@ -1,0 +1,192 @@
+@page "/components"
+@inject UiState Ui
+@inject GalleryData Data
+@implements IDisposable
+
+<PageTitle>@Ui.T("Components", "Komponen") · GDAL.Net Gallery</PageTitle>
+
+<section class="intro intro--compact">
+    <p class="eyebrow">Gravicode.GDAL.Net.Blazor</p>
+    <h1>@Ui.T("Components", "Komponen")</h1>
+    <p class="intro__lead">@Ui.T("Drop-in Blazor Server components built on GDAL.Net. Each one is shown standalone with the markup that produces it. Theme them through CSS variables (--gdal-ink, --gdal-accent, --gdal-surface, …).",
+                               "Komponen Blazor Server siap pakai di atas GDAL.Net. Masing-masing ditampilkan mandiri beserta markup yang menghasilkannya. Ubah tema lewat variabel CSS (--gdal-ink, --gdal-accent, --gdal-surface, …).")</p>
+</section>
+
+@if (_dem is null)
+{
+    <GdalProgressBar Indeterminate="true" Label="@Ui.T("Loading sample data…", "Memuat data sampel…")" />
+}
+else
+{
+    <section class="comp">
+        <header class="comp__head">
+            <h2>GdalMap</h2>
+            <p>@Ui.T("Rasters rendered server-side for the visible window at screen resolution; vectors as SVG with tooltips and click hit testing. Drag, scroll, or use + / − and the arrow keys.",
+                   "Raster dirender di server untuk jendela yang terlihat pada resolusi layar; vektor sebagai SVG dengan tooltip dan hit testing klik. Seret, gulir, atau gunakan + / − dan tombol panah.")</p>
+        </header>
+        <div class="comp__demo comp__demo--map">
+            <GdalMap Rasters="_rasters" Vectors="_vectors" CrsLabel="EPSG:32748" OnFeatureClick="c => _clicked = c" />
+        </div>
+        <p class="comp__status">@(_clicked is null ? Ui.T("Click a contour line.", "Klik sebuah garis kontur.") : $"{_clicked.Layer.Title}: elev = {GdalAttributeTable.Format(_clicked.Feature["elev"])} m")</p>
+        <CodeView Code="@MapCode" />
+    </section>
+
+    <div class="comp-grid">
+        <section class="comp">
+            <header class="comp__head">
+                <h2>GdalHistogram</h2>
+                <p>@Ui.T("SVG histogram from RasterBand.GetHistogram, bars colored by a ramp.", "Histogram SVG dari RasterBand.GetHistogram, batang diwarnai ramp.")</p>
+            </header>
+            <div class="comp__demo"><GdalHistogram Histogram="_histogram" Ramp="ColorRamp.Terrain" Title="@Ui.T("Elevation (m)", "Elevasi (m)")" /></div>
+            <CodeView Code="@HistogramCode" />
+        </section>
+
+        <section class="comp">
+            <header class="comp__head">
+                <h2>GdalColorLegend</h2>
+                <p>@Ui.T("Continuous legend for any ColorRamp.", "Legenda kontinu untuk ColorRamp apa pun.")</p>
+            </header>
+            <div class="comp__demo comp__legends">
+                @foreach (var ramp in ColorRamp.All.Take(6))
+                {
+                    <GdalColorLegend Ramp="ramp" Min="0" Max="1" Title="@ramp.Name" ShowMidpoint="false" />
+                }
+            </div>
+            <CodeView Code="@LegendCode" />
+        </section>
+    </div>
+
+    <section class="comp">
+        <header class="comp__head">
+            <h2>GdalAttributeTable</h2>
+            <p>@Ui.T("Sortable, paged table over a VectorData snapshot (or any rows). Click a header to sort.", "Tabel terurut dan berhalaman atas snapshot VectorData (atau baris apa pun). Klik header untuk mengurutkan.")</p>
+        </header>
+        <div class="comp__demo"><GdalAttributeTable Data="_cities" PageSize="8" /></div>
+        <CodeView Code="@TableCode" />
+    </section>
+
+    <div class="comp-grid">
+        <section class="comp">
+            <header class="comp__head">
+                <h2>GdalDatasetInfo</h2>
+                <p>@Ui.T("Driver, size, georeferencing, CRS, bands and metadata domains of any dataset.", "Driver, ukuran, georeferensi, CRS, band, dan domain metadata dari dataset apa pun.")</p>
+            </header>
+            <div class="comp__demo"><GdalDatasetInfo Dataset="_dem" /></div>
+        </section>
+
+        <section class="comp">
+            <header class="comp__head">
+                <h2>GdalProgressBar</h2>
+                <p>@Ui.T("Bound to IProgress<GdalProgress> of a real gdalwarp run.", "Terhubung ke IProgress<GdalProgress> dari proses gdalwarp sungguhan.")</p>
+            </header>
+            <div class="comp__demo">
+                <GdalProgressBar Value="_progress" Label="@_progressLabel" />
+                <button type="button" class="btn" @onclick="RunWarpAsync" disabled="@_warping">@Ui.T("Reproject DEM to EPSG:4326", "Reproyeksi DEM ke EPSG:4326")</button>
+            </div>
+            <CodeView Code="@ProgressCode" />
+        </section>
+    </div>
+
+    <section class="comp">
+        <header class="comp__head">
+            <h2>GdalSrsExplorer</h2>
+            <p>@Ui.T("Search the PROJ database, view WKT2 / PROJJSON / PROJ / ESRI definitions and transform a WGS 84 point.", "Cari di database PROJ, lihat definisi WKT2 / PROJJSON / PROJ / ESRI, dan transformasikan titik WGS 84.")</p>
+        </header>
+        <div class="comp__demo"><GdalSrsExplorer InitialCrs="EPSG:32748" /></div>
+        <CodeView Code="@SrsCode" />
+    </section>
+}
+
+@code {
+    private Dataset? _dem;
+    private IReadOnlyList<MapRaster>? _rasters;
+    private IReadOnlyList<StyledVector>? _vectors;
+    private VectorData? _cities;
+    private Histogram? _histogram;
+    private MapFeatureClick? _clicked;
+    private double _progress;
+    private string _progressLabel = "gdalwarp";
+    private bool _warping;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Data.Ready;
+        await Task.Run(() =>
+        {
+            var ctx = Data.Context;
+            _dem = ctx.OpenDem();
+            _histogram = _dem.GetBand(1).GetHistogram(64);
+            using var contours = RasterAlgorithms.GenerateContours(_dem.GetBand(1), 100);
+            var lines = VectorData.Load(contours.GetLayer(0));
+            _vectors = [new StyledVector(lines, VectorStyle.Lines(new Rgba(200, 85, 61, 230), 1), "Contours")];
+            _rasters = [new MapRaster(_dem, new RenderOptions { Ramp = ColorRamp.Terrain, Hillshade = true })];
+            using var cities = ctx.OpenCities();
+            _cities = VectorData.Load(cities.GetLayer(0));
+        });
+    }
+
+    private async Task RunWarpAsync()
+    {
+        if (_dem is null) return;
+        _warping = true;
+        _progress = 0;
+        var progress = new UiProgress(p =>
+        {
+            _progress = p.Fraction;
+            _progressLabel = $"gdalwarp · {p.Percent:0}%";
+            _ = InvokeAsync(StateHasChanged);
+        });
+        await Task.Run(() =>
+        {
+            using var dem = Data.Context.OpenDem();
+            using var _ = GdalUtils.Warp(dem, "", new WarpOptions { Format = "MEM", TargetSrs = "EPSG:4326", Resampling = ResampleAlgorithm.Cubic, Multithread = false }, progress);
+        });
+        _progress = 1;
+        _progressLabel = Ui.T("gdalwarp · done", "gdalwarp · selesai");
+        _warping = false;
+    }
+
+    private sealed class UiProgress(Action<GdalProgress> report) : IProgress<GdalProgress>
+    {
+        public void Report(GdalProgress value) => report(value);
+    }
+
+    public void Dispose()
+    {
+        var dem = _dem;
+        _dem = null;
+        _ = Task.Delay(2000).ContinueWith(_ => dem?.Dispose(), TaskScheduler.Default);
+    }
+
+    private const string MapCode = """
+        <GdalMap Rasters="@rasters" Vectors="@vectors" CrsLabel="EPSG:32748" OnFeatureClick="OnPick" />
+
+        @code {
+            IReadOnlyList<MapRaster> rasters = [new(dem, new RenderOptions { Ramp = ColorRamp.Terrain, Hillshade = true })];
+            IReadOnlyList<StyledVector> vectors = [new(VectorData.Load(contours.GetLayer(0)), VectorStyle.Lines(new Rgba(200, 85, 61)), "Contours")];
+        }
+        """;
+
+    private const string HistogramCode = """
+        <GdalHistogram Histogram="@dem.GetBand(1).GetHistogram(64)" Ramp="ColorRamp.Terrain" Title="Elevation (m)" />
+        """;
+
+    private const string LegendCode = """
+        <GdalColorLegend Ramp="ColorRamp.Viridis" Min="650" Max="2150" Unit=" m" Title="Elevation" />
+        """;
+
+    private const string TableCode = """
+        <GdalAttributeTable Data="@VectorData.Load(cities.GetLayer(0))" PageSize="8" />
+        """;
+
+    private const string ProgressCode = """
+        <GdalProgressBar Value="@progress" Label="gdalwarp" />
+
+        GdalUtils.Warp(dem, "out.tif", new WarpOptions { TargetSrs = "EPSG:4326" },
+            new Progress<GdalProgress>(p => { progress = p.Fraction; InvokeAsync(StateHasChanged); }));
+        """;
+
+    private const string SrsCode = """
+        <GdalSrsExplorer InitialCrs="EPSG:32748" OnSelected="crs => selected = crs" />
+        """;
+}

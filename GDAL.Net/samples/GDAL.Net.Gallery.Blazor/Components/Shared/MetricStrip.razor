@@ -1,0 +1,18 @@
+@inject UiState Ui
+
+@if (Metrics.Count > 0)
+{
+    <dl class="metrics">
+        @foreach (var m in Metrics)
+        {
+            <div class="metric @(m.Value.Length > 22 ? "metric--text" : null)">
+                <dt>@Ui.T(m.Label)</dt>
+                <dd>@m.Value@if (m.Unit is not null){<span class="metric__unit">@m.Unit</span>}</dd>
+            </div>
+        }
+    </dl>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<Metric> Metrics { get; set; } = [];
+}

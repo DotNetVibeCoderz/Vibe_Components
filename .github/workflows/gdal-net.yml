@@ -1,0 +1,147 @@
+name: GDAL.Net
+
+# CI for every change under GDAL.Net/, and NuGet publishing when a tag like gdal-net-v1.0.0 is pushed
+# (or when started manually with "publish" ticked). Uses the NUGET_API_KEY repository secret.
+# The Rust kernels are built for every runtime and packed into Gravicode.GDAL.Net.
+
+on:
+  push:
+    branches: [main]
+    paths: ["GDAL.Net/**", ".github/workflows/gdal-net.yml"]
+    tags: ["gdal-net-v*"]
+  pull_request:
+    paths: ["GDAL.Net/**", ".github/workflows/gdal-net.yml"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish packages to NuGet"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gdal-net-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  kernels:
+    name: Rust kernels (${{ matrix.rid }})
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: windows-latest,   target: x86_64-pc-windows-msvc,    rid: win-x64,     file: gdalnet_kernels.dll }
+          - { os: ubuntu-22.04,     target: x86_64-unknown-linux-gnu,  rid: linux-x64,   file: libgdalnet_kernels.so }
+          - { os: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu, rid: linux-arm64, file: libgdalnet_kernels.so }
+          - { os: macos-latest,     target: aarch64-apple-darwin,      rid: osx-arm64,   file: libgdalnet_kernels.dylib }
+          - { os: macos-latest,     target: x86_64-apple-darwin,       rid: osx-x64,     file: libgdalnet_kernels.dylib }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: GDAL.Net/native/gdalnet-kernels
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        shell: bash
+        run: |
+          rustup update stable --no-self-update
+          rustup target add ${{ matrix.target }}
+
+      - name: Test
+        if: matrix.target != 'x86_64-apple-darwin'
+        run: cargo test --release
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kernels-${{ matrix.rid }}
+          path: GDAL.Net/native/gdalnet-kernels/target/${{ matrix.target }}/release/${{ matrix.file }}
+
+  build:
+    needs: kernels
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: GDAL.Net
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: kernels-*
+          path: kernels
+
+      - name: Place Rust kernels
+        shell: pwsh
+        run: |
+          Get-ChildItem ../kernels -Directory | ForEach-Object {
+            $rid = $_.Name.Substring('kernels-'.Length)
+            $dst = "src/GDAL.Net/runtimes/$rid/native"
+            New-Item -ItemType Directory -Force $dst | Out-Null
+            Copy-Item "$($_.FullName)/*" $dst -Force
+            Write-Host "$rid -> $(Get-ChildItem $dst -Name)"
+          }
+
+      - name: Version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/gdal-net-v* ]]; then
+            echo "args=-p:Version=${GITHUB_REF#refs/tags/gdal-net-v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "args=-p:VersionSuffix=ci.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore
+        run: dotnet restore GDAL.Net.slnx
+
+      - name: Build
+        run: dotnet build GDAL.Net.slnx -c Release --no-restore ${{ steps.version.outputs.args }}
+
+      - name: Test
+        run: dotnet test --project tests/GDAL.Net.Tests -c Release --no-build
+
+      - name: Pack
+        shell: bash
+        run: |
+          for p in src/GDAL.Net src/GDAL.Net.Blazor src/GDAL.Net.Avalonia; do
+            dotnet pack "$p" -c Release --no-build -o artifacts ${{ steps.version.outputs.args }}
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gdal-net-packages
+          path: GDAL.Net/artifacts/*
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/gdal-net-v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: gdal-net-packages
+          path: packages
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Push to NuGet
+        working-directory: packages
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: dotnet nuget push "*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate

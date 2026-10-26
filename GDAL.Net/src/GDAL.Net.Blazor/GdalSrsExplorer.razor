@@ -1,0 +1,176 @@
+@* Searches the PROJ database, shows a CRS as WKT2 / PROJJSON / PROJ / ESRI and transforms a WGS 84 point into it. *@
+<div class="gdal-srs @Class">
+    <div class="gdal-srs__search">
+        <label for="@_id-q">Search CRS</label>
+        <input id="@_id-q" type="search" placeholder="e.g. UTM 48S, Indonesia, 3857" value="@_query"
+               @oninput="OnQueryInput" autocomplete="off" />
+    </div>
+
+    <div class="gdal-srs__body">
+        <ul class="gdal-srs__list" role="listbox" aria-label="Matching coordinate reference systems">
+            @if (_loading)
+            {
+                <li class="gdal-srs__hint">Loading the PROJ database…</li>
+            }
+            else if (_results.Count == 0)
+            {
+                <li class="gdal-srs__hint">No CRS matches “@_query”.</li>
+            }
+            @foreach (var crs in _results)
+            {
+                var c = crs;
+                <li role="option" aria-selected="@(c.Id == _selected?.Id)">
+                    <button type="button" class="@(c.Id == _selected?.Id ? "is-selected" : null)" @onclick="() => SelectAsync(c)">
+                        <span class="gdal-srs__code">@c.Id</span>
+                        <span class="gdal-srs__name">@c.Name</span>
+                        <span class="gdal-srs__type">@c.Type</span>
+                    </button>
+                </li>
+            }
+        </ul>
+
+        <div class="gdal-srs__detail">
+            @if (_selected is { } s)
+            {
+                <h4>@s.Name</h4>
+                <p class="gdal-srs__meta">@s.Id · @s.Type@(s.ProjectionMethod is { Length: > 0 } pm ? $" · {pm}" : "")</p>
+                @if (s.AreaName is not null)
+                {
+                    <p class="gdal-srs__area">@s.AreaName</p>
+                }
+
+                <div class="gdal-srs__tabs" role="tablist">
+                    @foreach (var f in Formats)
+                    {
+                        var fmt = f;
+                        <button type="button" role="tab" aria-selected="@(fmt == _format)" class="@(fmt == _format ? "is-active" : null)" @onclick="() => SetFormat(fmt)">@fmt</button>
+                    }
+                </div>
+                <pre class="gdal-srs__def" tabindex="0">@_definition</pre>
+
+                <div class="gdal-srs__transform">
+                    <span class="gdal-srs__label">WGS 84 → @s.Id</span>
+                    <label>Lon <input type="number" step="0.0001" @bind="_lon" @bind:after="Transform" /></label>
+                    <label>Lat <input type="number" step="0.0001" @bind="_lat" @bind:after="Transform" /></label>
+                    <output>@_transformed</output>
+                </div>
+            }
+            else
+            {
+                <p class="gdal-srs__hint">Select a CRS to see its definition.</p>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>CRS selected initially (e.g. "EPSG:32748").</summary>
+    [Parameter] public string InitialCrs { get; set; } = "EPSG:4326";
+    /// <summary>Authority searched (EPSG, ESRI, IAU_2015, …).</summary>
+    [Parameter] public string Authority { get; set; } = "EPSG";
+    [Parameter] public int MaxResults { get; set; } = 60;
+    [Parameter] public double Lon { get; set; } = 107.6191;
+    [Parameter] public double Lat { get; set; } = -6.9175;
+    [Parameter] public EventCallback<CrsInfo> OnSelected { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private static readonly string[] Formats = ["WKT2", "PROJJSON", "PROJ", "ESRI"];
+    private readonly string _id = "srs" + Guid.NewGuid().ToString("N")[..6];
+    private string _query = "";
+    private bool _loading = true;
+    private List<CrsInfo> _results = [];
+    private CrsInfo? _selected;
+    private string _format = "WKT2";
+    private string _definition = "";
+    private string _transformed = "";
+    private CancellationTokenSource? _debounce;
+
+    private double _lon;
+    private double _lat;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _lon = Lon;
+        _lat = Lat;
+        var all = await Task.Run(() => CrsDatabase.GetAll(Authority));
+        _loading = false;
+        var initial = all.FirstOrDefault(c => string.Equals(c.Id, InitialCrs, StringComparison.OrdinalIgnoreCase));
+        _query = initial?.Code ?? "";
+        Search();
+        if (initial is not null) await SelectAsync(initial);
+    }
+
+    private async Task OnQueryInput(ChangeEventArgs e)
+    {
+        _query = e.Value?.ToString() ?? "";
+        _debounce?.Cancel();
+        var cts = _debounce = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(180, cts.Token);
+            Search();
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private void Search()
+    {
+        var q = _query.Trim();
+        _results = (q.Length == 0
+                ? CrsDatabase.At(_lon, _lat, Authority)
+                : CrsDatabase.Search(q, Authority))
+            .Take(MaxResults).ToList();
+    }
+
+    private async Task SelectAsync(CrsInfo crs)
+    {
+        _selected = crs;
+        UpdateDefinition();
+        Transform();
+        await OnSelected.InvokeAsync(crs);
+    }
+
+    private void SetFormat(string f)
+    {
+        _format = f;
+        UpdateDefinition();
+    }
+
+    private void UpdateDefinition()
+    {
+        if (_selected is null) return;
+        try
+        {
+            using var srs = SpatialReference.FromUserInput(_selected.Id);
+            _definition = _format switch
+            {
+                "PROJJSON" => srs.ToProjJson(),
+                "PROJ" => srs.ToProj4(),
+                "ESRI" => srs.ToEsriWkt(),
+                _ => srs.ToWkt(WktFormat.Wkt2_2019, multiline: true),
+            };
+        }
+        catch (GdalException e)
+        {
+            _definition = e.Message;
+        }
+    }
+
+    private void Transform()
+    {
+        if (_selected is null) return;
+        try
+        {
+            using var wgs = SpatialReference.Wgs84;
+            using var target = SpatialReference.FromUserInput(_selected.Id);
+            using var ct = CoordinateTransformation.Create(wgs, target);
+            var (x, y) = ct.Transform(_lon, _lat);
+            var fmt = target.IsGeographic ? "0.000000" : "#,0.000";
+            _transformed = $"{x.ToString(fmt, CultureInfo.InvariantCulture)}, {y.ToString(fmt, CultureInfo.InvariantCulture)}";
+        }
+        catch (Exception e) when (e is GdalException)
+        {
+            _transformed = "Not transformable: " + e.Message;
+        }
+    }
+}

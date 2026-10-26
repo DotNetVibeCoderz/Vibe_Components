@@ -1,0 +1,48 @@
+.gdal-histogram {
+    margin: 0;
+    color: var(--gdal-ink, #12263A);
+    font-family: var(--gdal-font, inherit);
+}
+
+figcaption {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--gdal-muted, #4c6070);
+}
+
+svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+.gdal-histogram__bar {
+    fill: var(--gdal-accent-2, #2A9D8F);
+    transition: opacity .15s ease;
+}
+
+.gdal-histogram__bar:hover {
+    opacity: .7;
+}
+
+.gdal-histogram__grid {
+    stroke: var(--gdal-row-border, rgba(18, 38, 58, .08));
+    stroke-width: 1;
+}
+
+.gdal-histogram__axis {
+    stroke: var(--gdal-ink, #12263A);
+    stroke-width: 1;
+}
+
+.gdal-histogram__tick {
+    font: 500 10px/1 var(--gdal-font-mono, ui-monospace, monospace);
+    fill: var(--gdal-muted, #4c6070);
+}
+
+.gdal-histogram__empty {
+    font-size: 13px;
+    color: var(--gdal-muted, #4c6070);
+}

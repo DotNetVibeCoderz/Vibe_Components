@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/GDAL.Net/GDAL.Net.csproj" />
+    <Project Path="src/GDAL.Net.Blazor/GDAL.Net.Blazor.csproj" />
+    <Project Path="src/GDAL.Net.Avalonia/GDAL.Net.Avalonia.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/GDAL.Net.Gallery.Shared/GDAL.Net.Gallery.Shared.csproj" />
+    <Project Path="samples/GDAL.Net.Gallery.Blazor/GDAL.Net.Gallery.Blazor.csproj" />
+    <Project Path="samples/GDAL.Net.Gallery.Avalonia/GDAL.Net.Gallery.Avalonia.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/GDAL.Net.Tests/GDAL.Net.Tests.csproj" />
+  </Folder>
+</Solution>

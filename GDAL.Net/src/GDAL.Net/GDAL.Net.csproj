@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>GDAL.Net</RootNamespace>
+    <AssemblyName>GDAL.Net</AssemblyName>
+    <IsPackable>true</IsPackable>
+    <PackageId>Gravicode.GDAL.Net</PackageId>
+    <Title>GDAL.Net</Title>
+    <Description>Modern, high-performance .NET 10 wrapper for GDAL/OGR/OSR (GDAL 3.13): raster &amp; vector I/O for 200+ formats, reprojection, warping, DEM analysis, band math (NDVI/NDWI), vector geoprocessing, OGR SQL, VRT, cloud virtual file systems, multidimensional arrays and the GDAL utility suite (gdalinfo, gdal_translate, gdalwarp, ogr2ogr, ...). Native GDAL binaries included. Rust-accelerated kernels. Created by Gravicode Studios, led by Kang Fadhil.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MaxRev.Gdal.WindowsRuntime.Minimal" />
+    <PackageReference Include="MaxRev.Gdal.LinuxRuntime.Minimal" />
+    <PackageReference Include="MaxRev.Gdal.MacosRuntime.Minimal" />
+    <PackageReference Include="System.Numerics.Tensors" />
+  </ItemGroup>
+
+  <!-- GDAL support data (gdal-data). Copied to the output of this project and of every project referencing it. -->
+  <ItemGroup>
+    <None Include="gdal-data\**\*" Pack="true" PackagePath="gdal-data\" CopyToOutputDirectory="PreserveNewest" Link="gdal-data\%(RecursiveDir)%(Filename)%(Extension)" />
+    <None Include="buildTransitive\Gravicode.GDAL.Net.targets" Pack="true" PackagePath="buildTransitive\;build\" />
+  </ItemGroup>
+
+  <!-- Rust accelerated kernels (optional; managed SIMD fallback is used when absent). Built by build/build-native.ps1 -->
+  <ItemGroup>
+    <None Include="runtimes\**\*" Pack="true" PackagePath="runtimes\" CopyToOutputDirectory="PreserveNewest" Link="runtimes\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="GDAL.Net.Tests" />
+  </ItemGroup>
+
+</Project>

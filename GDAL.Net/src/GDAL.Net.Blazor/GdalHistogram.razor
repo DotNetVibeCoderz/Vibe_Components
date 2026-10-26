@@ -1,0 +1,75 @@
+@* SVG histogram with axis labels; bars optionally colored by a ColorRamp. *@
+<figure class="gdal-histogram @Class">
+    @if (Title is not null)
+    {
+        <figcaption>@Title</figcaption>
+    }
+    @if (Histogram is { BucketCount: > 0 } h)
+    {
+        <svg viewBox="0 0 @N(Width) @N(Height)" role="img" aria-label="@($"Histogram from {Fmt(h.Minimum)} to {Fmt(h.Maximum)}")">@BuildSvg(h)</svg>
+    }
+    else
+    {
+        <p class="gdal-histogram__empty">No histogram.</p>
+    }
+</figure>
+
+@code {
+    [Parameter] public Histogram? Histogram { get; set; }
+    /// <summary>Colors each bar by its position in the value range.</summary>
+    [Parameter] public ColorRamp? Ramp { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Unit { get; set; }
+    /// <summary>Logarithmic count axis.</summary>
+    [Parameter] public bool Log { get; set; }
+    [Parameter] public double Width { get; set; } = 560;
+    [Parameter] public double Height { get; set; } = 200;
+    [Parameter] public string? Class { get; set; }
+
+    private const double PadLeft = 44;
+    private const double PadBottom = 22;
+
+    private MarkupString BuildSvg(Histogram h)
+    {
+        var sb = new System.Text.StringBuilder();
+        double max = Math.Max(1UL, h.MaxCount);
+        var plotW = Width - PadLeft - 8;
+        var plotH = Height - PadBottom - 8;
+        var bw = plotW / h.BucketCount;
+        for (var t = 0; t <= 4; t++)
+        {
+            var y = 8 + plotH - plotH * t / 4.0;
+            sb.Append($"<line class=\"gdal-histogram__grid\" x1=\"{N(PadLeft)}\" x2=\"{N(Width - 8)}\" y1=\"{N(y)}\" y2=\"{N(y)}\" />");
+            sb.Append($"<text class=\"gdal-histogram__tick\" x=\"{N(PadLeft - 6)}\" y=\"{N(y + 3)}\" text-anchor=\"end\">{Compact(max * t / 4.0)}</text>");
+        }
+        for (var i = 0; i < h.BucketCount; i++)
+        {
+            var c = h.Counts[i];
+            var bh = plotH * (Log ? Math.Log10(1 + c) / Math.Log10(1.0 + max) : (double)c / max);
+            var style = Ramp is null ? "" : $" style=\"fill:{Ramp.Evaluate((i + 0.5) / h.BucketCount).ToCss()}\"";
+            var tip = System.Net.WebUtility.HtmlEncode($"{Fmt(h.Minimum + i * h.BucketWidth)} – {Fmt(h.Minimum + (i + 1) * h.BucketWidth)}: {c:#,0}");
+            sb.Append($"<rect class=\"gdal-histogram__bar\" x=\"{N(PadLeft + i * bw + 0.5)}\" y=\"{N(8 + plotH - bh)}\" width=\"{N(Math.Max(0.5, bw - 1))}\" height=\"{N(bh)}\"{style}><title>{tip}</title></rect>");
+        }
+        sb.Append($"<line class=\"gdal-histogram__axis\" x1=\"{N(PadLeft)}\" x2=\"{N(Width - 8)}\" y1=\"{N(8 + plotH)}\" y2=\"{N(8 + plotH)}\" />");
+        var unit = System.Net.WebUtility.HtmlEncode(Unit ?? "");
+        for (var t = 0; t <= 4; t++)
+        {
+            var x = PadLeft + plotW * t / 4.0;
+            var anchor = t == 0 ? "start" : t == 4 ? "end" : "middle";
+            sb.Append($"<text class=\"gdal-histogram__tick\" x=\"{N(x)}\" y=\"{N(Height - 6)}\" text-anchor=\"{anchor}\">{Fmt(h.Minimum + (h.Maximum - h.Minimum) * t / 4.0)}{unit}</text>");
+        }
+        return new MarkupString(sb.ToString());
+    }
+
+    private static string N(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private static string Fmt(double v)
+    {
+        var a = Math.Abs(v);
+        return v.ToString(a >= 1000 ? "#,0" : a >= 10 ? "0.#" : a >= 1 ? "0.##" : "0.###", CultureInfo.InvariantCulture);
+    }
+
+    private static string Compact(double v) => v >= 1e6 ? (v / 1e6).ToString("0.#", CultureInfo.InvariantCulture) + "M"
+        : v >= 1e3 ? (v / 1e3).ToString("0.#", CultureInfo.InvariantCulture) + "k"
+        : v.ToString("0", CultureInfo.InvariantCulture);
+}

@@ -1,0 +1,148 @@
+@* Sortable, paged attribute table over a VectorData snapshot or plain rows. *@
+<div class="gdal-table @Class">
+    @if (_columns.Count == 0)
+    {
+        <p class="gdal-table__empty">@EmptyText</p>
+    }
+    else
+    {
+        <div class="gdal-table__scroll" tabindex="0" role="region" aria-label="@(Caption ?? "Attribute table")">
+            <table>
+                @if (Caption is not null)
+                {
+                    <caption>@Caption</caption>
+                }
+                <thead>
+                    <tr>
+                        @for (var i = 0; i < _columns.Count; i++)
+                        {
+                            var col = i;
+                            <th scope="col" aria-sort="@AriaSort(col)">
+                                <button type="button" @onclick="() => SortBy(col)">
+                                    @_columns[col]
+                                    <span class="gdal-table__arrow" aria-hidden="true">@(_sortColumn == col ? (_descending ? "▼" : "▲") : "")</span>
+                                </button>
+                            </th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in PageRows)
+                    {
+                        <tr>
+                            @for (var i = 0; i < _columns.Count; i++)
+                            {
+                                var v = i < row.Count ? row[i] : string.Empty;
+                                <td class="@(IsNumeric(v) ? "is-num" : null)">@v</td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (PageCount > 1 || ShowCount)
+        {
+            <div class="gdal-table__pager">
+                <span>@RangeText</span>
+                @if (PageCount > 1)
+                {
+                    <span class="gdal-table__pages">
+                        <button type="button" disabled="@(_page == 0)" @onclick="() => GoTo(0)" aria-label="First page">«</button>
+                        <button type="button" disabled="@(_page == 0)" @onclick="() => GoTo(_page - 1)" aria-label="Previous page">‹</button>
+                        <span>@(_page + 1) / @PageCount</span>
+                        <button type="button" disabled="@(_page >= PageCount - 1)" @onclick="() => GoTo(_page + 1)" aria-label="Next page">›</button>
+                        <button type="button" disabled="@(_page >= PageCount - 1)" @onclick="() => GoTo(PageCount - 1)" aria-label="Last page">»</button>
+                    </span>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>A vector snapshot (columns = FID + fields).</summary>
+    [Parameter] public VectorData? Data { get; set; }
+
+    /// <summary>Column headers when using plain rows.</summary>
+    [Parameter] public IReadOnlyList<string>? Columns { get; set; }
+
+    /// <summary>Rows of pre-formatted cell text.</summary>
+    [Parameter] public IReadOnlyList<IReadOnlyList<string>>? Rows { get; set; }
+
+    [Parameter] public int PageSize { get; set; } = 25;
+    [Parameter] public string? Caption { get; set; }
+    [Parameter] public string EmptyText { get; set; } = "No rows.";
+    [Parameter] public bool ShowCount { get; set; } = true;
+    [Parameter] public string? Class { get; set; }
+
+    private IReadOnlyList<string> _columns = [];
+    private List<IReadOnlyList<string>> _rows = [];
+    private int _page;
+    private int _sortColumn = -1;
+    private bool _descending;
+    private object? _lastSource;
+
+    protected override void OnParametersSet()
+    {
+        object? source = (object?)Data ?? Rows;
+        if (ReferenceEquals(source, _lastSource) && ReferenceEquals(Columns, _columnsRef)) return;
+        _lastSource = source;
+        _columnsRef = Columns;
+        _page = 0;
+        _sortColumn = -1;
+        if (Data is not null)
+        {
+            _columns = ["FID", .. Data.Fields.Select(f => f.Name)];
+            _rows = Data.Features.Select(f => (IReadOnlyList<string>)[f.Id.ToString(CultureInfo.InvariantCulture), .. Data.Fields.Select(fd => Format(f[fd.Name]))]).ToList();
+        }
+        else
+        {
+            _columns = Columns ?? [];
+            _rows = Rows?.ToList() ?? [];
+        }
+    }
+
+    private IReadOnlyList<string>? _columnsRef;
+
+    private int PageCount => Math.Max(1, (int)Math.Ceiling(_rows.Count / (double)Math.Max(1, PageSize)));
+
+    private IEnumerable<IReadOnlyList<string>> PageRows => _rows.Skip(_page * PageSize).Take(PageSize);
+
+    private string RangeText => _rows.Count == 0 ? "0 rows"
+        : $"{_page * PageSize + 1:#,0}–{Math.Min(_rows.Count, (_page + 1) * PageSize):#,0} of {_rows.Count:#,0}";
+
+    private void GoTo(int page) => _page = Math.Clamp(page, 0, PageCount - 1);
+
+    private string? AriaSort(int col) => _sortColumn != col ? null : _descending ? "descending" : "ascending";
+
+    private void SortBy(int col)
+    {
+        _descending = _sortColumn == col && !_descending;
+        _sortColumn = col;
+        var numeric = _rows.All(r => col >= r.Count || IsNumeric(r[col]) || r[col] is "∅" or "");
+        IEnumerable<IReadOnlyList<string>> ordered = numeric
+            ? _rows.OrderBy(r => ParseNumber(col < r.Count ? r[col] : ""))
+            : _rows.OrderBy(r => col < r.Count ? r[col] : "", StringComparer.CurrentCultureIgnoreCase);
+        _rows = (_descending ? ordered.Reverse() : ordered).ToList();
+        _page = 0;
+    }
+
+    private static double ParseNumber(string s)
+        => double.TryParse(s.Replace(",", ""), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : double.MinValue;
+
+    private static bool IsNumeric(string s)
+        => s.Length > 0 && double.TryParse(s.Replace(",", ""), NumberStyles.Float, CultureInfo.InvariantCulture, out _);
+
+    /// <summary>Formats an attribute value for display.</summary>
+    public static string Format(object? v) => v switch
+    {
+        null => "∅",
+        double d => d.ToString("#,0.###", CultureInfo.InvariantCulture),
+        float f => f.ToString("#,0.###", CultureInfo.InvariantCulture),
+        long l => l.ToString("#,0", CultureInfo.InvariantCulture),
+        int i => i.ToString("#,0", CultureInfo.InvariantCulture),
+        DateTimeOffset dto => dto.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        byte[] b => $"<{b.Length} bytes>",
+        _ => Convert.ToString(v, CultureInfo.InvariantCulture) ?? string.Empty,
+    };
+}

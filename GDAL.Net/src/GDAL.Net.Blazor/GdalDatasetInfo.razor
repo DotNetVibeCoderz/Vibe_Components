@@ -1,0 +1,118 @@
+@* Compact inspector of a dataset: driver, size, georeferencing, CRS, bands, layers and metadata domains. *@
+<section class="gdal-info @Class" aria-label="Dataset information">
+    @if (_info is null)
+    {
+        <p class="gdal-info__empty">No dataset.</p>
+    }
+    else
+    {
+        <dl class="gdal-info__grid">
+            <dt>Driver</dt><dd>@_info.Driver</dd>
+            @if (_info.IsRaster)
+            {
+                <dt>Size</dt><dd class="mono">@_info.Size</dd>
+                <dt>Pixel size</dt><dd class="mono">@_info.Pixel</dd>
+                <dt>Origin</dt><dd class="mono">@_info.Origin</dd>
+                <dt>Extent</dt><dd class="mono">@_info.Extent</dd>
+            }
+            <dt>CRS</dt><dd>@_info.Crs</dd>
+            @if (_info.Domains.Count > 0)
+            {
+                <dt>Metadata</dt>
+                <dd>
+                    @foreach (var d in _info.Domains)
+                    {
+                        <span class="gdal-info__chip">@d</span>
+                    }
+                </dd>
+            }
+        </dl>
+
+        @if (_info.Bands.Count > 0)
+        {
+            <h4>Bands</h4>
+            <table class="gdal-info__table">
+                <thead><tr><th>#</th><th>Description</th><th>Type</th><th>Color</th><th>NoData</th><th>Overviews</th></tr></thead>
+                <tbody>
+                    @foreach (var b in _info.Bands)
+                    {
+                        <tr><td class="mono">@b.Number</td><td>@b.Description</td><td class="mono">@b.Type</td><td>@b.Color</td><td class="mono">@b.NoData</td><td class="mono">@b.Overviews</td></tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        @if (_info.Layers.Count > 0)
+        {
+            <h4>Layers</h4>
+            <table class="gdal-info__table">
+                <thead><tr><th>Name</th><th>Geometry</th><th>Features</th><th>Fields</th></tr></thead>
+                <tbody>
+                    @foreach (var l in _info.Layers)
+                    {
+                        <tr><td>@l.Name</td><td class="mono">@l.Geometry</td><td class="mono">@l.Count</td><td>@l.Fields</td></tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        @if (ShowMetadata && _info.Metadata.Count > 0)
+        {
+            <details class="gdal-info__meta">
+                <summary>Default metadata (@_info.Metadata.Count)</summary>
+                <dl>
+                    @foreach (var kv in _info.Metadata)
+                    {
+                        <dt>@kv.Key</dt><dd>@kv.Value</dd>
+                    }
+                </dl>
+            </details>
+        }
+    }
+</section>
+
+@code {
+    [Parameter] public Dataset? Dataset { get; set; }
+    [Parameter] public bool ShowMetadata { get; set; } = true;
+    [Parameter] public string? Class { get; set; }
+
+    private Snapshot? _info;
+    private Dataset? _last;
+
+    private sealed record BandRow(int Number, string Description, string Type, string Color, string NoData, int Overviews);
+    private sealed record LayerRow(string Name, string Geometry, string Count, string Fields);
+    private sealed record Snapshot(string Driver, bool IsRaster, string Size, string Pixel, string Origin, string Extent, string Crs,
+        IReadOnlyList<string> Domains, IReadOnlyList<BandRow> Bands, IReadOnlyList<LayerRow> Layers, IReadOnlyDictionary<string, string> Metadata);
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(Dataset, _last)) return;
+        _last = Dataset;
+        _info = Dataset is null || Dataset.IsDisposed ? null : Read(Dataset);
+    }
+
+    private static string N(double v) => v.ToString(Math.Abs(v) < 1 ? "0.########" : "#,0.###", CultureInfo.InvariantCulture);
+
+    private static Snapshot Read(Dataset ds)
+    {
+        using var srs = ds.SpatialReference;
+        var gt = ds.GeoTransform;
+        var ext = ds.Extent;
+        var bands = ds.Bands.Select(b => new BandRow(b.Number, string.IsNullOrEmpty(b.Description) ? "—" : b.Description, b.DataType.ToString(),
+            b.ColorInterpretation.ToString(), b.NoDataValue is { } nd ? N(nd) : "—", b.OverviewCount)).ToList();
+        var layers = ds.Layers.Select(l => new LayerRow(l.Name, l.GeometryType.ToString(), l.GetFeatureCount(false) is var c and >= 0 ? c.ToString("#,0", CultureInfo.InvariantCulture) : "?",
+            string.Join(", ", l.Fields.Select(f => f.Name)))).ToList();
+        return new Snapshot(
+            $"{ds.Driver.ShortName} — {ds.Driver.LongName}",
+            ds.RasterCount > 0,
+            $"{ds.RasterWidth:#,0} × {ds.RasterHeight:#,0} × {ds.RasterCount}",
+            $"{N(gt.PixelWidth)} × {N(Math.Abs(gt.PixelHeight))}",
+            $"{N(gt.OriginX)}, {N(gt.OriginY)}",
+            $"{N(ext.MinX)}, {N(ext.MinY)} → {N(ext.MaxX)}, {N(ext.MaxY)}",
+            srs?.ToString() ?? "none",
+            ds.MetadataDomains.Select(d => d.Length == 0 ? "(default)" : d).ToList(),
+            bands,
+            layers,
+            ds.GetMetadata());
+    }
+}

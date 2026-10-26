@@ -1,0 +1,29 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <GdalRuntimeVersion>3.13.3.583</GdalRuntimeVersion>
+    <AvaloniaVersion>12.1.4</AvaloniaVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- GDAL native binaries (GDAL 3.13.3, PROJ 9.8.1, GEOS) -->
+    <PackageVersion Include="MaxRev.Gdal.WindowsRuntime.Minimal" Version="$(GdalRuntimeVersion)" />
+    <PackageVersion Include="MaxRev.Gdal.LinuxRuntime.Minimal" Version="$(GdalRuntimeVersion)" />
+    <PackageVersion Include="MaxRev.Gdal.MacosRuntime.Minimal" Version="$(GdalRuntimeVersion)" />
+    <PackageVersion Include="System.Numerics.Tensors" Version="10.0.14" />
+
+    <PackageVersion Include="Avalonia" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Headless" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Skia" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Controls.DataGrid" Version="12.1.2" />
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+
+    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.14" />
+
+    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,32 @@
+@* Continuous color ramp legend with min / mid / max labels. *@
+<div class="gdal-legend @Class" role="img" aria-label="@($"{Title ?? Ramp.Name}: {Fmt(Min)} to {Fmt(Max)}{Unit}")">
+    @if (Title is not null)
+    {
+        <div class="gdal-legend__title">@Title</div>
+    }
+    <div class="gdal-legend__bar" style="background:@Ramp.ToCssGradient()"></div>
+    <div class="gdal-legend__labels">
+        <span>@Fmt(Min)@Unit</span>
+        @if (ShowMidpoint)
+        {
+            <span>@Fmt((Min + Max) / 2)@Unit</span>
+        }
+        <span>@Fmt(Max)@Unit</span>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ColorRamp Ramp { get; set; } = ColorRamp.Viridis;
+    [Parameter] public double Min { get; set; }
+    [Parameter] public double Max { get; set; } = 1;
+    [Parameter] public string? Unit { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public bool ShowMidpoint { get; set; } = true;
+    [Parameter] public string? Class { get; set; }
+
+    private static string Fmt(double v)
+    {
+        var a = Math.Abs(v);
+        return v.ToString(a >= 1000 ? "#,0" : a >= 10 ? "0.#" : a >= 1 ? "0.##" : "0.###", CultureInfo.InvariantCulture);
+    }
+}

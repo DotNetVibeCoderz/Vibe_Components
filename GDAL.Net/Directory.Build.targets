@@ -1,0 +1,7 @@
+<Project>
+  <!-- Every NuGet package ships the GDAL.Net icon and the package readme. -->
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)build\icon.png" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)build\PACKAGE.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+</Project>

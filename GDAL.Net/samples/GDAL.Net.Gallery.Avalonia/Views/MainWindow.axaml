@@ -1,0 +1,410 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:GDAL.Net.Gallery.Avalonia.ViewModels"
+        xmlns:c="using:GDAL.Net.Gallery.Avalonia.Controls"
+        xmlns:g="using:GDAL.Net.Avalonia"
+        x:Class="GDAL.Net.Gallery.Avalonia.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="GDAL.Net Gallery — Gravicode Studios"
+        Width="1440" Height="900" MinWidth="1000" MinHeight="640"
+        WindowStartupLocation="CenterScreen">
+
+  <Window.DataTemplates>
+    <!-- ======================= parameter editors ======================= -->
+    <DataTemplate DataType="vm:ChoiceParameterViewModel">
+      <StackPanel Spacing="5">
+        <TextBlock Text="{Binding Label}" FontSize="12.5" FontWeight="Medium" />
+        <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" HorizontalAlignment="Stretch" />
+      </StackPanel>
+    </DataTemplate>
+    <DataTemplate DataType="vm:NumberParameterViewModel">
+      <StackPanel Spacing="2">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Right" Text="{Binding Display}" Classes="mono" Foreground="{DynamicResource ShoalInk}" />
+          <TextBlock Text="{Binding Label}" FontSize="12.5" FontWeight="Medium" />
+        </DockPanel>
+        <Slider IsVisible="{Binding UseSlider}" Minimum="{Binding Min}" Maximum="{Binding Max}" SmallChange="{Binding Step}"
+                LargeChange="{Binding Step}" TickFrequency="{Binding Step}" IsSnapToTickEnabled="True" Value="{Binding Number}" />
+        <NumericUpDown IsVisible="{Binding !UseSlider}" Minimum="{Binding Min}" Maximum="{Binding Max}" Increment="{Binding Step}"
+                       Value="{Binding Number}" FormatString="0.######" FontFamily="{StaticResource MonoFont}" />
+      </StackPanel>
+    </DataTemplate>
+    <DataTemplate DataType="vm:ToggleParameterViewModel">
+      <ToggleSwitch IsChecked="{Binding IsOn}" OnContent="{Binding Label}" OffContent="{Binding Label}" FontSize="12.5" />
+    </DataTemplate>
+    <DataTemplate DataType="vm:TextParameterViewModel">
+      <StackPanel Spacing="5">
+        <TextBlock Text="{Binding Label}" FontSize="12.5" FontWeight="Medium" />
+        <TextBox Text="{Binding Text}" AcceptsReturn="{Binding Multiline}" TextWrapping="Wrap"
+                 MinHeight="{Binding Multiline, Converter={x:Static c:Converters.MultilineHeight}}"
+                 FontFamily="{StaticResource MonoFont}" FontSize="12" />
+        <TextBlock IsVisible="{Binding HasHint}" Text="{Binding Hint}" Classes="mono" FontSize="11" Foreground="{DynamicResource Ink3}" TextWrapping="Wrap" />
+      </StackPanel>
+    </DataTemplate>
+  </Window.DataTemplates>
+
+  <Grid RowDefinitions="Auto,*,Auto">
+
+    <!-- ============================================================ header (signature) -->
+    <Border Grid.Row="0" Height="104" Background="{DynamicResource Paper}" BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+      <Panel>
+        <c:ContourHeader Contours="{Binding Contours}" LineBrush="{DynamicResource HeaderLine}" IndexBrush="{DynamicResource HeaderIndex}" FocusY="0.2" />
+        <Border>
+          <Border.Background>
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+              <GradientStop Offset="0" Color="{DynamicResource PaperColor}" />
+              <GradientStop Offset="0.30" Color="{DynamicResource PaperColor}" />
+              <GradientStop Offset="0.62" Color="{DynamicResource PaperClearColor}" />
+              <GradientStop Offset="0.86" Color="{DynamicResource PaperClearColor}" />
+              <GradientStop Offset="1" Color="{DynamicResource PaperColor}" />
+            </LinearGradientBrush>
+          </Border.Background>
+        </Border>
+        <DockPanel Margin="28,0,24,0">
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <Border Classes="card" CornerRadius="5" ClipToBounds="True" Padding="0">
+              <StackPanel Orientation="Horizontal">
+                <ToggleButton Classes="seg" Content="EN" IsChecked="{Binding !IsIndonesian}" Click="OnEnglish" />
+                <ToggleButton Classes="seg" Content="ID" IsChecked="{Binding IsIndonesian}" Click="OnIndonesian" />
+              </StackPanel>
+            </Border>
+            <ToggleButton Classes="seg" IsChecked="{Binding IsDark}" Padding="10,4" ToolTip.Tip="Dark / light">
+              <PathIcon Width="14" Height="14" Data="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" />
+            </ToggleButton>
+          </StackPanel>
+          <StackPanel VerticalAlignment="Center" Spacing="2">
+            <TextBlock Classes="eyebrow" Text="GDAL 3.13 · .NET 10 · RUST KERNELS" />
+            <TextBlock Classes="brand">
+              <Run Text="GDAL" /><Run Text=".Net" Foreground="{DynamicResource Contour}" /><Run Text=" Gallery" />
+            </TextBlock>
+            <TextBlock Text="{Binding Tagline}" FontSize="13" Foreground="{DynamicResource Ink2}" />
+          </StackPanel>
+        </DockPanel>
+      </Panel>
+    </Border>
+
+    <!-- ============================================================ body -->
+    <Grid Grid.Row="1" ColumnDefinitions="264,*">
+
+      <!-- rail: navigation + category legend -->
+      <Border Grid.Column="0" BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,1,0" Background="{DynamicResource Panel}">
+        <ScrollViewer>
+          <StackPanel Margin="14,16,12,24" Spacing="2">
+            <Button Classes="nav" Classes.active="{Binding IsHome}" Command="{Binding ShowHomeCommand}">
+              <TextBlock Text="{Binding L[overview]}" />
+            </Button>
+            <Button Classes="nav" Classes.active="{Binding IsComponents}" Command="{Binding ShowComponentsCommand}">
+              <TextBlock Text="{Binding L[components]}" />
+            </Button>
+            <TextBlock Classes="panel-h" Margin="10,18,0,6" Text="{Binding L[use_cases], Converter={x:Static c:Converters.Upper}}" />
+            <ItemsControl ItemsSource="{Binding Categories}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:CategoryViewModel">
+                  <StackPanel Margin="0,6,0,4">
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="10,2,0,3">
+                      <Border Classes="swatch" Background="{Binding Swatch}" />
+                      <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Ink}" />
+                      <TextBlock Text="{Binding Count}" Classes="mono" FontSize="11" Foreground="{DynamicResource Ink3}" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding Samples}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:SampleItemViewModel">
+                          <Button Classes="rail-item" Classes.selected="{Binding IsSelected}"
+                                  Command="{Binding Owner.OpenSampleCommand}" CommandParameter="{Binding}">
+                            <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                          </Button>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+
+      <!-- content -->
+      <Panel Grid.Column="1">
+
+        <!-- ================================================== home -->
+        <ScrollViewer IsVisible="{Binding IsHome}">
+          <StackPanel Margin="40,34,26,40" Spacing="6">
+            <TextBlock Classes="eyebrow" Text="{Binding CountLabel, Converter={x:Static c:Converters.Upper}}" />
+            <TextBlock Classes="h1" Text="{Binding L[home_title]}" MaxWidth="860" HorizontalAlignment="Left" />
+            <TextBlock Classes="lede" Text="{Binding L[home_lede]}" MaxWidth="820" HorizontalAlignment="Left" Margin="0,4,0,18" />
+            <ItemsControl ItemsSource="{Binding Categories}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:CategoryViewModel">
+                  <StackPanel Margin="0,10,0,6">
+                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,12">
+                      <Border Classes="swatch" Width="14" Height="14" Background="{Binding Swatch}" />
+                      <TextBlock Classes="h3" Text="{Binding Title}" />
+                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding Samples}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <WrapPanel />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:SampleItemViewModel">
+                          <Button Classes="sample-card" Command="{Binding Owner.OpenSampleCommand}" CommandParameter="{Binding}">
+                            <Grid ColumnDefinitions="4,*">
+                              <Border Grid.Column="0" Background="{Binding Swatch}" CornerRadius="8,0,0,8" />
+                              <DockPanel Grid.Column="1" Margin="16,14,16,12">
+                                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="6">
+                                  <Border Classes="chip" IsVisible="{Binding Equivalent, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                    <TextBlock Text="{Binding Equivalent}" TextTrimming="CharacterEllipsis" MaxWidth="230" />
+                                  </Border>
+                                </StackPanel>
+                                <StackPanel Spacing="6">
+                                  <TextBlock Text="{Binding Title}" FontFamily="{StaticResource DisplayFont}" FontWeight="SemiBold" FontSize="16.5" TextWrapping="Wrap" />
+                                  <TextBlock Text="{Binding Summary}" FontSize="12.5" LineHeight="18" Foreground="{DynamicResource Ink2}" TextWrapping="Wrap" MaxLines="4" TextTrimming="WordEllipsis" />
+                                </StackPanel>
+                              </DockPanel>
+                            </Grid>
+                          </Button>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- ================================================== sample -->
+        <Panel IsVisible="{Binding IsSample}">
+        <Grid DataContext="{Binding Current}" RowDefinitions="Auto,*" Margin="26,20,20,18">
+          <DockPanel Grid.Row="0" Margin="0,0,0,14">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
+              <TextBlock Text="{Binding Elapsed}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Ink3}" VerticalAlignment="Center" />
+              <Button Classes="primary" Command="{Binding RunCommand}" Content="{Binding L[run]}" />
+            </StackPanel>
+            <StackPanel Spacing="4">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Border Classes="swatch" Background="{Binding Swatch}" />
+                <TextBlock Classes="eyebrow" Text="{Binding CategoryTitle, Converter={x:Static c:Converters.Upper}}" VerticalAlignment="Center" />
+                <Border Classes="chip" IsVisible="{Binding Equivalent, Converter={x:Static ObjectConverters.IsNotNull}}" Margin="6,0,0,0">
+                  <TextBlock Text="{Binding Equivalent}" />
+                </Border>
+              </StackPanel>
+              <TextBlock Classes="h2" Text="{Binding Title}" />
+              <TextBlock Classes="lede" Text="{Binding Summary}" MaxWidth="940" HorizontalAlignment="Left" FontSize="14" LineHeight="21" />
+            </StackPanel>
+          </DockPanel>
+
+          <Grid Grid.Row="1" ColumnDefinitions="*,16,420">
+            <!-- stage -->
+            <Border Grid.Column="0" Classes="card" ClipToBounds="True">
+              <Panel>
+                <g:GdalMapView x:Name="SampleMap" IsVisible="{Binding HasMap}" Rasters="{Binding Rasters}" Vectors="{Binding Vectors}"
+                               Extent="{Binding Extent}" CrsLabel="{Binding Crs}" />
+                <g:GdalAttributeGrid IsVisible="{Binding ShowTableInMain}" Columns="{Binding TableColumns}" Rows="{Binding TableRows}" Margin="2" />
+                <ScrollViewer IsVisible="{Binding ShowOutputInMain}" Padding="18,14">
+                  <c:CodeBlock Code="{Binding Output}" Language="{Binding OutputLanguage}" Classes="mono" TextWrapping="Wrap" />
+                </ScrollViewer>
+
+                <!-- legend overlay -->
+                <Border IsVisible="{Binding HasLegend}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12" Padding="12,8,12,6"
+                        Background="{DynamicResource GdalNet.Panel}" CornerRadius="5" Width="250">
+                  <g:GdalColorLegend Ramp="{Binding LegendRamp}" Minimum="{Binding LegendMin}" Maximum="{Binding LegendMax}" Title="{Binding LegendTitle}" Ticks="2" />
+                </Border>
+
+                <!-- clicked feature -->
+                <Border IsVisible="{Binding HasClicked}" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,52" Padding="12,6"
+                        Background="{DynamicResource Ink}" CornerRadius="5" MaxWidth="700">
+                  <TextBlock Text="{Binding ClickedFeature}" Classes="mono" Foreground="{DynamicResource OnInk}" TextTrimming="CharacterEllipsis" />
+                </Border>
+
+                <!-- running / error -->
+                <ProgressBar IsVisible="{Binding IsRunning}" IsIndeterminate="True" VerticalAlignment="Top" Height="3" MinHeight="3" CornerRadius="0" />
+                <Border IsVisible="{Binding HasError}" VerticalAlignment="Bottom" Margin="14" Padding="14,10" CornerRadius="6"
+                        Background="{DynamicResource ContourWash}" BorderBrush="{DynamicResource Contour}" BorderThickness="1">
+                  <StackPanel Spacing="3">
+                    <TextBlock Text="{Binding L[error]}" FontWeight="SemiBold" Foreground="{DynamicResource Contour}" />
+                    <SelectableTextBlock Text="{Binding Error}" Classes="mono" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding L[error_hint]}" FontSize="12" Foreground="{DynamicResource Ink2}" />
+                  </StackPanel>
+                </Border>
+              </Panel>
+            </Border>
+
+            <!-- side panel -->
+            <Grid Grid.Column="2" RowDefinitions="Auto,*">
+              <Border Grid.Row="0" Classes="card" Padding="16,14" Margin="0,0,0,12" IsVisible="{Binding HasParameters}">
+                <StackPanel>
+                  <TextBlock Classes="panel-h" Text="{Binding L[parameters], Converter={x:Static c:Converters.Upper}}" />
+                  <ItemsControl ItemsSource="{Binding Parameters}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Spacing="12" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                  </ItemsControl>
+                </StackPanel>
+              </Border>
+
+              <Border Grid.Row="1" Classes="card" Padding="14,4,14,14">
+                <TabControl Classes="panel-tabs">
+                  <TabItem Header="{Binding L[result]}">
+                    <ScrollViewer>
+                      <StackPanel Spacing="14" Margin="0,10,4,0">
+                        <ItemsControl ItemsSource="{Binding Metrics}">
+                          <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                              <UniformGrid Columns="2" />
+                            </ItemsPanelTemplate>
+                          </ItemsControl.ItemsPanel>
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="vm:MetricItem">
+                              <Border BorderBrush="{DynamicResource RuleSoft}" BorderThickness="0,0,0,1" Padding="0,7,10,7">
+                                <StackPanel Spacing="1">
+                                  <TextBlock Text="{Binding Label}" Classes="mono" FontSize="10.5" Foreground="{DynamicResource Ink3}" TextTrimming="CharacterEllipsis" />
+                                  <TextBlock TextWrapping="Wrap">
+                                    <Run Text="{Binding Value}" FontFamily="{StaticResource DisplayFont}" FontSize="17" FontWeight="SemiBold" />
+                                    <Run Text="{Binding Unit}" FontSize="12" Foreground="{DynamicResource Ink2}" />
+                                  </TextBlock>
+                                </StackPanel>
+                              </Border>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock IsVisible="{Binding HasNote}" Text="{Binding Note}" FontSize="12" Foreground="{DynamicResource Ink2}" TextWrapping="Wrap" />
+                        <StackPanel IsVisible="{Binding HasHistogram}">
+                          <g:GdalHistogramChart Histogram="{Binding Histogram}" Title="{Binding HistogramTitle}" Ramp="{Binding LegendRamp}"
+                                                RampMin="{Binding LegendMin}" RampMax="{Binding LegendMax}" Height="170" />
+                        </StackPanel>
+                        <StackPanel IsVisible="{Binding HasMap}">
+                          <g:GdalAttributeGrid IsVisible="{Binding HasTable}" Columns="{Binding TableColumns}" Rows="{Binding TableRows}" Height="280" />
+                        </StackPanel>
+                        <StackPanel Spacing="6" IsVisible="{Binding HasOutput}">
+                          <TextBlock Classes="panel-h" Text="{Binding L[output], Converter={x:Static c:Converters.Upper}}" Margin="0" />
+                          <Border Classes="output" MaxHeight="360">
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto">
+                              <c:CodeBlock Code="{Binding Output}" Language="{Binding OutputLanguage}" Classes="mono" FontSize="11.5" />
+                            </ScrollViewer>
+                          </Border>
+                        </StackPanel>
+                      </StackPanel>
+                    </ScrollViewer>
+                  </TabItem>
+                  <TabItem Header="{Binding L[code]}">
+                    <DockPanel Margin="0,10,0,0">
+                      <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+                        <Button Classes="ghost" Command="{Binding CopyCodeCommand}" Content="{Binding L[copy]}" />
+                        <TextBlock IsVisible="{Binding CodeCopied}" Text="{Binding L[copied]}" Foreground="{DynamicResource ShoalInk}" VerticalAlignment="Center" />
+                      </StackPanel>
+                      <Border Classes="code">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto">
+                          <c:CodeBlock Classes="code" Code="{Binding Code}" Language="csharp" />
+                        </ScrollViewer>
+                      </Border>
+                    </DockPanel>
+                  </TabItem>
+                  <TabItem Header="{Binding L[dataset]}" IsVisible="{Binding HasInfo}">
+                    <g:GdalDatasetInfoPanel Dataset="{Binding InfoDataset}" Margin="0,10,0,0" />
+                  </TabItem>
+                </TabControl>
+              </Border>
+            </Grid>
+          </Grid>
+        </Grid>
+
+        </Panel>
+
+        <!-- ================================================== components -->
+        <Panel IsVisible="{Binding IsComponents}">
+        <ScrollViewer DataContext="{Binding Components}">
+          <StackPanel Margin="32,26,26,40" Spacing="18">
+            <StackPanel Spacing="4">
+              <TextBlock Classes="eyebrow" Text="GRAVICODE.GDAL.NET.AVALONIA" />
+              <TextBlock Classes="h2" Text="{Binding L[components]}" />
+            </StackPanel>
+
+            <Border Classes="card" Padding="18,16">
+              <StackPanel Spacing="10">
+                <TextBlock Classes="h3" Text="{Binding L[comp_map]}" />
+                <TextBlock Classes="lede" FontSize="13" LineHeight="19" Text="{Binding L[comp_map_desc]}" />
+                <Border CornerRadius="6" ClipToBounds="True" Height="440">
+                  <g:GdalMapView x:Name="ComponentsMap" Rasters="{Binding Rasters}" Vectors="{Binding Vectors}" CrsLabel="EPSG:32748" />
+                </Border>
+                <TextBlock Text="{Binding Clicked}" Classes="mono" Foreground="{DynamicResource ShoalInk}" />
+              </StackPanel>
+            </Border>
+
+            <Grid ColumnDefinitions="*,18,*">
+              <Border Grid.Column="0" Classes="card" Padding="18,16">
+                <StackPanel Spacing="14">
+                  <TextBlock Classes="h3" Text="{Binding L[comp_hist]}" />
+                  <g:GdalHistogramChart Histogram="{Binding Histogram}" Ramp="{Binding Terrain}" RampMin="{Binding Min}" RampMax="{Binding Max}" Title="Elevation (m) · log scale" LogScale="True" Height="190" />
+                  <g:GdalColorLegend Ramp="{Binding Terrain}" Minimum="{Binding Min}" Maximum="{Binding Max}" Unit="m" Title="Terrain" />
+                </StackPanel>
+              </Border>
+              <Border Grid.Column="2" Classes="card" Padding="18,16">
+                <StackPanel Spacing="10">
+                  <TextBlock Classes="h3" Text="{Binding L[comp_info]}" />
+                  <g:GdalDatasetInfoPanel Dataset="{Binding Dem}" Height="300" />
+                </StackPanel>
+              </Border>
+            </Grid>
+
+            <Border Classes="card" Padding="18,16">
+              <StackPanel Spacing="10">
+                <TextBlock Classes="h3" Text="{Binding L[comp_srs]}" />
+                <g:GdalSrsExplorer Height="400" Query="Indonesia" SelectedCrs="EPSG:23830" />
+              </StackPanel>
+            </Border>
+
+            <Border Classes="card" Padding="18,16">
+              <StackPanel Spacing="10">
+                <TextBlock Classes="h3" Text="{Binding L[comp_grid]}" />
+                <g:GdalAttributeGrid Data="{Binding Cities}" Height="300" />
+              </StackPanel>
+            </Border>
+
+            <Border Classes="card" Padding="18,16">
+              <StackPanel Spacing="12">
+                <TextBlock Classes="h3" Text="{Binding L[comp_ramps]}" />
+                <ItemsControl ItemsSource="{Binding Ramps}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <UniformGrid Columns="3" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <g:GdalColorLegend Ramp="{Binding}" Title="{Binding Name}" Minimum="0" Maximum="1" Ticks="1" Margin="0,0,20,14" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+        </Panel>
+
+        <!-- ================================================== first-launch data generation -->
+        <Border IsVisible="{Binding !IsDataReady}" Background="{DynamicResource Paper}" Opacity="0.96">
+          <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10" MaxWidth="520">
+            <TextBlock Classes="h3" Text="{Binding L[preparing]}" TextAlignment="Center" TextWrapping="Wrap" />
+            <ProgressBar IsIndeterminate="True" Width="280" />
+            <TextBlock Text="{Binding DataStatus}" Classes="mono" HorizontalAlignment="Center" Foreground="{DynamicResource ShoalInk}" />
+            <TextBlock Text="{Binding L[preparing_hint]}" FontSize="12.5" Foreground="{DynamicResource Ink2}" TextAlignment="Center" TextWrapping="Wrap" />
+            <SelectableTextBlock Text="{Binding DataError}" Foreground="{DynamicResource Contour}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+      </Panel>
+    </Grid>
+
+    <!-- ============================================================ footer -->
+    <Border Grid.Row="2" BorderBrush="{DynamicResource Rule}" BorderThickness="0,1,0,0" Background="{DynamicResource Panel}" Padding="20,8">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Right" Text="{Binding Footer}" Classes="mono" FontSize="11" Foreground="{DynamicResource Ink3}" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding Credit}" FontSize="12.5" FontWeight="Medium" Foreground="{DynamicResource Ink2}" VerticalAlignment="Center" />
+      </DockPanel>
+    </Border>
+  </Grid>
+</Window>

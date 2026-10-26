@@ -1,0 +1,9 @@
+<Project>
+  <!-- Copies the GDAL support data (gdal-data) shipped in the Gravicode.GDAL.Net package to the consumer's output. -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)..\gdal-data\**\*"
+          Link="gdal-data\%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest"
+          Visible="false" />
+  </ItemGroup>
+</Project>

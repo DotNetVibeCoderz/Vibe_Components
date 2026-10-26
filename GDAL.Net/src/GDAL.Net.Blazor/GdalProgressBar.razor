@@ -1,0 +1,26 @@
+@* Determinate (Value 0..1) or indeterminate progress bar, e.g. bound to IProgress<GdalProgress>. *@
+<div class="gdal-progress @Class @(Indeterminate ? "is-indeterminate" : null)">
+    @if (Label is not null)
+    {
+        <div class="gdal-progress__label">
+            <span>@Label</span>
+            @if (!Indeterminate)
+            {
+                <span class="gdal-progress__pct">@((Math.Clamp(Value, 0, 1) * 100).ToString("0", CultureInfo.InvariantCulture))%</span>
+            }
+        </div>
+    }
+    <div class="gdal-progress__track" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+         aria-valuenow="@(Indeterminate ? null : (Math.Clamp(Value, 0, 1) * 100).ToString("0", CultureInfo.InvariantCulture))"
+         aria-label="@(Label ?? "Progress")">
+        <div class="gdal-progress__fill" style="@(Indeterminate ? null : $"width:{(Math.Clamp(Value, 0, 1) * 100).ToString("0.##", CultureInfo.InvariantCulture)}%")"></div>
+    </div>
+</div>
+
+@code {
+    /// <summary>Progress fraction in [0, 1] (see <see cref="GdalProgress.Fraction"/>).</summary>
+    [Parameter] public double Value { get; set; }
+    [Parameter] public bool Indeterminate { get; set; }
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? Class { get; set; }
+}

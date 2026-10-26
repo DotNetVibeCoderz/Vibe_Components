@@ -1,0 +1,25 @@
+@inject IJSRuntime JS
+@inject UiState Ui
+
+<div class="output">
+    <div class="code__bar">
+        <span class="code__lang">@Language.ToUpperInvariant()</span>
+        <button type="button" class="code__copy" @onclick="CopyAsync">@(_copied ? Ui.T("Copied", "Tersalin") : Ui.T("Copy", "Salin"))</button>
+    </div>
+    <pre tabindex="0" class="output__pre lang-@Language">@Text</pre>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Text { get; set; } = "";
+    [Parameter] public string Language { get; set; } = "text";
+
+    private bool _copied;
+
+    private async Task CopyAsync()
+    {
+        _copied = await JS.InvokeAsync<bool>("gdalGallery.copy", Text);
+        StateHasChanged();
+        await Task.Delay(1600);
+        _copied = false;
+    }
+}

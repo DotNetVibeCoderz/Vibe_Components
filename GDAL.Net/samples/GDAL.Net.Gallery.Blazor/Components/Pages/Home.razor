@@ -1,0 +1,46 @@
+@page "/"
+@inject UiState Ui
+
+<PageTitle>GDAL.Net Gallery</PageTitle>
+
+<section class="intro">
+    <p class="eyebrow">@Ui.T("Field guide", "Buku lapangan")</p>
+    <h1>@Ui.T("Read, reproject, analyse and draw geodata without leaving .NET.", "Baca, reproyeksi, analisis, dan gambar data geospasial tanpa keluar dari .NET.")</h1>
+    <p class="intro__lead">
+        @Ui.T("Each card below runs real GDAL.Net code against data the gallery generates on first start: a volcanic basin DEM modelled on Bandung, a Sentinel-2-like scene, Indonesian cities and a monthly climate cube. Change the parameters, watch the map update, then copy the code.",
+              "Setiap kartu di bawah menjalankan kode GDAL.Net sungguhan atas data yang dibuat gallery saat pertama kali dijalankan: DEM cekungan vulkanik yang dimodelkan dari Bandung, citra mirip Sentinel-2, kota-kota Indonesia, dan kubus iklim bulanan. Ubah parameter, lihat peta berubah, lalu salin kodenya.")
+    </p>
+    <dl class="survey">
+        <div><dt>GDAL</dt><dd>@Gdal.Version</dd></div>
+        <div><dt>PROJ</dt><dd>@Gdal.ProjVersion</dd></div>
+        <div><dt>@Ui.T("Drivers", "Driver")</dt><dd>@_drivers</dd></div>
+        <div><dt>@Ui.T("Samples", "Sampel")</dt><dd>@Catalog.All.Count</dd></div>
+        <div><dt>@Ui.T("Kernels", "Kernel")</dt><dd>@GDAL.Net.Processing.Kernels.Backend</dd></div>
+    </dl>
+</section>
+
+@foreach (var group in Catalog.ByCategory)
+{
+    <section class="cat" style="--swatch:@CategoryInfo.Swatch(group.Key)" aria-labelledby="cat-@group.Key">
+        <h2 id="cat-@group.Key"><span class="cat__swatch" aria-hidden="true"></span>@Ui.T(CategoryInfo.Title(group.Key))</h2>
+        <div class="cards">
+            @foreach (var s in group)
+            {
+                <a class="card" href="@($"sample/{s.Id}")">
+                    <span class="card__title">@Ui.T(s.Title)</span>
+                    <span class="card__summary">@Ui.T(s.Summary)</span>
+                    @if (s.Equivalent is not null)
+                    {
+                        <span class="card__eq">@s.Equivalent</span>
+                    }
+                </a>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    private int _drivers;
+
+    protected override void OnInitialized() => _drivers = Gdal.Drivers.Count;
+}

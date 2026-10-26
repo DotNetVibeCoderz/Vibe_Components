@@ -1,0 +1,196 @@
+.gdal-map {
+    position: relative;
+    overflow: hidden;
+    min-height: 240px;
+    height: 100%;
+    background: var(--gdal-map-bg, #e9eeec);
+    background-image:
+        linear-gradient(var(--gdal-map-grid, rgba(18, 38, 58, .06)) 1px, transparent 1px),
+        linear-gradient(90deg, var(--gdal-map-grid, rgba(18, 38, 58, .06)) 1px, transparent 1px);
+    background-size: 48px 48px;
+    border-radius: var(--gdal-radius, 10px);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    outline: none;
+    font-family: var(--gdal-font, inherit);
+}
+
+.gdal-map:focus-visible {
+    box-shadow: 0 0 0 3px var(--gdal-focus, #2A9D8F);
+}
+
+.gdal-map.is-dragging {
+    cursor: grabbing;
+}
+
+.gdal-map__stage {
+    position: absolute;
+    inset: 0;
+    will-change: transform;
+}
+
+.gdal-map__raster,
+.gdal-map__vectors {
+    position: absolute;
+    pointer-events: none;
+    max-width: none;
+}
+
+.gdal-map__raster {
+    image-rendering: auto;
+}
+
+.gdal-map__vectors {
+    overflow: visible;
+}
+
+.gdal-map ::deep .gdal-feature {
+    pointer-events: visiblePainted;
+    transition: opacity .15s ease, stroke-width .15s ease;
+    vector-effect: non-scaling-stroke;
+}
+
+.gdal-map ::deep .gdal-feature:hover {
+    opacity: .78;
+    stroke-width: 2.4px;
+}
+
+.gdal-map ::deep .gdal-label {
+    font: 600 11px/1 var(--gdal-font, system-ui, sans-serif);
+    fill: var(--gdal-label-color, #12263A);
+    stroke: var(--gdal-label-halo, rgba(255, 255, 255, .9));
+    stroke-width: 3px;
+    paint-order: stroke;
+    pointer-events: none;
+}
+
+.gdal-map__controls {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 2;
+}
+
+.gdal-map__controls button {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--gdal-border, rgba(18, 38, 58, .18));
+    border-radius: 8px;
+    background: var(--gdal-surface, rgba(255, 255, 255, .92));
+    color: var(--gdal-ink, #12263A);
+    font: 600 18px/1 var(--gdal-font, system-ui, sans-serif);
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    transition: background .15s ease, transform .1s ease;
+}
+
+.gdal-map__controls button:hover {
+    background: var(--gdal-surface-hover, #fff);
+}
+
+.gdal-map__controls button:active {
+    transform: scale(.95);
+}
+
+.gdal-map__controls button:focus-visible {
+    outline: 2px solid var(--gdal-focus, #2A9D8F);
+    outline-offset: 2px;
+}
+
+.gdal-map__fit svg {
+    width: 16px;
+    height: 16px;
+}
+
+.gdal-map__status {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: var(--gdal-surface, rgba(255, 255, 255, .92));
+    color: var(--gdal-ink, #12263A);
+    font: 500 11.5px/1.2 var(--gdal-font-mono, ui-monospace, monospace);
+    font-variant-numeric: tabular-nums;
+    border: 1px solid var(--gdal-border, rgba(18, 38, 58, .14));
+    backdrop-filter: blur(6px);
+    z-index: 2;
+    pointer-events: none;
+    max-width: calc(100% - 24px);
+    white-space: nowrap;
+}
+
+.gdal-map__scale {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.gdal-map__scale-bar {
+    display: inline-block;
+    height: 6px;
+    border: 1.5px solid currentColor;
+    border-top: none;
+}
+
+.gdal-map__crs {
+    padding-left: 10px;
+    border-left: 1px solid var(--gdal-border, rgba(18, 38, 58, .2));
+    color: var(--gdal-accent, #C8553D);
+}
+
+.gdal-map__coords {
+    min-width: 13ch;
+}
+
+.gdal-map__error {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    right: 60px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #fff4f1;
+    color: #8c2f1c;
+    border: 1px solid #f0c2b5;
+    font-size: 13px;
+    z-index: 3;
+}
+
+.gdal-map__busy {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gdal-focus, #2A9D8F), transparent);
+    background-size: 40% 100%;
+    background-repeat: no-repeat;
+    opacity: 0;
+    transition: opacity .2s ease;
+    z-index: 3;
+}
+
+.gdal-map.is-loading .gdal-map__busy {
+    opacity: 1;
+    animation: gdal-map-busy 1s linear infinite;
+}
+
+@keyframes gdal-map-busy {
+    from { background-position: -40% 0; }
+    to { background-position: 140% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .gdal-map.is-loading .gdal-map__busy { animation: none; }
+    .gdal-map ::deep .gdal-feature { transition: none; }
+}

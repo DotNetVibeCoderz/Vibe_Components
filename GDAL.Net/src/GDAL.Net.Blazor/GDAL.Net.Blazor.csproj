@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <RootNamespace>GDAL.Net.Blazor</RootNamespace>
+    <AssemblyName>GDAL.Net.Blazor</AssemblyName>
+    <IsPackable>true</IsPackable>
+    <PackageId>Gravicode.GDAL.Net.Blazor</PackageId>
+    <Title>GDAL.Net for Blazor</Title>
+    <Description>Blazor (Interactive Server) components for GDAL.Net: a pan/zoom map that renders rasters server-side and vectors as SVG, attribute table, histogram, color legend, dataset inspector, CRS explorer (EPSG search, WKT2/PROJJSON, point transformation) and progress bar. Themeable through CSS variables. Created by Gravicode Studios, led by Kang Fadhil.</Description>
+    <PackageTags>$(PackageTags);blazor;components;map</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GDAL.Net\GDAL.Net.csproj" />
+  </ItemGroup>
+
+</Project>

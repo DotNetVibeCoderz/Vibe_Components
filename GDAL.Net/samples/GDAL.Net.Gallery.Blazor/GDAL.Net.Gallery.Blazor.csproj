@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>GDAL.Net.Gallery.Blazor</RootNamespace>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\GDAL.Net.Blazor\GDAL.Net.Blazor.csproj" />
+    <ProjectReference Include="..\GDAL.Net.Gallery.Shared\GDAL.Net.Gallery.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

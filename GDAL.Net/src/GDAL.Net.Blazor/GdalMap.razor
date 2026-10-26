@@ -1,0 +1,50 @@
+@implements IAsyncDisposable
+
+<div class="gdal-map @Class" style="@Style" @ref="_host" tabindex="0" role="application"
+     aria-label="@(AriaLabel ?? "Map. Drag to pan, scroll or press plus and minus to zoom.")">
+    <div class="gdal-map__stage" @ref="_stage">
+        @if (_image is not null)
+        {
+            <img class="gdal-map__raster" src="@_image" alt="" draggable="false"
+                 style="left:@Px(-_padX);top:@Px(-_padY);width:@Px(_extWidth);height:@Px(_extHeight)" />
+        }
+        @if (_svg is not null)
+        {
+            <svg class="gdal-map__vectors" xmlns="http://www.w3.org/2000/svg"
+                 style="left:@Px(-_padX);top:@Px(-_padY)" width="@_extWidth" height="@_extHeight"
+                 viewBox="0 0 @_extWidth @_extHeight">@_svg</svg>
+        }
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="gdal-map__error gdal-map__ui" role="alert">@_error</div>
+    }
+
+    @if (ShowControls)
+    {
+        <div class="gdal-map__controls gdal-map__ui">
+            <button type="button" title="Zoom in" aria-label="Zoom in" @onclick="() => ZoomBy(1.6)">+</button>
+            <button type="button" title="Zoom out" aria-label="Zoom out" @onclick="() => ZoomBy(1 / 1.6)">&minus;</button>
+            <button type="button" title="Fit to data" aria-label="Fit to data" @onclick="FitAsync" class="gdal-map__fit">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.6" /></svg>
+            </button>
+        </div>
+    }
+
+    <div class="gdal-map__status gdal-map__ui">
+        @if (_scaleLabel is not null)
+        {
+            <span class="gdal-map__scale" aria-label="Scale bar">
+                <span class="gdal-map__scale-bar" style="width:@Px(_scalePixels)"></span>
+                <span>@_scaleLabel</span>
+            </span>
+        }
+        <span class="gdal-map__coords" @ref="_readout">—</span>
+        @if (!string.IsNullOrEmpty(CrsLabel))
+        {
+            <span class="gdal-map__crs">@CrsLabel</span>
+        }
+    </div>
+    <div class="gdal-map__busy" aria-hidden="true"></div>
+</div>

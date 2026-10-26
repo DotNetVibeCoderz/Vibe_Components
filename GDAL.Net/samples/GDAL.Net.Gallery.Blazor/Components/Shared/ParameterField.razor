@@ -1,0 +1,96 @@
+@inject UiState Ui
+
+<div class="param param--@Parameter.Kind.ToString().ToLowerInvariant()">
+    @switch (Parameter.Kind)
+    {
+        case ParameterKind.Choice:
+            <label for="@_id">@Ui.T(Parameter.Label)</label>
+            <select id="@_id" value="@Value" @onchange="e => Set(e.Value)" disabled="@Disabled">
+                @foreach (var o in Parameter.Options)
+                {
+                    <option value="@o">@o</option>
+                }
+            </select>
+            break;
+        case ParameterKind.Number:
+            <label for="@_id">
+                @Ui.T(Parameter.Label)
+                @if (Parameter.Step < 0.01 || Parameter.Max - Parameter.Min > 1000)
+                {
+                    <input class="param__number" type="number" min="@N(Parameter.Min)" max="@N(Parameter.Max)" step="@N(Parameter.Step)" value="@Value"
+                           aria-label="@Ui.T(Parameter.Label)" @onchange="e => Set(e.Value)" disabled="@Disabled" />
+                }
+                else
+                {
+                    <output class="param__value">@Display</output>
+                }
+            </label>
+            <input id="@_id" type="range" min="@N(Parameter.Min)" max="@N(Parameter.Max)" step="@N(Parameter.Step)" value="@Value"
+                   @oninput="e => _live = e.Value?.ToString()" @onchange="e => Set(e.Value)" disabled="@Disabled" />
+            break;
+        case ParameterKind.Toggle:
+            <label class="param__toggle">
+                <input type="checkbox" role="switch" checked="@(Value == "true")" @onchange="OnToggle" disabled="@Disabled" />
+                <span class="param__switch" aria-hidden="true"></span>
+                @Ui.T(Parameter.Label)
+            </label>
+            break;
+        default:
+            <label for="@_id">@Ui.T(Parameter.Label)</label>
+            @if (Parameter.Multiline)
+            {
+                <textarea id="@_id" rows="4" spellcheck="false" @bind="_text" @bind:event="oninput" @onkeydown="OnKey" disabled="@Disabled"></textarea>
+            }
+            else
+            {
+                <input id="@_id" type="text" spellcheck="false" @bind="_text" @bind:event="oninput" @onkeydown="OnKey" disabled="@Disabled" />
+            }
+            <div class="param__row">
+                @if (Parameter.Hint is { } hint)
+                {
+                    <small class="param__hint">@Ui.T(hint)</small>
+                }
+                <button type="button" class="btn btn--small" @onclick="() => Set(_text)" disabled="@Disabled">@Ui.T("Run", "Jalankan")</button>
+            </div>
+            break;
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SampleParameter Parameter { get; set; } = default!;
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
+    private readonly string _id = "p" + Guid.NewGuid().ToString("N")[..8];
+    private string? _live;
+    private string _text = "";
+
+    protected override void OnParametersSet()
+    {
+        _live = null;
+        if (Parameter.Kind == ParameterKind.Text) _text = Value;
+    }
+
+    private string Display
+    {
+        get
+        {
+            var v = _live ?? Value;
+            return double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)
+                ? d.ToString(Parameter.Step < 1 ? "0.####" : "#,0", CultureInfo.InvariantCulture)
+                : v;
+        }
+    }
+
+    private static string N(double v) => v.ToString("R", CultureInfo.InvariantCulture);
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && (e.CtrlKey || e.MetaKey || !Parameter.Multiline)) await Set(_text);
+    }
+
+    private Task OnToggle(ChangeEventArgs e) => Set(e.Value is true ? "true" : "false");
+
+    private Task Set(object? value) => ValueChanged.InvokeAsync(Convert.ToString(value, CultureInfo.InvariantCulture) ?? "");
+}

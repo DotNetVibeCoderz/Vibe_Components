@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>GDAL.Net.Avalonia</RootNamespace>
+    <AssemblyName>GDAL.Net.Avalonia</AssemblyName>
+    <IsPackable>true</IsPackable>
+    <PackageId>Gravicode.GDAL.Net.Avalonia</PackageId>
+    <Title>GDAL.Net for Avalonia UI</Title>
+    <Description>Avalonia UI desktop controls for GDAL.Net: GdalMapView (raster + vector map with smooth pan/zoom, hillshading, hit testing, scale bar), GdalAttributeGrid, GdalHistogramChart, GdalColorLegend, GdalDatasetInfoPanel and GdalSrsExplorer (EPSG search, WKT2/PROJJSON, coordinate transformation). Windows, macOS and Linux. Created by Gravicode Studios, led by Kang Fadhil (Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil).</Description>
+    <PackageTags>$(PackageTags);avalonia;desktop;map;controls</PackageTags>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GDAL.Net\GDAL.Net.csproj" />
+  </ItemGroup>
+
+
+</Project>

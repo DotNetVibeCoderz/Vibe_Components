@@ -1,0 +1,260 @@
+@page "/sample/{Id}"
+@inject UiState Ui
+@inject GalleryData Data
+@implements IDisposable
+
+@if (_sample is null)
+{
+    <PageTitle>Not found · GDAL.Net Gallery</PageTitle>
+    <section class="empty">
+        <h1>@Ui.T("Sample not found", "Sampel tidak ditemukan")</h1>
+        <p><a href="">@Ui.T("Back to the overview", "Kembali ke ikhtisar")</a></p>
+    </section>
+}
+else
+{
+    var s = _sample;
+    <PageTitle>@Ui.T(s.Title) · GDAL.Net Gallery</PageTitle>
+    <article class="sample" style="--swatch:@CategoryInfo.Swatch(s.Category)">
+        <header class="sample__head">
+            <p class="eyebrow"><span class="eyebrow__swatch" aria-hidden="true"></span>@Ui.T(CategoryInfo.Title(s.Category))</p>
+            <h1>@Ui.T(s.Title)</h1>
+            <p class="sample__summary">@Ui.T(s.Summary)</p>
+            <div class="sample__chips">
+                @if (s.Equivalent is not null)
+                {
+                    <span class="chip chip--eq" title="@Ui.T("Equivalent GDAL tool", "Padanan perangkat GDAL")">@s.Equivalent</span>
+                }
+                @if (s.RequiresNetwork)
+                {
+                    <span class="chip chip--warn">@Ui.T("Needs internet", "Butuh internet")</span>
+                }
+                @if (_result is not null && !_running)
+                {
+                    <span class="chip">@Ui.T("Ran in", "Selesai dalam") @_result.Elapsed.TotalMilliseconds.ToString("#,0", CultureInfo.InvariantCulture) ms</span>
+                }
+            </div>
+        </header>
+
+        <div class="workbench @(_result is { HasMap: false } ? "workbench--board" : null)">
+            <div class="stage" aria-busy="@_running">
+                @if (_error is not null)
+                {
+                    <div class="stage__error" role="alert">
+                        <strong>@Ui.T("The sample failed", "Sampel gagal dijalankan")</strong>
+                        <p>@_error</p>
+                        <small>@Ui.T("Adjust the parameters and try again.", "Ubah parameter lalu coba lagi.")</small>
+                    </div>
+                }
+                @if (_result is { HasMap: true } r)
+                {
+                    <GdalMap Rasters="_rasters" Vectors="r.Vectors" Extent="r.MapExtent" ViewKey="@($"{s.Id}|{r.Crs}")"
+                             CrsLabel="@r.Crs" OnRendered="OnMapRendered" OnFeatureClick="OnFeatureClick" Class="stage__map" />
+                    <div class="stage__legend">
+                        @foreach (var raster in r.Rasters.Where(x => x.LegendMin is not null && x.Options.Mode != GDAL.Net.Rendering.RenderMode.Rgb))
+                        {
+                            <GdalColorLegend Ramp="raster.Options.Ramp" Min="raster.LegendMin!.Value" Max="raster.LegendMax ?? 1" Title="@raster.Title" />
+                        }
+                        @if (r.Vectors.Count > 0)
+                        {
+                            <ul class="vlegend">
+                                @foreach (var v in r.Vectors)
+                                {
+                                    <li><span class="vlegend__sw" style="background:@v.Style.Fill.ToCss();border-color:@v.Style.Stroke.ToCss()"></span>@(v.Title ?? v.Data.Name) <small>@v.Data.Features.Count</small></li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                    @if (_picked is not null)
+                    {
+                        <div class="stage__pick" role="status">
+                            <button type="button" class="stage__pick-close" aria-label="@Ui.T("Close", "Tutup")" @onclick="() => _picked = null">×</button>
+                            <strong>@(_picked.Layer.Title ?? _picked.Layer.Data.Name) · #@_picked.Feature.Id</strong>
+                            <dl>
+                                @foreach (var kv in _picked.Feature.Attributes.Take(8))
+                                {
+                                    <dt>@kv.Key</dt><dd>@GdalAttributeTable.Format(kv.Value)</dd>
+                                }
+                            </dl>
+                        </div>
+                    }
+                }
+                else if (_result is not null)
+                {
+                    <div class="board">
+                        <MetricStrip Metrics="_result.Metrics" />
+                        @if (_result.Table is { } table)
+                        {
+                            <GdalAttributeTable Columns="table.Columns" Rows="table.Rows" PageSize="15" />
+                        }
+                        @if (_result.Output is not null)
+                        {
+                            <OutputView Text="@_result.Output" Language="@_result.OutputLanguage" />
+                        }
+                    </div>
+                }
+                @if (_running)
+                {
+                    <div class="stage__busy"><GdalProgressBar Indeterminate="true" Label="@Ui.T("Running GDAL.Net…", "Menjalankan GDAL.Net…")" /></div>
+                }
+            </div>
+
+            <aside class="panel" aria-label="@Ui.T("Parameters", "Parameter")">
+                <h2 class="panel__title">@Ui.T("Parameters", "Parameter")</h2>
+                @if (s.Parameters.Count == 0)
+                {
+                    <p class="panel__none">@Ui.T("This sample has no parameters.", "Sampel ini tidak memiliki parameter.")</p>
+                }
+                @foreach (var p in s.Parameters)
+                {
+                    var param = p;
+                    <ParameterField Parameter="param" Value="@_values[param.Key]" ValueChanged="v => OnParameterChanged(param.Key, v)" />
+                }
+                <button type="button" class="btn panel__rerun" @onclick="RunAsync" disabled="@_running">@Ui.T("Run again", "Jalankan lagi")</button>
+                @if (_result?.Note is { } note)
+                {
+                    <p class="panel__note">@Ui.T(note)</p>
+                }
+            </aside>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="@Ui.T("Sample details", "Detail sampel")">
+            @if (_result is { HasMap: true })
+            {
+                <button type="button" role="tab" id="tab-result" aria-controls="panel-result" aria-selected="@(_tab == "result")" @onclick="@(() => _tab = "result")">@Ui.T("Result", "Hasil")</button>
+            }
+            <button type="button" role="tab" id="tab-code" aria-controls="panel-code" aria-selected="@(_tab == "code" || _result is { HasMap: false })" @onclick="@(() => _tab = "code")">@Ui.T("Code", "Kode")</button>
+        </div>
+
+        @if (_result is { HasMap: true } res && _tab == "result")
+        {
+            <section class="tabpanel" role="tabpanel" id="panel-result" aria-labelledby="tab-result">
+                <MetricStrip Metrics="res.Metrics" />
+                <div class="result-grid">
+                    @if (res.Histogram is not null)
+                    {
+                        <div class="result-card">
+                            <GdalHistogram Histogram="res.Histogram" Title="@(res.HistogramTitle is { } ht ? Ui.T(ht) : null)"
+                                           Ramp="@(res.Rasters.FirstOrDefault(x => x.Options.Mode != GDAL.Net.Rendering.RenderMode.Rgb)?.Options.Ramp)" />
+                        </div>
+                    }
+                    @if (res.Table is { } t)
+                    {
+                        <div class="result-card result-card--wide">
+                            <GdalAttributeTable Columns="t.Columns" Rows="t.Rows" PageSize="12" />
+                        </div>
+                    }
+                    @if (res.Output is not null)
+                    {
+                        <div class="result-card result-card--wide">
+                            <OutputView Text="@res.Output" Language="@res.OutputLanguage" />
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+        else
+        {
+            <section class="tabpanel" role="tabpanel" id="panel-code" aria-labelledby="tab-code">
+                <CodeView Code="@s.Code" />
+            </section>
+        }
+    </article>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+
+    private GallerySample? _sample;
+    private string? _loadedId;
+    private Dictionary<string, string> _values = [];
+    private SampleResult? _result;
+    private IReadOnlyList<MapRaster>? _rasters;
+    private readonly List<SampleResult> _retired = [];
+    private bool _running;
+    private string? _error;
+    private int _runSeq;
+    private string _tab = "result";
+    private MapFeatureClick? _picked;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Id == _loadedId) return;
+        _loadedId = Id;
+        _sample = Catalog.Find(Id);
+        _tab = "result";
+        _picked = null;
+        _error = null;
+        if (_sample is null) return;
+        _values = _sample.Parameters.ToDictionary(p => p.Key, p => p.Default);
+        await RunAsync();
+    }
+
+    private async Task OnParameterChanged(string key, string value)
+    {
+        _values[key] = value;
+        await RunAsync();
+    }
+
+    private async Task RunAsync()
+    {
+        if (_sample is null) return;
+        var sample = _sample;
+        var seq = ++_runSeq;
+        _running = true;
+        StateHasChanged();
+        try
+        {
+            await Data.Ready;
+            var values = new Dictionary<string, string>(_values);
+            var result = await Task.Run(() => sample.Execute(Data.Context, values));
+            if (seq != _runSeq || !ReferenceEquals(sample, _sample))
+            {
+                result.Dispose();
+                return;
+            }
+            if (_result is not null) _retired.Add(_result);
+            _result = result;
+            _rasters = result.Rasters.Select(r => new MapRaster(r.Dataset, r.Options, r.Title)).ToList();
+            _error = null;
+            _picked = null;
+            if (!result.HasMap) _ = RetireLaterAsync();
+            if (!result.HasMap && _tab == "result") _tab = "code";
+        }
+        catch (Exception e)
+        {
+            if (seq == _runSeq) _error = (e is AggregateException a ? a.InnerException ?? e : e).Message;
+        }
+        finally
+        {
+            if (seq == _runSeq) _running = false;
+        }
+    }
+
+    // Old results are disposed only once the map shows the new one, so no render ever touches a closed dataset.
+    private void OnMapRendered() => DisposeRetired();
+
+    private async Task RetireLaterAsync()
+    {
+        await Task.Delay(1500);
+        DisposeRetired();
+    }
+
+    private void DisposeRetired()
+    {
+        foreach (var r in _retired) r.Dispose();
+        _retired.Clear();
+    }
+
+    private void OnFeatureClick(MapFeatureClick click) => _picked = click;
+
+    public void Dispose()
+    {
+        var all = _retired.ToList();
+        if (_result is not null) all.Add(_result);
+        _retired.Clear();
+        _result = null;
+        // Give an in-flight map render time to finish before closing datasets.
+        _ = Task.Delay(2000).ContinueWith(_ => { foreach (var r in all) r.Dispose(); }, TaskScheduler.Default);
+    }
+}

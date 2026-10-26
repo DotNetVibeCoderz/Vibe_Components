@@ -1,0 +1,86 @@
+@inherits LayoutComponentBase
+@inject UiState Ui
+@inject GalleryData Data
+@implements IDisposable
+
+<a class="skip-link" href="#main">@Ui.T("Skip to content", "Lewati ke konten")</a>
+
+<div class="shell">
+    <SignatureHeader />
+
+    <nav class="rail" aria-label="@Ui.T("Samples", "Sampel")">
+        <details class="rail__menu" open="@_menuOpen" @ontoggle="() => _menuOpen = !_menuOpen">
+            <summary>@Ui.T("Browse samples", "Jelajahi sampel")</summary>
+        </details>
+        <div class="rail__body @(_menuOpen ? "is-open" : null)">
+            <NavLink class="rail__top" href="" Match="NavLinkMatch.All">@Ui.T("Overview", "Ikhtisar")</NavLink>
+            <NavLink class="rail__top" href="components">@Ui.T("Components", "Komponen")</NavLink>
+            @foreach (var group in Catalog.ByCategory)
+            {
+                <div class="rail__group" style="--swatch:@CategoryInfo.Swatch(group.Key)">
+                    <div class="rail__cat"><span class="rail__swatch" aria-hidden="true"></span>@Ui.T(CategoryInfo.Title(group.Key))</div>
+                    @foreach (var s in group)
+                    {
+                        <NavLink class="rail__link" href="@($"sample/{s.Id}")" @onclick="() => _menuOpen = false">@Ui.T(s.Title)</NavLink>
+                    }
+                </div>
+            }
+        </div>
+    </nav>
+
+    <main id="main" class="main" tabindex="-1">
+        @if (!Data.Ready.IsCompleted)
+        {
+            <section class="preparing" aria-live="polite">
+                <h1>@Ui.T("Preparing sample data", "Menyiapkan data sampel")</h1>
+                <p>@Ui.T("The gallery generates its own DEM, imagery, vectors and climate cube with GDAL.Net on first start. This takes a few seconds.",
+                       "Gallery membuat sendiri DEM, citra, vektor, dan kubus iklim dengan GDAL.Net saat pertama kali dijalankan. Ini butuh beberapa detik.")</p>
+                <GdalProgressBar Indeterminate="true" Label="@Data.Status" />
+            </section>
+        }
+        else if (Data.Error is not null)
+        {
+            <section class="preparing" role="alert">
+                <h1>@Ui.T("Sample data could not be generated", "Data sampel gagal dibuat")</h1>
+                <p class="error-text">@Data.Error</p>
+            </section>
+        }
+        else
+        {
+            @Body
+        }
+    </main>
+
+    <footer class="footer">
+        <span class="footer__credit">@Ui.T(Branding.Credit)</span>
+        <span class="footer__meta">GDAL @Gdal.Version · PROJ @Gdal.ProjVersion · @GDAL.Net.Processing.Kernels.Backend</span>
+    </footer>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    @Ui.T("An unhandled error has occurred.", "Terjadi kesalahan yang tidak tertangani.")
+    <a href="." class="reload">@Ui.T("Reload", "Muat ulang")</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private bool _menuOpen;
+
+    protected override void OnInitialized()
+    {
+        Ui.Changed += Refresh;
+        Data.Changed += Refresh;
+        if (!Data.Ready.IsCompleted)
+        {
+            _ = Data.Ready.ContinueWith(_ => Refresh(), TaskScheduler.Default);
+        }
+    }
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Ui.Changed -= Refresh;
+        Data.Changed -= Refresh;
+    }
+}

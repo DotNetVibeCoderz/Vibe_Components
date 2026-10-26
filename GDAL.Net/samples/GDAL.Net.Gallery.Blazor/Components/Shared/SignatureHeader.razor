@@ -1,0 +1,107 @@
+@* The gallery's signature: contour lines computed live by GDAL.Net (gdal_contour) from the sample DEM. *@
+@inject GalleryData Data
+@inject UiState Ui
+@implements IDisposable
+
+<header class="sig">
+    <svg class="sig__contours" viewBox="0 70 1200 250" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+        @_paths
+    </svg>
+    <div class="sig__content">
+        <a class="sig__brand" href="">
+            <span class="sig__mark" aria-hidden="true"></span>
+            <span class="sig__title">GDAL<span class="sig__dot">.</span>Net <em>Gallery</em></span>
+        </a>
+        <p class="sig__tagline">@Ui.T(Branding.Tagline)</p>
+    </div>
+    <div class="sig__tools">
+        <div class="sig__lang" role="group" aria-label="@Ui.T("Language", "Bahasa")">
+            <button type="button" aria-pressed="@(Ui.Lang == Lang.En)" @onclick="() => SetLang(Lang.En)">EN</button>
+            <button type="button" aria-pressed="@(Ui.Lang == Lang.Id)" @onclick="() => SetLang(Lang.Id)">ID</button>
+        </div>
+        <button type="button" class="sig__theme" @onclick="ToggleTheme" aria-label="@Ui.T("Toggle dark mode", "Ganti mode gelap")" title="@Ui.T("Toggle dark mode", "Ganti mode gelap")">
+            @if (Ui.Dark)
+            {
+                <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="4" fill="currentColor" /><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 1.5v2M10 16.5v2M1.5 10h2M16.5 10h2M4 4l1.4 1.4M14.6 14.6 16 16M4 16l1.4-1.4M14.6 5.4 16 4" /></g></svg>
+            }
+            else
+            {
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 12.8A7 7 0 0 1 7.2 4.5a7 7 0 1 0 8.3 8.3Z" fill="currentColor" /></svg>
+            }
+        </button>
+        <span class="sig__elev" aria-live="polite">@_caption</span>
+    </div>
+</header>
+
+@code {
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    private MarkupString _paths;
+    private string _caption = "";
+
+    protected override void OnInitialized()
+    {
+        Data.Changed += OnDataChanged;
+        Ui.Changed += OnUiChanged;
+        Build();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        var theme = await JS.InvokeAsync<string>("gdalGallery.getTheme");
+        var lang = await JS.InvokeAsync<string>("gdalGallery.getLang");
+        Ui.SetDark(theme == "dark");
+        Ui.SetLang(lang == "id" ? Lang.Id : Lang.En);
+    }
+
+    private void OnDataChanged() => InvokeAsync(() => { Build(); StateHasChanged(); });
+    private void OnUiChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task SetLang(Lang lang)
+    {
+        Ui.SetLang(lang);
+        await JS.InvokeVoidAsync("gdalGallery.setLang", lang == Lang.Id ? "id" : "en");
+    }
+
+    private async Task ToggleTheme()
+    {
+        Ui.SetDark(!Ui.Dark);
+        await JS.InvokeVoidAsync("gdalGallery.setTheme", Ui.Dark ? "dark" : "light");
+    }
+
+    private void Build()
+    {
+        var lines = Data.Contours;
+        if (lines.Count == 0) return;
+        var min = lines.Min(l => l.Elevation);
+        var max = lines.Max(l => l.Elevation);
+        var low = Rgba.FromHex(Branding.Shoal);
+        var high = Rgba.FromHex(Branding.Contour);
+        var sb = new System.Text.StringBuilder();
+        foreach (var (elev, pts) in lines)
+        {
+            if (pts.Length < 6) continue;
+            var t = (elev - min) / Math.Max(1, max - min);
+            var index = Math.Abs(elev % 250) < 1e-6;
+            var color = Rgba.Lerp(low, high, t).ToHex();
+            sb.Append("<path class=\"").Append(index ? "idx" : "minor").Append("\" style=\"--d:")
+              .Append((t * 1.4).ToString("0.00", CultureInfo.InvariantCulture)).Append("s\" stroke=\"").Append(color).Append("\" pathLength=\"1\" d=\"");
+            for (var i = 0; i + 1 < pts.Length; i += 2)
+            {
+                sb.Append(i == 0 ? 'M' : 'L')
+                  .Append((pts[i] * 1200).ToString("0.#", CultureInfo.InvariantCulture)).Append(' ')
+                  .Append((pts[i + 1] * 900).ToString("0.#", CultureInfo.InvariantCulture));
+            }
+            sb.Append("\"/>");
+        }
+        _paths = new MarkupString(sb.ToString());
+        _caption = $"{lines.Count} contours · {min:0}–{max:0} m · gdal_contour";
+    }
+
+    public void Dispose()
+    {
+        Data.Changed -= OnDataChanged;
+        Ui.Changed -= OnUiChanged;
+    }
+}

@@ -1,0 +1,12 @@
+bin/
+obj/
+artifacts/
+target/
+.vs/
+*.user
+*.suo
+.idea/
+TestResults/
+samples/**/gallery-data/
+*.nupkg
+*.snupkg

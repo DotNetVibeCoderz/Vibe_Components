@@ -1,0 +1,80 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GDAL.Net.Gallery.Avalonia.App"
+             RequestedThemeVariant="Light">
+  <!--
+    GDAL.Net Gallery — "cartographic print" identity (shared with the Blazor gallery):
+    Ink #12263A · Paper #EEF2F0 · Contour #C8553D · Shoal #2A9D8F · Lichen #8AB17D · Graticule #C9D3CF
+    Bricolage Grotesque (display) · IBM Plex Sans (body) · JetBrains Mono (data & code)
+    Created by Gravicode Studios, led by Kang Fadhil.
+  -->
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <Color x:Key="PaperColor">#EEF2F0</Color>
+          <Color x:Key="PaperClearColor">#00EEF2F0</Color>
+          <SolidColorBrush x:Key="Paper" Color="#EEF2F0" />
+          <SolidColorBrush x:Key="PaperFade" Color="#00EEF2F0" />
+          <SolidColorBrush x:Key="Panel" Color="#F9FBFA" />
+          <SolidColorBrush x:Key="PanelRaised" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="Ink" Color="#12263A" />
+          <SolidColorBrush x:Key="Ink2" Color="#4A5C66" />
+          <SolidColorBrush x:Key="Ink3" Color="#7C8C92" />
+          <SolidColorBrush x:Key="Rule" Color="#C9D3CF" />
+          <SolidColorBrush x:Key="RuleSoft" Color="#DCE3E0" />
+          <SolidColorBrush x:Key="Contour" Color="#C8553D" />
+          <SolidColorBrush x:Key="ContourWash" Color="#F6E2DC" />
+          <SolidColorBrush x:Key="Shoal" Color="#2A9D8F" />
+          <SolidColorBrush x:Key="ShoalInk" Color="#1E7268" />
+          <SolidColorBrush x:Key="ShoalWash" Color="#DDEFEC" />
+          <SolidColorBrush x:Key="HeaderLine" Color="#2612263A" />
+          <SolidColorBrush x:Key="HeaderIndex" Color="#80C8553D" />
+          <SolidColorBrush x:Key="CodeBg" Color="#12263A" />
+          <SolidColorBrush x:Key="CodeText" Color="#E6EEEA" />
+          <SolidColorBrush x:Key="OnInk" Color="#EEF2F0" />
+          <SolidColorBrush x:Key="GdalNet.MapBackground" Color="#E3E9E6" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <Color x:Key="PaperColor">#0E1B26</Color>
+          <Color x:Key="PaperClearColor">#000E1B26</Color>
+          <SolidColorBrush x:Key="Paper" Color="#0E1B26" />
+          <SolidColorBrush x:Key="PaperFade" Color="#000E1B26" />
+          <SolidColorBrush x:Key="Panel" Color="#13232F" />
+          <SolidColorBrush x:Key="PanelRaised" Color="#15283A" />
+          <SolidColorBrush x:Key="Ink" Color="#E6EEEA" />
+          <SolidColorBrush x:Key="Ink2" Color="#A9B8BC" />
+          <SolidColorBrush x:Key="Ink3" Color="#6F8590" />
+          <SolidColorBrush x:Key="Rule" Color="#26394A" />
+          <SolidColorBrush x:Key="RuleSoft" Color="#1C2F3E" />
+          <SolidColorBrush x:Key="Contour" Color="#E07A5F" />
+          <SolidColorBrush x:Key="ContourWash" Color="#3A2420" />
+          <SolidColorBrush x:Key="Shoal" Color="#3CC2B1" />
+          <SolidColorBrush x:Key="ShoalInk" Color="#6FD8CB" />
+          <SolidColorBrush x:Key="ShoalWash" Color="#163B3A" />
+          <SolidColorBrush x:Key="HeaderLine" Color="#24E6EEEA" />
+          <SolidColorBrush x:Key="HeaderIndex" Color="#90E07A5F" />
+          <SolidColorBrush x:Key="CodeBg" Color="#08131C" />
+          <SolidColorBrush x:Key="CodeText" Color="#E6EEEA" />
+          <SolidColorBrush x:Key="OnInk" Color="#0E1B26" />
+          <SolidColorBrush x:Key="GdalNet.MapBackground" Color="#0B1620" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+
+      <FontFamily x:Key="DisplayFont">avares://GDAL.Net.Gallery.Avalonia/Assets/Fonts#Bricolage Grotesque</FontFamily>
+      <FontFamily x:Key="BodyFont">avares://GDAL.Net.Gallery.Avalonia/Assets/Fonts#IBM Plex Sans</FontFamily>
+      <FontFamily x:Key="MonoFont">avares://GDAL.Net.Gallery.Avalonia/Assets/Fonts#JetBrains Mono</FontFamily>
+
+      <!-- Fluent accent follows the palette -->
+      <Color x:Key="SystemAccentColor">#2A9D8F</Color>
+      <Color x:Key="SystemAccentColorDark1">#1E7268</Color>
+      <Color x:Key="SystemAccentColorLight1">#3CC2B1</Color>
+    </ResourceDictionary>
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="avares://GDAL.Net.Avalonia/Themes/GdalNetTheme.axaml" />
+    <StyleInclude Source="avares://GDAL.Net.Gallery.Avalonia/Styles/Gallery.axaml" />
+  </Application.Styles>
+</Application>

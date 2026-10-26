@@ -1,0 +1,21 @@
+@page "/Error"
+@using System.Diagnostics
+
+<PageTitle>Error · GDAL.Net Gallery</PageTitle>
+
+<section class="empty">
+    <h1>Something went wrong</h1>
+    <p>The request could not be completed. Reload the page; if it keeps failing, check the server log.</p>
+    @if (!string.IsNullOrEmpty(RequestId))
+    {
+        <p><small>Request ID: <code>@RequestId</code></small></p>
+    }
+</section>
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId { get; set; }
+
+    protected override void OnInitialized() => RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}
