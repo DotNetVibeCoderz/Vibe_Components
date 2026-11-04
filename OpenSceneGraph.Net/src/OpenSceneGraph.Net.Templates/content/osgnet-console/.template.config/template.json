@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [ "OpenSceneGraph", "3D", "Console" ],
+  "identity": "OpenSceneGraph.Net.Console",
+  "name": "OpenSceneGraph.Net Console App",
+  "shortName": "osgnet-console",
+  "description": "Builds a scene with OpenSceneGraph.Net and shows it in a native osgViewer window (or renders it to PNG with --render).",
+  "sourceName": "OsgNetConsoleApp",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" }
+}

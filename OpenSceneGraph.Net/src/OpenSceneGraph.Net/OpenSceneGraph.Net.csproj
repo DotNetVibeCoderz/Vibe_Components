@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>OpenSceneGraph.Net</PackageId>
+    <Description>.NET 10 scene graph modelled on OpenSceneGraph: nodes, transforms, LOD, paging, culling, manipulators, animation, particles, terrain, GIS (WGS84/ECEF/UTM), DIS simulation and scientific visualization. Renders with OpenGL (desktop), WebGL (Blazor) or native OpenSceneGraph. Created by Gravicode Studios, led by Kang Fadhil.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- optional Rust acceleration (native/osgnet-fast); managed fallbacks are used when absent -->
+    <None Include="runtimes\**\*" Pack="true" PackagePath="runtimes\%(RecursiveDir)" />
+    <None Update="runtimes\win-x64\native\*.dll" Condition="'$(OS)' == 'Windows_NT'" CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="OpenSceneGraph.Net.Tests" />
+  </ItemGroup>
+</Project>

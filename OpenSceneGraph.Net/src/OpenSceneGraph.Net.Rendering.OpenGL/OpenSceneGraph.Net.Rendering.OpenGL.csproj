@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>OpenSceneGraph.Net.Rendering.OpenGL</PackageId>
+    <Description>OpenGL 3.3 / OpenGL ES 3.0 renderer for OpenSceneGraph.Net render lists: Blinn-Phong lighting with 8 lights, shadow maps, fog, textures, point sprites, render-to-texture, HUD cameras, stereo and HDR/bloom post-processing. Created by Gravicode Studios, led by Kang Fadhil.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\OpenSceneGraph.Net\OpenSceneGraph.Net.csproj" />
+    <PackageReference Include="Silk.NET.OpenGL" Version="2.23.0" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,17 @@
+<div class="viewfinder @Class" style="--accent:@Accent">
+    <span class="vf-corner tl"></span><span class="vf-corner tr"></span><span class="vf-corner bl"></span><span class="vf-corner br"></span>
+    <span class="vf-tick top"></span><span class="vf-tick bottom"></span>
+    <div class="vf-screen">@ChildContent</div>
+    @if (Label is not null)
+    {
+        <div class="vf-label"><span class="vf-dot"></span>@Label</div>
+    }
+</div>
+
+@code {
+    /// <summary>Instrument-style frame around a live canvas: corner brackets, centre ticks and a status label.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string Accent { get; set; } = "var(--amber)";
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? Class { get; set; }
+}

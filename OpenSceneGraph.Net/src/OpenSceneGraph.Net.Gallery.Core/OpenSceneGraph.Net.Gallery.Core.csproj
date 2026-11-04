@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Use-case samples shared by the OpenSceneGraph.Net Gallery apps (Blazor and Avalonia).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\OpenSceneGraph.Net\OpenSceneGraph.Net.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Rodin-generated models, cleaned up in Blender (tools/blender/glb_to_obj.py) -->
+    <EmbeddedResource Include="Assets\*.obj;Assets\*.png" LogicalName="Assets.%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

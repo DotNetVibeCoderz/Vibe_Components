@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [ "OpenSceneGraph", "3D", "Desktop", "Avalonia" ],
+  "identity": "OpenSceneGraph.Net.Avalonia",
+  "name": "OpenSceneGraph.Net Avalonia App",
+  "shortName": "osgnet-avalonia",
+  "description": "Cross-platform desktop 3D app: an Avalonia window hosting OsgView with an animated OpenSceneGraph.Net scene.",
+  "sourceName": "OsgNetAvaloniaApp",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" }
+}

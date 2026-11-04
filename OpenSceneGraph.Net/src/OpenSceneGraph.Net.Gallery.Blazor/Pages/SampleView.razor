@@ -1,0 +1,237 @@
+@page "/sample/{Id}"
+@inherits LocalizedComponent
+@implements IDisposable
+@inject IJSRuntime JS
+
+@if (_sample is null)
+{
+    <PageTitle>404 · OpenSceneGraph.Net Gallery</PageTitle>
+    <section class="page narrow notfound">
+        <p class="eyebrow">404</p>
+        <h1 class="display">@string.Format(T("sample.notfound"), Id)</h1>
+        <a class="btn" href="">@T("sample.back")</a>
+    </section>
+    return;
+}
+
+<PageTitle>@T(_sample.Title) · OpenSceneGraph.Net Gallery</PageTitle>
+
+<section class="sample" style="--accent:@_sample.Accent">
+    <nav class="sample-bar" aria-label="@T("aria.sampleNav")">
+        <a class="crumb" href="@($"?cat={Glyphs.Slug(_sample.Category)}")">
+            <span aria-hidden="true">←</span> <Glyph Category="_sample.Category" /> @T(SampleCatalog.CategoryName(_sample.Category))
+        </a>
+        <div class="stepper">
+            <a class="btn ghost small" href="@($"sample/{Neighbour(-1).Id}")" title="@T(Neighbour(-1).Title)">← @T("sample.prev")</a>
+            <span class="mono stepper-pos">@((Index + 1).ToString("00")) / @SampleCatalog.All.Count.ToString("00")</span>
+            <a class="btn ghost small" href="@($"sample/{Neighbour(1).Id}")" title="@T(Neighbour(1).Title)">@T("sample.next") →</a>
+        </div>
+    </nav>
+
+    <div class="sample-layout">
+        <div class="sample-stage">
+            <Viewfinder Accent="@_sample.Accent" Label="@(_session is null ? T("sample.building") : $"{T("hero.live")} · {_sample.Id}")" Class="stage-frame">
+                @if (_error is not null)
+                {
+                    <div class="stage-message error">@_error</div>
+                }
+                else if (_session is null)
+                {
+                    <div class="stage-message"><span class="spinner" aria-hidden="true"></span>@T("sample.building")</div>
+                }
+                else
+                {
+                    <OsgCanvas @ref="_canvas" Viewer="_session.Viewer" Scene="_session.Scene" OnFrame="_session.Stats.Update"
+                               OnError="OnCanvasError" AriaLabel="@T(_sample.Title)" />
+                }
+            </Viewfinder>
+
+            <div class="rail mono" aria-live="off">
+                @if (_session is { } live)
+                {
+                    <LiveTick>
+                        <div class="rail-cell"><span>@T("stat.fps")</span><b>@live.Stats.Fps.ToString("F1", CultureInfo.InvariantCulture)</b></div>
+                        <div class="rail-cell"><span>@T("stat.draws")</span><b>@live.Stats.DrawItems</b></div>
+                        <div class="rail-cell"><span>@T("stat.calls")</span><b>@(_canvas?.DrawCalls ?? 0)</b></div>
+                        <div class="rail-cell"><span>@T("stat.tris")</span><b>@live.Stats.Triangles.ToString("N0", CultureInfo.InvariantCulture)</b></div>
+                        <div class="rail-cell"><span>@T("stat.culled")</span><b>@live.Stats.Culled</b></div>
+                        <div class="rail-cell"><span>@T("stat.lights")</span><b>@live.Stats.Lights</b></div>
+                        <div class="rail-cell" title="cull @live.Stats.CullMs.ToString("F1", CultureInfo.InvariantCulture) ms · pack @((_canvas?.EncodeMs ?? 0).ToString("F1", CultureInfo.InvariantCulture)) ms · gl @((_canvas?.RenderMs ?? 0).ToString("F1", CultureInfo.InvariantCulture)) ms"><span>@T("stat.cull")</span><b>@(((_canvas?.FrameMs ?? 0) + (_canvas?.EncodeMs ?? 0)).ToString("F1", CultureInfo.InvariantCulture))</b></div>
+                        <div class="rail-cell wide"><span>@T("stat.renderer")</span><b title="@_canvas?.RendererName">@(_canvas?.Info?.Renderer ?? "WebGL2")</b></div>
+                    </LiveTick>
+                }
+            </div>
+        </div>
+
+        <aside class="panel">
+            <div class="tabs" role="tablist">
+                <button type="button" role="tab" class="tab @(_tab == 0 ? "on" : "")" aria-selected="@(_tab == 0)" @onclick="() => _tab = 0">@T("sample.overview")</button>
+                <button type="button" role="tab" class="tab @(_tab == 1 ? "on" : "")" aria-selected="@(_tab == 1)" @onclick="() => _tab = 1">@T("sample.code")</button>
+            </div>
+
+            @if (_tab == 0)
+            {
+                <div class="panel-body" role="tabpanel">
+                    <p class="eyebrow accent"><Glyph Category="_sample.Category" /> @T(SampleCatalog.CategoryName(_sample.Category))</p>
+                    <h1 class="display sample-title">@T(_sample.Title)</h1>
+                    <p class="sample-desc">@T(_sample.Description)</p>
+
+                    <h2 class="panel-h">@T("sample.features")</h2>
+                    <ul class="badges">
+                        @foreach (var f in _sample.Features)
+                        {
+                            <li>@f</li>
+                        }
+                    </ul>
+
+                    <h2 class="panel-h">@T("sample.controls")</h2>
+                    <dl class="controls">
+                        @if (_session is { } s)
+                        {
+                            @foreach (var (keys, action) in s.Context.Controls)
+                            {
+                                <div><dt>@Keys(keys)</dt><dd>@T(action)</dd></div>
+                            }
+                            @if (s.UsesOrbitCamera && !s.Context.Controls.Any(c => c.Keys.Contains("Mouse", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                <div><dt><kbd>@T("ctl.drag")</kbd></dt><dd>@T("ctl.orbit")</dd></div>
+                                <div><dt><kbd>@T("ctl.shiftDrag")</kbd></dt><dd>@T("ctl.pan")</dd></div>
+                                <div><dt><kbd>@T("ctl.wheel")</kbd></dt><dd>@T("ctl.zoom")</dd></div>
+                            }
+                            @if (!s.Context.Controls.Any(c => c.Keys.Contains("Space", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                <div><dt><kbd>@T("ctl.space")</kbd></dt><dd>@T("ctl.home")</dd></div>
+                            }
+                        }
+                    </dl>
+                    <p class="hint">@T("sample.focus")</p>
+
+                    <h2 class="panel-h">@T("sample.telemetry")</h2>
+                    @if (_session is { } t)
+                    {
+                        <LiveTick>
+                            @{
+                                var values = t.Context.Telemetry.Snapshot();
+                            }
+                            @if (values.Count == 0)
+                            {
+                                <p class="hint">@T("sample.telemetry.none")</p>
+                            }
+                            else
+                            {
+                                <dl class="telemetry mono">
+                                    @foreach (var (k, v) in values)
+                                    {
+                                        <div><dt>@k</dt><dd>@v</dd></div>
+                                    }
+                                </dl>
+                            }
+                        </LiveTick>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="panel-body code-tab" role="tabpanel">
+                    <div class="code-head">
+                        <span class="mono">@($"{_sample.Id}.cs")</span>
+                        <button type="button" class="btn small" @onclick="CopyCode">@(_copied ? T("sample.copied") : T("sample.copy"))</button>
+                    </div>
+                    <pre class="code"><code>@CodeHighlighter.Highlight(Dedent(_sample.Code))</code></pre>
+                    <p class="hint">@T("sample.codeNote")</p>
+                </div>
+            }
+        </aside>
+    </div>
+</section>
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+
+    private GallerySample? _sample;
+    private SampleSession? _session;
+    private OsgCanvas? _canvas;
+    private string? _loadedId;
+    private string? _error;
+    private int _tab;
+    private bool _copied;
+
+    private int Index => _sample is null ? 0 : IndexOf(_sample);
+
+    private static int IndexOf(GallerySample s)
+    {
+        var all = SampleCatalog.All;
+        for (int i = 0; i < all.Count; i++) if (ReferenceEquals(all[i], s)) return i;
+        return 0;
+    }
+
+    private GallerySample Neighbour(int step)
+    {
+        var all = SampleCatalog.All;
+        return all[((Index + step) % all.Count + all.Count) % all.Count];
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Id == _loadedId) return;
+        _loadedId = Id;
+        _session?.Dispose();
+        _session = null;
+        _error = null;
+        _copied = false;
+        _sample = SampleCatalog.Find(Id);
+        if (_sample is null) return;
+
+        // let the "building" state paint before the (synchronous) scene construction
+        StateHasChanged();
+        await Task.Delay(20);
+        if (_loadedId != Id) return;
+        try
+        {
+            _session = SampleSession.Start(_sample);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            Console.Error.WriteLine($"Sample '{Id}' failed to build: {ex}");
+        }
+    }
+
+    private void OnCanvasError(string message) => _error = string.Format(T("sample.webglError"), message);
+
+    private async Task CopyCode()
+    {
+        if (_sample is null) return;
+        try
+        {
+            await JS.InvokeVoidAsync("osgGallery.copy", Dedent(_sample.Code));
+            _copied = true;
+            StateHasChanged();
+            await Task.Delay(1600);
+            _copied = false;
+        }
+        catch (JSException) { }
+    }
+
+    private static RenderFragment Keys(string keys) => builder =>
+    {
+        int seq = 0;
+        var parts = keys.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (i > 0) builder.AddContent(seq++, " ");
+            builder.OpenElement(seq++, "kbd");
+            builder.AddContent(seq++, parts[i]);
+            builder.CloseElement();
+        }
+    };
+
+    private static string Dedent(string code)
+    {
+        var lines = code.Replace("\r\n", "\n").Split('\n');
+        int indent = lines.Where(l => l.Trim().Length > 0).Select(l => l.Length - l.TrimStart().Length).DefaultIfEmpty(0).Min();
+        return string.Join('\n', lines.Select(l => l.Length >= indent ? l[indent..] : l.TrimStart())).Trim('\n');
+    }
+
+    public void Dispose() => _session?.Dispose();
+}

@@ -1,0 +1,28 @@
+@implements IDisposable
+@ChildContent
+
+@code {
+    /// <summary>Re-renders its content on a timer (used for telemetry and stats, ~4 Hz).</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public int IntervalMs { get; set; } = 250;
+
+    private CancellationTokenSource? _cts;
+
+    protected override void OnInitialized()
+    {
+        _cts = new CancellationTokenSource();
+        _ = Loop(_cts.Token);
+    }
+
+    private async Task Loop(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(IntervalMs));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct)) StateHasChanged();
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose() { _cts?.Cancel(); _cts?.Dispose(); }
+}

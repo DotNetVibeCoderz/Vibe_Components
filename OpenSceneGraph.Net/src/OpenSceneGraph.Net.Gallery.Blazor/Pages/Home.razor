@@ -1,0 +1,144 @@
+@page "/"
+@inherits LocalizedComponent
+@implements IDisposable
+@inject NavigationManager Nav
+
+<PageTitle>OpenSceneGraph.Net Gallery</PageTitle>
+
+<section class="hero">
+    <div class="hero-copy">
+        <p class="eyebrow">@T("hero.eyebrow")</p>
+        <h1 class="display hero-title">
+            <span>@T("hero.title.a")</span>
+            <span class="hero-title-b">@T("hero.title.b")</span>
+        </h1>
+        <p class="lead">@T("hero.body")</p>
+        <div class="hero-actions">
+            <a class="btn" href="#samples">@T("hero.cta")</a>
+            @if (_hero is not null)
+            {
+                <a class="btn ghost" href="@($"sample/{_hero.Sample.Id}")">@T("hero.open")</a>
+            }
+        </div>
+        <p class="hero-facts mono">@string.Format(T("hero.facts"), SampleCatalog.All.Count, Enum.GetValues<SampleCategory>().Length)</p>
+    </div>
+
+    <div class="hero-view">
+        @if (_hero is not null)
+        {
+            <Viewfinder Accent="@_hero.Sample.Accent" Label="@($"{T("hero.live")} · {T(_hero.Sample.Title)}")">
+                <OsgCanvas Viewer="_hero.Viewer" Scene="_hero.Scene" OnFrame="_hero.Stats.Update" AriaLabel="@T(_hero.Sample.Title)" />
+            </Viewfinder>
+            <div class="hero-rail mono">
+                <LiveTick>
+                    <span><b>@_hero.Stats.Fps.ToString("F0")</b> fps</span>
+                    <span><b>@_hero.Stats.DrawItems</b> @T("hero.draws")</span>
+                    <span><b>@_hero.Stats.Triangles.ToString("N0")</b> @T("hero.tris")</span>
+                </LiveTick>
+                <button type="button" class="link" @onclick="NextHero">@T("hero.next") →</button>
+            </div>
+        }
+    </div>
+</section>
+
+<section class="catalog" id="samples">
+    <div class="catalog-head">
+        <h2 class="section-title">@T("filter.heading")</h2>
+        <label class="search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13zM15.5 15.5L20 20" /></svg>
+            <input type="search" placeholder="@T("filter.search")" aria-label="@T("filter.search")" @bind="_query" @bind:event="oninput" />
+        </label>
+    </div>
+
+    <div class="chips" role="toolbar" aria-label="@T("filter.heading")">
+        <button type="button" class="chip @(_category is null ? "on" : "")" aria-pressed="@(_category is null)" @onclick="() => SetCategory(null)">
+            @T("filter.all") <span class="chip-count">@SampleCatalog.All.Count</span>
+        </button>
+        @foreach (var c in Enum.GetValues<SampleCategory>())
+        {
+            var cat = c;
+            int n = SampleCatalog.All.Count(s => s.Category == cat);
+            <button type="button" class="chip @(_category == cat ? "on" : "")" aria-pressed="@(_category == cat)" @onclick="() => SetCategory(cat)">
+                <Glyph Category="cat" /> @T(SampleCatalog.CategoryName(cat)) <span class="chip-count">@n</span>
+            </button>
+        }
+    </div>
+
+    @{
+        var visible = Visible().ToList();
+    }
+    <p class="catalog-count mono">@string.Format(T("filter.count"), visible.Count, SampleCatalog.All.Count)</p>
+    @if (visible.Count == 0)
+    {
+        <div class="empty">
+            <p>@string.Format(T("filter.empty"), _query)</p>
+            <button type="button" class="btn ghost" @onclick="ClearFilters">@T("filter.clear")</button>
+        </div>
+    }
+    else
+    {
+        <div class="grid">
+            @foreach (var s in visible)
+            {
+                <SampleCard @key="s.Id" Sample="s" />
+            }
+        </div>
+    }
+</section>
+
+@code {
+    private static readonly string[] HeroIds = ["solar-system", "battlefield", "particles", "geo-globe", "night-city"];
+
+    [SupplyParameterFromQuery(Name = "cat")] public string? Cat { get; set; }
+
+    private SampleSession? _hero;
+    private int _heroIndex;
+    private SampleCategory? _category;
+    private string _query = "";
+
+    protected override void OnInitialized() => StartHero(0);
+
+    protected override void OnParametersSet() => _category = Glyphs.FromSlug(Cat);
+
+    private void StartHero(int index)
+    {
+        _heroIndex = index % HeroIds.Length;
+        var sample = SampleCatalog.Find(HeroIds[_heroIndex]) ?? SampleCatalog.All[0];
+        var old = _hero;
+        _hero = SampleSession.Start(sample);
+        old?.Dispose();
+    }
+
+    private void NextHero() => StartHero(_heroIndex + 1);
+
+    private void SetCategory(SampleCategory? c)
+    {
+        _category = c;
+        Nav.NavigateTo(Nav.GetUriWithQueryParameter("cat", c is { } v ? Glyphs.Slug(v) : null), replace: true);
+    }
+
+    private void ClearFilters()
+    {
+        _query = "";
+        SetCategory(null);
+    }
+
+    private IEnumerable<GallerySample> Visible()
+    {
+        var q = _query.Trim();
+        foreach (var s in SampleCatalog.All)
+        {
+            if (_category is { } c && s.Category != c) continue;
+            if (q.Length > 0 && !Matches(s, q)) continue;
+            yield return s;
+        }
+    }
+
+    private bool Matches(GallerySample s, string q)
+    {
+        bool Has(string? x) => x is not null && x.Contains(q, StringComparison.OrdinalIgnoreCase);
+        return Has(s.Title.En) || Has(s.Title.Id) || Has(s.Description.Get(Lang)) || s.Tags.Any(Has) || s.Features.Any(Has) || Has(s.Id);
+    }
+
+    public void Dispose() => _hero?.Dispose();
+}

@@ -1,0 +1,23 @@
+bin/
+obj/
+.vs/
+artifacts/
+*.user
+native/third_party/
+native/osgnet/build/
+native/osgnet-fast/target/
+TestResults/
+
+# native binaries are rebuilt by native/build-*.ps1 locally and by CI
+src/OpenSceneGraph.Net.Native/runtimes/
+src/OpenSceneGraph.Net/runtimes/
+# 20 MB of Rodin source models; the converted OBJ + PNG are committed
+assets/models/source/
+
+# local Claude Code / MCP settings
+.claude/
+.mcp.json
+
+
+# MCP generation history
+*_History.json
