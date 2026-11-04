@@ -1,0 +1,39 @@
+@* The canvas fills its parent, so the parent must have a height. *@
+<div style="position:fixed;inset:0;background:#0f1419">
+    <OsgCanvas Scene="_scene" OnFrame="ShowStats" OnError="ShowError" AriaLabel="3D scene" />
+    <div style="position:absolute;left:12px;bottom:10px;color:#cbd5e1;font:13px system-ui;pointer-events:none">
+        @_status · Created by Gravicode Studios, led by Kang Fadhil
+    </div>
+</div>
+
+@code {
+    private readonly Node _scene = BuildScene();
+    private string _status = "Starting";
+    private DateTime _lastStatus;
+
+    private static Node BuildScene()
+    {
+        var root = new Group();
+        root.AddChild(Shapes.Plane(40, 40, 1, 1, Color.FromHex("#2b2d42")));
+        root.AddChild(new LightSource(Light.Sun(new Vector3(-0.4f, 0.5f, -0.8f))));
+        for (int i = 0; i < 6; i++)
+        {
+            var pat = new PositionAttitudeTransform { Position = new Vector3(MathF.Cos(i) * 8, MathF.Sin(i) * 8, 1.5f) };
+            pat.AddChild(Shapes.Cube(3, Color.FromHsv(i * 60, 0.6f, 0.95f)));
+            pat.AddUpdateCallback(new SpinCallback(Vector3.UnitZ, 20 + i * 10));
+            root.AddChild(pat);
+        }
+        root.AddChild(ParticleEffects.Fire(Vector3.Zero, 1.5f));
+        return root;
+    }
+
+    private void ShowStats(RenderStats stats)
+    {
+        if ((DateTime.UtcNow - _lastStatus).TotalSeconds < 0.5) return;
+        _lastStatus = DateTime.UtcNow;
+        _status = $"{stats.FramesPerSecond:F0} fps · {stats.DrawItems} draws";
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ShowError(string message) => _status = "WebGL2 error: " + message;
+}

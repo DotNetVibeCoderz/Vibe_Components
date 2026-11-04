@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>OpenSceneGraph.Net.Blazor</PackageId>
+    <Description>Blazor component (OsgCanvas) that runs an OpenSceneGraph.Net viewer in .NET and renders it with a WebGL2 renderer: lighting (8 lights), textures, fog, sky gradient, transparency, points/lines, HUD cameras, render-to-texture, shadow maps and bloom/HDR post-processing. Works with Blazor WebAssembly and Blazor Server. Created by Gravicode Studios, led by Kang Fadhil.</Description>
+    <PackageTags>$(PackageTags);blazor;webassembly;webgl;webgl2;razor</PackageTags>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.12" />
+    <ProjectReference Include="..\OpenSceneGraph.Net\OpenSceneGraph.Net.csproj" />
+  </ItemGroup>
+</Project>

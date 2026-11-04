@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [ "OpenSceneGraph", "3D", "Web", "Blazor", "WebAssembly" ],
+  "identity": "OpenSceneGraph.Net.Blazor",
+  "name": "OpenSceneGraph.Net Blazor WebAssembly App",
+  "shortName": "osgnet-blazor",
+  "description": "Blazor WebAssembly 3D app: an OsgCanvas (WebGL2) showing an animated OpenSceneGraph.Net scene.",
+  "sourceName": "OsgNetBlazorApp",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" }
+}

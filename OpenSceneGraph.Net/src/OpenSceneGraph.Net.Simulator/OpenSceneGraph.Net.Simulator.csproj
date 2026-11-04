@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>OpenSceneGraph.Net.Simulator</AssemblyName>
+    <RootNamespace>OpenSceneGraph.Net.Simulator</RootNamespace>
+    <Description>OpenSceneGraph.Net Simulator: training-style vehicle simulator (aircraft, UAV, ground vehicle, ship) with HUD, minimap, missions, weather and DIS output. Created by Gravicode Studios, led by Kang Fadhil.</Description>
+    <ApplicationIcon>..\..\assets\icon.ico</ApplicationIcon>
+    <ApplicationManifest>..\OpenSceneGraph.Net.Gallery.Avalonia\app.manifest</ApplicationManifest>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\OpenSceneGraph.Net.Avalonia\OpenSceneGraph.Net.Avalonia.csproj" />
+    <!-- procedural vehicle models, ChaseCamera and KeyState are shared with the gallery samples -->
+    <ProjectReference Include="..\OpenSceneGraph.Net.Gallery.Core\OpenSceneGraph.Net.Gallery.Core.csproj" />
+    <PackageReference Include="Avalonia" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.22" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\OpenSceneGraph.Net.Gallery.Avalonia\WindowCapture.cs" Link="Shared\WindowCapture.cs" />
+    <AvaloniaResource Include="..\..\assets\icon-64.png" Link="Assets\icon-64.png" />
+    <AvaloniaResource Include="..\..\assets\icon.ico" Link="Assets\icon.ico" />
+  </ItemGroup>
+</Project>

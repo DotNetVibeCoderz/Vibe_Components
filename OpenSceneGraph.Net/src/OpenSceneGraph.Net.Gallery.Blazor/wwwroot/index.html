@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0e1114" />
+    <meta name="description" content="OpenSceneGraph.Net Gallery: live 3D use cases rendered in the browser with Blazor WebAssembly and WebGL2. Created by Gravicode Studios, led by Kang Fadhil." />
+    <title>OpenSceneGraph.Net Gallery</title>
+    <base href="/" />
+    <link rel="preload" href="fonts/chakra-petch-600.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/ibm-plex-sans-var.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <script src="js/gallery.js"></script>
+</head>
+<body>
+    <div id="app">
+        <div class="boot">
+            <svg class="boot-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v5M12 8l-6 7M12 8l6 7M10 2h4v4h-4zM4 15h4v4H4zM16 15h4v4h-4z" /></svg>
+            <p class="boot-title">OpenSceneGraph.Net Gallery</p>
+            <p class="boot-sub">Loading the .NET runtime · Memuat runtime .NET</p>
+            <div class="boot-bar"><span style="width: var(--blazor-load-percentage, 0%)"></span></div>
+        </div>
+    </div>
+    <div id="blazor-error-ui" role="alert">
+        Something went wrong. Reload the page to restart the gallery. · Terjadi kesalahan. Muat ulang halaman.
+        <a href="." class="reload">Reload · Muat ulang</a>
+        <span class="dismiss" role="button" tabindex="0">×</span>
+    </div>
+    <script src="_framework/blazor.webassembly.js"></script>
+</body>
+</html>

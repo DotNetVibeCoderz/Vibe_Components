@@ -1,0 +1,33 @@
+@page "/about"
+@inherits LocalizedComponent
+
+<PageTitle>@T("about.title") · OpenSceneGraph.Net Gallery</PageTitle>
+
+<section class="page narrow about">
+    <p class="eyebrow">@T("nav.about")</p>
+    <h1 class="display">@T("about.title")</h1>
+    <p class="lead">@T("about.lead")</p>
+
+    <div class="credit-plate">
+        <p class="credit-main">@T(Ui.Credit)</p>
+        <p class="credit-alt">@Ui.Get(Ui.Credit, Lang == "id" ? "en" : "id")</p>
+    </div>
+
+    <h2 class="section-title">@T("about.how.title")</h2>
+    <ol class="pipeline">
+        <li><span class="mono step">rAF</span><p>@T("about.how.1")</p></li>
+        <li><span class="mono step">Frame()</span><p>@T("about.how.2")</p></li>
+        <li><span class="mono step">byte[]</span><p>@T("about.how.3")</p></li>
+        <li><span class="mono step">WebGL2</span><p>@T("about.how.4")</p></li>
+    </ol>
+
+    <h2 class="section-title">@T("about.use.title")</h2>
+    <pre class="code"><code>@CodeHighlighter.Highlight(Snippets.UsingOsgCanvas)</code></pre>
+
+    <h2 class="section-title">@T("about.supported.title")</h2>
+    <p>@T("about.supported")</p>
+
+    <h2 class="section-title">@T("about.credit.title")</h2>
+    <p class="hint">@T("about.credit.body")</p>
+</section>
+

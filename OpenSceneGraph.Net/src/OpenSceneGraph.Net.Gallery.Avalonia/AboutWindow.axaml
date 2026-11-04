@@ -1,0 +1,30 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:OpenSceneGraph.Net.Gallery.Desktop"
+        x:Class="OpenSceneGraph.Net.Gallery.Desktop.AboutWindow"
+        Title="{local:L About}" Width="520" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Icon="avares://OpenSceneGraph.Net.Gallery/Assets/icon.ico">
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Height="3" Background="{StaticResource Signal}" />
+    <StackPanel Margin="32,28,32,26" Spacing="14">
+      <StackPanel Orientation="Horizontal" Spacing="16">
+        <Image Source="avares://OpenSceneGraph.Net.Gallery/Assets/icon-64.png" Width="56" Height="56" />
+        <StackPanel VerticalAlignment="Center" Spacing="2">
+          <TextBlock Classes="display" Text="OpenSceneGraph.Net" FontSize="26" />
+          <TextBlock x:Name="VersionText" Classes="mono muted" FontSize="12" />
+        </StackPanel>
+      </StackPanel>
+      <TextBlock Text="{local:L AboutLead}" TextWrapping="Wrap" FontSize="13.5" LineHeight="21" />
+      <TextBlock Text="{local:L AboutGallery}" TextWrapping="Wrap" FontSize="13" Classes="muted" LineHeight="20" />
+      <Border Background="{StaticResource Panel}" CornerRadius="8" Padding="16,12" BorderBrush="{StaticResource Line}" BorderThickness="1">
+        <StackPanel Spacing="4">
+          <TextBlock Text="{local:L Credit}" FontWeight="SemiBold" TextWrapping="Wrap" />
+          <TextBlock Classes="mono muted" FontSize="11.5" Text="github.com/Gravicode/OpenSceneGraph.Net" />
+          <TextBlock Classes="muted" FontSize="11.5" Text="{local:L License}" />
+        </StackPanel>
+      </Border>
+      <Button x:Name="CloseButton" Classes="ghost" Content="{local:L Close}" HorizontalAlignment="Right" IsDefault="True" IsCancel="True" />
+    </StackPanel>
+  </DockPanel>
+</Window>

@@ -1,0 +1,295 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:OpenSceneGraph.Net.Simulator"
+        xmlns:osg="clr-namespace:OpenSceneGraph.Net.Avalonia;assembly=OpenSceneGraph.Net.Avalonia"
+        x:Class="OpenSceneGraph.Net.Simulator.MainWindow"
+        Title="OpenSceneGraph.Net Simulator"
+        Icon="avares://OpenSceneGraph.Net.Simulator/Assets/icon.ico"
+        Width="1480" Height="900" MinWidth="1100" MinHeight="660"
+        WindowStartupLocation="CenterScreen">
+  <Grid RowDefinitions="Auto,*,Auto">
+
+    <!-- ============================================================ top bar -->
+    <Border Grid.Row="0" Background="{StaticResource Deck}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="16,10">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <StackPanel Orientation="Horizontal" Spacing="11" VerticalAlignment="Center">
+          <Image Source="avares://OpenSceneGraph.Net.Simulator/Assets/icon-64.png" Width="32" Height="32" />
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Classes="mono" Text="OpenSceneGraph.Net" FontSize="10.5" Foreground="{StaticResource Muted}" />
+            <TextBlock Classes="display" Text="{local:L Brand}" FontSize="20" Margin="0,-3,0,0" />
+          </StackPanel>
+        </StackPanel>
+
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="14" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <Border Background="{StaticResource Panel}" CornerRadius="7" Padding="3" BorderBrush="{StaticResource Line}" BorderThickness="1">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <ToggleButton x:Name="VAircraft" Classes="vehicle" Content="{local:L Aircraft}" />
+              <ToggleButton x:Name="VQuad" Classes="vehicle" Content="{local:L Quadcopter}" />
+              <ToggleButton x:Name="VGround" Classes="vehicle" Content="{local:L Ground}" />
+              <ToggleButton x:Name="VShip" Classes="vehicle" Content="{local:L Ship}" />
+            </StackPanel>
+          </Border>
+          <Border Background="{StaticResource Panel}" CornerRadius="7" Padding="3" BorderBrush="{StaticResource Line}" BorderThickness="1">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <ToggleButton x:Name="CamChase" Classes="vehicle" Content="{local:L Chase}" ToolTip.Tip="C" />
+              <ToggleButton x:Name="CamCockpit" Classes="vehicle" Content="{local:L Cockpit}" ToolTip.Tip="C" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <Button x:Name="PauseButton" Classes="ghost" FontSize="12.5" ToolTip.Tip="P"><TextBlock x:Name="PauseLabel" Text="{local:L Pause}" /></Button>
+          <Button x:Name="ResetButton" Classes="ghost" FontSize="12.5" Content="{local:L Reset}" ToolTip.Tip="R" />
+          <Border Background="{StaticResource Panel}" CornerRadius="7" Padding="3" BorderBrush="{StaticResource Line}" BorderThickness="1" Margin="6,0,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <ToggleButton x:Name="LangEn" Classes="seg" Content="EN" IsChecked="True" ToolTip.Tip="English" />
+              <ToggleButton x:Name="LangId" Classes="seg" Content="ID" ToolTip.Tip="Bahasa Indonesia" />
+            </StackPanel>
+          </Border>
+          <Button x:Name="AboutButton" Classes="ghost" FontSize="12.5" Content="{local:L About}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- ============================================================ view + HUD -->
+    <Grid Grid.Row="1" ColumnDefinitions="*,292">
+      <Panel Grid.Column="0" Background="Black" ClipToBounds="True">
+        <osg:OsgView x:Name="View" />
+
+        <Panel x:Name="Hud" IsHitTestVisible="False">
+          <!-- heading tape -->
+          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,14,0,0" Spacing="2">
+            <Border Classes="hud" Padding="6,2" Width="440">
+              <local:HeadingTape x:Name="Tape" Height="40" />
+            </Border>
+            <Border Classes="hud" Padding="10,2" HorizontalAlignment="Center">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Classes="hudlabel" Text="{local:L Heading}" VerticalAlignment="Center" />
+                <TextBlock x:Name="HeadingText" Classes="hudvalue" FontSize="16" Text="000°" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+
+          <!-- mission -->
+          <Border Classes="hud" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16" Width="226">
+            <StackPanel Spacing="6">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="hudlabel" Text="{local:L Mission}" />
+                <TextBlock x:Name="MissionTimeText" Classes="mono" FontSize="11" Foreground="{StaticResource HudDim}" Grid.Column="1" />
+              </Grid>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Classes="hudvalue" FontSize="20" x:Name="WaypointText" Foreground="{StaticResource Caution}" Text="WP 1/5" />
+              </StackPanel>
+              <Grid ColumnDefinitions="*,*,*" Margin="0,2,0,0">
+                <StackPanel>
+                  <TextBlock Classes="hudlabel" Text="{local:L Distance}" />
+                  <TextBlock x:Name="DistText" Classes="mono" FontSize="13" Foreground="{StaticResource Hud}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1">
+                  <TextBlock Classes="hudlabel" Text="{local:L Bearing}" />
+                  <TextBlock x:Name="BearingText" Classes="mono" FontSize="13" Foreground="{StaticResource Hud}" />
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                  <TextBlock Classes="hudlabel" Text="{local:L Eta}" />
+                  <TextBlock x:Name="EtaText" Classes="mono" FontSize="13" Foreground="{StaticResource Hud}" />
+                </StackPanel>
+              </Grid>
+            </StackPanel>
+          </Border>
+
+          <!-- DIS badge -->
+          <Border x:Name="DisBadge" Classes="hud" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="16" IsVisible="False">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Ellipse x:Name="DisDot" Width="8" Height="8" Fill="{StaticResource Hud}" VerticalAlignment="Center" />
+              <TextBlock Classes="hudlabel" Text="DIS" VerticalAlignment="Center" />
+              <TextBlock x:Name="DisBadgeText" Classes="mono" FontSize="12" Foreground="{StaticResource Hud}" VerticalAlignment="Center" />
+            </StackPanel>
+          </Border>
+
+          <!-- speed (left) -->
+          <Border Classes="hud" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="22,0,0,0" MinWidth="132">
+            <StackPanel Spacing="1">
+              <TextBlock Classes="hudlabel" Text="{local:L Speed}" />
+              <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="SpeedText" Classes="hudvalue" FontSize="30" Text="0" />
+                <TextBlock x:Name="SpeedUnit" Classes="hudunit" Text="kt" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <!-- altitude (right) -->
+          <Border Classes="hud" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,22,0" MinWidth="150">
+            <StackPanel Spacing="4">
+              <StackPanel Spacing="1">
+                <TextBlock Classes="hudlabel" Text="{local:L Altitude}" />
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock x:Name="AltText" Classes="hudvalue" FontSize="30" Text="0" />
+                  <TextBlock Classes="hudunit" Text="m" />
+                </StackPanel>
+              </StackPanel>
+              <Grid ColumnDefinitions="*,*">
+                <StackPanel>
+                  <TextBlock Classes="hudlabel" Text="{local:L Agl}" />
+                  <TextBlock x:Name="AglText" Classes="mono" FontSize="13" Foreground="{StaticResource Hud}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1">
+                  <TextBlock Classes="hudlabel" Text="{local:L Vs}" />
+                  <TextBlock x:Name="VsText" Classes="mono" FontSize="13" Foreground="{StaticResource Hud}" />
+                </StackPanel>
+              </Grid>
+            </StackPanel>
+          </Border>
+
+          <!-- instrument cluster -->
+          <Border Classes="hud" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,16" Padding="14,10">
+            <StackPanel Orientation="Horizontal" Spacing="16">
+              <StackPanel Spacing="4" VerticalAlignment="Bottom">
+                <local:BarGauge x:Name="ThrottleGauge" Width="22" Height="118" HorizontalAlignment="Center" />
+                <TextBlock Classes="hudlabel" Text="{local:L Throttle}" HorizontalAlignment="Center" />
+                <TextBlock x:Name="ThrottleText" Classes="mono" FontSize="11" Foreground="{StaticResource Hud}" HorizontalAlignment="Center" />
+              </StackPanel>
+              <local:AttitudeIndicator x:Name="Adi" Width="150" Height="150" />
+            </StackPanel>
+          </Border>
+
+          <!-- key map -->
+          <Border x:Name="KeyMapPanel" Classes="hud" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="16" Width="248">
+            <StackPanel Spacing="6">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="hudlabel" Text="{local:L KeyMap}" />
+                <TextBlock Classes="mono" FontSize="10" Foreground="{StaticResource HudDim}" Grid.Column="1" Text="H" />
+              </Grid>
+              <ItemsControl x:Name="KeyList">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Grid ColumnDefinitions="74,*" Margin="0,2">
+                      <Border Classes="keycap" HorizontalAlignment="Left" Padding="6,1">
+                        <TextBlock Classes="mono" Text="{Binding Keys}" FontSize="10.5" Foreground="{StaticResource TextMain}" />
+                      </Border>
+                      <TextBlock Grid.Column="1" Text="{Binding Action}" FontSize="11.5" Foreground="{StaticResource TextMain}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+
+          <!-- minimap -->
+          <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="16" Spacing="4">
+            <TextBlock Classes="hudlabel" Text="{local:L Map}" HorizontalAlignment="Right" />
+            <local:Minimap x:Name="Map" Width="208" Height="208" />
+          </StackPanel>
+
+          <!-- banner -->
+          <Border x:Name="Banner" IsVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,120"
+                  Background="#D80A0F1C" CornerRadius="8" Padding="26,14" BorderThickness="1" BorderBrush="{StaticResource Caution}">
+            <StackPanel Spacing="4" HorizontalAlignment="Center">
+              <TextBlock x:Name="BannerTitle" Classes="display" FontSize="26" Foreground="{StaticResource Caution}" HorizontalAlignment="Center" />
+              <TextBlock x:Name="BannerText" FontSize="13" Foreground="{StaticResource TextMain}" HorizontalAlignment="Center" />
+            </StackPanel>
+          </Border>
+        </Panel>
+
+        <Border x:Name="ErrorPanel" IsVisible="False" Background="#E6100A14" Padding="28" MaxWidth="560" CornerRadius="8"
+                HorizontalAlignment="Center" VerticalAlignment="Center" BorderBrush="#66FF6B6B" BorderThickness="1">
+          <SelectableTextBlock x:Name="ErrorText" TextWrapping="Wrap" FontSize="13" />
+        </Border>
+
+        <!-- about -->
+        <Border x:Name="AboutPanel" IsVisible="False" Background="#C0050810">
+          <Border Background="{StaticResource Deck}" CornerRadius="10" BorderBrush="{StaticResource Line}" BorderThickness="1" Width="500"
+                  HorizontalAlignment="Center" VerticalAlignment="Center" ClipToBounds="True">
+            <DockPanel>
+              <Border DockPanel.Dock="Top" Height="3" Background="{StaticResource Hud}" />
+              <StackPanel Margin="30,26,30,24" Spacing="14">
+                <StackPanel Orientation="Horizontal" Spacing="14">
+                  <Image Source="avares://OpenSceneGraph.Net.Simulator/Assets/icon-64.png" Width="52" Height="52" />
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Classes="display" Text="OpenSceneGraph.Net Simulator" FontSize="23" />
+                    <TextBlock x:Name="VersionText" Classes="mono muted" FontSize="11.5" />
+                  </StackPanel>
+                </StackPanel>
+                <TextBlock Text="{local:L AboutLead}" TextWrapping="Wrap" FontSize="13" LineHeight="20" />
+                <Border Background="{StaticResource Panel}" CornerRadius="8" Padding="14,10" BorderBrush="{StaticResource Line}" BorderThickness="1">
+                  <StackPanel Spacing="3">
+                    <TextBlock Text="{local:L Credit}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Classes="mono muted" FontSize="11.5" Text="github.com/Gravicode/OpenSceneGraph.Net" />
+                    <TextBlock Classes="muted" FontSize="11.5" Text="{local:L License}" />
+                  </StackPanel>
+                </Border>
+                <Button x:Name="AboutClose" Classes="ghost" Content="{local:L Close}" HorizontalAlignment="Right" />
+              </StackPanel>
+            </DockPanel>
+          </Border>
+        </Border>
+      </Panel>
+
+      <!-- ============================================================ scenario panel -->
+      <Border Grid.Column="1" Background="{StaticResource Deck}" BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0">
+        <ScrollViewer>
+          <StackPanel Margin="20,20,20,20" Spacing="20">
+            <TextBlock Classes="eyebrow" Text="{local:L Scenario}" Foreground="{StaticResource Hud}" />
+
+            <StackPanel Spacing="8">
+              <TextBlock Classes="eyebrow" Text="{local:L Terrain}" />
+              <ComboBox x:Name="TerrainBox" />
+              <Button x:Name="NewTerrainButton" Classes="ghost" Content="{local:L NewTerrain}" FontSize="12" HorizontalAlignment="Left" />
+            </StackPanel>
+
+            <StackPanel Spacing="6">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="eyebrow" Text="{local:L TimeOfDay}" />
+                <TextBlock x:Name="HourText" Grid.Column="1" Classes="mono" FontSize="12" Foreground="{StaticResource TextMain}" />
+              </Grid>
+              <Slider x:Name="HourSlider" Minimum="0" Maximum="24" SmallChange="0.25" LargeChange="1" />
+            </StackPanel>
+
+            <StackPanel Spacing="6">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="eyebrow" Text="{local:L Visibility}" />
+                <TextBlock x:Name="VisText" Grid.Column="1" Classes="mono" FontSize="12" Foreground="{StaticResource TextMain}" />
+              </Grid>
+              <Slider x:Name="VisSlider" Minimum="400" Maximum="14000" SmallChange="100" LargeChange="1000" />
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+              <TextBlock Classes="eyebrow" Text="{local:L Weather}" />
+              <Border Background="{StaticResource Panel}" CornerRadius="7" Padding="3" BorderBrush="{StaticResource Line}" BorderThickness="1" HorizontalAlignment="Left">
+                <StackPanel Orientation="Horizontal" Spacing="2">
+                  <ToggleButton x:Name="PNone" Classes="seg" Content="{local:L Clear}" />
+                  <ToggleButton x:Name="PRain" Classes="seg" Content="{local:L Rain}" />
+                  <ToggleButton x:Name="PSnow" Classes="seg" Content="{local:L Snow}" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <Border Height="1" Background="{StaticResource Line}" />
+
+            <StackPanel Spacing="8">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="eyebrow" Text="{local:L Dis}" VerticalAlignment="Center" />
+                <ToggleSwitch x:Name="DisSwitch" Grid.Column="1" OnContent="" OffContent="" Margin="0,-6" />
+              </Grid>
+              <TextBlock Text="{local:L DisHelp}" FontSize="12" Foreground="{StaticResource Muted}" TextWrapping="Wrap" LineHeight="18" />
+              <Border Background="{StaticResource Panel}" CornerRadius="7" Padding="12,8" BorderBrush="{StaticResource Line}" BorderThickness="1">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="{local:L PdusSent}" FontSize="12" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
+                  <TextBlock x:Name="PduText" Grid.Column="1" Classes="mono" FontSize="13" Foreground="{StaticResource TextMain}" />
+                </Grid>
+              </Border>
+              <TextBlock x:Name="DisTarget" Classes="mono" FontSize="10.5" Foreground="{StaticResource Faint}" Text="UDP 255.255.255.255:3000 · ESPDU v7" />
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+    </Grid>
+
+    <!-- ============================================================ footer -->
+    <Border Grid.Row="2" Background="{StaticResource Deck}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="16,6">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Text="{local:L Credit}" FontSize="11" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
+        <TextBlock x:Name="StatusText" Grid.Column="1" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

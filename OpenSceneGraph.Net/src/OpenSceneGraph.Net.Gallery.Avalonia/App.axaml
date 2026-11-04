@@ -1,0 +1,218 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="OpenSceneGraph.Net.Gallery.Desktop.App"
+             RequestedThemeVariant="Dark">
+  <!--
+    Design tokens — "instrument deck":
+      Ink #0A0F1C (window) · Deck #0E1524 (sidebar) · Panel #121B2E (cards) · Raised #19243D · Line #24324F
+      Text #E8EDF6 · Muted #8E9CB6 · Faint #5C6B88 · Signal #5CE1E6 (brand cyan from the package icon)
+    Type: Bahnschrift (DIN-style display, the typeface of engineering signage) · Inter (body) · Cascadia Mono (data)
+    Signature: every scene carries its scene-graph path (/military/battlefield) and its own accent, which re-tints the
+    sample view when it opens.
+  -->
+  <Application.Resources>
+    <ResourceDictionary>
+      <Color x:Key="InkColor">#0A0F1C</Color>
+      <SolidColorBrush x:Key="Ink" Color="#0A0F1C" />
+      <SolidColorBrush x:Key="Deck" Color="#0E1524" />
+      <SolidColorBrush x:Key="Panel" Color="#121B2E" />
+      <SolidColorBrush x:Key="Raised" Color="#19243D" />
+      <SolidColorBrush x:Key="Line" Color="#24324F" />
+      <SolidColorBrush x:Key="LineStrong" Color="#3A4D75" />
+      <SolidColorBrush x:Key="TextMain" Color="#E8EDF6" />
+      <SolidColorBrush x:Key="Muted" Color="#8E9CB6" />
+      <SolidColorBrush x:Key="Faint" Color="#5C6B88" />
+      <SolidColorBrush x:Key="Signal" Color="#5CE1E6" />
+      <SolidColorBrush x:Key="SignalSoft" Color="#1F5CE1E6" />
+      <SolidColorBrush x:Key="Glass" Color="#C80A0F1C" />
+      <FontFamily x:Key="Display">Bahnschrift, Segoe UI, fonts:Inter#Inter</FontFamily>
+      <FontFamily x:Key="Body">fonts:Inter#Inter, Segoe UI</FontFamily>
+      <FontFamily x:Key="Mono">Cascadia Mono, Consolas, Courier New</FontFamily>
+      <Color x:Key="SystemAccentColor">#5CE1E6</Color>
+      <Color x:Key="SystemAccentColorDark1">#3FC3C8</Color>
+      <Color x:Key="SystemAccentColorLight1">#7BEAEE</Color>
+    </ResourceDictionary>
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme />
+
+    <Style Selector="Window">
+      <Setter Property="FontFamily" Value="{StaticResource Body}" />
+      <Setter Property="Background" Value="{StaticResource Ink}" />
+      <Setter Property="Foreground" Value="{StaticResource TextMain}" />
+    </Style>
+
+    <!-- type scale -->
+    <Style Selector="TextBlock.display">
+      <Setter Property="FontFamily" Value="{StaticResource Display}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="FontStretch" Value="SemiCondensed" />
+      <Setter Property="LetterSpacing" Value="-0.2" />
+    </Style>
+    <Style Selector="TextBlock.eyebrow">
+      <Setter Property="FontFamily" Value="{StaticResource Display}" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="LetterSpacing" Value="1.6" />
+      <Setter Property="Foreground" Value="{StaticResource Faint}" />
+    </Style>
+    <Style Selector="TextBlock.mono, SelectableTextBlock.mono">
+      <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+    </Style>
+    <Style Selector="TextBlock.muted">
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+    </Style>
+
+    <!-- sidebar navigation -->
+    <Style Selector="Button.nav">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Padding" Value="12,8" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.nav:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Raised}" />
+      <Setter Property="Foreground" Value="{StaticResource TextMain}" />
+    </Style>
+    <Style Selector="Button.nav.selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource SignalSoft}" />
+      <Setter Property="Foreground" Value="{StaticResource TextMain}" />
+    </Style>
+
+    <!-- quiet buttons -->
+    <Style Selector="Button.ghost">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="12,6" />
+      <Setter Property="Foreground" Value="{StaticResource TextMain}" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Raised}" />
+      <Setter Property="BorderBrush" Value="{StaticResource LineStrong}" />
+    </Style>
+    <Style Selector="Button.glass">
+      <Setter Property="Background" Value="{StaticResource Glass}" />
+      <Setter Property="BorderBrush" Value="#33FFFFFF" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="10,6" />
+      <Setter Property="Foreground" Value="{StaticResource TextMain}" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.glass:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#F00A0F1C" />
+      <Setter Property="BorderBrush" Value="#66FFFFFF" />
+    </Style>
+
+    <!-- segmented language toggle -->
+    <Style Selector="ToggleButton.seg">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Padding" Value="12,4" />
+      <Setter Property="MinWidth" Value="44" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="FontFamily" Value="{StaticResource Display}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ToggleButton.seg:checked /template/ ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Raised}" />
+      <Setter Property="Foreground" Value="{StaticResource Signal}" />
+    </Style>
+    <Style Selector="ToggleButton.seg:pointerover /template/ ContentPresenter">
+      <Setter Property="Foreground" Value="{StaticResource TextMain}" />
+    </Style>
+
+    <!-- inspector tabs -->
+    <Style Selector="RadioButton.tab">
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="frame" Background="Transparent" Padding="2,10" Margin="0,0,22,0" BorderThickness="0,0,0,2" BorderBrush="Transparent">
+            <ContentPresenter Content="{TemplateBinding Content}" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Setter Property="FontFamily" Value="{StaticResource Display}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="RadioButton.tab:checked">
+      <Setter Property="Foreground" Value="{StaticResource TextMain}" />
+    </Style>
+    <Style Selector="RadioButton.tab:checked /template/ Border#frame">
+      <Setter Property="BorderBrush" Value="{DynamicResource SampleAccent}" />
+    </Style>
+
+    <!-- sample card -->
+    <Style Selector="Button.card">
+      <Setter Property="Template">
+        <ControlTemplate>
+          <ContentPresenter Content="{TemplateBinding Content}" Background="Transparent" />
+        </ControlTemplate>
+      </Setter>
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Margin" Value="0,0,18,18" />
+      <Setter Property="Width" Value="296" />
+    </Style>
+    <Style Selector="Button.card Border.frame">
+      <Setter Property="Background" Value="{StaticResource Panel}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="ClipToBounds" Value="True" />
+      <Setter Property="RenderTransform" Value="translateY(0px)" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" />
+          <BrushTransition Property="BorderBrush" Duration="0:0:0.16" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Button.card:pointerover Border.frame">
+      <Setter Property="BorderBrush" Value="{StaticResource LineStrong}" />
+      <Setter Property="RenderTransform" Value="translateY(-3px)" />
+    </Style>
+    <Style Selector="Button.card:focus-visible Border.frame">
+      <Setter Property="BorderBrush" Value="{StaticResource Signal}" />
+    </Style>
+
+    <!-- small chips -->
+    <Style Selector="Border.chip">
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="7,2" />
+      <Setter Property="Margin" Value="0,0,6,6" />
+      <Setter Property="Background" Value="{StaticResource Raised}" />
+    </Style>
+    <Style Selector="Border.chip TextBlock">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+    </Style>
+    <Style Selector="Border.keycap">
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="8,3" />
+      <Setter Property="Background" Value="{StaticResource Raised}" />
+      <Setter Property="BorderBrush" Value="{StaticResource LineStrong}" />
+      <Setter Property="BorderThickness" Value="1,1,1,2" />
+    </Style>
+
+    <Style Selector="TextBox.search">
+      <Setter Property="Background" Value="{StaticResource Panel}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="34,8,10,8" />
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+  </Application.Styles>
+</Application>

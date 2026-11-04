@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>OpenSceneGraph.Net.Avalonia</PackageId>
+    <Description>Avalonia UI control (OsgView) that hosts an OpenSceneGraph.Net viewer with the OpenGL renderer: mouse/keyboard manipulators, picking, continuous or on-demand rendering. Created by Gravicode Studios, led by Kang Fadhil.</Description>
+    <PackageTags>$(PackageTags);avalonia;desktop</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\OpenSceneGraph.Net\OpenSceneGraph.Net.csproj" />
+    <ProjectReference Include="..\OpenSceneGraph.Net.Rendering.OpenGL\OpenSceneGraph.Net.Rendering.OpenGL.csproj" />
+    <PackageReference Include="Avalonia" Version="11.3.22" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,287 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:OpenSceneGraph.Net.Gallery.Desktop"
+        xmlns:osg="clr-namespace:OpenSceneGraph.Net.Avalonia;assembly=OpenSceneGraph.Net.Avalonia"
+        x:Class="OpenSceneGraph.Net.Gallery.Desktop.MainWindow"
+        Title="OpenSceneGraph.Net Gallery"
+        Icon="avares://OpenSceneGraph.Net.Gallery/Assets/icon.ico"
+        Width="1480" Height="920" MinWidth="1040" MinHeight="640"
+        WindowStartupLocation="CenterScreen">
+  <Grid ColumnDefinitions="264,*">
+
+    <!-- ============================================================ sidebar -->
+    <Border Grid.Column="0" Background="{StaticResource Deck}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+      <DockPanel Margin="18,22,18,18">
+        <!-- brand -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="4,0,0,22">
+          <Image Source="avares://OpenSceneGraph.Net.Gallery/Assets/icon-64.png" Width="38" Height="38" />
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Classes="mono" Text="OpenSceneGraph.Net" FontSize="11" Foreground="{StaticResource Muted}" />
+            <TextBlock Classes="display" Text="{local:L Brand}" FontSize="24" Margin="0,-2,0,0" />
+          </StackPanel>
+        </StackPanel>
+
+        <!-- search -->
+        <Panel DockPanel.Dock="Top" Margin="0,0,0,22">
+          <TextBox x:Name="SearchBox" Classes="search" Watermark="{local:L Search}" />
+          <Path Data="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z"
+                Fill="{StaticResource Faint}" Width="14" Height="14" Stretch="Uniform" HorizontalAlignment="Left" Margin="12,0,0,0" IsHitTestVisible="False" />
+        </Panel>
+
+        <!-- footer -->
+        <StackPanel DockPanel.Dock="Bottom" Spacing="14">
+          <Border Height="1" Background="{StaticResource Line}" />
+          <Grid ColumnDefinitions="*,Auto">
+            <Border Background="{StaticResource Panel}" CornerRadius="7" Padding="3" HorizontalAlignment="Left" BorderBrush="{StaticResource Line}" BorderThickness="1">
+              <StackPanel Orientation="Horizontal" Spacing="2">
+                <ToggleButton x:Name="LangEn" Classes="seg" Content="EN" IsChecked="True" ToolTip.Tip="English" />
+                <ToggleButton x:Name="LangId" Classes="seg" Content="ID" ToolTip.Tip="Bahasa Indonesia" />
+              </StackPanel>
+            </Border>
+            <Button x:Name="AboutButton" Grid.Column="1" Classes="ghost" Content="{local:L About}" FontSize="12" />
+          </Grid>
+          <TextBlock Text="{local:L Credit}" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource Faint}" LineHeight="16" />
+        </StackPanel>
+
+        <!-- categories -->
+        <ScrollViewer>
+          <StackPanel>
+            <TextBlock Classes="eyebrow" Text="{local:L Domains}" Margin="12,0,0,8" />
+            <ItemsControl x:Name="CategoryList">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Button Classes="nav" Classes.selected="{Binding IsSelected}" Click="OnCategoryClick" Margin="0,1">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{Binding Name}" FontSize="13.5" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="1" Classes="mono" Text="{Binding CountText}" FontSize="11" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
+                    </Grid>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+      </DockPanel>
+    </Border>
+
+    <!-- ============================================================ home -->
+    <Grid x:Name="HomeView" Grid.Column="1" RowDefinitions="Auto,*">
+      <StackPanel Margin="44,36,44,22" Spacing="10">
+        <TextBlock x:Name="HomeEyebrow" Classes="eyebrow" Foreground="{StaticResource Signal}" />
+        <TextBlock Classes="display" Text="{local:L HomeTitle}" FontSize="36" TextWrapping="Wrap" />
+        <TextBlock Classes="muted" Text="{local:L HomeLead}" FontSize="14.5" TextWrapping="Wrap" MaxWidth="720" HorizontalAlignment="Left" LineHeight="22" />
+        <TextBlock x:Name="CountText" Classes="mono" FontSize="11.5" Foreground="{StaticResource Faint}" Margin="0,8,0,0" />
+      </StackPanel>
+
+      <ScrollViewer Grid.Row="1" Padding="44,4,26,30">
+        <ItemsControl x:Name="CardList">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Button Classes="card" Click="OnCardClick" ToolTip.Tip="{Binding Description}">
+                <Border Classes="frame">
+                  <Grid RowDefinitions="156,Auto">
+                    <!-- thumbnail: rendered frame when available, otherwise the accent field with a monogram -->
+                    <Panel>
+                      <Border Background="{Binding AccentGlow}" />
+                      <TextBlock Classes="display" Text="{Binding Monogram}" FontSize="64" Foreground="{Binding Accent}" Opacity="0.55"
+                                 HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,16,4" IsVisible="{Binding !HasThumbnail}" />
+                      <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" IsVisible="{Binding HasThumbnail}" />
+                      <Border Height="60" VerticalAlignment="Bottom">
+                        <Border.Background>
+                          <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                            <GradientStop Color="#00121B2E" Offset="0" />
+                            <GradientStop Color="#F0121B2E" Offset="1" />
+                          </LinearGradientBrush>
+                        </Border.Background>
+                      </Border>
+                      <Border Background="{StaticResource Glass}" CornerRadius="4" Padding="7,3" Margin="10" HorizontalAlignment="Left" VerticalAlignment="Top">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <Ellipse Width="7" Height="7" Fill="{Binding Accent}" VerticalAlignment="Center" />
+                          <TextBlock Text="{Binding CategoryName}" FontSize="11" Foreground="{StaticResource TextMain}" />
+                        </StackPanel>
+                      </Border>
+                    </Panel>
+                    <Border Grid.Row="1" Height="2" VerticalAlignment="Top" Background="{Binding Accent}" HorizontalAlignment="Left" Width="44" />
+                    <StackPanel Grid.Row="1" Margin="16,14,16,12" Spacing="6">
+                      <TextBlock Classes="mono" Text="{Binding NodePath}" FontSize="10.5" Foreground="{Binding Accent}" />
+                      <TextBlock Classes="display" Text="{Binding Title}" FontSize="19" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding Description}" FontSize="12.5" Foreground="{StaticResource Muted}" TextWrapping="Wrap"
+                                 MaxLines="3" TextTrimming="WordEllipsis" Height="57" LineHeight="19" />
+                      <ItemsControl ItemsSource="{Binding Tags}" Margin="0,6,0,0" Height="26" ClipToBounds="True">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                            <Border Classes="chip"><TextBlock Text="{Binding}" /></Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </Grid>
+                </Border>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+
+      <!-- empty state -->
+      <StackPanel x:Name="EmptyState" Grid.Row="1" IsVisible="False" Margin="44,10" Spacing="14" HorizontalAlignment="Left">
+        <TextBlock Classes="muted" Text="{local:L NoResults}" FontSize="14" TextWrapping="Wrap" MaxWidth="520" />
+        <Button x:Name="ClearFilterButton" Classes="ghost" Content="{local:L ClearFilter}" />
+      </StackPanel>
+    </Grid>
+
+    <!-- ============================================================ sample view -->
+    <Grid x:Name="SampleView" Grid.Column="1" ColumnDefinitions="*,372" IsVisible="False">
+      <Grid.Resources>
+        <SolidColorBrush x:Key="SampleAccent" Color="#5CE1E6" />
+      </Grid.Resources>
+
+      <!-- live 3D view + overlays -->
+      <Panel Grid.Column="0" Background="Black">
+        <osg:OsgView x:Name="View" />
+
+        <StackPanel Orientation="Horizontal" Spacing="10" Margin="16" HorizontalAlignment="Left" VerticalAlignment="Top">
+          <Button x:Name="BackButton" Classes="glass" ToolTip.Tip="Esc">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="←" FontSize="14" VerticalAlignment="Center" />
+              <TextBlock Text="{local:L Back}" FontSize="12.5" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <Border Background="{StaticResource Glass}" CornerRadius="6" Padding="10,6" BorderBrush="#33FFFFFF" BorderThickness="1">
+            <TextBlock x:Name="PathText" Classes="mono" FontSize="12" Foreground="{DynamicResource SampleAccent}" VerticalAlignment="Center" />
+          </Border>
+        </StackPanel>
+
+        <!-- frame statistics -->
+        <Border Background="{StaticResource Glass}" CornerRadius="6" Padding="12,7" Margin="16" BorderBrush="#33FFFFFF" BorderThickness="1"
+                HorizontalAlignment="Left" VerticalAlignment="Bottom">
+          <StackPanel Orientation="Horizontal" Spacing="18">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <TextBlock x:Name="FpsText" Classes="mono" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource SampleAccent}" Text="--" />
+              <TextBlock Classes="mono muted" FontSize="11" Text="{local:L Fps}" VerticalAlignment="Bottom" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <TextBlock x:Name="DrawsText" Classes="mono" FontSize="13" Text="--" />
+              <TextBlock Classes="mono muted" FontSize="11" Text="{local:L Draws}" VerticalAlignment="Bottom" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <TextBlock x:Name="TrisText" Classes="mono" FontSize="13" Text="--" />
+              <TextBlock Classes="mono muted" FontSize="11" Text="{local:L Tris}" VerticalAlignment="Bottom" />
+            </StackPanel>
+            <TextBlock x:Name="RendererText" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}" VerticalAlignment="Center" MaxWidth="260" TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+        </Border>
+
+        <Border x:Name="ErrorPanel" IsVisible="False" Background="#E6100A14" Padding="28" MaxWidth="560" CornerRadius="8"
+                HorizontalAlignment="Center" VerticalAlignment="Center" BorderBrush="#66FF6B6B" BorderThickness="1">
+          <SelectableTextBlock x:Name="ErrorText" TextWrapping="Wrap" FontSize="13" />
+        </Border>
+      </Panel>
+
+      <!-- inspector -->
+      <Border Grid.Column="1" Background="{StaticResource Deck}" BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0">
+        <DockPanel>
+          <Border DockPanel.Dock="Top" Height="3" Background="{DynamicResource SampleAccent}" />
+          <StackPanel DockPanel.Dock="Top" Margin="24,22,24,0" Spacing="8">
+            <TextBlock x:Name="InspectorCategory" Classes="eyebrow" Foreground="{DynamicResource SampleAccent}" />
+            <TextBlock x:Name="InspectorTitle" Classes="display" FontSize="28" TextWrapping="Wrap" />
+            <TextBlock x:Name="InspectorDescription" Classes="muted" FontSize="13" TextWrapping="Wrap" LineHeight="20" />
+            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+              <RadioButton x:Name="TabOverview" Classes="tab" GroupName="inspector" Content="{local:L Overview}" IsChecked="True" />
+              <RadioButton x:Name="TabCode" Classes="tab" GroupName="inspector" Content="{local:L Code}" />
+            </StackPanel>
+            <Border Height="1" Background="{StaticResource Line}" Margin="0,-1,0,0" />
+          </StackPanel>
+
+          <Panel>
+            <!-- overview -->
+            <ScrollViewer x:Name="OverviewPane">
+              <StackPanel Spacing="24" Margin="24,18,24,24">
+                <StackPanel Spacing="10">
+                  <TextBlock Classes="eyebrow" Text="{local:L Telemetry}" />
+                  <Border Background="{StaticResource Panel}" CornerRadius="8" BorderBrush="{StaticResource Line}" BorderThickness="1" Padding="14,10">
+                    <Panel>
+                      <ItemsControl x:Name="TelemetryList">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                            <Grid ColumnDefinitions="Auto,*" Margin="0,4">
+                              <TextBlock Text="{Binding Key}" FontSize="12" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
+                              <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Value}" FontSize="12.5" HorizontalAlignment="Right"
+                                         TextAlignment="Right" TextWrapping="Wrap" Margin="16,0,0,0" />
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                      <TextBlock x:Name="NoTelemetryText" Text="{local:L NoTelemetry}" FontSize="12" Foreground="{StaticResource Faint}" Margin="0,4" />
+                    </Panel>
+                  </Border>
+                </StackPanel>
+
+                <StackPanel Spacing="10">
+                  <TextBlock Classes="eyebrow" Text="{local:L Controls}" />
+                  <TextBlock x:Name="DriveHint" Text="{local:L ClickToDrive}" FontSize="12" Foreground="{DynamicResource SampleAccent}" />
+                  <ItemsControl x:Name="ControlsList">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Grid ColumnDefinitions="110,*" Margin="0,3">
+                          <Border Classes="keycap" HorizontalAlignment="Left">
+                            <TextBlock Classes="mono" Text="{Binding Keys}" FontSize="11.5" />
+                          </Border>
+                          <TextBlock Grid.Column="1" Text="{Binding Action}" FontSize="12.5" VerticalAlignment="Center" TextWrapping="Wrap" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+
+                <StackPanel Spacing="10">
+                  <TextBlock Classes="eyebrow" Text="{local:L Features}" />
+                  <ItemsControl x:Name="FeatureList">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Border Classes="chip" Background="Transparent" BorderBrush="{DynamicResource SampleAccent}" BorderThickness="1">
+                          <TextBlock Classes="mono" Text="{Binding}" Foreground="{StaticResource TextMain}" />
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+
+                <StackPanel Spacing="6">
+                  <TextBlock Classes="eyebrow" Text="{local:L NodePath}" />
+                  <TextBlock x:Name="InspectorPath" Classes="mono" FontSize="12" Foreground="{StaticResource Muted}" />
+                </StackPanel>
+              </StackPanel>
+            </ScrollViewer>
+
+            <!-- code -->
+            <DockPanel x:Name="CodePane" IsVisible="False" Margin="24,18,24,24">
+              <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,10">
+                <TextBlock x:Name="CodeFileName" Classes="mono" FontSize="11.5" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
+                <Button x:Name="CopyButton" Grid.Column="1" Classes="ghost" FontSize="12">
+                  <TextBlock x:Name="CopyLabel" Text="{local:L CopyCode}" />
+                </Button>
+              </Grid>
+              <Border Background="#070B14" CornerRadius="8" BorderBrush="{StaticResource Line}" BorderThickness="1">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" Padding="16,14">
+                  <SelectableTextBlock x:Name="CodeText" Classes="mono" FontSize="12.5" LineHeight="20" Foreground="#CFE3F5" />
+                </ScrollViewer>
+              </Border>
+            </DockPanel>
+          </Panel>
+        </DockPanel>
+      </Border>
+    </Grid>
+  </Grid>
+</Window>

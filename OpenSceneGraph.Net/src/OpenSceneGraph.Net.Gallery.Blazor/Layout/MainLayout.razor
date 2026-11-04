@@ -1,0 +1,60 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject LanguageState Language
+@inject NavigationManager Nav
+
+<CascadingValue Value="@Language.Current" Name="Lang">
+    <div class="shell">
+        <header class="topbar">
+            <a class="wordmark" href="">
+                <svg class="wordmark-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v5M12 8l-6 7M12 8l6 7M10 2h4v4h-4zM4 15h4v4H4zM16 15h4v4h-4z" /></svg>
+                <span class="wordmark-name" aria-label="OpenSceneGraph.Net"><span class="wm-long">OpenSceneGraph</span><span class="wm-short">OSG</span><em>.Net</em></span>
+                <span class="wordmark-tag">@Ui.Get("nav.gallery", Language.Current)</span>
+            </a>
+            <nav class="topnav" aria-label="@Ui.Get("aria.primary", Language.Current)">
+                <NavLink href="" Match="NavLinkMatch.All">@Ui.Get("nav.gallery", Language.Current)</NavLink>
+                <NavLink href="about">@Ui.Get("nav.about", Language.Current)</NavLink>
+            </nav>
+            <div class="lang" role="group" aria-label="@Ui.Get("nav.lang", Language.Current)">
+                <button type="button" class="@(Language.IsIndonesian ? "" : "on")" aria-pressed="@(!Language.IsIndonesian)" @onclick='() => Language.SetAsync("en")'>EN</button>
+                <button type="button" class="@(Language.IsIndonesian ? "on" : "")" aria-pressed="@Language.IsIndonesian" @onclick='() => Language.SetAsync("id")'>ID</button>
+            </div>
+        </header>
+
+        <main class="content">
+            @Body
+        </main>
+
+        <footer class="footer">
+            <div class="footer-credit">
+                <span class="footer-primary">@Ui.Get(Ui.Credit, Language.Current)</span>
+                <span class="footer-secondary">@Ui.Get(Ui.Credit, Language.IsIndonesian ? "en" : "id")</span>
+            </div>
+            <div class="footer-meta">
+                <span>OpenSceneGraph.Net · .NET 10 · WebGL2</span>
+                <a href="about">@Ui.Get("nav.about", Language.Current)</a>
+            </div>
+        </footer>
+    </div>
+</CascadingValue>
+
+@code {
+    protected override void OnInitialized() => Language.Changed += OnLanguageChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        string? lang = null;
+        foreach (var part in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = part.Split('=', 2);
+            if (kv.Length == 2 && kv[0] == "lang") lang = Uri.UnescapeDataString(kv[1]);
+        }
+        await Language.InitializeAsync(lang);
+    }
+
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Language.Changed -= OnLanguageChanged;
+}

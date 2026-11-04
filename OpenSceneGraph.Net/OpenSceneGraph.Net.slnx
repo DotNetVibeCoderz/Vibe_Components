@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OpenSceneGraph.Net.Avalonia/OpenSceneGraph.Net.Avalonia.csproj" />
+    <Project Path="src/OpenSceneGraph.Net.Blazor/OpenSceneGraph.Net.Blazor.csproj" />
+    <Project Path="src/OpenSceneGraph.Net.Cli/OpenSceneGraph.Net.Cli.csproj" />
+    <Project Path="src/OpenSceneGraph.Net.Gallery.Avalonia/OpenSceneGraph.Net.Gallery.Avalonia.csproj" />
+    <Project Path="src/OpenSceneGraph.Net.Gallery.Blazor/OpenSceneGraph.Net.Gallery.Blazor.csproj" />
+    <Project Path="src/OpenSceneGraph.Net.Gallery.Core/OpenSceneGraph.Net.Gallery.Core.csproj" />
+    <Project Path="src/OpenSceneGraph.Net.Native/OpenSceneGraph.Net.Native.csproj" />
+    <Project Path="src/OpenSceneGraph.Net.Rendering.OpenGL/OpenSceneGraph.Net.Rendering.OpenGL.csproj" />
+    <Project Path="src/OpenSceneGraph.Net.Simulator/OpenSceneGraph.Net.Simulator.csproj" />
+    <Project Path="src/OpenSceneGraph.Net.Templates/OpenSceneGraph.Net.Templates.csproj" />
+    <Project Path="src/OpenSceneGraph.Net/OpenSceneGraph.Net.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OpenSceneGraph.Net.Tests/OpenSceneGraph.Net.Tests.csproj" />
+  </Folder>
+</Solution>

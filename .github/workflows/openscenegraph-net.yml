@@ -1,0 +1,200 @@
+name: OpenSceneGraph.Net
+
+# CI for every change under OpenSceneGraph.Net/, and NuGet publishing when a tag like osgnet-v0.1.0 is pushed
+# (or when started manually with "publish" ticked). Uses the NUGET_API_KEY repository secret.
+# Native pieces are built here, not committed: the Rust fast path for every runtime, and OpenSceneGraph 3.6.5
+# plus the osgnet C shim for win-x64 (OSG is cached because it takes about 20 minutes to build).
+
+on:
+  push:
+    branches: [main]
+    paths: ["OpenSceneGraph.Net/**", ".github/workflows/openscenegraph-net.yml"]
+    tags: ["osgnet-v*"]
+  pull_request:
+    paths: ["OpenSceneGraph.Net/**", ".github/workflows/openscenegraph-net.yml"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish packages to NuGet"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openscenegraph-net-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  fast-path:
+    name: Rust fast path (${{ matrix.rid }})
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: windows-latest,   target: x86_64-pc-windows-msvc,    rid: win-x64,     file: osgnet_fast.dll }
+          - { os: ubuntu-22.04,     target: x86_64-unknown-linux-gnu,  rid: linux-x64,   file: libosgnet_fast.so }
+          - { os: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu, rid: linux-arm64, file: libosgnet_fast.so }
+          - { os: macos-latest,     target: aarch64-apple-darwin,      rid: osx-arm64,   file: libosgnet_fast.dylib }
+          - { os: macos-latest,     target: x86_64-apple-darwin,       rid: osx-x64,     file: libosgnet_fast.dylib }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: OpenSceneGraph.Net/native/osgnet-fast
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        shell: bash
+        run: |
+          rustup update stable --no-self-update
+          rustup target add ${{ matrix.target }}
+
+      - name: Test
+        if: matrix.target != 'x86_64-apple-darwin'
+        run: cargo test --release
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fast-${{ matrix.rid }}
+          path: OpenSceneGraph.Net/native/osgnet-fast/target/${{ matrix.target }}/release/${{ matrix.file }}
+
+  native:
+    name: OpenSceneGraph 3.6.5 + osgnet (win-x64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: OpenSceneGraph.Net
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore OpenSceneGraph from cache
+        id: osg-cache
+        uses: actions/cache@v4
+        with:
+          path: OpenSceneGraph.Net/native/third_party/osg-install
+          key: osg-3.6.5-win-x64-${{ hashFiles('OpenSceneGraph.Net/native/build-osg.ps1') }}
+
+      - name: Build OpenSceneGraph
+        if: steps.osg-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: ./native/build-osg.ps1
+
+      - name: Build osgnet shim and stage the runtime
+        shell: pwsh
+        run: ./native/build-osgnet.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-win-x64
+          path: OpenSceneGraph.Net/src/OpenSceneGraph.Net.Native/runtimes/win-x64/native
+
+  build:
+    needs: [fast-path, native]
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: OpenSceneGraph.Net
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: downloaded
+
+      - name: Place native binaries
+        shell: pwsh
+        run: |
+          Get-ChildItem ../downloaded -Directory -Filter 'fast-*' | ForEach-Object {
+            $rid = $_.Name.Substring('fast-'.Length)
+            $dst = "src/OpenSceneGraph.Net/runtimes/$rid/native"
+            New-Item -ItemType Directory -Force $dst | Out-Null
+            Copy-Item "$($_.FullName)/*" $dst -Force
+            Write-Host "$rid -> $(Get-ChildItem $dst -Name)"
+          }
+          $dst = 'src/OpenSceneGraph.Net.Native/runtimes/win-x64/native'
+          New-Item -ItemType Directory -Force $dst | Out-Null
+          Copy-Item '../downloaded/native-win-x64/*' $dst -Recurse -Force
+          Write-Host "native: $((Get-ChildItem $dst -Recurse -File).Count) files"
+
+      - name: Version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/osgnet-v* ]]; then
+            echo "args=-p:Version=${GITHUB_REF#refs/tags/osgnet-v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "args=-p:VersionSuffix=ci.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore
+        run: dotnet restore OpenSceneGraph.Net.slnx
+
+      - name: Build
+        run: dotnet build OpenSceneGraph.Net.slnx -c Release --no-restore ${{ steps.version.outputs.args }}
+
+      - name: Test
+        run: dotnet test tests/OpenSceneGraph.Net.Tests -c Release --no-build
+
+      - name: Pack
+        shell: bash
+        run: |
+          for p in OpenSceneGraph.Net OpenSceneGraph.Net.Rendering.OpenGL OpenSceneGraph.Net.Native OpenSceneGraph.Net.Avalonia OpenSceneGraph.Net.Blazor OpenSceneGraph.Net.Cli OpenSceneGraph.Net.Templates; do
+            dotnet pack "src/$p" -c Release --no-build -o "$PWD/artifacts/nuget" ${{ steps.version.outputs.args }}
+          done
+          ls -la artifacts/nuget
+
+      - name: Verify templates and CLI against the packed packages
+        shell: bash
+        run: |
+          feed="$PWD/artifacts/nuget"
+          version=$(ls "$feed" | sed -n 's/^OpenSceneGraph\.Net\.Templates\.\(.*\)\.nupkg$/\1/p')
+          work="$RUNNER_TEMP/verify"; mkdir -p "$work"; cd "$work"
+          printf '<configuration><packageSources><clear/><add key="local" value="%s"/><add key="nuget.org" value="https://api.nuget.org/v3/index.json"/></packageSources><packageSourceMapping><packageSource key="local"><package pattern="OpenSceneGraph.Net*"/></packageSource><packageSource key="nuget.org"><package pattern="*"/></packageSource></packageSourceMapping></configuration>' "$feed" > nuget.config
+          dotnet new install "$feed/OpenSceneGraph.Net.Templates.$version.nupkg"
+          for t in console avalonia blazor; do
+            dotnet new "osgnet-$t" -o "App_$t"
+            # on a release tag the templates must already name the released version, so only CI builds are rewritten
+            if [[ "$GITHUB_REF" != refs/tags/osgnet-v* ]]; then sed -i "s/Include=\"OpenSceneGraph\.Net\(.*\)\" Version=\"[^\"]*\"/Include=\"OpenSceneGraph.Net\1\" Version=\"$version\"/" "App_$t/App_$t.csproj"; fi
+            dotnet build "App_$t" -c Release -v q
+          done
+          dotnet tool install OpenSceneGraph.Net.Cli --tool-path tool --version "$version"
+          ./tool/osgnet info
+          ./tool/osgnet geo -6.2088 106.8456
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openscenegraph-net-packages
+          path: OpenSceneGraph.Net/artifacts/nuget/*
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/osgnet-v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: openscenegraph-net-packages
+          path: packages
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Push to NuGet
+        working-directory: packages
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: dotnet nuget push "*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate

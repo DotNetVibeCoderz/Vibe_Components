@@ -1,0 +1,9 @@
+<Project>
+  <!-- Copies the OpenSceneGraph plugin folder next to the application (NuGet only flattens files directly under runtimes/<rid>/native). -->
+  <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+    <None Include="$(MSBuildThisFileDirectory)..\runtimes\win-x64\native\osgPlugins-3.6.5\*.dll"
+          Link="osgPlugins-3.6.5\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest"
+          Visible="false" />
+  </ItemGroup>
+</Project>

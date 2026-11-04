@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>OpenSceneGraph.Net.Native</PackageId>
+    <Description>Native OpenSceneGraph 3.6.5 runtime for OpenSceneGraph.Net: reads/writes every OSG format (.osg/.osgt/.osgb/.ive/.3ds/.flt/.dxf/.ac/.lwo/.x/.shp...), runs osgViewer windows and offscreen rendering, and converts between OSG and managed scene graphs. Created by Gravicode Studios, led by Kang Fadhil.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\OpenSceneGraph.Net\OpenSceneGraph.Net.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- native runtime: flat DLLs next to the app, OSG plugins in their versioned folder -->
+    <None Include="runtimes\win-x64\native\*.dll" Pack="true" PackagePath="runtimes\win-x64\native\" CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
+    <None Include="runtimes\win-x64\native\osgPlugins-3.6.5\*.dll" Pack="true" PackagePath="runtimes\win-x64\native\osgPlugins-3.6.5\" CopyToOutputDirectory="PreserveNewest" Link="osgPlugins-3.6.5\%(Filename)%(Extension)" />
+    <None Include="buildTransitive\OpenSceneGraph.Net.Native.targets" Pack="true" PackagePath="buildTransitive\" />
+    <None Include="OpenSceneGraph-LICENSE.txt" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>osgnet</ToolCommandName>
+    <PackageId>OpenSceneGraph.Net.Cli</PackageId>
+    <Description>osgnet — command line tool for OpenSceneGraph.Net: inspect, convert, optimize, view and render 3D scenes (all OpenSceneGraph formats), generate terrain from DEMs, export gallery samples and monitor DIS traffic. Created by Gravicode Studios, led by Kang Fadhil.</Description>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\OpenSceneGraph.Net\OpenSceneGraph.Net.csproj" />
+    <ProjectReference Include="..\OpenSceneGraph.Net.Native\OpenSceneGraph.Net.Native.csproj" />
+    <ProjectReference Include="..\OpenSceneGraph.Net.Gallery.Core\OpenSceneGraph.Net.Gallery.Core.csproj" />
+    <PackageReference Include="Spectre.Console" Version="0.50.0" />
+  </ItemGroup>
+</Project>

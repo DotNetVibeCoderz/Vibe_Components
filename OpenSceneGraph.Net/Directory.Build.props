@@ -1,0 +1,30 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <Authors>Gravicode Studios (Kang Fadhil)</Authors>
+    <Company>Gravicode Studios</Company>
+    <Copyright>Copyright (c) 2026 Gravicode Studios</Copyright>
+    <Product>OpenSceneGraph.Net</Product>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/DotNetVibeCoderz/Vibe_Components/tree/main/OpenSceneGraph.Net</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/DotNetVibeCoderz/Vibe_Components</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+        <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
+    <PackageTags>openscenegraph;osg;3d;scenegraph;opengl;webgl;blazor;avalonia;simulation;gis</PackageTags>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)artifacts/nuget</PackageOutputPath>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)assets/icon.png" Pack="true" PackagePath="\" Condition="Exists('$(MSBuildThisFileDirectory)assets/icon.png')" />
+    <None Include="$(MSBuildThisFileDirectory)assets/PACKAGE.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

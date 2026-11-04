@@ -1,0 +1,23 @@
+@inherits LocalizedComponent
+
+<a class="card" href="@($"sample/{Sample.Id}")" style="--accent:@Sample.Accent">
+    <div class="card-thumb">
+        <img src="@($"thumbs/{Sample.Id}.jpg")" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'" />
+        <span class="card-domain"><Glyph Category="Sample.Category" /> @T(SampleCatalog.CategoryName(Sample.Category))</span>
+    </div>
+    <div class="card-body">
+        <h3 class="card-title">@T(Sample.Title)</h3>
+        <p class="card-desc">@T(Sample.Description)</p>
+        <ul class="card-tags">
+            @foreach (var tag in Sample.Tags.Take(4))
+            {
+                <li>@tag</li>
+            }
+        </ul>
+    </div>
+    <span class="card-run">@T("card.open") <span aria-hidden="true">→</span></span>
+</a>
+
+@code {
+    [Parameter, EditorRequired] public GallerySample Sample { get; set; } = default!;
+}
