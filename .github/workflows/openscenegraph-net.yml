@@ -159,7 +159,7 @@ jobs:
       - name: Verify templates and CLI against the packed packages
         shell: bash
         run: |
-          feed="$PWD/artifacts/nuget"
+          feed="$(cygpath -m "$PWD/artifacts/nuget")"
           version=$(ls "$feed" | sed -n 's/^OpenSceneGraph\.Net\.Templates\.\(.*\)\.nupkg$/\1/p')
           work="$RUNNER_TEMP/verify"; mkdir -p "$work"; cd "$work"
           printf '<configuration><packageSources><clear/><add key="local" value="%s"/><add key="nuget.org" value="https://api.nuget.org/v3/index.json"/></packageSources><packageSourceMapping><packageSource key="local"><package pattern="OpenSceneGraph.Net*"/></packageSource><packageSource key="nuget.org"><package pattern="*"/></packageSource></packageSourceMapping></configuration>' "$feed" > nuget.config
