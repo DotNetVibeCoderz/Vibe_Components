@@ -1,0 +1,42 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Scene seed", "Seed citra")</label><input type="range" min="1" max="40" @bind="_seed" @bind:event="oninput" @bind:after="Run" /><output>@_seed</output></div>
+    <div class="control"><label>@T("Stress patches", "Titik cekaman")</label><input type="range" min="0" max="8" @bind="_patches" @bind:event="oninput" @bind:after="Run" /><output>@_patches</output></div>
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Mean NDVI", "Rata-rata NDVI")" Value="@F(_r.Stats.Stats.Mean, "0.000")" Note="@($"σ {F(_r.Stats.Stats.StdDev, "0.000")}")" Class="good" />
+    <KpiCard Label="@T("Field area", "Luas lahan")" Value="@F(DemoFarm.Field.AreaHectares, "0.00")" Unit="ha" Note="@($"{_r.Stats.PixelCount:N0} px @ 5 m")" />
+    <KpiCard Label="@T("Healthy canopy", "Kanopi sehat")" Value="@F(HealthyShare, "0")" Unit="%" Note="NDVI ≥ 0.55" />
+    <KpiCard Label="Kernel" Value="@_r.Backend.ToString()" Note="@($"{_r.MegapixelsPerSecond:N0} MP/s")" />
+</div>
+
+<div class="grid three" style="margin-top:16px">
+    <div class="panel"><h2>@T("True colour", "Warna asli")</h2><img src="@PngEncoder.ToDataUri(_r.TruePng)" alt="RGB composite" style="width:100%;image-rendering:pixelated" /></div>
+    <div class="panel"><h2>NDVI</h2><img src="@PngEncoder.ToDataUri(_r.NdviPng)" alt="NDVI" style="width:100%;image-rendering:pixelated" /><ColorRampLegend Map="ColorMap.Ndvi" /></div>
+    <div class="panel">
+        <h2>@T("Management zones", "Zona pengelolaan")</h2>
+        <img src="@PngEncoder.ToDataUri(_r.ZonesPng)" alt="management zones" style="width:100%;image-rendering:pixelated" />
+        <table class="data" style="margin-top:10px">
+            <tr><th>@T("Zone", "Zona")</th><th>NDVI</th><th>@T("Action", "Tindakan")</th></tr>
+            <tr><td><span class="tag warn">1 · @T("low", "rendah")</span></td><td class="num">@F(_r.ZoneMeans[0], "0.00")</td><td>@T("Scout first, +20% N", "Pantau dulu, N +20%")</td></tr>
+            <tr><td><span class="tag S2">2 · @T("medium", "sedang")</span></td><td class="num">@F(_r.ZoneMeans[1], "0.00")</td><td>@T("Standard rate", "Dosis standar")</td></tr>
+            <tr><td><span class="tag good">3 · @T("high", "tinggi")</span></td><td class="num">@F(_r.ZoneMeans[2], "0.00")</td><td>@T("−15% N", "N −15%")</td></tr>
+        </table>
+    </div>
+</div>
+
+<div class="panel" style="margin-top:16px">
+    <h2>@T("Canopy health classes", "Kelas kesehatan kanopi") <small>% @T("of field pixels", "dari piksel lahan")</small></h2>
+    <AgriBarChart Bars="@HealthBars" Color="#4f9f3a" Options="@(new ChartOptions { Width = 640, Height = 150, YMax = 100 })" />
+</div>
+
+@code {
+    private int _seed = 7, _patches = 3;
+    private NdviDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = NdviDemo.Run(_seed, _patches);
+    private double HealthyShare => _r.Stats.HealthShare.Where(k => k.Key >= Agritech.RemoteSensing.VegetationHealth.Healthy).Sum(k => k.Value);
+    private List<(string, double)> HealthBars => _r.Stats.HealthShare.OrderBy(k => k.Key).Select(k => (k.Key.ToString(), k.Value)).ToList();
+}

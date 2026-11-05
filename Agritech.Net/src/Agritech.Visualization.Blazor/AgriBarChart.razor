@@ -1,0 +1,12 @@
+<figure class="agt-chart">
+    @((MarkupString)SvgCharts.Bars(Bars, Options, Color, Format))
+    @if (Caption is not null) { <figcaption>@Caption</figcaption> }
+</figure>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<(string Label, double Value)> Bars { get; set; } = [];
+    [Parameter] public ChartOptions? Options { get; set; }
+    [Parameter] public string? Color { get; set; }
+    [Parameter] public string Format { get; set; } = "0.#";
+    [Parameter] public string? Caption { get; set; }
+}

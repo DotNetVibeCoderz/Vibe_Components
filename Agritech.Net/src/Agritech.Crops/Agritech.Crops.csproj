@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Crop catalog, lifecycle (GDD), yield estimation and crop recommendation.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agritech.Core/Agritech.Core.csproj" />
+  </ItemGroup>
+</Project>

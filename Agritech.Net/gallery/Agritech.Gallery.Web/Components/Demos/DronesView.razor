@@ -1,0 +1,44 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Altitude AGL m", "Ketinggian m")</label><input type="range" min="30" max="120" step="5" @bind="_alt" @bind:event="oninput" @bind:after="Run" /><output>@_alt</output></div>
+    <div class="control"><label>@T("Front overlap", "Overlap depan")</label><input type="range" min="0.6" max="0.9" step="0.05" @bind="_front" @bind:event="oninput" @bind:after="Run" /><output>@F(_front * 100, "0")%</output></div>
+    <div class="control"><label>@T("Side overlap", "Overlap samping")</label><input type="range" min="0.5" max="0.85" step="0.05" @bind="_side" @bind:event="oninput" @bind:after="Run" /><output>@F(_side * 100, "0")%</output></div>
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="GSD" Value="@F(_r.Plan.GsdCm, "0.00")" Unit="cm/px" Note="DJI Mavic 3M" />
+    <KpiCard Label="@T("Flight time", "Waktu terbang")" Value="@F(_r.Plan.FlightTimeMin)" Unit="min" Note="@($"{_r.Plan.BatteriesRequired} {T("battery", "baterai")}")" />
+    <KpiCard Label="@T("Photos", "Foto")" Value="@_r.Plan.EstimatedPhotos.ToString()" Note="@($"{T("every", "setiap")} {F(_r.Plan.PhotoIntervalM)} m")" />
+    <KpiCard Label="@T("Line spacing", "Jarak lintasan")" Value="@F(_r.Plan.LineSpacingM)" Unit="m" Note="@($"{T("footprint", "cakupan")} {F(_r.FootprintW)}×{F(_r.FootprintH)} m")" />
+    <KpiCard Label="@T("Weed patches", "Rumpun gulma")" Value="@_r.Weeds.Weeds.Count.ToString()" Note="@($"{F(_r.Weeds.WeedCoverPct)}% {T("of frame", "dari bingkai")}")" Class="alert" />
+</div>
+
+<div class="grid two" style="margin-top:16px">
+    <div class="panel">
+        <h2>@T("Survey flight lines", "Jalur terbang survei") <small>@T("heading", "arah") @F(_r.Plan.HeadingDeg, "0")°</small></h2>
+        <SvgMarkup Svg="@_r.MissionSvg" />
+        <p class="note">@T("Lines follow the longest field edge to minimise turns. Green dot = first waypoint, red = last.", "Lintasan mengikuti sisi lahan terpanjang untuk meminimalkan belokan. Titik hijau = titik awal, merah = akhir.")</p>
+    </div>
+    <div class="panel">
+        <h2>@T("Weeds between rows", "Gulma di antara barisan") <small>ExG + Otsu</small></h2>
+        <div class="grid two">
+            <img src="@PngEncoder.ToDataUri(_r.PhotoPng)" alt="@T("drone photo", "foto drone")" style="width:100%" />
+            <img src="@PngEncoder.ToDataUri(_r.OverlayPng)" alt="@T("weed overlay", "lapisan gulma")" style="width:100%" />
+        </div>
+        <p class="note">@T($"{_r.Weeds.CropRowCentersX.Count} crop rows found; vegetation outside the row bands is marked red as weed.", $"{_r.Weeds.CropRowCentersX.Count} barisan tanaman ditemukan; vegetasi di luar pita barisan ditandai merah sebagai gulma.")</p>
+    </div>
+</div>
+
+<details class="panel" style="margin-top:16px">
+    <summary style="cursor:pointer;font-weight:600">@T("QGroundControl .plan export", "Ekspor .plan QGroundControl")</summary>
+    <pre style="max-height:280px;overflow:auto;font-size:12px">@_r.QgcPlanJson</pre>
+</details>
+
+@code {
+    private int _alt = 80;
+    private double _front = 0.8, _side = 0.7;
+    private DroneDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = DroneDemo.Run(_alt, _front, _side);
+}

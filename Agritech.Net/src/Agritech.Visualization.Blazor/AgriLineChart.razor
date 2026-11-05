@@ -1,0 +1,11 @@
+@* Responsive SVG line/area chart. *@
+<figure class="agt-chart" aria-label="@Options?.Title">
+    @((MarkupString)SvgCharts.Line(Series, Options))
+    @if (Caption is not null) { <figcaption>@Caption</figcaption> }
+</figure>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ChartSeries> Series { get; set; } = [];
+    [Parameter] public ChartOptions? Options { get; set; }
+    [Parameter] public string? Caption { get; set; }
+}

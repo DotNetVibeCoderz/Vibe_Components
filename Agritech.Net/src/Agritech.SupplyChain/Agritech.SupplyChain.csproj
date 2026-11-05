@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Agri supply chain: lot traceability, cold chain shelf life and inventory.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agritech.Core/Agritech.Core.csproj" />
+  </ItemGroup>
+</Project>

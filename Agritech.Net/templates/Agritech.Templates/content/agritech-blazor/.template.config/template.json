@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [ "Agritech", "Web", "Blazor" ],
+  "identity": "Agritech.Templates.Blazor",
+  "name": "Agritech.Net Farm Dashboard (Blazor)",
+  "description": "Blazor Server farm dashboard with an NDVI map, soil water chart and KPIs using Agritech.Visualization.Blazor components.",
+  "shortName": "agritech-blazor",
+  "sourceName": "AgritechDashboard",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" }
+}

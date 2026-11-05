@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Weather observations, FAO-56 ET0, forecast providers (Open-Meteo) and climate projections.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agritech.Core/Agritech.Core.csproj" />
+  </ItemGroup>
+</Project>

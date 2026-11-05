@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Native (Rust) high-performance kernels for Agritech.Net — vegetation indices, raster statistics and FAO-56 ET0 — with an automatic managed SIMD fallback.</Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Prebuilt native binaries produced by build/build-native.ps1 (cargo build -release). -->
+    <None Include="runtimes/**/native/*" Pack="true" PackagePath="runtimes/" CopyToOutputDirectory="PreserveNewest" Link="runtimes/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

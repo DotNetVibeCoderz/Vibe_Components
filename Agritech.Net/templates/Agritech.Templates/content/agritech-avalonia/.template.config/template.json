@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [ "Agritech", "Desktop", "Avalonia" ],
+  "identity": "Agritech.Templates.Avalonia",
+  "name": "Agritech.Net Field Viewer (Avalonia)",
+  "description": "Cross-platform Avalonia desktop app that renders an NDVI field map and zonal statistics.",
+  "shortName": "agritech-avalonia",
+  "sourceName": "AgritechFieldViewer",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" }
+}

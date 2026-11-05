@@ -1,0 +1,147 @@
+name: Agritech.Net
+
+# CI for every change under Agritech.Net/, and NuGet publishing when a tag like agritech-net-v1.0.0 is pushed
+# (or when started manually with "publish" ticked). Uses the NUGET_API_KEY repository secret.
+# The Rust kernels are built for every runtime and packed into Agritech.Native.
+
+on:
+  push:
+    branches: [main]
+    paths: ["Agritech.Net/**", ".github/workflows/agritech-net.yml"]
+    tags: ["agritech-net-v*"]
+  pull_request:
+    paths: ["Agritech.Net/**", ".github/workflows/agritech-net.yml"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish packages to NuGet"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agritech-net-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  kernels:
+    name: Rust kernels (${{ matrix.rid }})
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: windows-latest,   target: x86_64-pc-windows-msvc,    rid: win-x64,     file: agritech_native.dll }
+          - { os: ubuntu-22.04,     target: x86_64-unknown-linux-gnu,  rid: linux-x64,   file: libagritech_native.so }
+          - { os: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu, rid: linux-arm64, file: libagritech_native.so }
+          - { os: macos-latest,     target: aarch64-apple-darwin,      rid: osx-arm64,   file: libagritech_native.dylib }
+          - { os: macos-latest,     target: x86_64-apple-darwin,       rid: osx-x64,     file: libagritech_native.dylib }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: Agritech.Net/native/agritech-native
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        shell: bash
+        run: |
+          rustup update stable --no-self-update
+          rustup target add ${{ matrix.target }}
+
+      - name: Test
+        if: matrix.target != 'x86_64-apple-darwin'
+        run: cargo test --release
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agritech-kernels-${{ matrix.rid }}
+          path: Agritech.Net/native/agritech-native/target/${{ matrix.target }}/release/${{ matrix.file }}
+
+  build:
+    needs: kernels
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: Agritech.Net
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: agritech-kernels-*
+          path: kernels
+
+      - name: Place Rust kernels
+        shell: pwsh
+        run: |
+          Get-ChildItem ../kernels -Directory | ForEach-Object {
+            $rid = $_.Name.Substring('agritech-kernels-'.Length)
+            $dst = "src/Agritech.Native/runtimes/$rid/native"
+            New-Item -ItemType Directory -Force $dst | Out-Null
+            Copy-Item "$($_.FullName)/*" $dst -Force
+            Write-Host "$rid -> $(Get-ChildItem $dst -Name)"
+          }
+
+      - name: Version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/agritech-net-v* ]]; then
+            echo "args=-p:Version=${GITHUB_REF#refs/tags/agritech-net-v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "args=-p:VersionSuffix=ci.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore
+        run: dotnet restore Agritech.Net.slnx
+
+      - name: Build
+        run: dotnet build Agritech.Net.slnx -c Release --no-restore ${{ steps.version.outputs.args }}
+
+      - name: Test
+        run: dotnet test tests/Agritech.Tests/Agritech.Tests.csproj -c Release --no-build
+
+      - name: Pack
+        shell: bash
+        run: |
+          for p in src/*/ tools/Agritech.Cli templates/Agritech.Templates; do
+            dotnet pack "$p" -c Release --no-build -o artifacts ${{ steps.version.outputs.args }}
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agritech-net-packages
+          path: Agritech.Net/artifacts/*
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/agritech-net-v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: agritech-net-packages
+          path: packages
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Push to NuGet
+        working-directory: packages
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: dotnet nuget push "*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate

@@ -1,0 +1,55 @@
+@using Agritech.Core.Geo
+@using Agritech.Crops
+@using Agritech.RemoteSensing
+@using Agritech.Simulation
+@using Agritech.Soil
+@using Agritech.Visualization
+@using Agritech.Visualization.Blazor
+@using Agritech.Weather
+
+<main>
+    <h1>AgritechDashboard</h1>
+    <p class="sub">Block A · @_field.AreaHectares.ToString("0.00") ha · @Agritech.Core.AgritechInfo.CreditEn</p>
+
+    <div class="kpis">
+        <KpiCard Label="Mean NDVI" Value="@_ndviStats.Mean.ToString("0.00")" />
+        <KpiCard Label="Simulated yield" Value="@_sim.YieldTonHa.ToString("0.00")" Unit="t/ha" />
+        <KpiCard Label="Irrigation" Value="@_sim.TotalIrrigationMm.ToString("0")" Unit="mm" />
+    </div>
+
+    <div class="cols">
+        <section>
+            <h2>NDVI</h2>
+            <RasterImage Values="_ndvi.Data" Width="_ndvi.Width" Height="_ndvi.Height" Map="ColorMap.Ndvi" Alt="NDVI map" />
+            <ColorRampLegend Map="ColorMap.Ndvi" />
+            <button @onclick="() => { _seed++; Compute(); }">New scene</button>
+        </section>
+        <section>
+            <h2>Leaf area index</h2>
+            <AgriLineChart Series="@([new ChartSeries("LAI", _sim.Days.Select(d => d.Lai).ToList(), "#2e6b3b", Area: true)])" />
+            <h2>Soil water (mm)</h2>
+            <AgriLineChart Series="@([new ChartSeries("Soil water", _sim.Days.Select(d => d.SoilWaterMm).ToList(), "#2f7da0")])" />
+        </section>
+    </div>
+</main>
+
+@code {
+    private readonly GeoPolygon _field = GeoPolygon.Rectangle(new GeoCoordinate(-6.3045, 107.3012), 320, 220);
+    private int _seed = 7;
+    private RasterBand _ndvi = null!;
+    private Agritech.Native.RasterStats _ndviStats;
+    private SimulationResult _sim = null!;
+
+    protected override void OnInitialized() => Compute();
+
+    private void Compute()
+    {
+        _ndvi = VegetationIndices.Ndvi(SyntheticScene.Create(_field.Bounds, 5, _seed));
+        _ndviStats = _ndvi.Statistics();
+        var crop = CropCatalog.Default.Get("maize");
+        var planting = new DateOnly(2026, 4, 1);
+        var weather = new SyntheticWeatherProvider(_seed).Generate(_field.Centroid, planting, planting.AddDays(150));
+        _sim = new CropSimulator(crop, new SoilSample(), new WeatherStation(-6.3, 20))
+            .Run(new Management { PlantingDate = planting, Irrigation = IrrigationStrategy.AutoAtRaw }, weather);
+    }
+}

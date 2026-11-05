@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Soil texture, soil health score, nutrient tracking and fertilizer calculation.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agritech.Core/Agritech.Core.csproj" />
+  </ItemGroup>
+</Project>

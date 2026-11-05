@@ -1,0 +1,86 @@
+@inherits DemoBase
+@using Agritech.AI.Agent
+
+<div class="grid two">
+    <div class="panel chat">
+        <div class="chat-log">
+            @if (_log.Count == 0)
+            {
+                <p class="note">@T("Ask about fertilizer, irrigation, weather, disease, pests, yield or which crop to grow. Answers are computed from the farm profile on the right.",
+                                   "Tanyakan tentang pupuk, irigasi, cuaca, penyakit, hama, hasil panen, atau tanaman yang cocok. Jawaban dihitung dari profil kebun di sebelah kanan.")</p>
+            }
+            @foreach (var m in _log)
+            {
+                <div class="msg @(m.User ? "user" : "bot")">@m.Text@if (!m.User) {<span class="meta">@m.Meta</span>}</div>
+            }
+            @if (_busy) { <div class="msg bot typing">@T("Checking the farm data", "Memeriksa data kebun")</div> }
+        </div>
+        <div>
+            <div class="suggestions">
+                @foreach (var s in Suggestions) { <button @onclick="() => AskAsync(s)" disabled="@_busy">@s</button> }
+            </div>
+            <form class="chat-form" @onsubmit="() => AskAsync(_input)" @onsubmit:preventDefault>
+                <input type="text" @bind="_input" placeholder="@T("Type a question…", "Ketik pertanyaan…")" aria-label="@T("Question", "Pertanyaan")" />
+                <button class="btn" type="submit" disabled="@(_busy || string.IsNullOrWhiteSpace(_input))">@T("Ask", "Tanya")</button>
+            </form>
+        </div>
+    </div>
+    <div class="panel">
+        <h2>@T("Farm profile", "Profil kebun")</h2>
+        <table class="data">
+            <tr><td>@T("Crop", "Tanaman")</td><td>
+                <select @bind="_crop" @bind:after="Rebuild">
+                    @foreach (var c in new[] { "rice", "maize", "chili", "shallot", "soybean" }) { <option value="@c">@Agritech.Crops.CropCatalog.Default.Get(c).Name</option> }
+                </select></td></tr>
+            <tr><td>@T("Days after planting", "Hari setelah tanam")</td><td><input type="number" style="width:90px" @bind="_dap" @bind:after="Rebuild" /></td></tr>
+            <tr><td>@T("Area", "Luas")</td><td><input type="number" step="0.1" style="width:90px" @bind="_area" @bind:after="Rebuild" /> ha</td></tr>
+            <tr><td>@T("Soil", "Tanah")</td><td>pH @DemoFarm.Soil.Ph · C-org @DemoFarm.Soil.OrganicCarbonPct% · @DemoFarm.Soil.Texture</td></tr>
+            <tr><td>@T("Location", "Lokasi")</td><td>Karawang, @DemoFarm.Center</td></tr>
+            <tr><td>@T("Model", "Model")</td><td class="mono" style="font-size:12px">@_agent.Model.Name</td></tr>
+        </table>
+        <p class="note">@T("Without an API key the agent runs offline with keyword routing. Set AGRITECH_LLM_PROVIDER, AGRITECH_LLM_ENDPOINT, AGRITECH_LLM_API_KEY and AGRITECH_LLM_MODEL to use OpenAI, Azure OpenAI, Hugging Face or Ollama.",
+                           "Tanpa kunci API, agen berjalan luring dengan pemilahan kata kunci. Atur AGRITECH_LLM_PROVIDER, AGRITECH_LLM_ENDPOINT, AGRITECH_LLM_API_KEY dan AGRITECH_LLM_MODEL untuk memakai OpenAI, Azure OpenAI, Hugging Face atau Ollama.")</p>
+    </div>
+</div>
+
+@code {
+    private sealed record Line(bool User, string Text, string Meta = "");
+    private readonly List<Line> _log = [];
+    private string _input = "", _crop = "rice";
+    private int _dap = 3;
+    private double _area = 2;
+    private bool _busy;
+    private FarmAgent _agent = null!;
+
+    private string[] Suggestions => Lang == "id"
+        ? ["Berapa dosis pupuk terbaik minggu ini?", "Apakah sawah perlu diairi hari ini?", "Bagaimana risiko penyakit blas minggu ini?", "Berapa perkiraan hasil panen saya?"]
+        : ["What fertilizer should I apply this week?", "Do I need to irrigate today?", "What is the disease risk this week?", "Which crop suits this site best?"];
+
+    protected override void OnInitialized() => Rebuild();
+
+    private void Rebuild() => _agent = new FarmAgent(new FarmContext
+    {
+        FarmName = "Kebun Sukamaju", CropId = _crop, AreaHa = _area, Soil = DemoFarm.Soil, Location = DemoFarm.Center, ElevationM = 18,
+        PlantingDate = DateOnly.FromDateTime(DateTime.Today).AddDays(-_dap),
+    });
+
+    private async Task AskAsync(string q)
+    {
+        if (string.IsNullOrWhiteSpace(q) || _busy) return;
+        _log.Add(new Line(true, q));
+        _input = "";
+        _busy = true;
+        StateHasChanged();
+        try
+        {
+            var a = await _agent.AskAsync(q);
+            _log.Add(new Line(false, a.Text, $"{a.Model} · {T("tools", "alat")}: {string.Join(", ", a.ToolsUsed.Distinct())}"));
+        }
+        catch (Exception ex)
+        {
+            _log.Add(new Line(false, T($"The model request failed: {ex.Message}. Check the LLM settings or remove them to use offline mode.",
+                                       $"Permintaan ke model gagal: {ex.Message}. Periksa pengaturan LLM atau hapus untuk memakai mode luring.")));
+        }
+        _busy = false;
+    }
+}

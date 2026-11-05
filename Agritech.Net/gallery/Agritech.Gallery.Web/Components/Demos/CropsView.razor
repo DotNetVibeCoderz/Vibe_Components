@@ -1,0 +1,35 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Mean temp °C", "Suhu rata-rata °C")</label><input type="range" min="12" max="32" step="0.5" @bind="_t" @bind:event="oninput" @bind:after="Run" /><output>@F(_t)</output></div>
+    <div class="control"><label>@T("Season rain mm", "Hujan musim mm")</label><input type="range" min="200" max="3500" step="50" @bind="_rain" @bind:event="oninput" @bind:after="Run" /><output>@_rain</output></div>
+    <div class="control"><label>pH</label><input type="range" min="4" max="8.5" step="0.1" @bind="_ph" @bind:event="oninput" @bind:after="Run" /><output>@F(_ph)</output></div>
+    <div class="control"><label>@T("Elevation m", "Ketinggian m")</label><input type="range" min="0" max="2500" step="50" @bind="_elev" @bind:event="oninput" @bind:after="Run" /><output>@_elev</output></div>
+    <div class="control"><label>@T("Irrigation available", "Irigasi tersedia")</label><input type="checkbox" @bind="_irr" @bind:after="Run" /></div>
+</div>
+<div class="panel">
+    <table class="data">
+        <tr><th>@T("Rank", "Peringkat")</th><th>@T("Crop", "Tanaman")</th><th>@T("Class", "Kelas")</th><th>@T("Score", "Skor")</th><th>@T("Limiting factors", "Faktor pembatas")</th></tr>
+        @{ var rank = 1; }
+        @foreach (var s in _r)
+        {
+            <tr>
+                <td class="num">@(rank++)</td>
+                <td><b>@(Lang == "id" ? s.Crop.NameId : s.Crop.Name)</b><br /><i style="font-size:12px;color:var(--ink-soft)">@s.Crop.ScientificName</i></td>
+                <td><span class="tag @s.Class">@s.Class</span></td>
+                <td class="num">@F(s.Score * 100, "0")%</td>
+                <td style="font-size:13px">@(s.LimitingFactors.Count == 0 ? "—" : string.Join("; ", s.LimitingFactors))</td>
+            </tr>
+        }
+    </table>
+    <p class="note">@T("S1 highly · S2 moderately · S3 marginally suitable · N not suitable (FAO land-suitability framework).", "S1 sangat sesuai · S2 cukup sesuai · S3 sesuai marginal · N tidak sesuai (kerangka kesesuaian lahan FAO).")</p>
+</div>
+
+@code {
+    private double _t = 26.5, _ph = 5.6;
+    private int _rain = 1400, _elev = 300;
+    private bool _irr;
+    private IReadOnlyList<Agritech.Crops.CropSuitability> _r = [];
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = CropDemo.Run(_t, _rain, _ph, _elev, _irr);
+}

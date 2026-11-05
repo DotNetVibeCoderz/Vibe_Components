@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>agritech</ToolCommandName>
+    <IsPackable>true</IsPackable>
+    <PackageId>Agritech.Cli</PackageId>
+    <Description>Agritech.Net command-line tool: crop suitability, soil &amp; fertilizer, ET0, weather, NDVI, drone missions, crop simulation, LoRaWAN decoding and the AI farm agent. Made by Gravicode Studios, led by Kang Fadhil.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
+    <PackageTags>agriculture;agritech;cli;dotnet-tool;smart-farming</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(AgritechRoot)assets/icon.png" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="$(AgritechRoot)PACKAGE.md" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Agritech.DigitalTwin/Agritech.DigitalTwin.csproj" />
+    <ProjectReference Include="../../src/Agritech.Simulation/Agritech.Simulation.csproj" />
+    <ProjectReference Include="../../src/Agritech.RemoteSensing/Agritech.RemoteSensing.csproj" />
+    <ProjectReference Include="../../src/Agritech.Drones/Agritech.Drones.csproj" />
+    <ProjectReference Include="../../src/Agritech.Livestock/Agritech.Livestock.csproj" />
+    <ProjectReference Include="../../src/Agritech.Visualization/Agritech.Visualization.csproj" />
+  </ItemGroup>
+</Project>

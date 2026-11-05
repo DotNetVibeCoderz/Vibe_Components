@@ -1,0 +1,39 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Water °C", "Suhu air °C")</label><input type="range" min="22" max="34" step="0.5" @bind="_t" @bind:event="oninput" @bind:after="Run" /><output>@F(_t)</output></div>
+    <div class="control"><label>DO mg/L</label><input type="range" min="1" max="9" step="0.1" @bind="_do" @bind:event="oninput" @bind:after="Run" /><output>@F(_do)</output></div>
+    <div class="control"><label>pH</label><input type="range" min="6" max="9.5" step="0.1" @bind="_ph" @bind:event="oninput" @bind:after="Run" /><output>@F(_ph)</output></div>
+    <div class="control"><label>TAN mg/L</label><input type="range" min="0" max="3" step="0.1" @bind="_tan" @bind:event="oninput" @bind:after="Run" /><output>@F(_tan)</output></div>
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Water status", "Status air")" Value="@_r.Water.Status" Class="@(_r.Water.Status == "Good" ? "good" : "alert")" />
+    <KpiCard Label="@T("Toxic NH₃", "NH₃ beracun")" Value="@F(_r.Water.UnionizedAmmoniaMgL, "0.000")" Unit="mg/L" Note="@T("limit 0.05 for tilapia", "batas 0,05 untuk nila")" />
+    <KpiCard Label="@T("DO saturation", "Saturasi DO")" Value="@F(_r.Water.DoPercentSaturation, "0")" Unit="%" />
+    <KpiCard Label="@T("Feed today", "Pakan hari ini")" Value="@F(_r.Feed.DailyFeedKg)" Unit="kg" Note="@($"{_r.Feed.MealsPerDay}× · {F(_r.Feed.PelletSizeMm)} mm pellet")" />
+    <KpiCard Label="@T("Days to 500 g", "Hari ke 500 g")" Value="@_r.Growth[^1].Day.ToString()" Note="TGC 1.8" />
+</div>
+
+<div class="grid two" style="margin-top:16px">
+    <div class="panel">
+        <h2>@T("Pond K-03 · Nile tilapia", "Kolam K-03 · Nila")</h2>
+        <p style="margin:0 0 8px">@_r.Feed.Note</p>
+        @if (_r.Water.Issues.Count == 0) { <p class="note">@T("All parameters within range.", "Semua parameter dalam batas.")</p> }
+        @foreach (var i in _r.Water.Issues) { <div class="decision ScoutDisease"><span>@i</span></div> }
+        <table class="data" style="margin-top:10px">
+            <tr><td>@T("Area × depth", "Luas × kedalaman")</td><td class="num">@F(_r.Pond.AreaM2, "0") m² × @F(_r.Pond.DepthM) m</td></tr>
+            <tr><td>@T("Stock", "Tebar")</td><td class="num">@_r.Pond.StockedCount.ToString("N0") × @F(_r.Pond.AvgWeightG, "0") g</td></tr>
+            <tr><td>@T("Biomass", "Biomassa")</td><td class="num">@F(_r.Pond.Biomass, "0") kg</td></tr>
+            <tr><td>@T("Max stocking for 500 g", "Tebar maksimum untuk 500 g")</td><td class="num">@_r.RecommendedStocking.ToString("N0")</td></tr>
+        </table>
+    </div>
+    <div class="panel"><h2>@T("Growth and feed to harvest", "Pertumbuhan dan pakan hingga panen")</h2><SvgMarkup Svg="@_r.GrowthSvg" /></div>
+</div>
+
+@code {
+    private double _t = 29, _do = 4.2, _ph = 8.1, _tan = 1.1;
+    private AquaDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = AquaDemo.Run(_t, _do, _ph, _tan);
+}

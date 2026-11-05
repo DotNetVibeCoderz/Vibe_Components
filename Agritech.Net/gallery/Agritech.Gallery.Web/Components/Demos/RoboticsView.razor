@@ -1,0 +1,39 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Implement width m", "Lebar implemen m")</label><input type="range" min="4" max="24" step="1" @bind="_w" @bind:event="oninput" @bind:after="Run" /><output>@_w</output></div>
+    <div class="control"><label>@T("Look-ahead m", "Jarak pandang m")</label><input type="range" min="2" max="10" step="0.5" @bind="_la" @bind:event="oninput" @bind:after="Run" /><output>@F(_la)</output></div>
+    <div class="control"><label>@T("Speed m/s", "Kecepatan m/s")</label><input type="range" min="1" max="4" step="0.25" @bind="_v" @bind:event="oninput" @bind:after="Run" /><output>@F(_v, "0.00")</output></div>
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Passes", "Lintasan")" Value="@_r.Passes.ToString()" />
+    <KpiCard Label="@T("Path length", "Panjang jalur")" Value="@F(_r.PathLengthM / 1000, "0.00")" Unit="km" />
+    <KpiCard Label="@T("Working time", "Waktu kerja")" Value="@F(_r.DurationMin, "0")" Unit="min" />
+    <KpiCard Label="@T("RMS cross-track error", "Galat lintang RMS")" Value="@F(_r.RmsCrossTrackM * 100, "0")" Unit="cm" Class="@(_r.RmsCrossTrackM < 0.5 ? "good" : null)" Note="@T("includes headland turns", "termasuk belokan headland")" />
+</div>
+
+<div class="grid two" style="margin-top:16px">
+    <div class="panel">
+        <h2>@T("Planned path and driven trajectory", "Jalur rencana dan lintasan aktual")</h2>
+        <SvgMarkup Svg="@_r.Svg" />
+        <p class="note">@T("Blue: planned coverage with 8 m headland. Dashed ochre: what the pure-pursuit controller actually drove on the bicycle model.", "Biru: jalur cakupan rencana dengan headland 8 m. Oker putus-putus: lintasan aktual pengendali pure-pursuit pada model sepeda.")</p>
+    </div>
+    <div class="panel">
+        <h2>@T("Harvest robot route", "Rute robot panen") <small>@T("greenhouse, 40 fruits", "rumah kaca, 40 buah")</small></h2>
+        <div class="grid kpis">
+            <KpiCard Label="@T("Ripe to pick", "Matang dipetik")" Value="@_r.Harvest.Order.Count.ToString()" Note="@($"{_r.Harvest.Skipped} {T("left to ripen", "dibiarkan matang")}")" />
+            <KpiCard Label="@T("Travel", "Perjalanan")" Value="@F(_r.Harvest.TravelDistanceM, "0")" Unit="m" />
+            <KpiCard Label="@T("Cycle time", "Waktu siklus")" Value="@F(_r.Harvest.EstimatedMinutes)" Unit="min" />
+        </div>
+        <p class="note">@T("Order: nearest-neighbour seed improved by 2-opt; ripeness threshold 0.75 from the red index.", "Urutan: tetangga terdekat lalu diperbaiki dengan 2-opt; ambang kematangan 0,75 dari indeks merah.")</p>
+    </div>
+</div>
+
+@code {
+    private int _w = 12;
+    private double _la = 4, _v = 2.5;
+    private RoboticsDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = RoboticsDemo.Run(_w, _la, _v);
+}

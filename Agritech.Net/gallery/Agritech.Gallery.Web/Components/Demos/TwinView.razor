@@ -1,0 +1,65 @@
+@inherits DemoBase
+@implements IDisposable
+@using Agritech.DigitalTwin
+
+<div class="controls">
+    <button class="btn small" @onclick="Toggle">@(_timer is null ? T("▶ Play hours", "▶ Putar jam") : T("❚❚ Pause", "❚❚ Jeda"))</button>
+    <button class="btn ghost small" @onclick="Step">@T("+1 hour", "+1 jam")</button>
+    <span class="mono" style="font-size:13px">@_session.Now.ToString("ddd dd MMM yyyy · HH:mm") WIB</span>
+    <span class="mono" style="font-size:12px;color:var(--ink-soft)">@_snap.ReadingsProcessed.ToString("N0") @T("readings processed", "data sensor diproses")</span>
+</div>
+
+<div class="grid two">
+    <div class="panel">
+        <h2>@_snap.Farm <small>@T("tile height = crop progress, colour = NDVI", "tinggi petak = kemajuan tanaman, warna = NDVI")</small></h2>
+        <SvgMarkup Svg="@_session.IsometricSvg()" />
+    </div>
+    <div class="panel">
+        <h2>@T("Decisions", "Keputusan") <small>@_snap.Decisions.Count @T("total", "total")</small></h2>
+        @if (_snap.Decisions.Count == 0) { <p class="note">@T("Nothing needs attention yet. Press play to advance time.", "Belum ada yang perlu ditangani. Tekan putar untuk memajukan waktu.")</p> }
+        <div style="max-height:380px;overflow-y:auto">
+            @foreach (var d in _snap.Decisions.OrderByDescending(d => d.CreatedAt).Take(10))
+            {
+                <div class="decision @d.Type"><b>@d.Title</b><span>@d.Rationale</span></div>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="panel" style="margin-top:16px">
+    <table class="data">
+        <tr><th>@T("Field", "Petak")</th><th>@T("Crop", "Tanaman")</th><th>@T("DAP", "HST")</th><th>@T("Stage", "Fase")</th><th>@T("Soil moisture", "Kelembapan tanah")</th><th>@T("Air", "Udara")</th><th>RH</th><th>NDVI</th><th>@T("Alerts 24 h", "Peringatan 24 j")</th></tr>
+        @foreach (var f in _snap.Fields)
+        {
+            <tr>
+                <td><b>@f.Name</b></td><td>@f.Crop</td><td class="num">@f.Dap</td><td>@f.Stage</td>
+                <td class="num">@(f.SoilMoisture?.ToString("0.0") ?? "—") %</td><td class="num">@(f.AirTemp?.ToString("0.0") ?? "—") °C</td>
+                <td class="num">@(f.Humidity?.ToString("0") ?? "—") %</td><td class="num">@(f.Ndvi?.ToString("0.00") ?? "—")</td>
+                <td><span class="tag @(f.ActiveAlerts > 0 ? "bad" : "good")">@f.ActiveAlerts</span></td>
+            </tr>
+        }
+    </table>
+</div>
+
+<div class="panel" style="margin-top:16px">
+    <h2>@T("Soil moisture, last 72 hours", "Kelembapan tanah, 72 jam terakhir")</h2>
+    <SvgMarkup Svg="@_session.MoistureSvg()" />
+</div>
+
+@code {
+    private readonly TwinSession _session = new();
+    private FarmSnapshot _snap = null!;
+    private Timer? _timer;
+
+    protected override void OnInitialized() => _snap = _session.Twin.Snapshot();
+
+    private void Step() => _snap = _session.Tick();
+
+    private void Toggle()
+    {
+        if (_timer is not null) { _timer.Dispose(); _timer = null; return; }
+        _timer = new Timer(_ => InvokeAsync(() => { _snap = _session.Tick(); StateHasChanged(); }), null, 0, 900);
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

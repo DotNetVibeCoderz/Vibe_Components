@@ -1,0 +1,87 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Agritech.Gallery.Desktop.App"
+             RequestedThemeVariant="Light">
+    <!-- Agritech.Net Gallery "field survey sheet" palette (shared with the Blazor gallery). -->
+    <Application.Resources>
+        <SolidColorBrush x:Key="Paper" Color="#E6ECE4" />
+        <SolidColorBrush x:Key="PaperRaised" Color="#F1F5EF" />
+        <SolidColorBrush x:Key="PaperSunk" Color="#D9E1D6" />
+        <SolidColorBrush x:Key="Ink" Color="#1C2620" />
+        <SolidColorBrush x:Key="InkSoft" Color="#46524A" />
+        <SolidColorBrush x:Key="Rule" Color="#B9C6B6" />
+        <SolidColorBrush x:Key="Chlorophyll" Color="#2E6B3B" />
+        <SolidColorBrush x:Key="ChlorophyllDeep" Color="#1F4D2A" />
+        <SolidColorBrush x:Key="Ochre" Color="#B5762E" />
+        <SolidColorBrush x:Key="Lesion" Color="#A5432F" />
+        <FontFamily x:Key="Display">avares://Agritech.Gallery.Desktop/Assets/Fonts#Big Shoulders Display</FontFamily>
+        <FontFamily x:Key="Body">avares://Agritech.Gallery.Desktop/Assets/Fonts#Public Sans</FontFamily>
+        <FontFamily x:Key="Mono">avares://Agritech.Gallery.Desktop/Assets/Fonts#JetBrains Mono</FontFamily>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+        <Style Selector="Window">
+            <Setter Property="Background" Value="{StaticResource Paper}" />
+            <Setter Property="FontFamily" Value="{StaticResource Body}" />
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+        </Style>
+        <Style Selector="TextBlock.display">
+            <Setter Property="FontFamily" Value="{StaticResource Display}" />
+            <Setter Property="FontWeight" Value="ExtraBold" />
+            <Setter Property="Foreground" Value="{StaticResource ChlorophyllDeep}" />
+        </Style>
+        <Style Selector="TextBlock.mono">
+            <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="LetterSpacing" Value="1.2" />
+            <Setter Property="Foreground" Value="{StaticResource InkSoft}" />
+        </Style>
+        <Style Selector="TextBlock.soft">
+            <Setter Property="Foreground" Value="{StaticResource InkSoft}" />
+        </Style>
+        <Style Selector="Border.panel">
+            <Setter Property="Background" Value="{StaticResource PaperRaised}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Rule}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="16,14" />
+        </Style>
+        <Style Selector="Button.nav">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+        </Style>
+        <Style Selector="Button.nav:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource PaperSunk}" />
+        </Style>
+        <Style Selector="Button.nav.active">
+            <Setter Property="Background" Value="{StaticResource PaperSunk}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="Button.primary">
+            <Setter Property="Background" Value="{StaticResource Ink}" />
+            <Setter Property="Foreground" Value="{StaticResource Paper}" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+        <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource ChlorophyllDeep}" />
+            <Setter Property="Foreground" Value="{StaticResource Paper}" />
+        </Style>
+        <Style Selector="ToggleButton.lang">
+            <Setter Property="Padding" Value="12,4" />
+            <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+        <Style Selector="ToggleButton.lang:checked /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource Ink}" />
+            <Setter Property="Foreground" Value="{StaticResource Paper}" />
+        </Style>
+        <Style Selector="Slider">
+            <Setter Property="Foreground" Value="{StaticResource Chlorophyll}" />
+        </Style>
+    </Application.Styles>
+</Application>

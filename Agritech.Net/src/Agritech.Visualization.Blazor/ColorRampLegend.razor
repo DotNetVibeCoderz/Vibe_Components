@@ -1,0 +1,11 @@
+<div class="agt-legend" role="img" aria-label="@($"{Map.Name} legend {Map.Min} to {Map.Max}")">
+    <div class="agt-legend-bar" style="background: linear-gradient(90deg, @Gradient); height: 10px; border-radius: 5px;"></div>
+    <div class="agt-legend-labels" style="display:flex; justify-content:space-between; font-size:11px;">
+        <span>@Map.Min.ToString("0.##")</span><span>@Map.Name</span><span>@Map.Max.ToString("0.##")</span>
+    </div>
+</div>
+
+@code {
+    [Parameter] public ColorMap Map { get; set; } = ColorMap.Ndvi;
+    private string Gradient => string.Join(", ", Map.Stops.Select(s => $"{s.Color.Hex} {s.Stop * 100:0}%"));
+}

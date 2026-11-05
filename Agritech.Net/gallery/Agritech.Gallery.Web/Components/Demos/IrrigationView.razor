@@ -1,0 +1,34 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Crop", "Tanaman")</label>
+        <select @bind="_crop" @bind:after="Run">
+            <option value="chili">@T("Chili", "Cabai")</option><option value="maize">@T("Maize", "Jagung")</option>
+            <option value="shallot">@T("Shallot", "Bawang merah")</option><option value="tomato">@T("Tomato", "Tomat")</option>
+        </select>
+    </div>
+    <div class="control"><label>@T("Days after planting", "Hari setelah tanam")</label><input type="range" min="10" max="100" @bind="_dap" @bind:event="oninput" @bind:after="Run" /><output>@_dap</output></div>
+    <div class="control"><label>@T("Weather seed", "Seed cuaca")</label><input type="range" min="1" max="30" @bind="_seed" @bind:event="oninput" @bind:after="Run" /><output>@_seed</output></div>
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Decision today", "Keputusan hari ini")" Value="@(_r.Recommendation.IrrigateNow ? T("Irrigate", "Irigasi") : T("Wait", "Tunda"))" Class="@(_r.Recommendation.IrrigateNow ? "alert" : "good")" />
+    <KpiCard Label="@T("Gross depth", "Kedalaman bruto")" Value="@F(_r.Recommendation.GrossDepthMm)" Unit="mm" Note="@T("75% application efficiency", "efisiensi aplikasi 75%")" />
+    <KpiCard Label="@T("Volume (1.2 ha)", "Volume (1,2 ha)")" Value="@F(_r.Recommendation.VolumeM3, "0")" Unit="m³" />
+    <KpiCard Label="@T("Root-zone depletion", "Deplesi zona akar")" Value="@F(_r.Recommendation.CurrentDepletionPct, "0")" Unit="% TAW" />
+    <KpiCard Label="@T("Season so far", "Musim sejauh ini")" Value="@F(_r.SeasonIrrigationMm, "0")" Unit="mm" Note="@($"{_r.Events} {T("irrigations if scheduled at RAW", "irigasi jika dijadwalkan pada RAW")}")" />
+</div>
+
+<div class="panel" style="margin-top:16px">
+    <h2>@T("Daily root-zone water balance", "Neraca air zona akar harian") <small>FAO-56</small></h2>
+    <SvgMarkup Svg="@_r.DepletionSvg" />
+    <p class="note">@_r.Recommendation.Reason</p>
+</div>
+
+@code {
+    private string _crop = "chili";
+    private int _dap = 55, _seed = 5;
+    private IrrigationDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = IrrigationDemo.Run(_crop, _dap, 1.2, _seed);
+}

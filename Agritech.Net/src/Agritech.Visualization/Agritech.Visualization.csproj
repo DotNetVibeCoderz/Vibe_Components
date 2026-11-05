@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Agritech.Net visualization core: agronomic color ramps, PNG raster rendering, SVG charts and isometric 2.5D farm views (UI-framework agnostic).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agritech.Core/Agritech.Core.csproj" />
+  </ItemGroup>
+</Project>

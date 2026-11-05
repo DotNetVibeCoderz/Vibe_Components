@@ -1,0 +1,40 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Transport cost Rp/kg/km", "Biaya angkut Rp/kg/km")</label><input type="range" min="0" max="8" step="0.5" @bind="_tc" @bind:event="oninput" @bind:after="Run" /><output>@F(_tc)</output></div>
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Last price", "Harga terakhir")" Value="@($"{_r.Insight.Last:N0}")" Unit="Rp/kg" />
+    <KpiCard Label="@T("30-day volatility", "Volatilitas 30 hari")" Value="@F(_r.Insight.VolatilityPct)" Unit="%" />
+    <KpiCard Label="@T("Fair farm-gate price", "Harga wajar di petani")" Value="@($"{_r.FairPrice:N0}")" Unit="Rp/kg" Note="@T("cost + 25% margin", "biaya + margin 25%")" />
+    <KpiCard Label="@T("Trades matched", "Transaksi cocok")" Value="@_r.Trades.Count.ToString()" Note="@($"{_r.Trades.Sum(t => t.QuantityKg):N0} kg")" Class="good" />
+</div>
+
+<div class="grid two" style="margin-top:16px">
+    <div class="panel">
+        <h2>@T("Chili price and 21-day outlook", "Harga cabai dan proyeksi 21 hari")</h2>
+        <SvgMarkup Svg="@_r.PriceSvg" />
+        <p class="note">@_r.Insight.Signal</p>
+    </div>
+    <div class="panel">
+        <h2>@T("Matched trades", "Transaksi tercocokkan")</h2>
+        <table class="data">
+            <tr><th>@T("Seller → buyer", "Penjual → pembeli")</th><th>kg</th><th>Rp/kg</th><th>@T("Freight", "Ongkos")</th></tr>
+            @foreach (var t in _r.Trades) { <tr><td>@t.Seller → @t.Buyer</td><td class="num">@t.QuantityKg.ToString("N0")</td><td class="num">@t.PricePerKg.ToString("N0")</td><td class="num">@t.TransportCostPerKg.ToString("N0")</td></tr> }
+        </table>
+        <h2 style="margin-top:16px">@T("Open order book", "Buku order terbuka")</h2>
+        <table class="data">
+            <tr><th>@T("Side", "Sisi")</th><th>@T("Trader", "Pelaku")</th><th>@T("Remaining kg", "Sisa kg")</th><th>Rp/kg</th></tr>
+            @foreach (var o in _r.OpenAsks) { <tr><td><span class="tag warn">@T("Offer", "Jual")</span></td><td>@o.Trader</td><td class="num">@o.RemainingKg.ToString("N0")</td><td class="num">@o.PricePerKg.ToString("N0")</td></tr> }
+            @foreach (var o in _r.OpenBids) { <tr><td><span class="tag good">@T("Bid", "Beli")</span></td><td>@o.Trader</td><td class="num">@o.RemainingKg.ToString("N0")</td><td class="num">@o.PricePerKg.ToString("N0")</td></tr> }
+        </table>
+    </div>
+</div>
+
+@code {
+    private double _tc = 2.5;
+    private MarketDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = MarketDemo.Run(_tc);
+}

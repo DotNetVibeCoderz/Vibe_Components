@@ -1,0 +1,9 @@
+<div class="agt-gauge">@((MarkupString)SvgCharts.Gauge(Fraction, Label, ValueText, Color, Size))</div>
+
+@code {
+    [Parameter] public double Fraction { get; set; }
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string ValueText { get; set; } = "";
+    [Parameter] public string Color { get; set; } = "#2e6b3b";
+    [Parameter] public int Size { get; set; } = 160;
+}

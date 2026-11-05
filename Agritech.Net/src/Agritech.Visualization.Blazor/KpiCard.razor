@@ -1,0 +1,13 @@
+<div class="agt-kpi @Class">
+    <div class="agt-kpi-label">@Label</div>
+    <div class="agt-kpi-value">@Value<span class="agt-kpi-unit">@Unit</span></div>
+    @if (Note is not null) { <div class="agt-kpi-note">@Note</div> }
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public string? Unit { get; set; }
+    [Parameter] public string? Note { get; set; }
+    [Parameter] public string? Class { get; set; }
+}

@@ -1,0 +1,8 @@
+<div class="agt-iso">@((MarkupString)IsometricFarm.Render(Tiles, TileSize, MaxHeight, Title))</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<FarmTile> Tiles { get; set; } = [];
+    [Parameter] public int TileSize { get; set; } = 64;
+    [Parameter] public double MaxHeight { get; set; } = 26;
+    [Parameter] public string? Title { get; set; }
+}

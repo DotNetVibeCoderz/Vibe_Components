@@ -1,0 +1,13 @@
+@* Renders a float raster through a ColorMap as a PNG data URI (crisp pixels). *@
+<img class="agt-raster" src="@Src" alt="@Alt" style="image-rendering: pixelated; width: 100%; height: auto;" />
+
+@code {
+    [Parameter] public float[]? Values { get; set; }
+    [Parameter] public int Width { get; set; }
+    [Parameter] public int Height { get; set; }
+    [Parameter] public ColorMap Map { get; set; } = ColorMap.Ndvi;
+    [Parameter] public byte[]? Png { get; set; }
+    [Parameter] public string Alt { get; set; } = "raster";
+
+    private string Src => PngEncoder.ToDataUri(Png ?? PngEncoder.FromRaster(Values ?? [], Width, Height, Map, 2));
+}

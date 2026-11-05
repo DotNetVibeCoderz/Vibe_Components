@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Agricultural robotics: path planning, pure-pursuit tractor control, harvest and greenhouse robots.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agritech.Core/Agritech.Core.csproj" />
+    <ProjectReference Include="../Agritech.GIS/Agritech.GIS.csproj" />
+  </ItemGroup>
+</Project>

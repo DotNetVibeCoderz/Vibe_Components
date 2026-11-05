@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <Description>Agritech.Net Gallery (Blazor web).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agritech.Gallery.Shared/Agritech.Gallery.Shared.csproj" />
+    <ProjectReference Include="../../src/Agritech.Visualization.Blazor/Agritech.Visualization.Blazor.csproj" />
+  </ItemGroup>
+</Project>

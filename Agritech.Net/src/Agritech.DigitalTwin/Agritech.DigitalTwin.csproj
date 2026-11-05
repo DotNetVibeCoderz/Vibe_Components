@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Farm digital twin: real-time state, sensor integration and AI-assisted decisions.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agritech.Core/Agritech.Core.csproj" />
+    <ProjectReference Include="../Agritech.IoT/Agritech.IoT.csproj" />
+    <ProjectReference Include="../Agritech.Crops/Agritech.Crops.csproj" />
+    <ProjectReference Include="../Agritech.Soil/Agritech.Soil.csproj" />
+    <ProjectReference Include="../Agritech.Weather/Agritech.Weather.csproj" />
+    <ProjectReference Include="../Agritech.AI/Agritech.AI.csproj" />
+  </ItemGroup>
+</Project>

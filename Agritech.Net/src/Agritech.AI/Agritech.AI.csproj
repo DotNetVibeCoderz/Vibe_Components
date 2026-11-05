@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Agricultural AI: yield forecasting, disease/pest risk, fertilizer and irrigation recommendation, LLM farm agent.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agritech.Core/Agritech.Core.csproj" />
+    <ProjectReference Include="../Agritech.Crops/Agritech.Crops.csproj" />
+    <ProjectReference Include="../Agritech.Soil/Agritech.Soil.csproj" />
+    <ProjectReference Include="../Agritech.Weather/Agritech.Weather.csproj" />
+  </ItemGroup>
+</Project>

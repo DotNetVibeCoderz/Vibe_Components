@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Agritech.Visualization.Blazor" Version="1.0.0" />
+    <PackageReference Include="Agritech.RemoteSensing" Version="1.0.0" />
+    <PackageReference Include="Agritech.Simulation" Version="1.0.0" />
+  </ItemGroup>
+</Project>

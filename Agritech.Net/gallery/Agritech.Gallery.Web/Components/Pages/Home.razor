@@ -1,0 +1,59 @@
+﻿@page "/"
+
+<PageTitle>Agritech.Net Gallery</PageTitle>
+
+<section class="hero">
+    <div>
+        <div class="eyebrow">@T("Agritech.Net gallery · 13 working examples", "Galeri Agritech.Net · 13 contoh siap pakai")</div>
+        <h1>@T("Agriculture,", "Pertanian,")<br /><em>@T("computed", "terhitung")</em> @T("in .NET", "di .NET")</h1>
+        <p class="lede">@T(
+            "Satellite indices, crop models, drone missions, IoT twins and an AI agronomist, each running live on this page next to the C# that produced it.",
+            "Indeks satelit, model tanaman, misi drone, kembaran digital IoT, dan ahli agronomi AI, semuanya berjalan langsung di halaman ini bersama kode C# yang menghasilkannya.")</p>
+        <div class="hero-actions">
+            <a class="btn" href="demo/ndvi">@T("Open the NDVI example", "Buka contoh NDVI")</a>
+            <a class="btn ghost" href="demo/agent">@T("Ask the farm agent", "Tanya agen pertanian")</a>
+        </div>
+    </div>
+
+    <figure class="survey" style="margin:0">
+        <div class="survey-head"><span>SENTINEL-2 · NDVI · 5 m</span><span>@_r.Width×@_r.Height px</span></div>
+        <div style="position:relative">
+            <img src="@PngEncoder.ToDataUri(_r.NdviPng)" alt="@T("NDVI map of the demo paddy block", "Peta NDVI petak sawah contoh")" />
+            <span class="pin" style="left:6%; top:8%">@T("Block A", "Blok A") <b>@DemoFarm.Field.AreaHectares.ToString("0.00") ha</b></span>
+            <span class="pin" style="right:6%; top:30%">@T("Mean NDVI", "Rata-rata NDVI") <b>@_r.Stats.Stats.Mean.ToString("0.00")</b></span>
+            <span class="pin" style="left:30%; bottom:14%">@T("Weakest zone", "Zona terlemah") <b>@_r.ZoneMeans[0].ToString("0.00")</b></span>
+        </div>
+        <ColorRampLegend Map="ColorMap.Ndvi" />
+        <figcaption class="note" style="font-size:12px;color:var(--ink-soft);margin-top:8px">
+            @T($"Computed when this page loaded by the {_r.Backend} kernel at {_r.MegapixelsPerSecond:N0} megapixels/s.",
+               $"Dihitung saat halaman dimuat oleh kernel {_r.Backend} dengan kecepatan {_r.MegapixelsPerSecond:N0} megapiksel/detik.")
+        </figcaption>
+    </figure>
+</section>
+
+@foreach (var g in GalleryCatalog.Groups)
+{
+    <section class="index-group">
+        <h2>@g.Name[Lang] <span>@GalleryCatalog.Demos.Count(d => d.Group == g.Key) @T("examples", "contoh")</span></h2>
+        <div class="cards">
+            @foreach (var d in GalleryCatalog.Demos.Where(x => x.Group == g.Key))
+            {
+                <a class="card" href="@($"demo/{d.Slug}")">
+                    <span class="spectral-rail ramp-@d.Ramp"></span>
+                    <span>
+                        <h3>@d.Title[Lang]</h3>
+                        <p>@d.Summary[Lang]</p>
+                        <span class="module">@d.Module</span>
+                    </span>
+                </a>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    [CascadingParameter(Name = "Lang")] public string Lang { get; set; } = "en";
+    private NdviDemoResult _r = null!;
+    protected override void OnInitialized() => _r = NdviDemo.Run();
+    private string T(string en, string id) => Lang == "id" ? id : en;
+}

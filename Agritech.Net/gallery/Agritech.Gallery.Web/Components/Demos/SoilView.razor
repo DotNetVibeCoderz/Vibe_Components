@@ -1,0 +1,58 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>pH</label><input type="range" min="4" max="8.5" step="0.1" @bind="_ph" @bind:event="oninput" @bind:after="Run" /><output>@F(_ph)</output></div>
+    <div class="control"><label>@T("Organic C (%)", "C organik (%)")</label><input type="range" min="0.3" max="4" step="0.1" @bind="_oc" @bind:event="oninput" @bind:after="Run" /><output>@F(_oc)</output></div>
+    <div class="control"><label>@T("Available P (ppm)", "P tersedia (ppm)")</label><input type="range" min="2" max="40" step="1" @bind="_p" @bind:event="oninput" @bind:after="Run" /><output>@_p</output></div>
+    <div class="control"><label>@T("Crop", "Tanaman")</label>
+        <select @bind="_crop" @bind:after="Run">
+            @foreach (var c in Crops) { <option value="@c">@(Lang == "id" ? Agritech.Crops.CropCatalog.Default.Get(c).NameId : Agritech.Crops.CropCatalog.Default.Get(c).Name)</option> }
+        </select>
+    </div>
+    <div class="control"><label>@T("Target yield t/ha", "Target hasil t/ha")</label><input type="number" step="0.5" style="width:90px" @bind="_target" @bind:after="Run" /></div>
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Soil health", "Kesehatan tanah")" Value="@F(_r.Report.Score, "0")" Unit="/100" Note="@_r.Report.Grade" Class="@(_r.Report.Score >= 65 ? "good" : _r.Report.Score < 45 ? "alert" : null)" />
+    <KpiCard Label="@T("Texture", "Tekstur")" Value="@_r.Texture.ToString()" Note="USDA" />
+    <KpiCard Label="@T("Available water", "Air tersedia")" Value="@F(_r.Hydraulics.AvailableWaterMmPerM, "0")" Unit="mm/m" Note="@($"FC {F(_r.Hydraulics.FieldCapacity * 100)}% · WP {F(_r.Hydraulics.WiltingPoint * 100)}%")" />
+    <KpiCard Label="@T("Fertilizer cost", "Biaya pupuk")" Value="@F(_r.Advice.Plan.TotalCost / 1e6, "0.0")" Unit="@T("M Rp · 2.5 ha", "jt Rp · 2,5 ha")" />
+</div>
+
+<div class="grid two" style="margin-top:16px">
+    <div class="panel">
+        <h2>@T("Indicator scores", "Skor indikator") <small>0–100</small></h2>
+        <SvgMarkup Svg="@_r.IndicatorSvg" />
+        <ul style="margin:12px 0 0;padding-left:18px;font-size:13.5px">
+            @foreach (var rec in _r.Report.Recommendations) { <li>@rec</li> }
+        </ul>
+    </div>
+    <div class="panel">
+        <h2>@T("Fertilizer schedule", "Jadwal pemupukan") <small>N @F(_r.Advice.Need.N, "0") · P₂O₅ @F(_r.Advice.Need.P2O5, "0") · K₂O @F(_r.Advice.Need.K2O, "0") kg/ha</small></h2>
+        <table class="data">
+            <tr><th>@T("Application", "Aplikasi")</th><th>@T("DAP", "HST")</th><th>@T("Product", "Produk")</th><th>kg/ha</th><th>@T("Total kg", "Total kg")</th></tr>
+            @foreach (var a in _r.Advice.Schedule)
+            {
+                var first = true;
+                foreach (var p in a.Products)
+                {
+                    <tr>
+                        <td>@(first ? a.Stage : "")</td><td class="num">@(first ? $"{a.FromDap}–{a.ToDap}" : "")</td>
+                        <td>@p.Product.Name</td><td class="num">@F(p.KgPerHa)</td><td class="num">@F(p.TotalKg)</td>
+                    </tr>
+                    first = false;
+                }
+            }
+        </table>
+    </div>
+</div>
+
+@code {
+    private static readonly string[] Crops = ["rice", "maize", "chili", "shallot", "soybean", "potato"];
+    private double _ph = 5.4, _oc = 1.2, _target = 6.5;
+    private int _p = 9;
+    private string _crop = "rice";
+    private SoilDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = SoilDemo.Run(DemoFarm.Soil with { Ph = _ph, OrganicCarbonPct = _oc, AvailablePMgKg = _p }, _crop, 2.5, _target);
+}

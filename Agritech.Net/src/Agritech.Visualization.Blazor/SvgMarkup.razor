@@ -1,0 +1,7 @@
+@* Hosts any SVG produced by Agritech.Visualization. *@
+<div class="agt-svg @Class">@((MarkupString)Svg)</div>
+
+@code {
+    [Parameter, EditorRequired] public string Svg { get; set; } = "";
+    [Parameter] public string? Class { get; set; }
+}

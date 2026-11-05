@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Drone mission planning, weed and disease detection, and orthomosaic generation.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agritech.Core/Agritech.Core.csproj" />
+    <ProjectReference Include="../Agritech.GIS/Agritech.GIS.csproj" />
+  </ItemGroup>
+</Project>

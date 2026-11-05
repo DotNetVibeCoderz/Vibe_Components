@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Crop simulation: APSIM/DSSAT-inspired growth, soil water, nitrogen, roots and climate scenarios.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agritech.Core/Agritech.Core.csproj" />
+    <ProjectReference Include="../Agritech.Crops/Agritech.Crops.csproj" />
+    <ProjectReference Include="../Agritech.Weather/Agritech.Weather.csproj" />
+    <ProjectReference Include="../Agritech.Soil/Agritech.Soil.csproj" />
+  </ItemGroup>
+</Project>

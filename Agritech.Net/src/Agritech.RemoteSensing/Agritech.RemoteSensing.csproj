@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Remote sensing: Sentinel-2/Landsat/MODIS band models, NDVI/EVI/SAVI/NDWI and zonal statistics.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agritech.Core/Agritech.Core.csproj" />
+    <ProjectReference Include="../Agritech.Native/Agritech.Native.csproj" />
+  </ItemGroup>
+</Project>

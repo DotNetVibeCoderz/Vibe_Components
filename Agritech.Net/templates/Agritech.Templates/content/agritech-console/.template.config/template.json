@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [ "Agritech", "Agriculture", "Console" ],
+  "identity": "Agritech.Templates.Console",
+  "name": "Agritech.Net Farm Advisor (console)",
+  "description": "Console farm advisor: crop suitability, soil health, fertilizer plan, ET0/irrigation and the AI farm agent.",
+  "shortName": "agritech-console",
+  "sourceName": "AgritechConsoleApp",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" },
+  "symbols": {
+    "crop": { "type": "parameter", "datatype": "string", "defaultValue": "rice", "replaces": "CROP_ID", "description": "Crop id from the catalog (rice, maize, chili, …)" }
+  }
+}

@@ -1,0 +1,66 @@
+﻿@inherits LayoutComponentBase
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="shell">
+    <nav class="rail @(_menuOpen ? "open" : "")" aria-label="Gallery">
+        <a class="brand" href="" @onclick="CloseMenu">
+            <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="12" fill="#1c2620"/><rect x="12" y="34" width="8" height="18" rx="2" fill="#c49a5a"/><rect x="24" y="26" width="8" height="26" rx="2" fill="#a6cf5d"/><rect x="36" y="18" width="8" height="34" rx="2" fill="#4f9f3a"/><path d="M48 52 C48 30 52 18 56 10 C44 14 40 26 44 40" fill="#2e6b3b" stroke="#e6ece4" stroke-width="2"/></svg>
+            <span class="brand-name">Agritech.Net<small>GALLERY · v1.0</small></span>
+        </a>
+        @foreach (var g in GalleryCatalog.Groups)
+        {
+            <div class="nav-group">
+                <div class="nav-group-title">@g.Name[_lang]</div>
+                @foreach (var d in GalleryCatalog.Demos.Where(x => x.Group == g.Key))
+                {
+                    <NavLink class="nav-link" href="@($"demo/{d.Slug}")" @onclick="CloseMenu">
+                        <span class="nav-swatch spectral-rail ramp-@d.Ramp"></span><span>@d.Title[_lang]</span>
+                    </NavLink>
+                }
+            </div>
+        }
+        <div class="rail-foot">@GalleryCatalog.Credit[_lang]</div>
+    </nav>
+
+    <div class="main">
+        <header class="topbar">
+            <button class="btn ghost small menu-toggle" @onclick="() => _menuOpen = !_menuOpen" aria-expanded="@_menuOpen">☰ @(_lang == "id" ? "Menu" : "Menu")</button>
+            <span class="stamp">Blok A · Karawang −6.3045, 107.3012 · @(_lang == "id" ? "dataset sintetis deterministik" : "deterministic synthetic dataset")</span>
+            <div class="lang" role="group" aria-label="Language / Bahasa">
+                <button aria-pressed="@(_lang == "en")" @onclick='() => _lang = "en"'>EN</button>
+                <button aria-pressed="@(_lang == "id")" @onclick='() => _lang = "id"'>ID</button>
+            </div>
+        </header>
+        <main class="content">
+            <CascadingValue Value="_lang" Name="Lang">
+                @Body
+            </CascadingValue>
+            <footer class="credit">
+                <span>Agritech.Net — @Agritech.Core.AgritechInfo.Tagline</span>
+                <span>@GalleryCatalog.Credit[_lang]</span>
+            </footer>
+        </main>
+    </div>
+</div>
+
+@code {
+    private string _lang = "en";
+    private bool _menuOpen;
+
+    protected override void OnInitialized()
+    {
+        var uri = new Uri(Nav.Uri);
+        if (uri.Query.Contains("lang=id")) _lang = "id";
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? s, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        _menuOpen = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void CloseMenu() => _menuOpen = false;
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

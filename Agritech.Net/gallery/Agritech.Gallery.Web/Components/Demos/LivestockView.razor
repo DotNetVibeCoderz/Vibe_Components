@@ -1,0 +1,32 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Afternoon max °C", "Suhu maks siang °C")</label><input type="range" min="26" max="40" step="0.5" @bind="_t" @bind:event="oninput" @bind:after="Run" /><output>@F(_t)</output></div>
+    <div class="control"><label>@T("Afternoon min RH %", "RH min siang %")</label><input type="range" min="30" max="90" step="1" @bind="_rh" @bind:event="oninput" @bind:after="Run" /><output>@F(_rh, "0")</output></div>
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Peak THI", "THI puncak")" Value="@F(_r.PeakThi)" Note="@_r.PeakLevel.ToString()" Class="@(_r.PeakThi >= 79 ? "alert" : "good")" />
+    <KpiCard Label="@T("Milk loss / cow", "Kehilangan susu / ekor")" Value="@F(_r.MilkLossKg)" Unit="kg/day" />
+    <KpiCard Label="@T("Weight from heart girth 165 cm", "Bobot dari lingkar dada 165 cm")" Value="@F(_r.GirthWeight, "0")" Unit="kg" Note="Schoorl" />
+</div>
+
+<div class="grid two" style="margin-top:16px">
+    <div class="panel"><h2>@T("Temperature–humidity index over 24 h", "Indeks suhu–kelembapan selama 24 jam")</h2><SvgMarkup Svg="@_r.ThiSvg" /></div>
+    <div class="panel">
+        <h2>@T("Reproduction calendar", "Kalender reproduksi")</h2>
+        <table class="data">
+            <tr><th>@T("Animal", "Ternak")</th><th>@T("Event", "Kegiatan")</th><th>@T("Date", "Tanggal")</th></tr>
+            @foreach (var c in _r.Calendar) { <tr><td class="mono">@c.TagId</td><td>@c.Event</td><td class="num">@c.Date.ToString("dd MMM yyyy")</td></tr> }
+        </table>
+        <h2 style="margin-top:18px">@T("Health alerts", "Peringatan kesehatan")</h2>
+        @foreach (var a in _r.Alerts) { <div class="decision ScoutDisease"><b>@a.TagId</b><span>@a.Message</span></div> }
+    </div>
+</div>
+
+@code {
+    private double _t = 34, _rh = 55;
+    private LivestockDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = LivestockDemo.Run(_t, _rh);
+}

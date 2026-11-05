@@ -1,0 +1,59 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Crop", "Tanaman")</label>
+        <select @bind="_crop">
+            <option value="maize">@T("Maize", "Jagung")</option><option value="rice">@T("Rice", "Padi")</option>
+            <option value="soybean">@T("Soybean", "Kedelai")</option><option value="chili">@T("Chili", "Cabai")</option>
+        </select>
+    </div>
+    <div class="control"><label>@T("Nitrogen kg/ha", "Nitrogen kg/ha")</label><input type="range" min="0" max="240" step="10" @bind="_n" @bind:event="oninput" /><output>@_n</output></div>
+    <div class="control"><label>@T("Weather years", "Tahun cuaca")</label><input type="range" min="4" max="30" step="2" @bind="_years" @bind:event="oninput" /><output>@_years</output></div>
+    <button class="btn small" @onclick="RunAsync" disabled="@_busy">@(_busy ? T("Running…", "Menjalankan…") : T("Run simulation", "Jalankan simulasi"))</button>
+</div>
+
+@if (_r is not null)
+{
+    <div class="grid kpis">
+        <KpiCard Label="@T("Rainfed yield", "Hasil tadah hujan")" Value="@F(_r.Rainfed.YieldTonHa, "0.00")" Unit="t/ha" Note="@($"{T("water stress", "cekaman air")} {F((1 - _r.Rainfed.MeanWaterStress) * 100, "0")}%")" />
+        <KpiCard Label="@T("Irrigated yield", "Hasil irigasi")" Value="@F(_r.Irrigated.YieldTonHa, "0.00")" Unit="t/ha" Note="@($"+{F(_r.Irrigated.TotalIrrigationMm, "0")} mm")" Class="good" />
+        <KpiCard Label="@T("Water productivity", "Produktivitas air")" Value="@F(_r.Irrigated.WaterProductivityKgM3, "0.00")" Unit="kg/m³" />
+        <KpiCard Label="@T("Maturity", "Masak")" Value="@(_r.Rainfed.MaturityDate?.ToString("dd MMM") ?? "—")" Note="@($"{T("flowering", "berbunga")} {_r.Rainfed.FloweringDate:dd MMM}")" />
+        <KpiCard Label="@T("N leached", "N tercuci")" Value="@F(_r.Rainfed.NLeachedKgHa, "0.0")" Unit="kg/ha" />
+    </div>
+
+    <div class="grid two" style="margin-top:16px">
+        <div class="panel"><h2>@T("Leaf area index", "Indeks luas daun")</h2><SvgMarkup Svg="@_r.LaiSvg" /></div>
+        <div class="panel"><h2>@T("Above-ground biomass", "Biomassa di atas tanah")</h2><SvgMarkup Svg="@_r.BiomassSvg" /></div>
+        <div class="panel"><h2>@T("Soil water, 0–100 cm", "Air tanah, 0–100 cm")</h2><SvgMarkup Svg="@_r.WaterSvg" /></div>
+        <div class="panel">
+            <h2>@T("Scenario comparison", "Perbandingan skenario") <small>@_years @T("stochastic years", "tahun stokastik")</small></h2>
+            <SvgMarkup Svg="@_r.ScenarioSvg" />
+            <table class="data" style="margin-top:8px">
+                <tr><th>@T("Scenario", "Skenario")</th><th>@T("Mean", "Rata-rata")</th><th>P10–P90</th><th>@T("Irrigation", "Irigasi")</th></tr>
+                @foreach (var s in _r.Scenarios)
+                {
+                    <tr><td>@s.Name</td><td class="num">@F(s.MeanYield, "0.00")</td><td class="num">@F(s.P10Yield, "0.0")–@F(s.P90Yield, "0.0")</td><td class="num">@F(s.MeanIrrigationMm, "0") mm</td></tr>
+                }
+            </table>
+        </div>
+    </div>
+    <p class="note" style="margin-top:12px;font-size:13px;color:var(--ink-soft)">@T("Dry-season (gadu) planting on 1 April in Karawang, clay soil from the soil example, nitrogen split 30/40/30 %.", "Tanam musim gadu 1 April di Karawang, tanah liat dari contoh tanah, nitrogen dibagi 30/40/30 %.")</p>
+}
+
+@code {
+    private string _crop = "maize";
+    private int _n = 120, _years = 12;
+    private bool _busy;
+    private SimulationDemoResult? _r;
+    protected override void OnInitialized() => _r = SimulationDemo.Run(_crop, _n, _years);
+
+    private async Task RunAsync()
+    {
+        _busy = true;
+        StateHasChanged();
+        var crop = _crop; var n = _n; var y = _years;
+        _r = await Task.Run(() => SimulationDemo.Run(crop, n, y));
+        _busy = false;
+    }
+}

@@ -1,0 +1,49 @@
+@page "/demo/{Slug}"
+
+@if (_info is null)
+{
+    <p>@T("No example with that name. Pick one from the list on the left.", "Contoh tidak ditemukan. Pilih dari daftar di sebelah kiri.")</p>
+}
+else
+{
+    <PageTitle>@_info.Title[Lang] · Agritech.Net Gallery</PageTitle>
+    <header class="demo-head">
+        <span class="spectral-rail ramp-@_info.Ramp"></span>
+        <div>
+            <div class="crumb">@GalleryCatalog.Groups.First(g => g.Key == _info.Group).Name[Lang]</div>
+            <h1>@_info.Title[Lang]</h1>
+            <p>@_info.Summary[Lang]</p>
+            <span class="badge">@_info.Module</span>
+        </div>
+    </header>
+
+    @switch (Slug)
+    {
+        case "ndvi": <NdviView Lang="@Lang" /> break;
+        case "soil": <SoilView Lang="@Lang" /> break;
+        case "crops": <CropsView Lang="@Lang" /> break;
+        case "simulation": <SimulationView Lang="@Lang" /> break;
+        case "irrigation": <IrrigationView Lang="@Lang" /> break;
+        case "drones": <DronesView Lang="@Lang" /> break;
+        case "twin": <TwinView Lang="@Lang" /> break;
+        case "robotics": <RoboticsView Lang="@Lang" /> break;
+        case "livestock": <LivestockView Lang="@Lang" /> break;
+        case "aquaculture": <AquaView Lang="@Lang" /> break;
+        case "market": <MarketView Lang="@Lang" /> break;
+        case "genomics": <GenomicsView Lang="@Lang" /> break;
+        case "agent": <AgentView Lang="@Lang" /> break;
+    }
+
+    <section class="code" aria-label="@T("Source code", "Kode sumber")">
+        <div class="code-head"><span>C# · @_info.Module</span><span>@T("The code behind this example", "Kode di balik contoh ini")</span></div>
+        <pre><code>@_info.Code</code></pre>
+    </section>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    [CascadingParameter(Name = "Lang")] public string Lang { get; set; } = "en";
+    private DemoInfo? _info;
+    protected override void OnParametersSet() => _info = GalleryCatalog.Demos.FirstOrDefault(d => d.Slug == Slug);
+    private string T(string en, string id) => Lang == "id" ? id : en;
+}

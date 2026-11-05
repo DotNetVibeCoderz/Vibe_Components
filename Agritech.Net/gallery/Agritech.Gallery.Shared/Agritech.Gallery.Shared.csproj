@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Shared use-case scenarios for the Agritech.Net Gallery (Blazor + Avalonia).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Agritech.DigitalTwin/Agritech.DigitalTwin.csproj" />
+    <ProjectReference Include="../../src/Agritech.Simulation/Agritech.Simulation.csproj" />
+    <ProjectReference Include="../../src/Agritech.RemoteSensing/Agritech.RemoteSensing.csproj" />
+    <ProjectReference Include="../../src/Agritech.Drones/Agritech.Drones.csproj" />
+    <ProjectReference Include="../../src/Agritech.Genomics/Agritech.Genomics.csproj" />
+    <ProjectReference Include="../../src/Agritech.Livestock/Agritech.Livestock.csproj" />
+    <ProjectReference Include="../../src/Agritech.Fisheries/Agritech.Fisheries.csproj" />
+    <ProjectReference Include="../../src/Agritech.Robotics/Agritech.Robotics.csproj" />
+    <ProjectReference Include="../../src/Agritech.SupplyChain/Agritech.SupplyChain.csproj" />
+    <ProjectReference Include="../../src/Agritech.Marketplace/Agritech.Marketplace.csproj" />
+    <ProjectReference Include="../../src/Agritech.Visualization/Agritech.Visualization.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [ "Agritech", "IoT", "Worker", "Edge" ],
+  "identity": "Agritech.Templates.IoTEdge",
+  "name": "Agritech.Net IoT Edge Gateway",
+  "description": "Worker service that subscribes to farm sensors over MQTT, runs edge analytics and a farm digital twin, and logs decisions.",
+  "shortName": "agritech-iot-edge",
+  "sourceName": "AgritechEdgeGateway",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" },
+  "symbols": {
+    "broker": { "type": "parameter", "datatype": "string", "defaultValue": "localhost", "replaces": "MQTT_BROKER_HOST", "description": "MQTT broker host name" }
+  }
+}

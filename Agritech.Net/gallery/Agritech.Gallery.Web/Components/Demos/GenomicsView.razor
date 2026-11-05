@@ -1,0 +1,33 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Heritability h²", "Heritabilitas h²")</label><input type="range" min="0.1" max="0.9" step="0.05" @bind="_h2" @bind:event="oninput" @bind:after="Run" /><output>@F(_h2, "0.00")</output></div>
+    <div class="control"><label>@T("Population seed", "Seed populasi")</label><input type="range" min="1" max="30" @bind="_seed" @bind:event="oninput" @bind:after="Run" /><output>@_seed</output></div>
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Prediction accuracy", "Akurasi prediksi")" Value="@F(_r.PredictionAccuracy, "0.00")" Note="@T("r(GEBV, true BV) on 40 untested lines", "r(GEBV, BV sebenarnya) pada 40 galur uji")" Class="good" />
+    <KpiCard Label="@T("Markers after QC", "Penanda setelah QC")" Value="@_r.Markers.ToString()" Note="MAF ≥ 0.05" />
+    <KpiCard Label="@T("Gain per year", "Kemajuan per tahun")" Value="@F(_r.Response.PerYear, "0.00")" Unit="t/ha" Note="@T("top 10%, 1.5-year cycle", "10% teratas, siklus 1,5 tahun")" />
+    <KpiCard Label="@T("Marker gene GC", "GC gen penanda")" Value="@F(_r.GcContent)" Unit="%" Note="@($"{_r.Orfs.Count} ORF · {(_r.Orfs.Count > 0 ? _r.Orfs[0].Protein.Length : 0)} aa")" />
+</div>
+
+<div class="grid two" style="margin-top:16px">
+    <div class="panel"><h2>@T("Top 12 lines by GEBV", "12 galur teratas berdasarkan GEBV")</h2><SvgMarkup Svg="@_r.GebvSvg" /></div>
+    <div class="panel">
+        <h2>@T("Recommended crosses", "Persilangan yang disarankan")</h2>
+        <table class="data">
+            <tr><th>@T("Parents", "Tetua")</th><th>@T("Mid-parent GEBV", "GEBV rata-rata tetua")</th><th>@T("Relationship", "Kekerabatan")</th><th>@T("Score", "Skor")</th></tr>
+            @foreach (var c in _r.Crosses) { <tr><td class="mono">@c.Parent1 × @c.Parent2</td><td class="num">@F(c.ExpectedProgenyValue, "0.00")</td><td class="num">@F(c.Relationship, "0.00")</td><td class="num">@F(c.Score, "0.00")</td></tr> }
+        </table>
+        <p class="note">@T("Score rewards genetic value and penalises related parents, which keeps diversity in the program.", "Skor menghargai nilai genetik dan menghukum tetua yang berkerabat, sehingga keragaman program tetap terjaga.")</p>
+    </div>
+</div>
+
+@code {
+    private double _h2 = 0.5;
+    private int _seed = 5;
+    private GenomicsDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = GenomicsDemo.Run(_h2, _seed);
+}

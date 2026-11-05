@@ -1,0 +1,38 @@
+<Solution>
+  <Folder Name="/gallery/">
+    <Project Path="gallery/Agritech.Gallery.Desktop/Agritech.Gallery.Desktop.csproj" />
+    <Project Path="gallery/Agritech.Gallery.Shared/Agritech.Gallery.Shared.csproj" />
+    <Project Path="gallery/Agritech.Gallery.Web/Agritech.Gallery.Web.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Agritech.AI/Agritech.AI.csproj" />
+    <Project Path="src/Agritech.Core/Agritech.Core.csproj" />
+    <Project Path="src/Agritech.Crops/Agritech.Crops.csproj" />
+    <Project Path="src/Agritech.DigitalTwin/Agritech.DigitalTwin.csproj" />
+    <Project Path="src/Agritech.Drones/Agritech.Drones.csproj" />
+    <Project Path="src/Agritech.Fisheries/Agritech.Fisheries.csproj" />
+    <Project Path="src/Agritech.Genomics/Agritech.Genomics.csproj" />
+    <Project Path="src/Agritech.GIS/Agritech.GIS.csproj" />
+    <Project Path="src/Agritech.IoT/Agritech.IoT.csproj" />
+    <Project Path="src/Agritech.Livestock/Agritech.Livestock.csproj" />
+    <Project Path="src/Agritech.Marketplace/Agritech.Marketplace.csproj" />
+    <Project Path="src/Agritech.Native/Agritech.Native.csproj" />
+    <Project Path="src/Agritech.RemoteSensing/Agritech.RemoteSensing.csproj" />
+    <Project Path="src/Agritech.Robotics/Agritech.Robotics.csproj" />
+    <Project Path="src/Agritech.Simulation/Agritech.Simulation.csproj" />
+    <Project Path="src/Agritech.Soil/Agritech.Soil.csproj" />
+    <Project Path="src/Agritech.SupplyChain/Agritech.SupplyChain.csproj" />
+    <Project Path="src/Agritech.Visualization.Blazor/Agritech.Visualization.Blazor.csproj" />
+    <Project Path="src/Agritech.Visualization/Agritech.Visualization.csproj" />
+    <Project Path="src/Agritech.Weather/Agritech.Weather.csproj" />
+  </Folder>
+  <Folder Name="/templates/">
+    <Project Path="templates/Agritech.Templates/Agritech.Templates.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Agritech.Tests/Agritech.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Agritech.Cli/Agritech.Cli.csproj" />
+  </Folder>
+</Solution>
