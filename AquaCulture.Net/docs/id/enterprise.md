@@ -42,3 +42,21 @@ var laporanTambak = EsgAccounting.Farm(farm, c => sumberDaya(c));   // intensita
 
 Faktor grid (0,85 kg/kWh) dan jejak pakan (1,8 kg CO₂e/kg) adalah **nilai bawaan indikatif**. Isi `EsgFactors` dengan angka dari PLN dan
 pabrik pakan Anda.
+
+## Hatchery udang (`AquaCulture.Hatchery`)
+
+```csharp
+var induk = new BroodstockUnit();                          // induk SPF + lolos PCR (WSSV, IHHNV, TSV, YHV, IMNV, AHPND, EHP)
+induk.Spawnings.Add(new Spawning(tanggal, "F01", "M01", eggs: 250_000, nauplii: 180_000));
+var afkir = induk.CullCandidates(hariIni);                 // betina lemah atau tidak memijah
+
+var batch = new LarvalBatch { Id = "B1", TankId = "LRT-04", Stocked = hari0, NaupliiStocked = 2_000_000, TankVolumeM3 = 10, TemperatureC = 29 };
+var (stadia, hariPl) = batch.StageOn(hariIni);             // N → Z1–Z3 → M1–M3 → PL (PL1 ≈ hari ke-8–9 pada 29 °C, Q10 2,2)
+var pakan = batch.DailyFeed(hariIni);                      // liter alga, juta Artemia, gram mikrodiet
+
+var mutu = PlQualityAssessment.Evaluate(new PlSample { PlDay = 10, StressTestSurvival = 0.92, LengthCv = 0.10, MuscleGutRatio = 4.5, Pcr = pcr });
+var eventLotBenur = SeedLots.Commissioning(batch, induk, sampel, gtinBenur, glnHatchery, tanggalPanen);   // EPCIS, silsilah dan PCR di ILMD
+```
+
+- Mutu PL diberi skor 0–100. Lot dinyatakan tidak lulus jika ada PCR positif, sintasan uji stres di bawah 80 %, atau nekrosis di atas 5 %.
+- Durasi stadia, takaran pakan, dan sintasan adalah praktik hatchery yang **indikatif**. Sesuaikan dengan protokol Anda.

@@ -42,3 +42,21 @@ var farmReport = EsgAccounting.Farm(farm, c => resourcesOf(c));   // harvest-wei
 
 The grid factor (0.85 kg/kWh) and the feed footprint (1.8 kg CO₂e/kg) are **indicative defaults**. Set them in `EsgFactors` from your
 utility and your feed mill.
+
+## Shrimp hatchery (`AquaCulture.Hatchery`)
+
+```csharp
+var brood = new BroodstockUnit();                          // SPF + PCR-cleared animals (WSSV, IHHNV, TSV, YHV, IMNV, AHPND, EHP)
+brood.Spawnings.Add(new Spawning(date, "F01", "M01", eggs: 250_000, nauplii: 180_000));
+var cull = brood.CullCandidates(today);                    // weak or idle females
+
+var batch = new LarvalBatch { Id = "B1", TankId = "LRT-04", Stocked = day0, NaupliiStocked = 2_000_000, TankVolumeM3 = 10, TemperatureC = 29 };
+var (stage, plDay) = batch.StageOn(today);                 // N → Z1–Z3 → M1–M3 → PL (PL1 ≈ day 8–9 at 29 °C, Q10 2.2)
+var feed = batch.DailyFeed(today);                         // algae litres, Artemia millions, micro-diet g
+
+var quality = PlQualityAssessment.Evaluate(new PlSample { PlDay = 10, StressTestSurvival = 0.92, LengthCv = 0.10, MuscleGutRatio = 4.5, Pcr = pcr });
+var seedLotEvent = SeedLots.Commissioning(batch, brood, sample, seedGtin, hatcheryGln, harvestDate);   // EPCIS, with genealogy and PCR in ILMD
+```
+
+- PL quality is scored 0–100. Any positive PCR, stress-test survival below 80 % or necrosis above 5 % fails the lot.
+- Stage durations, feeding levels and survivals are **indicative** hatchery practice. Set your own protocol.

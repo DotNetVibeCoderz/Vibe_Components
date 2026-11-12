@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Shrimp hatchery management for AquaCulture.Net: broodstock registry with SPF/PCR screening, spawning and female performance, larval stage schedule and feeding, tank batches, PL quality scoring and EPCIS seed lots.</Description>
+    <PackageTags>$(PackageTags);hatchery;broodstock;larvae;post-larvae;shrimp</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Traceability/AquaCulture.Traceability.csproj" />
+  </ItemGroup>
+</Project>

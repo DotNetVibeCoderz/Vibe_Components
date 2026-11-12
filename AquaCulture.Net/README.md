@@ -42,6 +42,7 @@ indoor RAS, aquaponics, fisheries and marine research, government monitoring and
 | `AquaCulture.Forecasting` | Holt, Holt–Winters, AR (Yule–Walker), auto selection; dawn DO-crash forecast; Monte-Carlo harvest P10/P50/P90 |
 | `AquaCulture.DigitalTwin` | Pond and farm twins: sensor fusion, growth soft-sensor, explained decisions, actuator commands, what-if |
 | `AquaCulture.Traceability` | GS1 identifiers and EPCIS 2.0 JSON-LD from hatchery to pallet (GDST farm-harvest data); trace-back and recall graph |
+| `AquaCulture.Hatchery` | Shrimp hatchery: SPF/PCR broodstock, spawning performance, larval stages and feeding, PL quality score, EPCIS seed lots |
 | `AquaCulture.Esg` | kg CO₂e per kg (feed, electricity, diesel, mangrove conversion and restoration), energy and water intensity, N/P discharge |
 | `AquaCulture.Analytics` | FCR, SR, ABW, ADG, SGR, biomass, productivity, cost breakdown, profit, break-even price, B/C, Water Health Index, benchmarks |
 | `AquaCulture.Reporting` | Excel, PDF, Word, CSV, JSON, HTML, Markdown writers (no third-party libraries); GAP, CBIB, ASC and BAP self-assessment |

@@ -36,7 +36,7 @@ so the versions below deepen them rather than introduce them.
 - ✅ Stock assessment: ELEFAN (TropFishR-style), catch-only methods (CMSY), Bayesian surplus production
 
 ## v2.0: Enterprise edition (from the design)
-- Farm ERP (inventory, purchasing, payroll), hatchery management (broodstock, spawning, larval rearing)
+- Farm ERP (inventory, purchasing, payroll); ✅ hatchery management (broodstock, spawning, larval rearing, PL quality, EPCIS seed lots)
 - ✅ Traceability (lot to pond, GS1 EPCIS 2.0), ESG reporting (energy, carbon, water footprint, mangrove, N/P)
 - AI Copilot across farms; multi-tenant cloud deployment
 
