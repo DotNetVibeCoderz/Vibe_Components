@@ -35,10 +35,10 @@ so the versions below deepen them rather than introduce them.
 - ✅ Tidal coastal transport over real bathymetry (raster → grid, depth-scaled tide, plume footprint and receptor exposure)
 - ✅ Stock assessment: ELEFAN (TropFishR-style), catch-only methods (CMSY), Bayesian surplus production
 
-## v2.0: Enterprise edition (from the design)
+## v2.0: Enterprise edition ✅ (2026-11-12)
 - ✅ Farm ERP (inventory, purchasing, payroll); ✅ hatchery management (broodstock, spawning, larval rearing, PL quality, EPCIS seed lots)
 - ✅ Traceability (lot to pond, GS1 EPCIS 2.0), ESG reporting (energy, carbon, water footprint, mangrove, N/P)
-- AI Copilot across farms; multi-tenant cloud deployment
+- ✅ AI Copilot across farms; multi-tenant cloud deployment (database per tenant, `aqua-cloud` template with Dockerfile)
 
 ## v5.0: Full aquaculture operating system
 - Edge OS image for gateways, offline-first sync, marketplace for sensors, feeds and buyers

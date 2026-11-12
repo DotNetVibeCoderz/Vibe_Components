@@ -192,7 +192,7 @@ public sealed class AquaAgent
 
     public AquaAgent(AquaContext context, IChatModel? model = null, AgentMemory? memory = null) : this([context], model, memory) { }
 
-    public AquaAgent(IEnumerable<AquaContext> ponds, IChatModel? model = null, AgentMemory? memory = null)
+    public AquaAgent(IEnumerable<AquaContext> ponds, IChatModel? model = null, AgentMemory? memory = null, IEnumerable<AgentTool>? extraTools = null)
     {
         _ponds = ponds.ToList();
         if (_ponds.Count == 0) throw new ArgumentException("At least one pond is required.", nameof(ponds));
@@ -200,8 +200,14 @@ public sealed class AquaAgent
         Memory = memory ?? new AgentMemory();
         Model = model ?? (LlmOptions.FromEnvironment() is { } o ? o.CreateModel() : new RuleBasedChatModel());
         foreach (var c in _ponds) _pondTools[c] = AquaTools.Create(c, () => _lang);
-        _farmTools = FarmTools();
+        _farmTools = [.. FarmTools(), .. extraTools ?? []];
     }
+
+    /// <summary>Extra instructions appended to the system prompt (for example the farms of a portfolio copilot).</summary>
+    public string PromptAddendum { get; init; } = "";
+
+    /// <summary>Raised when the detected answer language changes ("en" / "id"), so that extra tools can answer in it.</summary>
+    public event Action<string>? LanguageChanged;
 
     /// <summary>The pond the agent is currently advising on.</summary>
     public AquaContext Context { get; private set; }
@@ -297,13 +303,14 @@ public sealed class AquaAgent
         var notes = Memory.Recall(question, 3, Context.PondName);
         string remembered = notes.Count == 0 ? "" : "\nNotes remembered from earlier conversations (use them when relevant):\n" +
             string.Join("\n", notes.Select(n => $"- {n.Note.TimeUtc:yyyy-MM-dd}{(n.Note.Pond is null ? "" : " [" + n.Note.Pond + "]")}: {n.Note.Text}"));
+        string extra = PromptAddendum.Length > 0 ? System.Environment.NewLine + PromptAddendum : "";
         string farm = _ponds.Count > 1 ? $"\nThe farm has {_ponds.Count} ponds ({string.Join(", ", _ponds.Select(p => p.PondName))}); use list_ponds for a farm-wide view and select_pond to switch." : "";
         return $"""
         You are AquaCulture.Net's aquaculture advisor for fish and shrimp farmers. Farm context: {Context.Species.Name.En} ({Context.Species.ScientificName}),
         pond "{Context.PondName}", {Context.AreaM2:N0} m², depth {Context.DepthM} m, system {Context.System}, day of culture {Context.DayOfCulture}, ABW {Context.AbwG} g,
         population {Context.Population:N0}. Always call the tools for numbers; never invent values. Answer in {(_lang == "id" ? "Bahasa Indonesia" : "English")},
         concisely (max ~8 lines), practical and actionable, citing the key figures from tool results. If a disease is suspected, recommend laboratory confirmation.
-        When the farmer tells you a fact worth keeping (an event, a preference, a problem), call remember.{farm}{remembered}
+        When the farmer tells you a fact worth keeping (an event, a preference, a problem), call remember.{farm}{extra}{remembered}
         """;
     }
 
@@ -311,7 +318,8 @@ public sealed class AquaAgent
 
     public async Task<AgentAnswer> AskAsync(string question, CancellationToken ct = default)
     {
-        _lang = DetectLanguage(question);
+        var lang = DetectLanguage(question);
+        if (lang != _lang) { _lang = lang; LanguageChanged?.Invoke(lang); } else LanguageChanged?.Invoke(lang);
         if (MentionedPond(question) is { } mentioned) Context = mentioned;
         if (_history.Count == 0 || _history[0].Role != ChatRole.System) _history.Insert(0, new ChatMessage(ChatRole.System, SystemPrompt(question)));
         else _history[0] = new ChatMessage(ChatRole.System, SystemPrompt(question));

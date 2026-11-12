@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+    <ProjectReference Include="../AquaCulture.Analytics/AquaCulture.Analytics.csproj" />
     <ProjectReference Include="../AquaCulture.WaterQuality/AquaCulture.WaterQuality.csproj" />
     <ProjectReference Include="../AquaCulture.Growth/AquaCulture.Growth.csproj" />
     <ProjectReference Include="../AquaCulture.Feeding/AquaCulture.Feeding.csproj" />

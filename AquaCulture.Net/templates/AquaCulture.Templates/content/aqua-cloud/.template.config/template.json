@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [ "AquaCulture", "Aquaculture", "Web", "API", "Cloud" ],
+  "identity": "AquaCulture.Templates.Cloud",
+  "name": "AquaCulture.Net multi-tenant cloud API",
+  "shortName": "aqua-cloud",
+  "sourceName": "AquaCloud",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" },
+  "symbols": {
+    "species": { "type": "parameter", "datatype": "string", "defaultValue": "vaname", "replaces": "SPECIES_ID", "description": "Default species id for /ask: nila, lele, gurame, patin, koi, bandeng, kerapu, kakap, vaname, windu" }
+  }
+}

@@ -83,3 +83,34 @@ var slip = Payroll.Monthly(karyawan, new Timesheet(karyawan.Id, 25, jamLembur), 
   - Bonus panen per kg.
   - THR: satu bulan upah setelah 12 bulan bekerja, proporsional jika kurang dari itu.
 - Tarif dan batas upah ada di `PayrollRules`; perbarui setiap kali regulasi berubah. PPh 21 tidak dihitung.
+
+## Copilot lintas tambak (`AquaCulture.AI`)
+
+```csharp
+var copilot = FarmCopilot.Create([new FarmSite(tambakA, konteksKolamA, hariIni), new FarmSite(tambakB, konteksKolamB, hariIni)], memory: memori);
+await copilot.AskAsync("Bandingkan tambak menurut laba per kg");   // compare_farms(profit)
+await copilot.AskAsync("Kolam bermasalah di mana saja?");          // farm_alerts lintas tambak
+await copilot.AskAsync("Berapa pakan untuk kolam B/P-02 hari ini?");
+```
+
+Copilot ini adalah `AquaAgent` yang kolamnya dinamai "tambak/kolam". Selain tool per kolam, ada tiga tool tambahan yang semuanya dihitung dari
+`KpiCalculator`:
+- `portfolio_overview`: setiap tambak beserta biomassa, panen, laba, FCR, dan kolam terburuknya.
+- `compare_farms`: peringkat tambak menurut FCR, laba per kg, sintasan, atau produktivitas.
+- `farm_alerts`: kolam di semua tambak yang kualitas air atau DO-nya perlu perhatian.
+
+## Cloud multi-tenant (`AquaCulture.Data` + template `aqua-cloud`)
+
+```bash
+dotnet new aqua-cloud -n AquaCloudSaya --species vaname
+AQUA_ADMIN_KEY=<minimal 16 karakter> dotnet run --project AquaCloudSaya
+curl -X POST localhost:5000/admin/tenants -H "X-Admin-Key: $AQUA_ADMIN_KEY" -H "Content-Type: application/json" -d '{"id":"koperasi-a","name":"Koperasi A"}'
+curl -X POST localhost:5000/t/koperasi-a/readings -H "X-Api-Key: <kunci>" -H "Content-Type: application/json" \
+     -d '[{"device":"probe-1","pond":"P-01","kind":"DissolvedOxygen","value":4.2}]'
+```
+
+- `AquaTenants` memakai satu database per tenant: file SQLite secara bawaan, atau provider EF Core apa pun lewat factory, misalnya satu database
+  PostgreSQL per tenant.
+- Id tenant dibatasi `[a-z0-9-]`. API key disimpan sebagai hash SHA-256 dan dibandingkan dalam waktu konstan. Kunci bisa dirotasi dan tenant bisa
+  dinonaktifkan.
+- Template sudah menyertakan Dockerfile. Pasang `/data` sebagai volume.

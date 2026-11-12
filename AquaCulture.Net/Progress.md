@@ -30,11 +30,12 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | AquaCulture.Reporting | ✅ | XLSX/PDF/DOCX/CSV/JSON/HTML/MD (no third-party libs), GAP/CBIB/ASC/BAP |
 | AquaCulture.Visualization / Blazor | ✅ | SVG/PNG charts; 6 domain components incl. Three.js 3D pond |
 | AquaCulture.Native (Rust) | ✅ | 7 Rust tests; bit-identical managed fallback; CI builds 5 RIDs |
-| Tests | ✅ | 160 xUnit tests (reference values, native/managed parity, determinism, file-format validity, every gallery scenario) |
+| Tests | ✅ | 175 xUnit tests (reference values, native/managed parity, determinism, file-format validity, every gallery scenario) |
 | Gallery: Blazor | ✅ | 20 demos (v1.2: connectors, chlorophyll, learning), EN/ID, light/dark, screenshots in docs/images |
 | Gallery: Avalonia | ✅ | 20 demos, ThreeNet 3D pond (interactive + offscreen), headless screenshot mode |
 | CLI (`aqua`) | ✅ | 21 commands (v1.1: bmkg, history, marine, export, opcua) |
-| Templates | ✅ | 4 templates, verified to build from the packed feed |
+| Templates | ✅ | 5 templates (v2.0: aqua-cloud), verified to build from the packed feed |
+| v2.0 Enterprise | ✅ | Traceability (GS1/EPCIS 2.0), Esg, Hatchery, Operations (inventory, purchasing, payroll), FarmCopilot, AquaTenants + aqua-cloud template |
 | NuGet icon & packages | ✅ | 26 packages (v1.1, IoT.IoTCom as preview) + symbols; icon generated with Rodin (Nano Banana 2) |
 | Docs EN / ID | ✅ | 10 guides each (v1.1: data and connectors) + README / README.id |
 | Monorepo move (Vibe_Components/AquaCulture.Net) + CI workflow | ✅ | `.github/workflows/aquaculture-net.yml`, tag `aquaculture-net-v*` publishes with `NUGET_API_KEY` |
@@ -69,3 +70,8 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
   bathymetry; ELEFAN, CMSY, Bayesian surplus production. Fixed during verification: a sign error in the wind-mixing energy (columns
   were always fully mixed), convective mixing of equal-density layers, cage respiration spread over the whole column, low-wind latent
   heat (surface reached 38 °C), MCMC step adaptation (0.6 % acceptance). Version 1.3.0.
+- **2026-11-12**: v2.0 "Enterprise edition" complete: GS1/EPCIS 2.0 traceability with trace-back and recall, ESG accounting (feed, energy,
+  mangrove conversion and restoration, water, N/P), shrimp hatchery (broodstock, larval rearing, PL quality, EPCIS seed lots), farm ERP
+  (FEFO inventory feeding cycles per lot, purchasing, Indonesian payroll), multi-farm copilot, database-per-tenant cloud API template.
+  Fixed during verification: `LarvalBatch.StageOn` treated day 0 as "not found" because `(0, N, 0)` equals the default tuple.
+  Version 2.0.0; 31 packages.

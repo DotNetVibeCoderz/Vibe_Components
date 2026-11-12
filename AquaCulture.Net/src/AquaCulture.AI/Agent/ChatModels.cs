@@ -195,6 +195,9 @@ public sealed class RuleBasedChatModel : IChatModel
         ("harvest_forecast", ["panen", "harvest", "kapan", "when", "biomassa", "biomass", "yield", "hasil"]),
         ("weather_impact", ["cuaca", "hujan", "weather", "rain", "panas", "heat", "angin", "storm"]),
         ("economics", ["untung", "profit", "biaya", "cost", "harga", "price", "margin", "impas", "break-even"]),
+        ("compare_farms", ["bandingkan tambak", "compare farms", "tambak terbaik", "best farm", "peringkat tambak", "rank farms"]),
+        ("farm_alerts", ["kolam bermasalah", "ponds need attention", "peringatan semua", "alerts across", "kolam mana yang perlu"]),
+        ("portfolio_overview", ["semua tambak", "all farms", "portofolio", "portfolio", "seluruh tambak"]),
         ("list_ponds", ["semua kolam", "all ponds", "kolam mana", "which pond", "every pond", "tiap kolam", "setiap kolam"]),
         ("remember", ["catat ", "ingat bahwa", "ingatlah", "remember that", "note that", "tolong ingat"]),
         ("recall", ["pernah", "catatan", "what did i", "apa yang saya", "kemarin", "last time", "sebelumnya"]),
@@ -219,6 +222,8 @@ public sealed class RuleBasedChatModel : IChatModel
         {
             "remember" => new System.Text.Json.Nodes.JsonObject { ["text"] = userText }.ToJsonString(),
             "recall" => new System.Text.Json.Nodes.JsonObject { ["query"] = userText }.ToJsonString(),
+            "compare_farms" => new System.Text.Json.Nodes.JsonObject { ["metric"] = q.Contains("untung") || q.Contains("profit") || q.Contains("laba") ? "profit"
+                : q.Contains("sintasan") || q.Contains("survival") || q.Contains("sr ") ? "survival" : q.Contains("produktiv") ? "productivity" : "fcr" }.ToJsonString(),
             _ => "{}",
         };
         // remembering is the whole request: do not mix it with another intent

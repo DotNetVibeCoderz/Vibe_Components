@@ -83,3 +83,34 @@ var slip = Payroll.Monthly(employee, new Timesheet(employee.Id, 25, overtimeHour
   - Harvest bonus per kg.
   - THR: one month's wage after 12 months of service, prorated below that.
 - Rates and caps live in `PayrollRules`; update them when regulations change. PPh 21 is not computed.
+
+## Copilot across farms (`AquaCulture.AI`)
+
+```csharp
+var copilot = FarmCopilot.Create([new FarmSite(farmA, pondContextsA, today), new FarmSite(farmB, pondContextsB, today)], memory: memory);
+await copilot.AskAsync("Bandingkan tambak menurut laba per kg");   // compare_farms(profit)
+await copilot.AskAsync("Kolam bermasalah di mana saja?");          // farm_alerts across farms
+await copilot.AskAsync("Berapa pakan untuk kolam B/P-02 hari ini?");
+```
+
+The copilot is an `AquaAgent` whose ponds are named "farm/pond". It adds three tools on top of the per-pond tools, all from `KpiCalculator`:
+- `portfolio_overview`: every farm with its biomass, harvest, profit, FCR and worst pond.
+- `compare_farms`: farms ranked by FCR, profit per kg, survival or productivity.
+- `farm_alerts`: ponds across farms whose water quality or DO needs attention.
+
+## Multi-tenant cloud (`AquaCulture.Data` + template `aqua-cloud`)
+
+```bash
+dotnet new aqua-cloud -n MyAquaCloud --species vaname
+AQUA_ADMIN_KEY=<at least 16 characters> dotnet run --project MyAquaCloud
+curl -X POST localhost:5000/admin/tenants -H "X-Admin-Key: $AQUA_ADMIN_KEY" -H "Content-Type: application/json" -d '{"id":"koperasi-a","name":"Koperasi A"}'
+curl -X POST localhost:5000/t/koperasi-a/readings -H "X-Api-Key: <key>" -H "Content-Type: application/json" \
+     -d '[{"device":"probe-1","pond":"P-01","kind":"DissolvedOxygen","value":4.2}]'
+curl -X POST localhost:5000/t/koperasi-a/ponds/P-01/ask -H "X-Api-Key: <key>" -H "Content-Type: application/json" -d '{"text":"Berapa pakan hari ini?"}'
+```
+
+- `AquaTenants` keeps one database per tenant: SQLite files by default, or any EF Core provider through a factory, for example one
+  PostgreSQL database per tenant.
+- Tenant ids are restricted to `[a-z0-9-]`. API keys are stored as SHA-256 hashes and compared in constant time. Keys can be rotated
+  and tenants disabled.
+- The template ships a Dockerfile. Mount `/data` as a volume.

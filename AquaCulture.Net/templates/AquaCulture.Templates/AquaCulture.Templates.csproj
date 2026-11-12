@@ -3,7 +3,7 @@
     <PackageType>Template</PackageType>
     <PackageId>AquaCulture.Templates</PackageId>
     <Title>AquaCulture.Net project templates</Title>
-    <Description>dotnet new templates for AquaCulture.Net: console pond advisor, Blazor farm dashboard, IoT edge gateway (MQTT + digital twin) and Avalonia desktop pond monitor. Made by Gravicode Studios, led by Kang Fadhil.</Description>
+    <Description>dotnet new templates for AquaCulture.Net: console pond advisor, Blazor farm dashboard, IoT edge gateway (MQTT + digital twin), Avalonia desktop pond monitor and a multi-tenant cloud API. Made by Gravicode Studios, led by Kang Fadhil.</Description>
     <PackageTags>aquaculture;dotnet-new;templates;blazor;avalonia;iot;shrimp;fish</PackageTags>
     <IsPackable>true</IsPackable>
     <IncludeContentInPack>true</IncludeContentInPack>
