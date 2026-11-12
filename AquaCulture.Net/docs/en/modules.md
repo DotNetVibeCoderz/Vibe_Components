@@ -18,6 +18,16 @@ mortality, harvest, expense logs), `Stats`, `TimeSeries`, `Numerics` (Nelder–M
 × crowding × ration; stress mortality; feed = gain × species FCR worsened by stress, capped by appetite), `HarvestPredictor` (at weight, margin optimum,
 size-graded shrimp price, biomass confidence interval, TGC calibration).
 
+### Mechanistic growth (v1.3)
+- `Bioenergetics`: Wisconsin model (Fish Bioenergetics 4.0 structure). Consumption and respiration follow Kitchell temperature curves, and
+  egestion, excretion and SDA close the energy budget. `FitP` finds the proportion of maximum ration that reproduces observed growth.
+  The tilapia and whiteleg-shrimp parameter sets are **indicative**: calibrate `p` and `ACT` with your samplings.
+- `DebModel`: standard Dynamic Energy Budget for the growth phase (reserve, structure, κ-rule, Arrhenius temperature). Parameters come
+  from the Add-my-Pet collection. At constant food it reproduces von Bertalanffy growth with L∞ = f·L_m and r_B = k_M·g / (3(f + g)).
+- `ShrimpMoultModel`: size- and temperature-dependent intermoult period, Drach stages A–D3, and a stepwise individual weight. It also
+  computes the pond moulting share and feeding factor after a synchronising event (water exchange, moon phase), the moment farmers cut
+  feed and add minerals.
+
 ## AquaCulture.Feeding
 `Fcr`, `FeedingCalculator.Plan`, `FeedCatalog`, `FeedOptimizer` (adjusted FCR, cost per kg gain, ranking, Pearson square, cycle cost analysis), `AutoFeedingAdvisor`.
 
