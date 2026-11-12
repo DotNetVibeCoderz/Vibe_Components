@@ -39,7 +39,7 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | NuGet icon & packages | ✅ | 26 packages (v1.1, IoT.IoTCom as preview) + symbols; icon generated with Rodin (Nano Banana 2) |
 | Docs EN / ID | ✅ | 10 guides each (v1.1: data and connectors) + README / README.id |
 | Monorepo move (Vibe_Components/AquaCulture.Net) + CI workflow | ✅ | `.github/workflows/aquaculture-net.yml`, tag `aquaculture-net-v*` publishes with `NUGET_API_KEY` |
-| NuGet publish | ✅ | 1.0.0: all 22 packages on nuget.org · 1.1.0: 25 packages + IoT.IoTCom 1.1.0-preview.1 pushed by tag `aquaculture-net-v1.1.0` (CI run 43148528947) · 1.2.0: 27 packages + IoT.IoTCom 1.2.0-preview.1 pushed by tag `aquaculture-net-v1.2.0` (CI run 43157251298) · 1.3.0: 27 packages + IoT.IoTCom 1.3.0-preview.1 pushed by tag `aquaculture-net-v1.3.0` (CI run 43192930499) |
+| NuGet publish | ✅ | 1.0.0: all 22 packages on nuget.org · 1.1.0: 25 packages + IoT.IoTCom 1.1.0-preview.1 pushed by tag `aquaculture-net-v1.1.0` (CI run 43148528947) · 1.2.0: 27 packages + IoT.IoTCom 1.2.0-preview.1 pushed by tag `aquaculture-net-v1.2.0` (CI run 43157251298) · 1.3.0: 27 packages + IoT.IoTCom 1.3.0-preview.1 pushed by tag `aquaculture-net-v1.3.0` (CI run 43192930499) · 2.0.0: 31 packages + IoT.IoTCom 2.0.0-preview.1 pushed by tag `aquaculture-net-v2.0.0` (CI run 43253214690) |
 
 ## Log
 - **2026-11-12**: v1.0.0 implemented end-to-end. Fixed during verification: edge Hampel filter locking out after a level shift (all values now enter the window),
