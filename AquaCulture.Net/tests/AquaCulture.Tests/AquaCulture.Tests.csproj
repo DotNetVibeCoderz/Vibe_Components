@@ -20,6 +20,7 @@
     <ProjectReference Include="../../src/AquaCulture.AI.Torch/AquaCulture.AI.Torch.csproj" />
     <ProjectReference Include="../../gallery/AquaCulture.Gallery.Shared/AquaCulture.Gallery.Shared.csproj" />
     <ProjectReference Include="../../src/AquaCulture.ComputerVision/AquaCulture.ComputerVision.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.ComputerVision.MediaPipe/AquaCulture.ComputerVision.MediaPipe.csproj" />
     <ProjectReference Include="../../src/AquaCulture.DigitalTwin/AquaCulture.DigitalTwin.csproj" />
     <ProjectReference Include="../../src/AquaCulture.GIS/AquaCulture.GIS.csproj" />
     <ProjectReference Include="../../src/AquaCulture.Data/AquaCulture.Data.csproj" />

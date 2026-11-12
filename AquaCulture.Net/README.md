@@ -38,6 +38,7 @@ indoor RAS, aquaponics, fisheries and marine research, government monitoring and
 | `AquaCulture.AI` | Gradient-boosted growth model, logistic mortality risk, disease outlook, harvest outlook, Q-learning feed policy, ML.NET and ONNX Runtime backends, **AquaAgent** LLM with grounded tools |
 | `AquaCulture.AI.Torch` | LSTM dissolved-oxygen forecaster on TorchSharp (bring a libtorch backend such as TorchSharp-cpu) |
 | `AquaCulture.ComputerVision` | YOLO/ONNX detector with letterbox and NMS, model-free counting / sizing / white-spot, lesion and black-gill screening, OpenCvSharp interop |
+| `AquaCulture.ComputerVision.MediaPipe` | Fish and shrimp length and weight from photos and video with MediaPipe MagicTouch (one tap per animal) |
 | `AquaCulture.Forecasting` | Holt, Holt–Winters, AR (Yule–Walker), auto selection; dawn DO-crash forecast; Monte-Carlo harvest P10/P50/P90 |
 | `AquaCulture.DigitalTwin` | Pond and farm twins: sensor fusion, growth soft-sensor, explained decisions, actuator commands, what-if |
 | `AquaCulture.Analytics` | FCR, SR, ABW, ADG, SGR, biomass, productivity, cost breakdown, profit, break-even price, B/C, Water Health Index, benchmarks |
@@ -108,7 +109,7 @@ dotnet new aqua-blazor -n MyFarm --species vaname
 
 ```bash
 dotnet build AquaCulture.Net.slnx
-dotnet test tests/AquaCulture.Tests                  # 136 tests
+dotnet test tests/AquaCulture.Tests                  # 139 tests
 cd native/aqua-native && cargo test --release        # Rust kernels
 pwsh build/build-native.ps1                          # copy kernel into AquaCulture.Native/runtimes/<rid>/native
 pwsh build/pack.ps1                                  # NuGet packages → artifacts/packages

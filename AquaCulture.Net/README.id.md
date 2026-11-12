@@ -38,6 +38,7 @@ RAS indoor, akuaponik, riset perikanan dan kelautan, pemantauan pemerintah, dan 
 | `AquaCulture.AI` | Model pertumbuhan gradient boosting, risiko kematian, prakiraan penyakit dan panen, kebijakan pakan Q-learning, backend ML.NET dan ONNX, **AquaAgent** LLM |
 | `AquaCulture.AI.Torch` | Forecaster DO berbasis LSTM di TorchSharp (tambahkan backend libtorch seperti TorchSharp-cpu) |
 | `AquaCulture.ComputerVision` | Detektor YOLO/ONNX, penghitungan / pengukuran / skrining bintik putih, luka dan insang hitam, interop OpenCvSharp |
+| `AquaCulture.ComputerVision.MediaPipe` | Panjang dan bobot ikan/udang dari foto dan video dengan MediaPipe MagicTouch (satu ketukan per ekor) |
 | `AquaCulture.Forecasting` | Holt, Holt–Winters, AR, prakiraan DO subuh, prakiraan panen Monte-Carlo P10/P50/P90 |
 | `AquaCulture.DigitalTwin` | Kembaran digital kolam dan tambak dengan keputusan beralasan, perintah aktuator, what-if |
 | `AquaCulture.Analytics` | FCR, SR, ABW, ADG, SGR, biomassa, produktivitas, struktur biaya, laba, harga impas, B/C, Indeks Kesehatan Air |

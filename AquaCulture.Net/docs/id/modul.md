@@ -18,7 +18,8 @@
 | GIS.Gdal | `GdalRaster`, `WaterColour` | GeoTIFF lewat GDAL.Net; NDWI, MNDWI, klorofil-a dari NDCI (Mishra & Mishra 2012), kekeruhan (Dogliotti 2015), status trofik |
 | GIS | `GeoJson`, `FarmMapping`, `DrainageAnalysis`, `WaterSourceAnalysis`, `NtsInterop` | IDW, D8, NetTopologySuite + ProjNet (UTM, buffer, union) |
 | AI | `GrowthPredictor`, `MortalityPredictor`, `FeedOptimizationPolicy`, `MlNetGrowthModel`, `OnnxTabularModel`, `AquaAgent` | Lihat [AI dan AquaAgent](agen-ai.md) |
-| ComputerVision | `OnnxDetector`, `YoloDecoder`, `AnimalAnalyzer`, `OpenCvInterop` | YOLO v5/v8 + NMS; penghitungan, ukuran, skrining bintik putih/luka/insang hitam |
+| ComputerVision | `OnnxDetector`, `YoloDecoder`, `AnimalAnalyzer`, `OpenCvInterop`, `ModelHub` | YOLO v5/v8 + NMS; penghitungan, ukuran, skrining bintik putih/luka/insang hitam; unduh model dari Hugging Face Hub dengan cek lisensi dan cache |
+| ComputerVision.MediaPipe | `FishMeasurer` | Panjang dan bobot ikan/udang dari foto atau video: satu ketukan, segmentasi MagicTouch (MediaPipeNet), sumbu utama, skala papan ukur, relasi panjang–bobot spesies |
 | Forecasting | `HoltLinear`, `HoltWinters`, `Autoregressive`, `DoCrashForecaster`, `HarvestForecaster` | DO subuh = gabungan tren malam teredam dan neraca oksigen; panen P10/P50/P90 |
 | DigitalTwin | `PondTwin`, `FarmTwin` | Fusi sensor, soft-sensor pertumbuhan, keputusan beralasan, perintah aerator, what-if |
 | Analytics | `KpiCalculator` | FCR, SR, ABW, ADG, SGR, produktivitas, struktur biaya (kata kunci dwibahasa), laba, harga impas, B/C, Indeks Kesehatan Air |

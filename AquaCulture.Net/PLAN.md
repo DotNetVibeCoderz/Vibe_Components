@@ -22,8 +22,8 @@ so the versions below deepen them rather than introduce them.
 ## v1.2: AI depth
 - ✅ More IoTCom.Net adapters: LwM2M server (IPSO objects), farm-local LoRaWAN network server (Semtech UDP, AS923-2), M-Bus aerator energy meters
 - Gallery demos for the v1.1 connectors (store browser, BMKG/marine panel, chlorophyll map)
-- Trained ONNX models: shrimp disease (WSSV/AHPND/black gill) and fish counting/sizing (YOLO) with datasets and training notebooks
-- HF.Net model hub integration; MediaPipeNet for fish pose/length estimation from video
+- 🟡 Trained ONNX models: training notebook (`notebooks/train-yolo-aquaculture.ipynb`, YOLO → ONNX → Hub) done; trained weights wait for a licensed, labelled shrimp/fish dataset (none permissive on the Hub yet)
+- ✅ Hub integration (`ModelHub`: licence check, cached download, ONNX detector) and MediaPipeNet fish length/weight from photos and video (`FishMeasurer`)
 - ✅ Gradient-boosted (ML.NET FastTree) and LSTM (TorchSharp, `AquaCulture.AI.Torch`) DO forecasters with baseline skill; farm-data growth learning
 - ✅ Gravicode.RLNet SAC policies for hourly aeration and daily feeding (continuous actions), evaluated against farmer baselines
 - ✅ AquaAgent long-term memory (BM25 notes), multi-pond context, bounded history, voice (OpenAI-compatible ASR/TTS, Indonesian)

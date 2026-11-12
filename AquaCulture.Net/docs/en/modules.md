@@ -59,6 +59,25 @@ See [AI and the AquaAgent](ai-agent.md). Forecasting: `HoltLinear`, `HoltWinters
 `RgbImage`, `ImageOps` (resize, letterbox, CHW tensor, HSV), `YoloDecoder` (v5 and v8 layouts, class-wise NMS), `OnnxDetector`, `AnimalAnalyzer`
 (segmentation, components, moments, length → weight, screening), `SyntheticAquaImage`, `OpenCvInterop` (add an OpenCvSharp runtime package).
 
+### Model hub and fish length (v1.2)
+
+```csharp
+// Hugging Face Hub: licence check, cached download (ETag, offline fallback), ONNX detector
+var hub = new ModelHub();                                   // HF_TOKEN for gated repos, HF_ENDPOINT for a mirror
+var info = await hub.GetModelInfoAsync("your-org/shrimp-yolo-onnx");
+using var detector = await hub.LoadDetectorAsync("your-org/shrimp-yolo-onnx", "best.onnx", ["shrimp"]);   // refuses AGPL/NC unless acceptLicense: true
+
+// AquaCulture.ComputerVision.MediaPipe: tap a fish, get its length and weight (MediaPipe MagicTouch segmenter)
+using var measurer = new FishMeasurer(SpeciesCatalog.Nila, cmPerPixel: FishMeasurer.ScaleFromReference(600, 30));   // 30 cm board = 600 px
+var m = measurer.Measure("sampling.jpg", x: 0.45f, y: 0.52f);       // LengthPx (principal axis), LengthCm, WeightG, AngleDeg
+var (median, frames) = measurer.MeasureVideo(videoFrames);           // follows the fish, median of plausible frames
+```
+
+- Public Hub models for fish and shrimp are few. At the time of writing they ship as PyTorch `.pt` files under AGPL-3.0 or are gated,
+  so none is bundled or downloaded by default.
+- Train your own detector with `notebooks/train-yolo-aquaculture.ipynb` (Ultralytics → ONNX), publish it to a Hub repository, and load it
+  with `ModelHub`.
+
 ## AquaCulture.Analytics
 `KpiCalculator.Calculate` (FCR, SR, ABW, ADG, SGR, biomass, productivity, cost breakdown by bilingual keywords, profit, break-even, ROI, B/C, Water Health Index,
 benchmarks), `Summarize` for a farm.

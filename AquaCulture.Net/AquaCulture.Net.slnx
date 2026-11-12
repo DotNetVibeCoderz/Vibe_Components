@@ -10,6 +10,7 @@
     <Project Path="src/AquaCulture.Analytics/AquaCulture.Analytics.csproj" />
     <Project Path="src/AquaCulture.Blazor/AquaCulture.Blazor.csproj" />
     <Project Path="src/AquaCulture.ComputerVision/AquaCulture.ComputerVision.csproj" />
+    <Project Path="src/AquaCulture.ComputerVision.MediaPipe/AquaCulture.ComputerVision.MediaPipe.csproj" />
     <Project Path="src/AquaCulture.Core/AquaCulture.Core.csproj" />
     <Project Path="src/AquaCulture.Data/AquaCulture.Data.csproj" />
     <Project Path="src/AquaCulture.DigitalTwin/AquaCulture.DigitalTwin.csproj" />

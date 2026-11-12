@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Fish and shrimp length and weight from photos and video with MediaPipe's MagicTouch interactive segmenter (MediaPipeNet): one tap per animal, principal-axis length, measuring-board scale, species length–weight.</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+    <PackageTags>$(PackageTags);mediapipe;computer-vision;fish-length;segmentation</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Gravicode.MediaPipeNet.Tasks.Vision" Version="1.0.0" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
+    <!-- MediaPipeNet 1.0.0 pulls SixLabors.ImageSharp 3.1.12, which has published advisories (NU1902/NU1903). The patched 3.2.0+
+         requires a commercial Six Labors licence for Release builds, so it is not pinned here; this needs a fix in MediaPipeNet. -->
+  </ItemGroup>
+</Project>
