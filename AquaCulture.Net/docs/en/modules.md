@@ -35,6 +35,15 @@ size-graded shrimp price, biomass confidence interval, TGC calibration).
 `DiseaseKnowledgeBase` (15 diseases × signs with P(sign|disease), risk factors, treatment, prevention, WOAH-notifiable flag), `DiagnosisEngine.Diagnose`
 (naive Bayes + "none of these" hypothesis), `Risk` / `RiskProfile` (noisy-OR of factor scores).
 
+### Biofloc and RAS components (v1.3, AquaCulture.Hydrodynamic)
+- `BioflocModel`: hourly nitrogen dynamics with the Ebeling, Timmons & Bisogni (2006) stoichiometry (per g TAN-N: heterotrophs use
+  15.17 g carbohydrate, 4.71 g O₂ and 3.57 g alkalinity and make 8.07 g biomass; nitrifiers use 4.18 g O₂ and 7.05 g alkalinity).
+  Heterotrophic uptake is limited by carbohydrate, so the C:N ratio is the control. AOB and NOB communities mature at different
+  speeds, which reproduces the start-up nitrite peak. The model also tracks sludge, floc volume, alkalinity limitation and optional
+  bicarbonate dosing. `CarbonSourceForCn` and `CarbonSourceForFullAssimilation` give the molasses dose.
+- `DrumFilter` (removal from the particle-size distribution), `MbbrReactor` (Monod areal TAN removal, required volume), `Degasser`
+  (CO₂ stripping against G:L and packing depth) and `RasLoop.SteadyState` (TAN, CO₂ and TSS of the loop).
+
 ## AquaCulture.StockAssessment
 `SurplusProduction` (Schaefer/Fox equilibrium, dynamic Schaefer fit with Kobe status), `StockRecruitment`, `YieldPerRecruit.Analyze` (Fmax, F0.1, F40 %),
 `LengthBased` (Pauly M, Then M, Powell–Wetherall, catch curve, exploitation rate).
