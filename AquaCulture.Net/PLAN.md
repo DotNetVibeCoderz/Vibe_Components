@@ -19,7 +19,7 @@ so the versions below deepen them rather than introduce them.
 - ✅ IoTCom.Net adapters (`AquaCulture.IoT.IoTCom`, preview like IoTCom.Net itself): Modbus transport, SenML, NMEA 0183 cage sensors and drift, AIS vessel watch, Sparkplug B
 - ✅ GDAL.Net raster I/O (`AquaCulture.GIS.Gdal`: GeoTIFF read/write with WGS-84 warp) and Sentinel-2 water colour (NDWI, MNDWI, NDCI chlorophyll-a, turbidity, trophic state)
 
-## v1.2: AI depth
+## v1.2: AI depth ✅ (2026-11-12)
 - ✅ More IoTCom.Net adapters: LwM2M server (IPSO objects), farm-local LoRaWAN network server (Semtech UDP, AS923-2), M-Bus aerator energy meters
 - ✅ Gallery demos: data & connectors (BMKG, NASA POWER, marine, ChirpStack, SQLite → Parquet), satellite chlorophyll around cages, learned DO forecast & RL aeration
 - 🟡 Trained ONNX models: training notebook (`notebooks/train-yolo-aquaculture.ipynb`, YOLO → ONNX → Hub) done; trained weights wait for a licensed, labelled shrimp/fish dataset (none permissive on the Hub yet)

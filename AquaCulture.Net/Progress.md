@@ -61,3 +61,6 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
   so `ModelHub` is a small HTTP client instead. MediaPipeNet 1.0.0 pulls SixLabors.ImageSharp 3.1.12 (advisories NU1902/NU1903); the patched
   3.2.0 needs a commercial licence for Release builds, so it is not pinned. Both need fixes upstream. No permissively licensed fish/shrimp
   ONNX model exists on the Hub yet (AGPL `.pt` or gated), so trained models stay pending.
+- **2026-11-12**: v1.2 "AI depth" complete (except trained detector weights, which need a licensed dataset): IoTCom gateways, learned DO
+  forecasters (GBT, LSTM), RLNet aeration/feeding, agent memory/multi-pond/voice, model hub + MediaPipe fish length, 3 gallery demos.
+  Version 1.2.0; 27 packages (new: AI.Torch, ComputerVision.MediaPipe).
