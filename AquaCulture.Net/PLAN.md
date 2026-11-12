@@ -28,12 +28,12 @@ so the versions below deepen them rather than introduce them.
 - ✅ Gravicode.RLNet SAC policies for hourly aeration and daily feeding (continuous actions), evaluated against farmer baselines
 - ✅ AquaAgent long-term memory (BM25 notes), multi-pond context, bounded history, voice (OpenAI-compatible ASR/TTS, Indonesian)
 
-## v1.3: Science fidelity
+## v1.3: Science fidelity ✅ (2026-11-12)
 - ✅ Bioenergetic growth model (Wisconsin-style) and DEB option; stage-specific shrimp moult cycle
 - ✅ Biofloc C:N dynamics, nitrification kinetics, sludge model; RAS component models (drum filter, MBBR, degassing)
 - ✅ Stratified reservoir model for KJA upwelling (umbalan) risk — 1-D vertical (layered) column; full 3-D circulation deferred
 - ✅ Tidal coastal transport over real bathymetry (raster → grid, depth-scaled tide, plume footprint and receptor exposure)
-- Stock assessment: ELEFAN (TropFishR-style), catch-only methods (CMSY), Bayesian surplus production
+- ✅ Stock assessment: ELEFAN (TropFishR-style), catch-only methods (CMSY), Bayesian surplus production
 
 ## v2.0: Enterprise edition (from the design)
 - Farm ERP (inventory, purchasing, payroll), hatchery management (broodstock, spawning, larval rearing)

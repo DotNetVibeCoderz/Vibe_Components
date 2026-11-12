@@ -10,7 +10,7 @@ Its home is the `AquaCulture.Net/` folder of the `DotNetVibeCoderz/Vibe_Componen
 
 ```bash
 dotnet build AquaCulture.Net.slnx
-dotnet test tests/AquaCulture.Tests                                               # 142 xUnit tests
+dotnet test tests/AquaCulture.Tests                                               # 160 xUnit tests
 dotnet test tests/AquaCulture.Tests --filter "FullyQualifiedName~WaterQualityTests"                 # one class
 dotnet test tests/AquaCulture.Tests --filter "FullyQualifiedName~WaterQualityTests.Do_saturation_matches_reference_tables"  # one test
 cd native/aqua-native && cargo test --release                                     # Rust kernels
@@ -51,6 +51,9 @@ A running gallery server locks DLLs and makes builds fail with MSB3027; stop `Aq
   named in the question), an `AgentMemory` (JSON + BM25) and an `IVoiceService` (`OpenAiVoiceService`).
 - Vision v1.2: `ModelHub` (own Hugging Face client: GraviHub would bring Parquet.Net, which breaks GDAL on Windows) and
   `AquaCulture.ComputerVision.MediaPipe` (`FishMeasurer`, MagicTouch model is downloaded by MediaPipeNet's ModelStore on first use).
+- v1.3 science: `Bioenergetics`/`DebModel`/`ShrimpMoultModel` (Growth); `BioflocModel`, RAS components, `ReservoirStratification`
+  (1-D layered column, umbalan) and `CoastalTidal` (Hydrodynamic); `Elefan`, `Cmsy`, `BayesianSurplusProduction` (StockAssessment).
+  Built-in bioenergetics parameter sets are indicative; calibrate `p`/`ACT` with farm samplings.
 - The gallery's computation lives in `gallery/AquaCulture.Gallery.Shared` (`GalleryCatalog`, `DemoFarm`, `*Demo.Run`); the Blazor views
   (`Components/Demos/*View.razor`) and the Avalonia views (`Views.cs`, code-first kit in `Ui.cs`, ThreeNet scene in `Twin3D.cs`) only render results.
   `GalleryScenarioTests` runs every scenario. SVG uses `var(--aq-*, #fallback)`; `SvgTheme.Resolve` swaps in literals for Svg.Skia.

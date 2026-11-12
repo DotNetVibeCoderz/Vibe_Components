@@ -61,6 +61,18 @@ size-graded shrimp price, biomass confidence interval, TGC calibration).
 `SurplusProduction` (Schaefer/Fox equilibrium, dynamic Schaefer fit with Kobe status), `StockRecruitment`, `YieldPerRecruit.Analyze` (Fmax, F0.1, F40 %),
 `LengthBased` (Pauly M, Then M, Powell–Wetherall, catch curve, exploitation rate).
 
+### ELEFAN, CMSY and Bayesian surplus production (v1.3)
+- `Elefan`: TropFishR-style length-frequency analysis. Samples are restructured into peaks and troughs, von Bertalanffy curves are scored
+  with ESP/ASP into Rn, and a response surface over L∞ and K (best anchor time for each) gives the growth parameters and φ'.
+- `Cmsy`: catch-only MSY (Froese et al. 2017). It uses an r prior from resilience and depletion priors from the catch trend, keeps the
+  viable Monte-Carlo (r, k) pairs, and takes the estimate from the upper half of the viable r values.
+- `BayesianSurplusProduction`: Schaefer model fitted to catch and CPUE by Metropolis–Hastings, with q and σ integrated out. It gives
+  posterior medians and 95 % intervals for r, K, MSY, B/Bmsy and F/Fmsy, plus the Kobe probabilities of being overfished and of
+  overfishing.
+- On a synthetic fishery (r = 0.5, K = 10 000, MSY = 1 250), ELEFAN recovers L∞ and K exactly on its grid. CMSY gives
+  MSY ≈ 1 150 (95 % range 1 044–1 320). The Bayesian fit gives MSY ≈ 1 190 (1 136–1 247), slightly low because the medium-resilience
+  r prior centres on 0.4, and its B/Bmsy interval contains the true 0.72.
+
 ## AquaCulture.Population
 `AgeStructuredModel` (recruitment models incl. steepness, CV, seasonality, migration, Holling-II predator, `HarvestPolicy` constant F or hockey stick),
 `LeslieMatrix.Dominant`, `PredatorPrey.Simulate`.

@@ -7,13 +7,13 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | Solution scaffold (.NET 10, slnx, shared props) | ✅ | 32 projects, Release build with 0 warnings |
 | AquaCulture.Core | ✅ | 10 species, farm/pond/cycle model, SIMD stats, numerics, geo, deterministic RNG, DI, event bus |
 | AquaCulture.WaterQuality | ✅ | 15 parameters, NH₃, DO saturation (verified against APHA tables), WQI + CCME, alerts with hysteresis and DO trend, dosed recommendations |
-| AquaCulture.Growth | ✅ | TGC / VBGF / Gompertz, environmental modifiers, mortality, feed calibrated to species FCR, harvest optimum |
+| AquaCulture.Growth | ✅ | v1.3: Wisconsin bioenergetics, DEB, shrimp moult cycle · TGC / VBGF / Gompertz, environmental modifiers, mortality, feed calibrated to species FCR, harvest optimum |
 | AquaCulture.Feeding | ✅ | FCR, plans, schedules, least-cost feed, Pearson square, auto-feeder |
 | AquaCulture.Disease | ✅ | 15 diseases, Bayesian diagnosis, environmental risk |
-| AquaCulture.StockAssessment | ✅ | Schaefer/Fox, dynamic fit + Kobe, B-H/Ricker, YPR, length-based methods; ELEFAN ⏳ |
+| AquaCulture.StockAssessment | ✅ | Schaefer/Fox, dynamic fit + Kobe, B-H/Ricker, YPR, length-based methods; v1.3: ELEFAN, CMSY, Bayesian surplus production |
 | AquaCulture.Population | ✅ | Age-structured model, HCRs, predation, Leslie, predator–prey |
 | AquaCulture.Environment | ✅ | Open-Meteo, BMKG, NASA POWER, Open-Meteo Marine (all live-tested, parsers tested on fixtures), synthetic weather, impact predictor, climate risk |
-| AquaCulture.Hydrodynamic | ✅ | 2-D transport on Rust kernel, flows, sediment/plume, oxygen budget, RAS mass balance |
+| AquaCulture.Hydrodynamic | ✅ | v1.3: biofloc N dynamics, RAS components, 1-D reservoir stratification + umbalan, coastal tidal plumes · 2-D transport on Rust kernel, flows, sediment/plume, oxygen budget, RAS mass balance |
 | AquaCulture.IoT | ✅ | MQTT, REST, Modbus RTU/TCP + RTU serial client, LoRaWAN (LPP, TTN, ChirpStack v4), OPC-UA mapping, edge analytics, simulator; ESP32 firmware sample |
 | AquaCulture.GIS | ✅ | GeoJSON, pond layout, IDW, D8 drainage, water sources, NTS + ProjNet |
 | AquaCulture.GIS.Gdal (v1.1) | ✅ | GeoTIFF I/O via GDAL.Net 3.13 with WGS-84 warp; NDWI, MNDWI, NDCI chlorophyll-a, turbidity, trophic state |
@@ -30,7 +30,7 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | AquaCulture.Reporting | ✅ | XLSX/PDF/DOCX/CSV/JSON/HTML/MD (no third-party libs), GAP/CBIB/ASC/BAP |
 | AquaCulture.Visualization / Blazor | ✅ | SVG/PNG charts; 6 domain components incl. Three.js 3D pond |
 | AquaCulture.Native (Rust) | ✅ | 7 Rust tests; bit-identical managed fallback; CI builds 5 RIDs |
-| Tests | ✅ | 142 xUnit tests (reference values, native/managed parity, determinism, file-format validity, every gallery scenario) |
+| Tests | ✅ | 160 xUnit tests (reference values, native/managed parity, determinism, file-format validity, every gallery scenario) |
 | Gallery: Blazor | ✅ | 20 demos (v1.2: connectors, chlorophyll, learning), EN/ID, light/dark, screenshots in docs/images |
 | Gallery: Avalonia | ✅ | 20 demos, ThreeNet 3D pond (interactive + offscreen), headless screenshot mode |
 | CLI (`aqua`) | ✅ | 21 commands (v1.1: bmkg, history, marine, export, opcua) |
@@ -64,3 +64,8 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 - **2026-11-12**: v1.2 "AI depth" complete (except trained detector weights, which need a licensed dataset): IoTCom gateways, learned DO
   forecasters (GBT, LSTM), RLNet aeration/feeding, agent memory/multi-pond/voice, model hub + MediaPipe fish length, 3 gallery demos.
   Version 1.2.0; 27 packages (new: AI.Torch, ComputerVision.MediaPipe).
+- **2026-11-12**: v1.3 "Science fidelity" complete. Bioenergetics/DEB/moult; biofloc (Ebeling stoichiometry, start-up nitrite peak) and RAS
+  components; layered reservoir model with umbalan detection (a 1-D vertical column: full 3-D circulation deferred); tidal plumes over
+  bathymetry; ELEFAN, CMSY, Bayesian surplus production. Fixed during verification: a sign error in the wind-mixing energy (columns
+  were always fully mixed), convective mixing of equal-density layers, cage respiration spread over the whole column, low-wind latent
+  heat (surface reached 38 °C), MCMC step adaptation (0.6 % acceptance). Version 1.3.0.

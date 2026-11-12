@@ -10,7 +10,7 @@
     <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
     <PackageReference Include="Svg.Controls.Skia.Avalonia" Version="12.0.0.17" />
-    <PackageReference Include="AquaCulture.DigitalTwin" Version="1.2.0" />
-    <PackageReference Include="AquaCulture.Visualization" Version="1.2.0" />
+    <PackageReference Include="AquaCulture.DigitalTwin" Version="1.3.0" />
+    <PackageReference Include="AquaCulture.Visualization" Version="1.3.0" />
   </ItemGroup>
 </Project>
