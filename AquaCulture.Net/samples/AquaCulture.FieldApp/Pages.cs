@@ -75,8 +75,9 @@ public sealed class SamplePage : ContentPage
         var w = report.Water;
         Color c = w.Class switch { WaterQualityClass.Excellent or WaterQualityClass.Good => Ui.Good, WaterQualityClass.Fair => Ui.Warn, _ => Ui.Bad };
         foreach (var warn in report.EntryWarnings) _result.Add(Ui.P("⚠ " + _s.T(warn), Ui.Warn));
-        _result.Add(Ui.H($"WQI {w.Wqi.ToString("0", ci)} · {_s.T(WaterQualityAssessment.ClassName(w.Class))}"));
-        _result.Children[^1].SetValue(Label.TextColorProperty, c);
+        var head = Ui.H($"WQI {w.Wqi.ToString("0", ci)} · {_s.T(WaterQualityAssessment.ClassName(w.Class))}");
+        head.TextColor = c;
+        _result.Add(head);
         if (w.UnionizedAmmonia is { } nh3) _result.Add(Ui.P($"NH₃-N {nh3.ToString("0.000", ci)} mg/L"));
         foreach (var issue in w.Issues) _result.Add(Ui.P("• " + _s.T(issue)));
         if (report.Actions.Count > 0) _result.Add(Ui.H(_s.T("Do now", "Tindakan")));
