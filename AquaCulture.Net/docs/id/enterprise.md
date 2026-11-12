@@ -60,3 +60,26 @@ var eventLotBenur = SeedLots.Commissioning(batch, induk, sampel, gtinBenur, glnH
 
 - Mutu PL diberi skor 0–100. Lot dinyatakan tidak lulus jika ada PCR positif, sintasan uji stres di bawah 80 %, atau nekrosis di atas 5 %.
 - Durasi stadia, takaran pakan, dan sintasan adalah praktik hatchery yang **indikatif**. Sesuaikan dengan protokol Anda.
+
+## ERP tambak (`AquaCulture.Operations`)
+
+```csharp
+var gudang = new Inventory().Add(new InventoryItem("GROWER-2", "Pakan grower 2 mm", ItemCategory.Feed) { LeadTimeDays = 7, SafetyDays = 5 });
+var po = new PurchaseOrder { Number = "PO-001", Supplier = "PT Pakan", Date = hariIni };
+po.Lines.Add(new PoLine("GROWER-2", 2000, 16_000));
+po.Place().Receive(gudang, "GROWER-2", 2000, lotCode: "G2-2606", hariIni, expiry: hariIni.AddMonths(4));   // masuk stok sebagai lot
+
+gudang.IssueFeed("GROWER-2", 120, hariIni, siklus);  // yang paling dulu kedaluwarsa dipakai dulu; tercatat di siklus dengan kode lot dan harga
+var saran = gudang.Reorder("GROWER-2", hariIni, plannedDailyUse: rencana.DailyKg);   // titik pesan = pemakaian × (lead time + stok pengaman)
+
+var slip = Payroll.Monthly(karyawan, new Timesheet(karyawan.Id, 25, jamLembur), harvestKg: 12_000, thrHoliday: idulFitri);
+```
+
+- Pakan yang dikeluarkan dari gudang tercatat di siklus per lot, dengan kode lot sebagai id pakan dan harga lot sebagai harga. Dengan begitu
+  biaya pakan, FCR, dan ketertelusuran EPCIS memakai lot yang sama.
+- Penggajian mengikuti aturan Indonesia:
+  - Lembur: jam pertama 1,5×, jam berikutnya 2× dari 1/173 upah sebulan.
+  - BPJS: JHT 3,7 % + 2 %, JKK sesuai kelas risiko, JKM 0,3 %, JP 2 % + 1 % hingga batas upahnya, dan Kesehatan 4 % + 1 % hingga batasnya.
+  - Bonus panen per kg.
+  - THR: satu bulan upah setelah 12 bulan bekerja, proporsional jika kurang dari itu.
+- Tarif dan batas upah ada di `PayrollRules`; perbarui setiap kali regulasi berubah. PPh 21 tidak dihitung.

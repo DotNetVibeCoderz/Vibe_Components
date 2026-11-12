@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Farm ERP for AquaCulture.Net: lot-tracked inventory (FEFO, expiry, valuation, reorder point, feed issued to cycles), purchase orders with receiving, and Indonesian payroll (overtime, BPJS, harvest bonus, THR).</Description>
+    <PackageTags>$(PackageTags);erp;inventory;purchasing;payroll;bpjs</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+  </ItemGroup>
+</Project>

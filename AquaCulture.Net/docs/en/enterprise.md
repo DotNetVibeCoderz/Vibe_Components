@@ -60,3 +60,26 @@ var seedLotEvent = SeedLots.Commissioning(batch, brood, sample, seedGtin, hatche
 
 - PL quality is scored 0–100. Any positive PCR, stress-test survival below 80 % or necrosis above 5 % fails the lot.
 - Stage durations, feeding levels and survivals are **indicative** hatchery practice. Set your own protocol.
+
+## Farm ERP (`AquaCulture.Operations`)
+
+```csharp
+var store = new Inventory().Add(new InventoryItem("GROWER-2", "Grower feed 2 mm", ItemCategory.Feed) { LeadTimeDays = 7, SafetyDays = 5 });
+var po = new PurchaseOrder { Number = "PO-001", Supplier = "PT Pakan", Date = today };
+po.Lines.Add(new PoLine("GROWER-2", 2000, 16_000));
+po.Place().Receive(store, "GROWER-2", 2000, lotCode: "G2-2606", today, expiry: today.AddMonths(4));   // a lot in stock
+
+store.IssueFeed("GROWER-2", 120, today, cycle);    // first-expiring-first-out; logged on the cycle with lot code and cost
+var advice = store.Reorder("GROWER-2", today, plannedDailyUse: plan.DailyKg);   // reorder point = use × (lead time + safety)
+
+var slip = Payroll.Monthly(employee, new Timesheet(employee.Id, 25, overtimeHours), harvestKg: 12_000, thrHoliday: idulFitri);
+```
+
+- Feed issued from stock is logged on the cycle per lot, with the lot code as feed id and the lot cost as price. Feed cost, FCR and EPCIS
+  traceability therefore all see the same lots.
+- Payroll follows Indonesian rules:
+  - Overtime: first hour 1.5×, then 2× of 1/173 of the monthly wage.
+  - BPJS: JHT 3.7 % + 2 %, JKK by risk class, JKM 0.3 %, JP 2 % + 1 % up to its wage cap, and Kesehatan 4 % + 1 % up to its cap.
+  - Harvest bonus per kg.
+  - THR: one month's wage after 12 months of service, prorated below that.
+- Rates and caps live in `PayrollRules`; update them when regulations change. PPh 21 is not computed.

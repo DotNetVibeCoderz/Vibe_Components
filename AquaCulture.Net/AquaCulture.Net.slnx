@@ -28,6 +28,7 @@
     <Project Path="src/AquaCulture.IoT.OpcUa/AquaCulture.IoT.OpcUa.csproj" />
     <Project Path="src/AquaCulture.IoT/AquaCulture.IoT.csproj" />
     <Project Path="src/AquaCulture.Native/AquaCulture.Native.csproj" />
+    <Project Path="src/AquaCulture.Operations/AquaCulture.Operations.csproj" />
     <Project Path="src/AquaCulture.Population/AquaCulture.Population.csproj" />
     <Project Path="src/AquaCulture.Reporting/AquaCulture.Reporting.csproj" />
     <Project Path="src/AquaCulture.StockAssessment/AquaCulture.StockAssessment.csproj" />
