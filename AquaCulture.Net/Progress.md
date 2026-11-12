@@ -39,3 +39,6 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
   DO-trend alert using end points instead of a regression, dawn-DO forecast extrapolating the dusk slope linearly (now damped) and assuming aerators off in the twin,
   shrimp respiration about 2× literature, simulated FCR too low (feed now derived from gain × species FCR), Monte-Carlo harvest spread too narrow (per-run TGC),
   doubled `runtimes` path in the native package, 3-D pond water hidden under the ground plane.
+- **2026-11-12**: web-twin / web-twin-dark screenshots showed an empty 3D pond: the screenshot script passed `--disable-gpu`, which disables WebGL in headless Chrome.
+  Removed the flag and shortened the virtual-time budget to 12 s (longer budgets let the Blazor circuit drop and the reconnect overlay grey the page).
+  `DigitalTwinViewer` now shows a "needs WebGL" message instead of an empty box when the 3D context cannot be created.

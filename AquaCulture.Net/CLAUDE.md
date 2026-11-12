@@ -19,7 +19,7 @@ pwsh build/pack.ps1                  # all NuGet packages → artifacts/packages
 dotnet run --project gallery/AquaCulture.Gallery.Web --urls http://localhost:5390
 dotnet run --project gallery/AquaCulture.Gallery.Desktop
 dotnet run --project gallery/AquaCulture.Gallery.Desktop -- --screenshot docs/images [en|id]   # headless Avalonia + ThreeNet offscreen
-pwsh build/screenshots-web.ps1       # headless Chrome screenshots of the running web gallery (twin page needs a long virtual-time budget)
+pwsh build/screenshots-web.ps1       # headless Chrome screenshots of the running web gallery (no --disable-gpu: WebGL needs it; ~12 s budget avoids the reconnect overlay)
 dotnet run --project tools/AquaCulture.Cli -- help
 ```
 

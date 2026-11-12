@@ -4,6 +4,10 @@
 
 <div class="aq-twin3d" style="height:@(Height)px">
     <canvas @ref="_canvas" aria-label="@(Lang == "id" ? "Kolam digital 3D" : "3D digital pond")"></canvas>
+    @if (_error is not null)
+    {
+        <div class="aq-twin3d-error">@(Lang == "id" ? "Tampilan 3D membutuhkan WebGL" : "The 3D view needs WebGL") · @_error</div>
+    }
     @if (State is { } s)
     {
         <div class="aq-twin3d-hud">
@@ -32,16 +36,26 @@
 
     private ElementReference _canvas;
     private IJSObjectReference? _module;
-    private int _id;
+    private int _id = -1;
+    private string? _error;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/AquaCulture.Blazor/aquaTwin.js");
-            _id = await _module.InvokeAsync<int>("create", _canvas, new { width = PondWidthM, length = PondLengthM, depth = DepthM, wheels = Aerators, sensors = SensorCount, animals = Shrimp ? "shrimp" : "fish" });
+            try
+            {
+                _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/AquaCulture.Blazor/aquaTwin.js");
+                _id = await _module.InvokeAsync<int>("create", _canvas, new { width = PondWidthM, length = PondLengthM, depth = DepthM, wheels = Aerators, sensors = SensorCount, animals = Shrimp ? "shrimp" : "fish" });
+            }
+            catch (JSException e)
+            {
+                _error = e.Message.Split(Environment.NewLine)[0];
+                StateHasChanged();
+                return;
+            }
         }
-        if (_module is not null)
+        if (_module is not null && _id >= 0)
             await _module.InvokeVoidAsync("update", _id, new { @do = State?.Water.DissolvedOxygen ?? 6, aerator = Aerator, biomassRatio = Math.Clamp(BiomassRatio, 0.02, 1), alert = State?.ActiveAlerts.Count > 0 });
     }
 

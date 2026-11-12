@@ -79,3 +79,4 @@
 .aq-twin3d-hud span { background: rgba(11, 46, 54, .78); color: #e8f6f4; font: 12px var(--aq-mono); padding: 4px 8px; border-radius: 6px; backdrop-filter: blur(4px); }
 .aq-twin3d-hud span.on { background: rgba(18, 164, 182, .9); }
 .aq-twin3d-hud span.off { background: rgba(224, 97, 74, .9); }
+.aq-twin3d-error { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; color: var(--aq-muted); font: 13px var(--aq-mono); }
