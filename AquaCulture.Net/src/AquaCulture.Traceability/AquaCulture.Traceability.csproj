@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Traceability for AquaCulture.Net: GS1 identifiers (GTIN, GLN, SSCC, Digital Link), EPCIS 2.0 JSON-LD events from hatchery to pallet (GDST farm-harvest data), trace-back and recall graph.</Description>
+    <PackageTags>$(PackageTags);traceability;gs1;epcis;gdst;seafood</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+  </ItemGroup>
+</Project>

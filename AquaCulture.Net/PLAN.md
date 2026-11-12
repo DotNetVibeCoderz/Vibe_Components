@@ -37,7 +37,7 @@ so the versions below deepen them rather than introduce them.
 
 ## v2.0: Enterprise edition (from the design)
 - Farm ERP (inventory, purchasing, payroll), hatchery management (broodstock, spawning, larval rearing)
-- Traceability (lot to pond, GS1 EPCIS), ESG reporting (energy, carbon, water footprint, mangrove)
+- ✅ Traceability (lot to pond, GS1 EPCIS 2.0), ESG reporting (energy, carbon, water footprint, mangrove, N/P)
 - AI Copilot across farms; multi-tenant cloud deployment
 
 ## v5.0: Full aquaculture operating system

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>ESG accounting for AquaCulture.Net: greenhouse gases (feed, electricity, diesel, mangrove conversion and restoration), energy and water intensity, nitrogen and phosphorus discharge per kg harvested.</Description>
+    <PackageTags>$(PackageTags);esg;carbon;footprint;mangrove;sustainability</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -9,6 +9,7 @@
 | [Modul](modul.md) | Fungsi setiap paket, tipe utama dan dasar ilmiahnya |
 | [IoT dan kembaran digital](iot-kembaran.md) | Perangkat, topik MQTT, codec LoRaWAN, peta Modbus, analitik edge, kembaran kolam dan tambak |
 | [Data dan konektor](data-konektor.md) | Penyimpanan SQLite/EF Core, ekspor Parquet/CSV, BMKG, NASA POWER, prakiraan laut, Modbus RTU serial, ChirpStack, OPC UA, IoTCom.Net (SenML, NMEA/AIS, Sparkplug B), warna air GDAL |
+| [Edisi enterprise](enterprise.md) | v2.0: ketertelusuran GS1/EPCIS, akuntansi ESG, hatchery, ERP, copilot lintas tambak |
 | [AI dan AquaAgent](agen-ai.md) | Model prediktif, kebijakan pakan RL, ML.NET/ONNX, penyedia LLM dan alat |
 | [Kernel native](native.md) | Crate Rust, C ABI, fallback managed, build untuk platform lain |
 | [Galeri](galeri.md) | 20 kasus penggunaan, cara menjalankan aplikasi web dan desktop, tangkapan layar |

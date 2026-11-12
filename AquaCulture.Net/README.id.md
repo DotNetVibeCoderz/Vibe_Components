@@ -41,6 +41,8 @@ RAS indoor, akuaponik, riset perikanan dan kelautan, pemantauan pemerintah, dan 
 | `AquaCulture.ComputerVision.MediaPipe` | Panjang dan bobot ikan/udang dari foto dan video dengan MediaPipe MagicTouch (satu ketukan per ekor) |
 | `AquaCulture.Forecasting` | Holt, Holt–Winters, AR, prakiraan DO subuh, prakiraan panen Monte-Carlo P10/P50/P90 |
 | `AquaCulture.DigitalTwin` | Kembaran digital kolam dan tambak dengan keputusan beralasan, perintah aktuator, what-if |
+| `AquaCulture.Traceability` | Pengenal GS1 dan EPCIS 2.0 JSON-LD dari hatchery hingga palet (data panen GDST); graf trace-back dan recall |
+| `AquaCulture.Esg` | kg CO₂e per kg panen (pakan, listrik, solar, konversi dan restorasi mangrove), intensitas energi dan air, buangan N/P |
 | `AquaCulture.Analytics` | FCR, SR, ABW, ADG, SGR, biomassa, produktivitas, struktur biaya, laba, harga impas, B/C, Indeks Kesehatan Air |
 | `AquaCulture.Reporting` | Excel, PDF, Word, CSV, JSON, HTML, Markdown tanpa pustaka pihak ketiga; penilaian mandiri GAP, CBIB, ASC, BAP |
 | `AquaCulture.Visualization` / `AquaCulture.Blazor` | Grafik SVG/PNG; komponen `PondMap`, `WaterChart`, `FeedScheduler`, `SensorGrid`, `GISViewer`, `DigitalTwinViewer` (Three.js) |

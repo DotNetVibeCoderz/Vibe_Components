@@ -22,7 +22,9 @@
     <ProjectReference Include="../../src/AquaCulture.ComputerVision/AquaCulture.ComputerVision.csproj" />
     <ProjectReference Include="../../src/AquaCulture.ComputerVision.MediaPipe/AquaCulture.ComputerVision.MediaPipe.csproj" />
     <ProjectReference Include="../../src/AquaCulture.DigitalTwin/AquaCulture.DigitalTwin.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.Esg/AquaCulture.Esg.csproj" />
     <ProjectReference Include="../../src/AquaCulture.GIS/AquaCulture.GIS.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.Traceability/AquaCulture.Traceability.csproj" />
     <ProjectReference Include="../../src/AquaCulture.Data/AquaCulture.Data.csproj" />
     <ProjectReference Include="../../src/AquaCulture.GIS.Gdal/AquaCulture.GIS.Gdal.csproj" />
     <ProjectReference Include="../../src/AquaCulture.IoT.IoTCom/AquaCulture.IoT.IoTCom.csproj" />

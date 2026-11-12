@@ -9,6 +9,7 @@
 | [Modules](modules.md) | What each package does, key types and the science behind it |
 | [IoT and digital twin](iot-twin.md) | Devices, MQTT topics, LoRaWAN codecs, Modbus maps, edge analytics, pond and farm twins |
 | [Data and connectors](data-connectors.md) | SQLite/EF Core store, Parquet/CSV export, BMKG, NASA POWER, marine forecasts, Modbus RTU serial, ChirpStack, OPC UA, IoTCom.Net (SenML, NMEA/AIS, Sparkplug B), GDAL water colour |
+| [Enterprise edition](enterprise.md) | v2.0: GS1/EPCIS traceability, ESG accounting, hatchery, ERP, multi-farm copilot |
 | [AI and the AquaAgent](ai-agent.md) | Predictive models, RL feed policy, ML.NET/ONNX, LLM providers and tools |
 | [Native kernels](native.md) | Rust crate, C ABI, managed fallback, building for other platforms |
 | [Gallery](gallery.md) | The 20 use cases, how to run the web and desktop apps, screenshots |
