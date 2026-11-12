@@ -44,6 +44,19 @@ size-graded shrimp price, biomass confidence interval, TGC calibration).
 - `DrumFilter` (removal from the particle-size distribution), `MbbrReactor` (Monod areal TAN removal, required volume), `Degasser`
   (CO₂ stripping against G:L and packing depth) and `RasLoop.SteadyState` (TAN, CO₂ and TSS of the loop).
 
+### Reservoir upwelling and coastal tides (v1.3, AquaCulture.Hydrodynamic)
+- `ReservoirStratification`: a vertical (1-D, layered) column of a cage reservoir. It covers the surface heat budget (shortwave with
+  extinction, long-wave, sensible and latent heat, cooling rain), convective mixing, mixed-layer deepening by wind energy against the
+  thermocline, and oxygen per layer (photosynthesis, water-column, sediment and cage respiration).
+- `DetectUpwelling` flags *umbalan*: cage-zone DO falls while anoxic hypolimnetic water is entrained. `Assess` turns a weather forecast
+  and the current profiles into a 0–100 risk with bilingual advice.
+- In the tests, 20 calm days stratify a 20 m column and turn its lower 16 m anoxic; a 3-day cold, windy, rainy spell then overturns it
+  and cage DO drops to about 1.2 mg/L.
+- Horizontal (3-D) circulation is not modelled.
+- `CoastalTidal`: a grid from a bathymetry raster (`GdalRaster.Read` → `FromBathymetry`), a depth-scaled tidal current (Manning,
+  u ∝ h^⅔) and effluent or cage-waste dispersion over tidal cycles. It reports the plume track, the footprint above a threshold and the
+  exposure of receptors such as intakes or seagrass. The current is a kinematic approximation for screening, not a shallow-water solver.
+
 ## AquaCulture.StockAssessment
 `SurplusProduction` (Schaefer/Fox equilibrium, dynamic Schaefer fit with Kobe status), `StockRecruitment`, `YieldPerRecruit.Analyze` (Fmax, F0.1, F40 %),
 `LengthBased` (Pauly M, Then M, Powell–Wetherall, catch curve, exploitation rate).
