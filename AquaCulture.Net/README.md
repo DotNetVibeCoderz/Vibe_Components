@@ -113,11 +113,13 @@ dotnet new aqua-blazor -n MyFarm --species vaname
 
 ```bash
 dotnet build AquaCulture.Net.slnx
-dotnet test tests/AquaCulture.Tests                  # 175 tests
+dotnet test tests/AquaCulture.Tests                  # 180 tests
 cd native/aqua-native && cargo test --release        # Rust kernels
 pwsh build/build-native.ps1                          # copy kernel into AquaCulture.Native/runtimes/<rid>/native
 pwsh build/pack.ps1                                  # NuGet packages → artifacts/packages
 ```
+
+Edge gateway for Raspberry Pi 4/5 (NativeAOT, offline-first sync) and performance budgets: [docs/en/edge-platform.md](docs/en/edge-platform.md).
 
 ## Documentation
 

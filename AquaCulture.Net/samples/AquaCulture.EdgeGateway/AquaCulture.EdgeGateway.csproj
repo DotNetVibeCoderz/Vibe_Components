@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    NativeAOT edge gateway for Raspberry Pi 4/5 (linux-arm64) and other small Linux boxes.
+    Made by Gravicode Studios, led by Kang Fadhil.
+
+      dotnet publish samples/AquaCulture.EdgeGateway -c Release -r linux-arm64    (on an arm64 Linux host or runner)
+      dotnet publish samples/AquaCulture.EdgeGateway -c Release -r win-x64        (on Windows with the C++ build tools)
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>aqua-edge</AssemblyName>
+    <RootNamespace>AquaCulture.EdgeGateway</RootNamespace>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <StackTraceSupport>false</StackTraceSupport>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- any trim/AOT warning from our code or our dependencies fails the publish -->
+    <WarningsAsErrors>$(WarningsAsErrors);IL2026;IL2046;IL2057;IL2067;IL2070;IL2072;IL2075;IL2087;IL2091;IL3050;IL3051</WarningsAsErrors>
+  </PropertyGroup>
+  <!--
+    SDKs that bundle runtime 10.0.12 or older bring an ILCompiler with advisory GHSA-p3jp-9v83-76w9 (NU1903). On those SDKs use the
+    patched compiler and the matching runtime pack (RID-specific builds only: a framework-dependent `dotnet run` keeps the installed runtime); newer SDKs (CI) use their own. Remove once every SDK in use is newer.
+  -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != '' and $([MSBuild]::VersionLessThan('$(BundledNETCoreAppPackageVersion)', '10.0.15'))">
+    <RuntimeFrameworkVersion>10.0.15</RuntimeFrameworkVersion>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(RuntimeIdentifier)' != '' and $([MSBuild]::VersionLessThan('$(BundledNETCoreAppPackageVersion)', '10.0.15'))">
+    <KnownILCompilerPack Update="Microsoft.DotNet.ILCompiler" ILCompilerPackVersion="10.0.15" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/AquaCulture.IoT/AquaCulture.IoT.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.WaterQuality/AquaCulture.WaterQuality.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.Forecasting/AquaCulture.Forecasting.csproj" />
+  </ItemGroup>
+  <!-- builds without a RID only reference the ILCompiler package and never run it, so its advisory does not apply there -->
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == ''">
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-p3jp-9v83-76w9" />
+  </ItemGroup>
+</Project>

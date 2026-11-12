@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Performance benchmarks with budgets. Made by Gravicode Studios, led by Kang Fadhil. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <Optimize>true</Optimize>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/AquaCulture.AI/AquaCulture.AI.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.Hydrodynamic/AquaCulture.Hydrodynamic.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.IoT/AquaCulture.IoT.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.Traceability/AquaCulture.Traceability.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="budgets.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -54,6 +54,44 @@ api.MapPost("/readings", async (string tenant, ReadingIn[] rows, AquaTenants ten
     return Results.Accepted(value: new { stored = n });
 });
 
+// ── offline-first edge sync (AquaCulture.IoT CloudSyncClient) ──
+// Idempotent: each gateway numbers its readings; the tenant database keeps a watermark per gateway, so a retried batch is not stored twice.
+api.MapPost("/sync/{gateway}/readings", async (string tenant, string gateway, HttpRequest req, AquaTenants tenants) =>
+{
+    if (!SyncWire.IsValidGatewayId(gateway)) return Results.BadRequest(new { error = "Invalid gateway id." });
+    using var ms = new MemoryStream();
+    await req.Body.CopyToAsync(ms);
+    if (ms.Length > 8 << 20) return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+    try
+    {
+        var (gw, records) = SyncWire.ParseBatch(ms.ToArray());
+        if (gw != gateway) return Results.BadRequest(new { error = "Gateway in body does not match the URL." });
+        var (acked, stored, duplicates) = await tenants.Store(tenant).IngestGatewayBatchAsync(gateway, records);
+        return Results.Ok(new { acked, stored, duplicates });
+    }
+    catch (FormatException e) { return Results.BadRequest(new { error = e.Message }); }
+});
+
+api.MapGet("/sync/{gateway}/config", async (string tenant, string gateway, HttpRequest req, AquaTenants tenants) =>
+{
+    if (await tenants.Store(tenant).GetGatewayConfigAsync(gateway) is not { } cfg) return Results.NotFound();
+    string etag = $"\"{cfg.Version}\"";
+    if (req.Headers.IfNoneMatch.ToString() == etag) return Results.StatusCode(StatusCodes.Status304NotModified);
+    req.HttpContext.Response.Headers.ETag = etag;
+    return Results.Text(cfg.Json, "application/json");
+});
+
+api.MapPut("/sync/{gateway}/config", async (string tenant, string gateway, HttpRequest req, AquaTenants tenants) =>
+{
+    if (!SyncWire.IsValidGatewayId(gateway)) return Results.BadRequest(new { error = "Invalid gateway id." });
+    using var sr = new StreamReader(req.Body);
+    try { return Results.Ok(new { version = await tenants.Store(tenant).SetGatewayConfigAsync(gateway, await sr.ReadToEndAsync()) }); }
+    catch (Exception e) when (e is ArgumentException or System.Text.Json.JsonException) { return Results.BadRequest(new { error = e.Message }); }
+});
+
+api.MapGet("/sync/gateways", async (string tenant, AquaTenants tenants) =>
+    Results.Ok((await tenants.Store(tenant).ListGatewaysAsync()).Select(g => new { g.GatewayId, g.AckedSeq, g.Received, g.Duplicates, g.LastSeenUtc, g.ConfigVersion })));
+
 api.MapGet("/ponds/{pond}/readings", async (string tenant, string pond, string? kind, int? hours, AquaTenants tenants) =>
 {
     SensorKind? k = kind is null ? null : SensorReading.TryParseKind(kind, out var kk) ? kk : throw new BadHttpRequestException($"Unknown kind '{kind}'.");

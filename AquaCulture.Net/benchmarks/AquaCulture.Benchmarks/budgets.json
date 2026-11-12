@@ -1,0 +1,22 @@
+{
+  "_comment": "Ceilings for a GitHub-hosted runner with the ShortRun job. meanUs ≈ 4× a desktop run (runners are slower and noisy); allocatedBytes is deterministic, so it is tight: the kernels must not allocate. Re-baseline with --budgets budgets.json and edit by hand.",
+  "_baseline": "2026-11-13, Windows 11, .NET 10.0, x64: AdvectDiffuse200 native 526 µs / managed 926 µs, OxygenBudget48h 10.3 µs, GbtDoForecast12h 39 µs.",
+
+  "KernelBenchmarks.AdvectDiffuse200[Backend=Native]":  { "meanUs": 2500, "allocatedBytes": 0 },
+  "KernelBenchmarks.AdvectDiffuse200[Backend=Managed]": { "meanUs": 4000, "allocatedBytes": 0 },
+  "KernelBenchmarks.DoSaturation10k[Backend=Native]":   { "meanUs": 500,  "allocatedBytes": 0 },
+  "KernelBenchmarks.DoSaturation10k[Backend=Managed]":  { "meanUs": 600,  "allocatedBytes": 0 },
+  "KernelBenchmarks.Nh3Fraction10k[Backend=Native]":    { "meanUs": 1100, "allocatedBytes": 0 },
+  "KernelBenchmarks.Nh3Fraction10k[Backend=Managed]":   { "meanUs": 1100, "allocatedBytes": 0 },
+  "KernelBenchmarks.Stats100k[Backend=Native]":         { "meanUs": 2400, "allocatedBytes": 0 },
+  "KernelBenchmarks.Stats100k[Backend=Managed]":        { "meanUs": 2400, "allocatedBytes": 0 },
+  "KernelBenchmarks.TgcMonteCarlo1k[Backend=Native]":   { "meanUs": 7000, "allocatedBytes": 8100 },
+  "KernelBenchmarks.TgcMonteCarlo1k[Backend=Managed]":  { "meanUs": 8000, "allocatedBytes": 80000 },
+
+  "ModelBenchmarks.OxygenBudget48h":    { "meanUs": 50,  "allocatedBytes": 7000 },
+  "ModelBenchmarks.Growth120d":         { "meanUs": 120, "allocatedBytes": 20000 },
+  "ModelBenchmarks.WaterQualityAssess": { "meanUs": 4,   "allocatedBytes": 1300 },
+  "ModelBenchmarks.EdgeAnalytics1k":    { "meanUs": 4,   "allocatedBytes": 1000 },
+  "ModelBenchmarks.GbtDoForecast12h":   { "meanUs": 160, "allocatedBytes": 3200 },
+  "ModelBenchmarks.EpcisDocument":      { "meanUs": 110, "allocatedBytes": 30000 }
+}

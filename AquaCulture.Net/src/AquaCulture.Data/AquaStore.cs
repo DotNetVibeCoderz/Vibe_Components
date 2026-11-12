@@ -29,6 +29,13 @@ public sealed class AquaStore : IDisposable, IAsyncDisposable
         _options = options;
         using var db = NewContext();
         db.Database.EnsureCreated();
+        // Tables added after 2.0 for databases created by an older version (EnsureCreated does not alter an existing database).
+        if (db.Database.IsSqlite())
+            db.Database.ExecuteSqlRaw("""
+                CREATE TABLE IF NOT EXISTS "sync_gateways" (
+                  "GatewayId" TEXT NOT NULL CONSTRAINT "PK_sync_gateways" PRIMARY KEY, "AckedSeq" INTEGER NOT NULL, "Received" INTEGER NOT NULL,
+                  "Duplicates" INTEGER NOT NULL, "LastSeenUtc" TEXT NOT NULL, "ConfigJson" TEXT NULL, "ConfigVersion" INTEGER NOT NULL)
+                """);
     }
 
     /// <summary>Opens (or creates) a SQLite database file.</summary>
@@ -176,6 +183,67 @@ public sealed class AquaStore : IDisposable, IAsyncDisposable
 
     private static SensorReading ToReading(ReadingRow x) =>
         new(x.DeviceId, x.PondId, (SensorKind)x.Kind, x.Value, DateTime.SpecifyKind(x.TimestampUtc, DateTimeKind.Utc), SensorReading.DefaultUnit((SensorKind)x.Kind), x.Quality);
+
+    // ───────── edge gateway sync ─────────
+
+    /// <summary>
+    /// Idempotent ingest of a gateway batch: readings with a sequence number at or below the gateway's watermark are skipped
+    /// (a retried upload), the rest are stored and the watermark advances, all in one transaction.
+    /// Returns the new watermark (what the gateway may delete), the number stored and the number skipped as duplicates.
+    /// </summary>
+    public async Task<(long Acked, int Stored, int Duplicates)> IngestGatewayBatchAsync(string gatewayId, IReadOnlyList<OutboxRecord> batch, CancellationToken ct = default)
+    {
+        await using var db = NewContext();
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        var gw = await db.Gateways.FindAsync([gatewayId], ct).ConfigureAwait(false);
+        if (gw is null) db.Gateways.Add(gw = new GatewaySyncRow { GatewayId = gatewayId });
+        long watermark = gw.AckedSeq;
+        int stored = 0, dup = 0;
+        foreach (var rec in batch.OrderBy(r => r.Seq))
+        {
+            if (rec.Seq <= watermark) { dup++; continue; }
+            var r = rec.Reading;
+            db.Readings.Add(new ReadingRow { DeviceId = r.DeviceId, PondId = r.PondId, Kind = (int)r.Kind, Value = r.Value, TimestampUtc = r.Timestamp.ToUniversalTime(), Quality = r.Quality });
+            watermark = rec.Seq;
+            stored++;
+        }
+        gw.AckedSeq = watermark;
+        gw.Received += stored;
+        gw.Duplicates += dup;
+        gw.LastSeenUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await tx.CommitAsync(ct).ConfigureAwait(false);
+        return (watermark, stored, dup);
+    }
+
+    /// <summary>Known gateways with their watermark, totals and last contact.</summary>
+    public async Task<IReadOnlyList<GatewaySyncRow>> ListGatewaysAsync(CancellationToken ct = default)
+    {
+        await using var db = NewContext();
+        return await db.Gateways.AsNoTracking().OrderBy(x => x.GatewayId).ToListAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Stores the configuration a gateway pulls (JSON object); returns the new version.</summary>
+    public async Task<int> SetGatewayConfigAsync(string gatewayId, string configJson, CancellationToken ct = default)
+    {
+        if (System.Text.Json.Nodes.JsonNode.Parse(configJson) is not System.Text.Json.Nodes.JsonObject)
+            throw new ArgumentException("Gateway configuration must be a JSON object.", nameof(configJson));
+        await using var db = NewContext();
+        var gw = await db.Gateways.FindAsync([gatewayId], ct).ConfigureAwait(false);
+        if (gw is null) db.Gateways.Add(gw = new GatewaySyncRow { GatewayId = gatewayId, LastSeenUtc = DateTime.UnixEpoch });
+        gw.ConfigJson = configJson;
+        gw.ConfigVersion++;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return gw.ConfigVersion;
+    }
+
+    /// <summary>The configuration of a gateway and its version, or null when none was set.</summary>
+    public async Task<(string Json, int Version)?> GetGatewayConfigAsync(string gatewayId, CancellationToken ct = default)
+    {
+        await using var db = NewContext();
+        var gw = await db.Gateways.AsNoTracking().FirstOrDefaultAsync(x => x.GatewayId == gatewayId, ct).ConfigureAwait(false);
+        return gw?.ConfigJson is { } json ? (json, gw.ConfigVersion) : null;
+    }
 
     // ───────── decisions ─────────
 

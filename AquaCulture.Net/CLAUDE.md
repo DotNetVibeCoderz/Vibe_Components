@@ -10,7 +10,7 @@ Its home is the `AquaCulture.Net/` folder of the `DotNetVibeCoderz/Vibe_Componen
 
 ```bash
 dotnet build AquaCulture.Net.slnx
-dotnet test tests/AquaCulture.Tests                                               # 175 xUnit tests
+dotnet test tests/AquaCulture.Tests                                               # 180 xUnit tests
 dotnet test tests/AquaCulture.Tests --filter "FullyQualifiedName~WaterQualityTests"                 # one class
 dotnet test tests/AquaCulture.Tests --filter "FullyQualifiedName~WaterQualityTests.Do_saturation_matches_reference_tables"  # one test
 cd native/aqua-native && cargo test --release                                     # Rust kernels
@@ -21,6 +21,8 @@ dotnet run --project gallery/AquaCulture.Gallery.Desktop
 dotnet run --project gallery/AquaCulture.Gallery.Desktop -- --screenshot docs/images [en|id]   # headless Avalonia + ThreeNet offscreen
 pwsh build/screenshots-web.ps1       # headless Chrome screenshots of the running web gallery (no --disable-gpu: WebGL needs it; ~12 s budget avoids the reconnect overlay)
 dotnet run --project tools/AquaCulture.Cli -- help
+dotnet run -c Release --project benchmarks/AquaCulture.Benchmarks -- --budgets budgets.json --job short --filter "*"   # perf budgets (~3 min)
+dotnet run --project samples/AquaCulture.EdgeGateway -- --selftest                 # edge gateway; AOT: dotnet publish ... -r win-x64 (needs vswhere on PATH)
 ```
 
 A running gallery server locks DLLs and makes builds fail with MSB3027; stop `AquaCulture.Gallery.Web` first.
@@ -60,6 +62,10 @@ A running gallery server locks DLLs and makes builds fail with MSB3027; stop `Aq
 - The gallery's computation lives in `gallery/AquaCulture.Gallery.Shared` (`GalleryCatalog`, `DemoFarm`, `*Demo.Run`); the Blazor views
   (`Components/Demos/*View.razor`) and the Avalonia views (`Views.cs`, code-first kit in `Ui.cs`, ThreeNet scene in `Twin3D.cs`) only render results.
   `GalleryScenarioTests` runs every scenario. SVG uses `var(--aq-*, #fallback)`; `SvgTheme.Resolve` swaps in literals for Svg.Skia.
+- v2.1 edge: `EdgeOutbox`/`CloudSyncClient`/`SyncWire` (IoT) ↔ `AquaStore.IngestGatewayBatchAsync` (per-gateway watermark, idempotent) ↔
+  `aqua-cloud` `/t/{tenant}/sync/{gateway}/…`. `samples/AquaCulture.EdgeGateway` is NativeAOT with trim/AOT warnings as errors: it may only
+  reference AOT-safe libraries. New tables must also be created for existing SQLite databases (see the `AquaStore` constructor).
+  `benchmarks/AquaCulture.Benchmarks/budgets.json` gates CI publishing; re-baseline it when a change legitimately moves a number.
 - The Blazor 3D pond is `src/AquaCulture.Blazor/wwwroot/aquaTwin.js` with a vendored Three.js r170 (`wwwroot/three/`).
 
 ## Conventions

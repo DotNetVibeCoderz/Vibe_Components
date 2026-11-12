@@ -92,6 +92,18 @@ public sealed class DecisionRow
     public DateTime TimestampUtc { get; set; }
 }
 
+/// <summary>Sync state of an edge gateway: the highest sequence number stored (watermark) and its pushed configuration.</summary>
+public sealed class GatewaySyncRow
+{
+    public string GatewayId { get; set; } = "";
+    public long AckedSeq { get; set; }
+    public long Received { get; set; }
+    public long Duplicates { get; set; }
+    public DateTime LastSeenUtc { get; set; }
+    public string? ConfigJson { get; set; }
+    public int ConfigVersion { get; set; }
+}
+
 /// <summary>EF Core context for AquaCulture.Net (SQLite by default; any EF Core provider works).</summary>
 public sealed class AquaDbContext(DbContextOptions<AquaDbContext> options) : DbContext(options)
 {
@@ -101,6 +113,7 @@ public sealed class AquaDbContext(DbContextOptions<AquaDbContext> options) : DbC
     public DbSet<CycleEventRow> CycleEvents => Set<CycleEventRow>();
     public DbSet<ReadingRow> Readings => Set<ReadingRow>();
     public DbSet<DecisionRow> Decisions => Set<DecisionRow>();
+    public DbSet<GatewaySyncRow> Gateways => Set<GatewaySyncRow>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -110,5 +123,6 @@ public sealed class AquaDbContext(DbContextOptions<AquaDbContext> options) : DbC
         b.Entity<CycleEventRow>(e => { e.ToTable("cycle_events"); e.HasKey(x => x.Id); e.HasIndex(x => new { x.FarmId, x.CycleId, x.Kind, x.Date }); });
         b.Entity<ReadingRow>(e => { e.ToTable("readings"); e.HasKey(x => x.Id); e.HasIndex(x => new { x.PondId, x.Kind, x.TimestampUtc }); });
         b.Entity<DecisionRow>(e => { e.ToTable("decisions"); e.HasKey(x => x.Id); e.HasIndex(x => new { x.PondId, x.TimestampUtc }); });
+        b.Entity<GatewaySyncRow>(e => { e.ToTable("sync_gateways"); e.HasKey(x => x.GatewayId); });
     }
 }

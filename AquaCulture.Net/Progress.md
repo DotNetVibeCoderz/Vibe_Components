@@ -4,7 +4,7 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 
 | Area | Status | Notes |
 |---|---|---|
-| Solution scaffold (.NET 10, slnx, shared props) | ✅ | 32 projects, Release build with 0 warnings |
+| Solution scaffold (.NET 10, slnx, shared props) | ✅ | 38 projects (30 libraries, gallery ×3, CLI, templates, tests, benchmarks, edge gateway), Release build without code warnings (NU190x: ImageSharp via MediaPipeNet, upstream) |
 | AquaCulture.Core | ✅ | 10 species, farm/pond/cycle model, SIMD stats, numerics, geo, deterministic RNG, DI, event bus |
 | AquaCulture.WaterQuality | ✅ | 15 parameters, NH₃, DO saturation (verified against APHA tables), WQI + CCME, alerts with hysteresis and DO trend, dosed recommendations |
 | AquaCulture.Growth | ✅ | v1.3: Wisconsin bioenergetics, DEB, shrimp moult cycle · TGC / VBGF / Gompertz, environmental modifiers, mortality, feed calibrated to species FCR, harvest optimum |
@@ -14,7 +14,7 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | AquaCulture.Population | ✅ | Age-structured model, HCRs, predation, Leslie, predator–prey |
 | AquaCulture.Environment | ✅ | Open-Meteo, BMKG, NASA POWER, Open-Meteo Marine (all live-tested, parsers tested on fixtures), synthetic weather, impact predictor, climate risk |
 | AquaCulture.Hydrodynamic | ✅ | v1.3: biofloc N dynamics, RAS components, 1-D reservoir stratification + umbalan, coastal tidal plumes · 2-D transport on Rust kernel, flows, sediment/plume, oxygen budget, RAS mass balance |
-| AquaCulture.IoT | ✅ | MQTT, REST, Modbus RTU/TCP + RTU serial client, LoRaWAN (LPP, TTN, ChirpStack v4), OPC-UA mapping, edge analytics, simulator; ESP32 firmware sample |
+| AquaCulture.IoT | ✅ | MQTT, REST, Modbus RTU/TCP + RTU serial client, LoRaWAN (LPP, TTN, ChirpStack v4), OPC-UA mapping, edge analytics, simulator; ESP32 firmware sample; v2.1: `EdgeOutbox` + `CloudSyncClient` offline-first sync |
 | AquaCulture.GIS | ✅ | GeoJSON, pond layout, IDW, D8 drainage, water sources, NTS + ProjNet |
 | AquaCulture.GIS.Gdal (v1.1) | ✅ | GeoTIFF I/O via GDAL.Net 3.13 with WGS-84 warp; NDWI, MNDWI, NDCI chlorophyll-a, turbidity, trophic state |
 | AquaCulture.Data (v1.1) | ✅ | EF Core 10 / SQLite store (farms, cycles + logs, readings, decisions), recording transport, Parquet (ParquetSharp) / CSV export |
@@ -30,14 +30,17 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | AquaCulture.Reporting | ✅ | XLSX/PDF/DOCX/CSV/JSON/HTML/MD (no third-party libs), GAP/CBIB/ASC/BAP |
 | AquaCulture.Visualization / Blazor | ✅ | SVG/PNG charts; 6 domain components incl. Three.js 3D pond |
 | AquaCulture.Native (Rust) | ✅ | 7 Rust tests; bit-identical managed fallback; CI builds 5 RIDs |
-| Tests | ✅ | 175 xUnit tests (reference values, native/managed parity, determinism, file-format validity, every gallery scenario) |
+| Tests | ✅ | 180 xUnit tests (reference values, native/managed parity, determinism, file-format validity, every gallery scenario) |
 | Gallery: Blazor | ✅ | 20 demos (v1.2: connectors, chlorophyll, learning), EN/ID, light/dark, screenshots in docs/images |
 | Gallery: Avalonia | ✅ | 20 demos, ThreeNet 3D pond (interactive + offscreen), headless screenshot mode |
 | CLI (`aqua`) | ✅ | 21 commands (v1.1: bmkg, history, marine, export, opcua) |
 | Templates | ✅ | 5 templates (v2.0: aqua-cloud), verified to build from the packed feed |
 | v2.0 Enterprise | ✅ | Traceability (GS1/EPCIS 2.0), Esg, Hatchery, Operations (inventory, purchasing, payroll), FarmCopilot, AquaTenants + aqua-cloud template |
-| NuGet icon & packages | ✅ | 26 packages (v1.1, IoT.IoTCom as preview) + symbols; icon generated with Rodin (Nano Banana 2) |
-| Docs EN / ID | ✅ | 10 guides each (v1.1: data and connectors) + README / README.id |
+| v2.1 Edge and platform | ✅ | NativeAOT gateway `aqua-edge` (4.4 MB, self-test 1 s; CI: linux-arm64 + linux-x64), offline-first sync with per-gateway watermarks, BenchmarkDotNet with budgets in CI. Not released yet |
+| MAUI field-sampling client | ⏳ | |
+| Marketplace (v5.0) | ⏳ | |
+| NuGet icon & packages | ✅ | 31 packages + IoT.IoTCom (preview) + symbols; icon generated with Rodin (Nano Banana 2) |
+| Docs EN / ID | ✅ | 12 guides each (v2.0: enterprise, v2.1: edge and platform) + README / README.id |
 | Monorepo move (Vibe_Components/AquaCulture.Net) + CI workflow | ✅ | `.github/workflows/aquaculture-net.yml`, tag `aquaculture-net-v*` publishes with `NUGET_API_KEY` |
 | NuGet publish | ✅ | 1.0.0: all 22 packages on nuget.org · 1.1.0: 25 packages + IoT.IoTCom 1.1.0-preview.1 pushed by tag `aquaculture-net-v1.1.0` (CI run 43148528947) · 1.2.0: 27 packages + IoT.IoTCom 1.2.0-preview.1 pushed by tag `aquaculture-net-v1.2.0` (CI run 43157251298) · 1.3.0: 27 packages + IoT.IoTCom 1.3.0-preview.1 pushed by tag `aquaculture-net-v1.3.0` (CI run 43192930499) · 2.0.0: 31 packages + IoT.IoTCom 2.0.0-preview.1 pushed by tag `aquaculture-net-v2.0.0` (CI run 43253214690) |
 
@@ -75,3 +78,10 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
   (FEFO inventory feeding cycles per lot, purchasing, Indonesian payroll), multi-farm copilot, database-per-tenant cloud API template.
   Fixed during verification: `LarvalBatch.StageOn` treated day 0 as "not found" because `(0, N, 0)` equals the default tuple.
   Version 2.0.0; 31 packages.
+- **2026-11-13**: v2.1 "Edge and platform". `EdgeOutbox`/`CloudSyncClient` (AquaCulture.IoT), `IngestGatewayBatchAsync` + `sync_gateways`
+  (AquaCulture.Data; added to existing SQLite databases with `CREATE TABLE IF NOT EXISTS`, since `EnsureCreated` does not alter them),
+  `aqua-cloud` sync endpoints, NativeAOT `aqua-edge`, BenchmarkDotNet budgets, CI jobs `benchmarks` and `edge-aot` gate publishing.
+  Verified end to end: the native gateway against the template server built from the 2.1.0 packages, through an outage and back:
+  640/640 readings stored, 0 duplicates, cloud set point applied. The ILCompiler bundled with SDK 10.0.4xx (10.0.12) has advisory
+  GHSA-p3jp-9v83-76w9; on such SDKs the gateway publishes with ILCompiler/runtime 10.0.15 (`KnownILCompilerPack` update, RID builds only).
+  Version 2.1.0 (not tagged).

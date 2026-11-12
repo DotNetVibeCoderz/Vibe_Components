@@ -40,10 +40,20 @@ so the versions below deepen them rather than introduce them.
 - ✅ Traceability (lot to pond, GS1 EPCIS 2.0), ESG reporting (energy, carbon, water footprint, mangrove, N/P)
 - ✅ AI Copilot across farms; multi-tenant cloud deployment (database per tenant, `aqua-cloud` template with Dockerfile)
 
+## v2.1: Edge and platform ✅ (2026-11-13)
+- ✅ NativeAOT edge gateway `aqua-edge` (`samples/AquaCulture.EdgeGateway`): local alerts and aerator control, Modbus TCP or simulated probes,
+  self-test; CI publishes it for linux-arm64 (Raspberry Pi 4/5) and linux-x64 and runs the native binary
+- ✅ Offline-first sync: `EdgeOutbox` (durable, power-cut safe, capped), `CloudSyncClient` (batches, backoff, config pull with ETag),
+  idempotent per-gateway watermarks in `AquaStore` and the `aqua-cloud` sync endpoints
+- ✅ BenchmarkDotNet project (`benchmarks/AquaCulture.Benchmarks`, Rust vs managed kernels and the hot models) with time and allocation
+  budgets enforced in CI before publishing
+
 ## v5.0: Full aquaculture operating system
-- Edge OS image for gateways, offline-first sync, marketplace for sensors, feeds and buyers
+- 🟡 Edge OS image for gateways: the gateway is one self-contained binary with a systemd unit (documented); a flashable Pi image is not built yet
+- ✅ Offline-first sync (v2.1)
+- ⏳ Marketplace for sensors, feeds and buyers
 
 ## Platform
-- NativeAOT samples for edge gateways (Raspberry Pi 4/5)
-- BenchmarkDotNet project and performance budgets in CI
-- MAUI/mobile client for field sampling
+- ✅ NativeAOT samples for edge gateways (Raspberry Pi 4/5) (v2.1)
+- ✅ BenchmarkDotNet project and performance budgets in CI (v2.1)
+- ⏳ MAUI/mobile client for field sampling

@@ -1,8 +1,14 @@
 <Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/AquaCulture.Benchmarks/AquaCulture.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/gallery/">
     <Project Path="gallery/AquaCulture.Gallery.Desktop/AquaCulture.Gallery.Desktop.csproj" />
     <Project Path="gallery/AquaCulture.Gallery.Shared/AquaCulture.Gallery.Shared.csproj" />
     <Project Path="gallery/AquaCulture.Gallery.Web/AquaCulture.Gallery.Web.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/AquaCulture.EdgeGateway/AquaCulture.EdgeGateway.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/AquaCulture.AI.Torch/AquaCulture.AI.Torch.csproj" />

@@ -64,6 +64,8 @@ Console.WriteLine(agen.Ask("Berapa pakan udang hari ini dan apakah DO aman malam
 
 Panduan lengkap: [docs/id/memulai.md](docs/id/memulai.md).
 
+Gateway edge untuk Raspberry Pi 4/5 (NativeAOT, sinkronisasi offline-first) dan anggaran performa: [docs/id/edge-platform.md](docs/id/edge-platform.md).
+
 ## Galeri
 
 20 kasus penggunaan interaktif dalam aplikasi web **Blazor** dan desktop **Avalonia** (dengan kolam 3D **ThreeNet**).
