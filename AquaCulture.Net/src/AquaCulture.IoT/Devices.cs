@@ -15,6 +15,10 @@ public enum SensorKind
 {
     Temperature, Ph, DissolvedOxygen, Orp, Salinity, Tds, Tss, Alkalinity, Ammonia, Nitrite, Nitrate, Phosphate, Bod, Cod, Turbidity,
     WaterLevel, AirTemperature, Humidity, Rainfall, WindSpeed, SolarRadiation, AeratorCurrent, FeederRemaining, Battery, Rssi,
+    /// <summary>Electrical power (kW), for example of an aerator from an energy meter.</summary>
+    Power,
+    /// <summary>Cumulative electrical energy (kWh).</summary>
+    Energy,
 }
 
 /// <summary>A sensor reading.</summary>
@@ -38,6 +42,8 @@ public sealed record SensorReading(string DeviceId, string PondId, SensorKind Ki
         SensorKind.FeederRemaining => "kg",
         SensorKind.Battery => "V",
         SensorKind.Rssi => "dBm",
+        SensorKind.Power => "kW",
+        SensorKind.Energy => "kWh",
         _ => "",
     };
 

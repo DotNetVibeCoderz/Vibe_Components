@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>IoTCom.Net adapters for AquaCulture.Net: Modbus TCP/RTU/ASCII probe polling with aerator coils, SenML (RFC 8428) JSON/CBOR, NMEA 0183 cage sensors and mooring drift, AIS vessel watch around KJA zones, and Sparkplug B publishing of ponds to SCADA hosts.</Description>
+    <Description>IoTCom.Net adapters for AquaCulture.Net: Modbus TCP/RTU/ASCII probe polling with aerator coils, SenML (RFC 8428) JSON/CBOR, NMEA 0183 cage sensors and mooring drift, AIS vessel watch around KJA zones, Sparkplug B publishing of ponds to SCADA hosts, a farm-local LoRaWAN network server (Semtech UDP), an LwM2M server for IPSO pond sensors and M-Bus aerator energy meters.</Description>
     <IsAotCompatible>false</IsAotCompatible>
     <PackageTags>$(PackageTags);iotcom;sparkplug;senml;nmea;ais;modbus</PackageTags>
   </PropertyGroup>
@@ -21,6 +21,9 @@
     <PackageReference Include="IoTCom.Net.Serialization.SenML" Version="0.22.0-preview.1" />
     <PackageReference Include="IoTCom.Net.Transport.Serial" Version="0.22.0-preview.1" />
     <PackageReference Include="IoTCom.Net.Adapters.Mqtt" Version="0.22.0-preview.1" />
+    <PackageReference Include="IoTCom.Net.Protocols.LoRaWan" Version="0.22.0-preview.1" />
+    <PackageReference Include="IoTCom.Net.Protocols.Lwm2m" Version="0.22.0-preview.1" />
+    <PackageReference Include="IoTCom.Net.Protocols.MBus" Version="0.22.0-preview.1" />
     <!-- 10.0.12 (pulled in by SenML) has advisory GHSA-vmv3-wvjp-wqpj. -->
     <PackageReference Include="System.Formats.Cbor" Version="10.0.15" />
   </ItemGroup>

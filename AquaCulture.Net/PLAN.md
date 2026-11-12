@@ -20,7 +20,7 @@ so the versions below deepen them rather than introduce them.
 - ✅ GDAL.Net raster I/O (`AquaCulture.GIS.Gdal`: GeoTIFF read/write with WGS-84 warp) and Sentinel-2 water colour (NDWI, MNDWI, NDCI chlorophyll-a, turbidity, trophic state)
 
 ## v1.2: AI depth
-- More IoTCom.Net adapters: CoAP / LwM2M devices, LoRaWAN Semtech UDP gateway ingest, M-Bus energy meters for aerators
+- ✅ More IoTCom.Net adapters: LwM2M server (IPSO objects), farm-local LoRaWAN network server (Semtech UDP, AS923-2), M-Bus aerator energy meters
 - Gallery demos for the v1.1 connectors (store browser, BMKG/marine panel, chlorophyll map)
 - Trained ONNX models: shrimp disease (WSSV/AHPND/black gill) and fish counting/sizing (YOLO) with datasets and training notebooks
 - HF.Net model hub integration; MediaPipeNet for fish pose/length estimation from video

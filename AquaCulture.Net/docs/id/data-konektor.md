@@ -116,6 +116,26 @@ await sp.StartAsync();
 await sp.PublishAsync(readings);
 ```
 
+### Gateway tanpa cloud (v1.2)
+
+```csharp
+// Network server LoRaWAN lokal di tambak: arahkan packet forwarder Semtech gateway ke komputer ini (UDP 1700), region AS923-2
+await using var lora = LoRaWanPondNetwork.Udp([new LoRaPondNode("70B3D57ED0000001", "P-04", "lora-04", AppKey: "…")]);
+lora.ReadingReceived += twin.Ingest;            // didekripsi, didekode (codec kolam / Cayenne LPP) + RSSI gateway
+await lora.ConnectAsync();
+await lora.SendCommandAsync(new ActuatorCommand("lora-04", "aerator_on"));   // downlink kelas A, FPort 10
+
+// Server LwM2M untuk probe NB-IoT / LTE-M (IPSO 3303 suhu, 3300 sensor generik dengan 5750 = "DO", "pH"…, 3306 aerator)
+await using var lwm2m = Lwm2mPondGateway.Udp();  // endpoint "P-07.nbiot-3" → kolam P-07, perangkat nbiot-3
+await lwm2m.ConnectAsync();
+
+// Meter listrik M-Bus pada sirkuit aerator → kW, kWh, dan A; intensitas energi per kg panen
+await using var meters = MBusEnergyReader.Serial("COM4", [new MBusAeratorMeter(5, "kincir-P01", "P-01")]);
+await meters.ConnectAsync();
+var energi = await meters.ReadAsync();
+double kwhPerKg = MBusEnergyReader.KwhPerKg(awalKwh, akhirKwh, panenKg);
+```
+
 ## Warna air dari satelit (GDAL)
 
 ```csharp

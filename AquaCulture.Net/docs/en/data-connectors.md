@@ -116,6 +116,26 @@ await sp.StartAsync();
 await sp.PublishAsync(readings);
 ```
 
+### Gateways without a cloud (v1.2)
+
+```csharp
+// A farm-local LoRaWAN network server: gateways point their Semtech packet forwarder at this machine (UDP 1700), region AS923-2
+await using var lora = LoRaWanPondNetwork.Udp([new LoRaPondNode("70B3D57ED0000001", "P-04", "lora-04", AppKey: "…")]);
+lora.ReadingReceived += twin.Ingest;            // decrypted, decoded (pond codec / Cayenne LPP) + gateway RSSI
+await lora.ConnectAsync();
+await lora.SendCommandAsync(new ActuatorCommand("lora-04", "aerator_on"));   // Class A downlink, FPort 10
+
+// LwM2M server for NB-IoT / LTE-M probes (IPSO 3303 temperature, 3300 generic sensor with 5750 = "DO", "pH"…, 3306 aerator)
+await using var lwm2m = Lwm2mPondGateway.Udp();  // endpoint "P-07.nbiot-3" → pond P-07, device nbiot-3
+await lwm2m.ConnectAsync();
+
+// M-Bus electricity meters on aerator circuits → kW, kWh and A; energy intensity per kg harvested
+await using var meters = MBusEnergyReader.Serial("COM4", [new MBusAeratorMeter(5, "kincir-P01", "P-01")]);
+await meters.ConnectAsync();
+var energy = await meters.ReadAsync();
+double kwhPerKg = MBusEnergyReader.KwhPerKg(startKwh, endKwh, harvestKg);
+```
+
 ## Satellite water colour (GDAL)
 
 ```csharp

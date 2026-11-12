@@ -19,7 +19,7 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | AquaCulture.GIS.Gdal (v1.1) | ✅ | GeoTIFF I/O via GDAL.Net 3.13 with WGS-84 warp; NDWI, MNDWI, NDCI chlorophyll-a, turbidity, trophic state |
 | AquaCulture.Data (v1.1) | ✅ | EF Core 10 / SQLite store (farms, cycles + logs, readings, decisions), recording transport, Parquet (ParquetSharp) / CSV export |
 | AquaCulture.IoT.OpcUa (v1.1) | ✅ | OPC UA reader/writer (OPC Foundation 1.5.378) and pond simulator; integration-tested client ↔ server |
-| AquaCulture.IoT.IoTCom (v1.1, preview) | ✅ | IoTCom.Net 0.22 preview: Modbus transport (in-memory server test), SenML JSON/CBOR, NMEA MTW/DPT/DBT + drift, AIS zone watch, Sparkplug B (tested against a local broker and host) |
+| AquaCulture.IoT.IoTCom (v1.1, preview) | ✅ | IoTCom.Net 0.22 preview: Modbus transport (in-memory server test), SenML JSON/CBOR, NMEA MTW/DPT/DBT + drift, AIS zone watch, Sparkplug B (tested against a local broker and host); v1.2: LoRaWAN network server, LwM2M gateway, M-Bus energy (all tested against IoTCom.Net simulators) |
 | AquaCulture.AI | ✅ | GBT growth, logistic mortality, disease/harvest outlook, Q-learning feed policy, ML.NET, ONNX, AquaAgent (live-tested: Azure OpenAI gpt-5-mini, Anthropic claude-sonnet-5-5) |
 | AquaCulture.ComputerVision | 🟡 | YOLO/ONNX decode + NMS, model-free counting/sizing/screening, OpenCvSharp interop; trained disease models ⏳ v1.2 |
 | AquaCulture.Forecasting | ✅ | Holt, Holt–Winters, AR, auto; dawn-DO forecast; Monte-Carlo harvest |
@@ -28,7 +28,7 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | AquaCulture.Reporting | ✅ | XLSX/PDF/DOCX/CSV/JSON/HTML/MD (no third-party libs), GAP/CBIB/ASC/BAP |
 | AquaCulture.Visualization / Blazor | ✅ | SVG/PNG charts; 6 domain components incl. Three.js 3D pond |
 | AquaCulture.Native (Rust) | ✅ | 7 Rust tests; bit-identical managed fallback; CI builds 5 RIDs |
-| Tests | ✅ | 121 xUnit tests (reference values, native/managed parity, determinism, file-format validity, every gallery scenario) |
+| Tests | ✅ | 124 xUnit tests (reference values, native/managed parity, determinism, file-format validity, every gallery scenario) |
 | Gallery: Blazor | ✅ | 17 demos, EN/ID, light/dark, screenshots in docs/images |
 | Gallery: Avalonia | ✅ | 17 demos, ThreeNet 3D pond (interactive + offscreen), headless screenshot mode |
 | CLI (`aqua`) | ✅ | 21 commands (v1.1: bmkg, history, marine, export, opcua) |
