@@ -10,6 +10,7 @@ Version 1.1 connects AquaCulture.Net to storage, public weather and ocean data, 
 | `AquaCulture.Environment` | `BmkgClient` (Indonesian village forecasts), `NasaPowerClient` (daily history since 1981), `MarineForecastClient` (waves, currents, SST) |
 | `AquaCulture.IoT` | `ModbusRtuClient` over serial RS-485 (System.IO.Ports) or any stream; `ChirpStack.ParseUplink` for ChirpStack v4 HTTP integrations |
 | `AquaCulture.IoT.OpcUa` | `OpcUaReader` (OPC Foundation stack) for PLC/SCADA, plus `PondOpcUaSimulator` for testing without hardware |
+| `AquaCulture.IoT.IoTCom` (preview) | IoTCom.Net adapters: Modbus TCP/RTU/ASCII transport, SenML, NMEA 0183 cage sensors and mooring drift, AIS vessel watch, Sparkplug B |
 | `AquaCulture.GIS.Gdal` | `GdalRaster` GeoTIFF read/write through GDAL.Net (warps to WGS-84); `WaterColour` NDWI, MNDWI, NDCI chlorophyll-a, turbidity and trophic state |
 
 ## Persistence
@@ -82,7 +83,38 @@ await opc.WriteAsync("ns=2;s=Ponds/P-01/Aerator", true);
 writable and raises DO. Try `aqua opcua`. Security: the reader accepts untrusted server certificates by default (`AcceptUntrustedCertificates`) and uses
 no message security unless you set `UseSecurity = true`. Turn on both for production networks.
 
-The IoTComNet adapters are deferred until IoTCom.Net is published on NuGet.
+## IoTCom.Net adapters (`AquaCulture.IoT.IoTCom`, preview)
+
+[IoTCom.Net](https://www.nuget.org/packages/IoTCom.Net) is still a preview, so this adapter package also ships as a preview (`1.1.0-preview.1`).
+
+```csharp
+using AquaCulture.IoT.IoTCom;
+
+// Modbus TCP / RTU / ASCII with retries and reconnect; aerator_on/off commands write a coil
+IoTComProbe[] probes = [new(Unit: 7, "probe-7", "P-01", Modbus.TypicalProbeMap, AeratorCoil: 3)];
+await using var modbus = IoTComModbusTransport.Serial("COM3", probes, baudRate: 9600);   // or .Tcp("10.0.0.20", probes)
+modbus.ReadingReceived += twin.Ingest;
+await modbus.ConnectAsync();
+
+// SenML (RFC 8428) JSON or CBOR for any LwM2M / CoAP / HTTP sensor
+byte[] pack = AquaSenML.Encode(readings);                  // names "P-01/probe-7/DissolvedOxygen", units Cel, %RH…
+var back = AquaSenML.Decode(body, defaultPond: "P-09");    // URN names such as "urn:dev:esp32-07:temp" work too
+
+// NMEA 0183 on a cage: MTW water temperature, DPT/DBT depth, GNSS fix and mooring drift
+var cage = new NmeaCageDecoder("kja-gnss", "KJA-01", anchor: new(-5.85, 106.60), driftAlarmM: 30);
+foreach (var r in cage.Feed(line)) twin.Ingest(r);
+if (cage.IsDrifting) alert($"Cage drifted {cage.DriftM:0} m from its anchor");
+
+// AIS: vessels inside the KJA zone, or fast vessels within 300 m (wake risk)
+var watch = new CageZoneWatch(zonePolygon, bufferM: 300, minSpeedKnots: 2);
+if (watch.Feed("!AIVDM,1,1,,A,...") is { } a) Console.WriteLine(a.Message.En);
+
+// Sparkplug B: publish ponds to Ignition or another SCADA host; aerator writes come back as commands
+await using var sp = new SparkplugPondPublisher("Indramayu", "farm-01", ["P-01", "P-02"], m => m.UseBroker("broker", 1883));
+sp.CommandReceived += cmd => transport.SendCommandAsync(cmd);
+await sp.StartAsync();
+await sp.PublishAsync(readings);
+```
 
 ## Satellite water colour (GDAL)
 

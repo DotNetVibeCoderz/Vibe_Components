@@ -44,7 +44,7 @@ photosynthesis index, stratification, storms), `ClimateRiskAnalysis` (heatwave, 
 
 ## AquaCulture.Data, IoT.OpcUa, GIS.Gdal (v1.1)
 `AquaStore` (EF Core / SQLite: farms, cycles and logs, readings, decisions; `SeriesAsync` → `TimeSeries`, retention), `RecordingTransport`,
-`TimeSeriesExport` (CSV, Parquet via ParquetSharp); `OpcUaReader` and `PondOpcUaSimulator` (OPC Foundation stack); `GdalRaster` (GeoTIFF via GDAL.Net) and
+`TimeSeriesExport` (CSV, Parquet via ParquetSharp); `OpcUaReader` and `PondOpcUaSimulator` (OPC Foundation stack); IoT.IoTCom (preview): `IoTComModbusTransport`, `AquaSenML`, `NmeaCageDecoder`, `CageZoneWatch` (AIS), `SparkplugPondPublisher`; `GdalRaster` (GeoTIFF via GDAL.Net) and
 `WaterColour` (NDWI, MNDWI, NDCI → chlorophyll-a after Mishra & Mishra 2012, turbidity after Dogliotti et al. 2015, trophic state).
 Environment adds `BmkgClient`, `NasaPowerClient`, `MarineForecastClient`; IoT adds `ModbusRtuClient` (serial) and `ChirpStack`. See [Data and connectors](data-connectors.md).
 

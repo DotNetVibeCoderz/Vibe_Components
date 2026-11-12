@@ -14,6 +14,7 @@
 | IoT | `MqttSensorTransport`, `Modbus`, `ModbusRtuClient`, `ChirpStack`, `LoRaPayload`, `EdgeAnalytics`, `SimulatedSensorTransport` | Lihat [IoT dan kembaran digital](iot-kembaran.md) |
 | Data | `AquaStore`, `RecordingTransport`, `TimeSeriesExport` | EF Core / SQLite untuk tambak, siklus, pembacaan, keputusan; ekspor CSV dan Parquet. Lihat [Data dan konektor](data-konektor.md) |
 | IoT.OpcUa | `OpcUaReader`, `PondOpcUaSimulator` | Klien OPC UA (stack OPC Foundation) dan simulator kolam |
+| IoT.IoTCom (preview) | `IoTComModbusTransport`, `AquaSenML`, `NmeaCageDecoder`, `CageZoneWatch`, `SparkplugPondPublisher` | Adaptor IoTCom.Net: Modbus, SenML, NMEA/AIS untuk KJA, Sparkplug B ke SCADA |
 | GIS.Gdal | `GdalRaster`, `WaterColour` | GeoTIFF lewat GDAL.Net; NDWI, MNDWI, klorofil-a dari NDCI (Mishra & Mishra 2012), kekeruhan (Dogliotti 2015), status trofik |
 | GIS | `GeoJson`, `FarmMapping`, `DrainageAnalysis`, `WaterSourceAnalysis`, `NtsInterop` | IDW, D8, NetTopologySuite + ProjNet (UTM, buffer, union) |
 | AI | `GrowthPredictor`, `MortalityPredictor`, `FeedOptimizationPolicy`, `MlNetGrowthModel`, `OnnxTabularModel`, `AquaAgent` | Lihat [AI dan AquaAgent](agen-ai.md) |

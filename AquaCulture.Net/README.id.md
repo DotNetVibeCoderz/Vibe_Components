@@ -33,6 +33,7 @@ RAS indoor, akuaponik, riset perikanan dan kelautan, pemantauan pemerintah, dan 
 | `AquaCulture.GIS` | Tata letak kolam, GeoJSON, interpolasi IDW, analisis sumber air, drainase D8; NetTopologySuite + ProjNet |
 | `AquaCulture.Data` | Penyimpanan EF Core / SQLite untuk tambak, siklus, pembacaan sensor, dan keputusan kembaran; transport perekam; ekspor deret waktu CSV dan Apache Parquet |
 | `AquaCulture.IoT.OpcUa` | Klien OPC UA untuk PLC/SCADA (stack OPC Foundation) dan simulator kolam OPC UA |
+| `AquaCulture.IoT.IoTCom` (preview) | Adaptor IoTCom.Net: transport Modbus TCP/RTU/ASCII, SenML, sensor KJA NMEA 0183 dan deteksi hanyut, pemantauan kapal AIS di zona KJA, Sparkplug B ke SCADA |
 | `AquaCulture.GIS.Gdal` | GeoTIFF dan 200+ format raster lewat GDAL.Net; warna air Sentinel-2: NDWI, MNDWI, klorofil-a NDCI, kekeruhan, status trofik |
 | `AquaCulture.AI` | Model pertumbuhan gradient boosting, risiko kematian, prakiraan penyakit dan panen, kebijakan pakan Q-learning, backend ML.NET dan ONNX, **AquaAgent** LLM |
 | `AquaCulture.ComputerVision` | Detektor YOLO/ONNX, penghitungan / pengukuran / skrining bintik putih, luka dan insang hitam, interop OpenCvSharp |

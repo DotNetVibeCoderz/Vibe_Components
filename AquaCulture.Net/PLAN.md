@@ -16,11 +16,11 @@ so the versions below deepen them rather than introduce them.
 - ✅ Persistence: `AquaCulture.Data`, an EF Core / SQLite store for farms, cycles, readings and decisions, with time-series export (Parquet via ParquetSharp, CSV)
 - ✅ BMKG village weather forecasts; NASA POWER history for climate risk. Marine forecasts use Open-Meteo Marine because BMKG's maritime API is not a stable public API
 - ✅ ChirpStack v4 webhook parser; Modbus RTU over serial (System.IO.Ports); OPC UA client package `AquaCulture.IoT.OpcUa` (OPC Foundation stack) with a pond simulator
-- ⏳ IoTComNet adapters: moved to v1.2, waiting for IoTCom.Net on NuGet
+- ✅ IoTCom.Net adapters (`AquaCulture.IoT.IoTCom`, preview like IoTCom.Net itself): Modbus transport, SenML, NMEA 0183 cage sensors and drift, AIS vessel watch, Sparkplug B
 - ✅ GDAL.Net raster I/O (`AquaCulture.GIS.Gdal`: GeoTIFF read/write with WGS-84 warp) and Sentinel-2 water colour (NDWI, MNDWI, NDCI chlorophyll-a, turbidity, trophic state)
 
 ## v1.2: AI depth
-- IoTComNet adapters (carried over from v1.1)
+- More IoTCom.Net adapters: CoAP / LwM2M devices, LoRaWAN Semtech UDP gateway ingest, M-Bus energy meters for aerators
 - Gallery demos for the v1.1 connectors (store browser, BMKG/marine panel, chlorophyll map)
 - Trained ONNX models: shrimp disease (WSSV/AHPND/black gill) and fish counting/sizing (YOLO) with datasets and training notebooks
 - HF.Net model hub integration; MediaPipeNet for fish pose/length estimation from video

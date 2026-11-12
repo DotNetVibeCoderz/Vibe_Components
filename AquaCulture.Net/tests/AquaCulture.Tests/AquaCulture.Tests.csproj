@@ -21,6 +21,7 @@
     <ProjectReference Include="../../src/AquaCulture.GIS/AquaCulture.GIS.csproj" />
     <ProjectReference Include="../../src/AquaCulture.Data/AquaCulture.Data.csproj" />
     <ProjectReference Include="../../src/AquaCulture.GIS.Gdal/AquaCulture.GIS.Gdal.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.IoT.IoTCom/AquaCulture.IoT.IoTCom.csproj" />
     <ProjectReference Include="../../src/AquaCulture.IoT.OpcUa/AquaCulture.IoT.OpcUa.csproj" />
     <ProjectReference Include="../../src/AquaCulture.Population/AquaCulture.Population.csproj" />
     <ProjectReference Include="../../src/AquaCulture.Reporting/AquaCulture.Reporting.csproj" />

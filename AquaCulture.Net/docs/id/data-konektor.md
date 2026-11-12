@@ -10,6 +10,7 @@ Versi 1.1 menghubungkan AquaCulture.Net ke penyimpanan data, data cuaca dan laut
 | `AquaCulture.Environment` | `BmkgClient` (prakiraan cuaca per desa), `NasaPowerClient` (riwayat harian sejak 1981), `MarineForecastClient` (gelombang, arus, suhu permukaan laut) |
 | `AquaCulture.IoT` | `ModbusRtuClient` lewat serial RS-485 (System.IO.Ports) atau stream apa pun; `ChirpStack.ParseUplink` untuk integrasi HTTP ChirpStack v4 |
 | `AquaCulture.IoT.OpcUa` | `OpcUaReader` (stack OPC Foundation) untuk PLC/SCADA, serta `PondOpcUaSimulator` untuk uji tanpa perangkat keras |
+| `AquaCulture.IoT.IoTCom` (preview) | Adaptor IoTCom.Net: transport Modbus TCP/RTU/ASCII, SenML, sensor KJA NMEA 0183 dan deteksi hanyut, pemantauan kapal AIS, Sparkplug B |
 | `AquaCulture.GIS.Gdal` | `GdalRaster`: baca/tulis GeoTIFF lewat GDAL.Net (otomatis diproyeksikan ke WGS-84); `WaterColour`: NDWI, MNDWI, klorofil-a dari NDCI, kekeruhan, dan status trofik |
 
 ## Penyimpanan
@@ -82,7 +83,38 @@ await opc.WriteAsync("ns=2;s=Ponds/P-01/Aerator", true);
 bisa ditulis dan menaikkan DO. Coba jalankan `aqua opcua`. Soal keamanan: secara bawaan reader menerima sertifikat server yang belum dipercaya (`AcceptUntrustedCertificates`)
 dan tidak memakai keamanan pesan kecuali `UseSecurity = true`. Aktifkan keduanya di jaringan produksi.
 
-Adaptor IoTComNet ditunda sampai IoTCom.Net terbit di NuGet.
+## Adaptor IoTCom.Net (`AquaCulture.IoT.IoTCom`, preview)
+
+[IoTCom.Net](https://www.nuget.org/packages/IoTCom.Net) masih berstatus preview, jadi paket adaptor ini juga dirilis sebagai preview (`1.1.0-preview.1`).
+
+```csharp
+using AquaCulture.IoT.IoTCom;
+
+// Modbus TCP / RTU / ASCII dengan retry dan reconnect; perintah aerator_on/off menulis coil
+IoTComProbe[] probes = [new(Unit: 7, "probe-7", "P-01", Modbus.TypicalProbeMap, AeratorCoil: 3)];
+await using var modbus = IoTComModbusTransport.Serial("COM3", probes, baudRate: 9600);   // atau .Tcp("10.0.0.20", probes)
+modbus.ReadingReceived += twin.Ingest;
+await modbus.ConnectAsync();
+
+// SenML (RFC 8428) JSON atau CBOR untuk sensor LwM2M / CoAP / HTTP
+byte[] pack = AquaSenML.Encode(readings);                  // nama "P-01/probe-7/DissolvedOxygen", satuan Cel, %RH…
+var hasil = AquaSenML.Decode(body, defaultPond: "P-09");   // nama URN seperti "urn:dev:esp32-07:temp" juga bisa
+
+// NMEA 0183 di KJA: suhu air MTW, kedalaman DPT/DBT, posisi GNSS, dan deteksi KJA hanyut
+var kja = new NmeaCageDecoder("kja-gnss", "KJA-01", anchor: new(-5.85, 106.60), driftAlarmM: 30);
+foreach (var r in kja.Feed(line)) twin.Ingest(r);
+if (kja.IsDrifting) alert($"KJA bergeser {kja.DriftM:0} m dari jangkar");
+
+// AIS: kapal di dalam zona KJA, atau kapal cepat dalam radius 300 m (risiko gelombang kapal)
+var watch = new CageZoneWatch(zonaKja, bufferM: 300, minSpeedKnots: 2);
+if (watch.Feed("!AIVDM,1,1,,A,...") is { } a) Console.WriteLine(a.Message.Id);
+
+// Sparkplug B: publikasikan kolam ke Ignition atau host SCADA lain; perintah aerator dari SCADA kembali sebagai perintah aktuator
+await using var sp = new SparkplugPondPublisher("Indramayu", "farm-01", ["P-01", "P-02"], m => m.UseBroker("broker", 1883));
+sp.CommandReceived += cmd => transport.SendCommandAsync(cmd);
+await sp.StartAsync();
+await sp.PublishAsync(readings);
+```
 
 ## Warna air dari satelit (GDAL)
 

@@ -20,6 +20,7 @@
     <Project Path="src/AquaCulture.GIS/AquaCulture.GIS.csproj" />
     <Project Path="src/AquaCulture.Growth/AquaCulture.Growth.csproj" />
     <Project Path="src/AquaCulture.Hydrodynamic/AquaCulture.Hydrodynamic.csproj" />
+    <Project Path="src/AquaCulture.IoT.IoTCom/AquaCulture.IoT.IoTCom.csproj" />
     <Project Path="src/AquaCulture.IoT.OpcUa/AquaCulture.IoT.OpcUa.csproj" />
     <Project Path="src/AquaCulture.IoT/AquaCulture.IoT.csproj" />
     <Project Path="src/AquaCulture.Native/AquaCulture.Native.csproj" />

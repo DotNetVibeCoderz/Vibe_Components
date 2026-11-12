@@ -33,6 +33,7 @@ indoor RAS, aquaponics, fisheries and marine research, government monitoring and
 | `AquaCulture.GIS` | Pond layout, GeoJSON, IDW interpolation, water-source analysis, D8 drainage; NetTopologySuite + ProjNet (UTM, buffers, unions) |
 | `AquaCulture.Data` | EF Core / SQLite store for farms, cycles, readings and twin decisions; recording transport; CSV and Apache Parquet time-series export |
 | `AquaCulture.IoT.OpcUa` | OPC UA client for PLC/SCADA (OPC Foundation stack) and a pond OPC UA simulator |
+| `AquaCulture.IoT.IoTCom` (preview) | IoTCom.Net adapters: Modbus TCP/RTU/ASCII transport, SenML, NMEA 0183 cage sensors and mooring drift, AIS vessel watch around KJA zones, Sparkplug B to SCADA |
 | `AquaCulture.GIS.Gdal` | GeoTIFF and 200+ raster formats via GDAL.Net; Sentinel-2 water colour: NDWI, MNDWI, NDCI chlorophyll-a, turbidity, trophic state |
 | `AquaCulture.AI` | Gradient-boosted growth model, logistic mortality risk, disease outlook, harvest outlook, Q-learning feed policy, ML.NET and ONNX Runtime backends, **AquaAgent** LLM with grounded tools |
 | `AquaCulture.ComputerVision` | YOLO/ONNX detector with letterbox and NMS, model-free counting / sizing / white-spot, lesion and black-gill screening, OpenCvSharp interop |
@@ -106,7 +107,7 @@ dotnet new aqua-blazor -n MyFarm --species vaname
 
 ```bash
 dotnet build AquaCulture.Net.slnx
-dotnet test tests/AquaCulture.Tests                  # 116 tests
+dotnet test tests/AquaCulture.Tests                  # 121 tests
 cd native/aqua-native && cargo test --release        # Rust kernels
 pwsh build/build-native.ps1                          # copy kernel into AquaCulture.Native/runtimes/<rid>/native
 pwsh build/pack.ps1                                  # NuGet packages → artifacts/packages
