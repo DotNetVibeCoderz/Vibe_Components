@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Aquaculture GIS: farm/pond/sensor mapping, GeoJSON, IDW interpolation, water source analysis, D8 drainage mapping, NetTopologySuite and ProjNet interop.</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="NetTopologySuite" Version="2.6.0" />
+    <PackageReference Include="ProjNet" Version="2.1.0" />
+  </ItemGroup>
+</Project>

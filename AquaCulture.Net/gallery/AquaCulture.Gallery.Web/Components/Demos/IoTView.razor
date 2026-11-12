@@ -1,0 +1,33 @@
+@inherits DemoBase
+
+<div class="controls">
+    <Slider Label="DO mg/L" @bind-Value="_do" Min="0.5" Max="9" Step="0.01" Format="0.00" OnChange="Run" />
+    <Slider Label="@T("Temp °C", "Suhu °C")" @bind-Value="_t" Min="20" Max="35" Step="0.1" OnChange="Run" />
+    <Slider Label="@T("Spike value", "Nilai lonjakan")" @bind-Value="_spike" Min="0" Max="20" Step="0.5" OnChange="Run" />
+</div>
+
+<div class="grid three">
+    <div class="panel"><h2>Modbus RTU <small>@T("probe unit 7, function 0x03", "probe unit 7, fungsi 0x03")</small></h2>
+        <div class="note">@T("Request", "Permintaan")</div><div class="hex">@_r.ModbusRequestHex</div>
+        <div class="note" style="margin-top:8px">@T("Response (CRC-16 checked)", "Respons (CRC-16 diperiksa)")</div><div class="hex">@_r.ModbusResponseHex</div>
+        <table class="data" style="margin-top:8px">@foreach (var (k, v) in _r.ModbusValues) { <tr><td>@k</td><td class="num">@F(v, "0.##")</td></tr> }</table></div>
+    <div class="panel"><h2>LoRaWAN <small>@T("12-byte pond codec", "codec kolam 12 byte")</small></h2>
+        <div class="hex">@_r.LoraHex</div>
+        <table class="data" style="margin-top:8px">@foreach (var r in _r.LoraReadings) { <tr><td>@r.Kind</td><td class="num">@F(r.Value, "0.###") @r.Unit</td></tr> }</table></div>
+    <div class="panel"><h2>MQTT <small>ESP32</small></h2>
+        <div class="note">topic</div><div class="hex">@_r.MqttTopic</div>
+        <div class="note" style="margin-top:8px">payload</div><div class="hex">@_r.MqttPayload</div>
+        <table class="data" style="margin-top:8px">@foreach (var r in _r.MqttReadings) { <tr><td>@r.Kind</td><td class="num">@F(r.Value, "0.##") @r.Unit</td></tr> }</table></div>
+</div>
+
+<div class="grid wide-left" style="margin-top:14px">
+    <div class="panel"><h2>@T("Edge analytics", "Analitik edge") <small>Hampel + EMA · @_r.Outliers @T("outliers", "outlier")</small></h2><SvgMarkup Svg="@_r.EdgeSvg" /></div>
+    <div class="panel"><h2>@T("Firmware sketch", "Contoh firmware")</h2><pre class="hex">@_r.FirmwareSnippet</pre></div>
+</div>
+
+@code {
+    private double _do = 5.12, _t = 29.1, _spike = 14;
+    private IoTDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = IoTDemo.Run(_do, _t, _spike);
+}

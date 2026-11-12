@@ -1,0 +1,31 @@
+@inherits DemoBase
+
+<div class="controls">
+    <Slider Label="@T("Fishing mortality F", "Mortalitas tangkap F")" @bind-Value="_f" Min="0" Max="1.5" Step="0.05" Format="0.00" OnChange="Run" />
+    <Slider Label="@T("Recruitment CV", "CV rekrutmen")" @bind-Value="_cv" Min="0" Max="0.8" Step="0.05" Format="0.00" OnChange="Run" />
+    <Slider Label="@T("Emigration /yr", "Emigrasi /thn")" @bind-Value="_mig" Min="0" Max="0.2" Step="0.01" Format="0.00" OnChange="Run" />
+    <div class="control"><label>@T("Predator", "Pemangsa")</label>
+        <select @bind="_pred" @bind:after="Run"><option value="yes">@T("present", "ada")</option><option value="no">@T("absent", "tidak ada")</option></select></div>
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Leslie λ", "λ Leslie")" Value="@F(_r.Lambda, "0.000")" Note="@(_r.Lambda > 1 ? T("growing", "bertumbuh") : T("declining", "menurun"))" Tone="@(_r.Lambda > 1 ? "good" : "warn")" />
+    <KpiCard Label="@T("SSB, no fishing", "SSB tanpa tangkap")" Value="@F(_r.NoFishing[^1].SpawningBiomass, "N0")" Unit="kg" />
+    <KpiCard Label="@T("SSB at F", "SSB pada F")" Value="@F(_r.ConstantF[^1].SpawningBiomass, "N0")" Unit="kg" Tone="@(_r.ConstantF[^1].SpawningBiomass < 0.3 * _r.NoFishing[^1].SpawningBiomass ? "alert" : "")" />
+    <KpiCard Label="@T("40-yr catch, F", "Tangkapan 40 thn, F")" Value="@F(_r.ConstantF.Sum(x => x.Catch), "N0")" Unit="kg" />
+    <KpiCard Label="@T("40-yr catch, HCR", "Tangkapan 40 thn, HCR")" Value="@F(_r.HockeyStick.Sum(x => x.Catch), "N0")" Unit="kg" />
+</div>
+
+<div class="grid two" style="margin-top:14px">
+    <div class="panel"><h2>@T("Spawning stock biomass", "Biomassa stok pemijah")</h2><SvgMarkup Svg="@_r.BiomassSvg" /></div>
+    <div class="panel"><h2>@T("Catch", "Tangkapan")</h2><SvgMarkup Svg="@_r.CatchSvg" /></div>
+</div>
+<div class="panel" style="margin-top:14px"><h2>@T("Predator–prey (Rosenzweig–MacArthur)", "Mangsa–pemangsa (Rosenzweig–MacArthur)")</h2><SvgMarkup Svg="@_r.PredatorSvg" /></div>
+
+@code {
+    private double _f = 0.6, _cv = 0.3, _mig = 0.02;
+    private string _pred = "yes";
+    private PopulationDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = PopulationDemo.Run(_f, _pred == "yes", _cv, _mig);
+}

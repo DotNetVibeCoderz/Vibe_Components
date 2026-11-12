@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Aquaculture AI: growth, mortality, disease and harvest prediction, feed optimisation policy, ML.NET and ONNX Runtime backends and an LLM aquaculture agent with grounded tool calls.</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+    <ProjectReference Include="../AquaCulture.WaterQuality/AquaCulture.WaterQuality.csproj" />
+    <ProjectReference Include="../AquaCulture.Growth/AquaCulture.Growth.csproj" />
+    <ProjectReference Include="../AquaCulture.Feeding/AquaCulture.Feeding.csproj" />
+    <ProjectReference Include="../AquaCulture.Disease/AquaCulture.Disease.csproj" />
+    <ProjectReference Include="../AquaCulture.Environment/AquaCulture.Environment.csproj" />
+    <ProjectReference Include="../AquaCulture.Forecasting/AquaCulture.Forecasting.csproj" />
+    <ProjectReference Include="../AquaCulture.Hydrodynamic/AquaCulture.Hydrodynamic.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML" Version="6.0.0" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
+  </ItemGroup>
+</Project>

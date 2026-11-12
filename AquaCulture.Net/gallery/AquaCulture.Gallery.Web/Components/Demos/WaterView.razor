@@ -1,0 +1,53 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Species", "Spesies")</label>
+        <select @bind="_sp" @bind:after="Run">@foreach (var s in SpeciesCatalog.All) { <option value="@s.Id">@s.Name[Lang]</option> }</select></div>
+    <Slider Label="@T("Temp °C", "Suhu °C")" @bind-Value="_t" Min="20" Max="36" Step="0.1" OnChange="Run" />
+    <Slider Label="DO mg/L" @bind-Value="_do" Min="0.5" Max="10" Step="0.1" OnChange="Run" />
+    <Slider Label="pH" @bind-Value="_ph" Min="6" Max="9.6" Step="0.05" Format="0.00" OnChange="Run" />
+    <Slider Label="TAN mg/L" @bind-Value="_tan" Min="0" Max="5" Step="0.05" Format="0.00" OnChange="Run" />
+    <Slider Label="@T("Salinity ppt", "Salinitas ppt")" @bind-Value="_sal" Min="0" Max="40" Step="0.5" OnChange="Run" />
+    <Slider Label="NO₂-N mg/L" @bind-Value="_no2" Min="0" Max="4" Step="0.05" Format="0.00" OnChange="Run" />
+    <Slider Label="@T("Alkalinity", "Alkalinitas")" @bind-Value="_alk" Min="20" Max="250" Step="5" Format="0" OnChange="Run" />
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="WQI" Value="@F(_r.Assessment.Wqi, "0")" Note="@WaterQualityAssessment.ClassName(_r.Assessment.Class)[Lang]" Tone="@Tone(_r.Assessment.Class)" />
+    <KpiCard Label="@T("Toxic NH₃-N", "NH₃-N beracun")" Value="@F(_r.Nh3, "0.000")" Unit="mg/L" Note="@($"{T("safe", "aman")} ≤ {_r.Assessment.Species.Nh3Max}")" Tone="@(_r.Nh3 > _r.Assessment.Species.Nh3Max ? "alert" : "good")" />
+    <KpiCard Label="@T("DO saturation", "Saturasi DO")" Value="@F(_r.DoSat, "0")" Unit="%" />
+    <KpiCard Label="@T("Free CO₂", "CO₂ bebas")" Value="@F(_r.Assessment.FreeCo2 ?? double.NaN, "0.0")" Unit="mg/L" />
+    <KpiCard Label="@T("Issues", "Masalah")" Value="@_r.Assessment.Issues.Count.ToString()" Tone="@(_r.Assessment.Issues.Count > 0 ? "warn" : "good")" />
+</div>
+
+<div class="grid wide-left" style="margin-top:14px">
+    <div class="panel"><h2>@T("Parameters vs species tolerance", "Parameter vs toleransi spesies") <small>@_r.Assessment.Species.Name[Lang]</small></h2>
+        <SensorGrid Assessment="@_r.Assessment" Lang="@Lang" /></div>
+    <div class="panel"><h2>Water Quality Index</h2><Gauge Value="@Math.Round(_r.Assessment.Wqi)" Label="WQI" />
+        @foreach (var i in _r.Assessment.Issues) { <div class="decision Warning"><span>@i[Lang]</span></div> }</div>
+</div>
+
+<div class="grid two" style="margin-top:14px">
+    <div class="panel"><h2>@T("Recommended actions", "Tindakan yang disarankan") <small>K-01 · 2 600 m³</small></h2>
+        <div class="actions">
+            @foreach (var a in _r.Actions)
+            {
+                <div class="action p@(a.Priority)"><span class="prio">@a.Priority</span>
+                    <div><b>@a.Action[Lang]</b><span class="why">@a.Rationale[Lang]</span></div>
+                    <span class="dose">@(a.Quantity is { } q ? $"{q:0.#} {a.Unit}" : "")</span></div>
+            }
+        </div></div>
+    <div class="panel"><h2>@T("Last 24 h on the buoy", "24 jam terakhir di pelampung")</h2><SvgMarkup Svg="@_r.DaySvg" />
+        <h2 style="margin-top:12px; font-size:20px">@T("Alerts raised", "Peringatan muncul")</h2>
+        @foreach (var a in _r.Alerts) { <div class="decision @a.Severity"><span class="k">@a.Timestamp.ToString("HH:mm")</span><span>@a.Message[Lang]</span></div> }
+        @if (_r.Alerts.Count == 0) { <p class="note">@T("No alerts.", "Tidak ada peringatan.")</p> }</div>
+</div>
+
+@code {
+    private string _sp = "vaname";
+    private double _t = 30.5, _do = 3.8, _ph = 8.4, _tan = 1.6, _sal = 18, _no2 = 0.6, _alk = 95;
+    private WaterDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = WaterDemo.Run(_sp, _t, _do, _ph, _tan, _sal, _no2, _alk);
+    private static string Tone(WaterQualityClass c) => c is WaterQualityClass.Excellent or WaterQualityClass.Good ? "good" : c == WaterQualityClass.Fair ? "warn" : "alert";
+}

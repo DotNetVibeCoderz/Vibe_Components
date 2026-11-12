@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageType>Template</PackageType>
+    <PackageId>AquaCulture.Templates</PackageId>
+    <Title>AquaCulture.Net project templates</Title>
+    <Description>dotnet new templates for AquaCulture.Net: console pond advisor, Blazor farm dashboard, IoT edge gateway (MQTT + digital twin) and Avalonia desktop pond monitor. Made by Gravicode Studios, led by Kang Fadhil.</Description>
+    <PackageTags>aquaculture;dotnet-new;templates;blazor;avalonia;iot;shrimp;fish</PackageTags>
+    <IsPackable>true</IsPackable>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <ContentTargetFolders>content</ContentTargetFolders>
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <NoWarn>$(NoWarn);NU5128;NU5110;NU5111</NoWarn>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
+    <IncludeSymbols>false</IncludeSymbols>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="content/**/*" Exclude="content/**/bin/**;content/**/obj/**" />
+    <Compile Remove="**/*" />
+    <None Include="$(AquaRoot)assets/icon.png" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="$(AquaRoot)PACKAGE.md" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
+</Project>

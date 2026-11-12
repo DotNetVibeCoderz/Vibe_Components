@@ -1,0 +1,62 @@
+@* Raster layer (e.g. interpolated DO, elevation, drainage) with vector features on top and layer toggles. *@
+<div class="aq-gis">
+    <div class="aq-gis-layers" role="group" aria-label="Layers">
+        @foreach (var l in Layers)
+        {
+            <label class="aq-chip"><input type="checkbox" checked="@(!_hidden.Contains(l.Name))" @onchange="e => Toggle(l.Name, (bool)e.Value!)" /> @l.Name</label>
+        }
+    </div>
+    <div class="aq-gis-stage" style="aspect-ratio:@(Width)/@(Height)">
+        @foreach (var l in Layers.Where(l => !_hidden.Contains(l.Name)))
+        {
+            <img class="aq-gis-raster" src="@PngEncoder.DataUri(PngEncoder.Raster(l.Raster.Data, l.Raster.Width, l.Raster.Height, l.Ramp, 1))" alt="@l.Name" style="opacity:@(l.Opacity.ToString(CultureInfo.InvariantCulture))" />
+        }
+        @if (Features is { Count: > 0 } && !_hidden.Contains(FeaturesName))
+        {
+            <svg class="aq-gis-vector" viewBox="0 0 @Width @Height" preserveAspectRatio="none">
+                @foreach (var f in Features)
+                {
+                    if (f.Polygon is { } poly)
+                    {
+                        <path d="@Path(poly)" class="aq-gis-poly"><title>@f.Id</title></path>
+                    }
+                    else if (f.Point is { } pt)
+                    {
+                        var (x, y) = Px(pt);
+                        <circle cx="@F(x)" cy="@F(y)" r="5" class="aq-gis-point"><title>@f.Id</title></circle>
+                    }
+                }
+            </svg>
+        }
+    </div>
+    @foreach (var l in Layers.Where(l => !_hidden.Contains(l.Name)).Take(1))
+    {
+        <div class="aq-legend"><span>@l.Name: @l.Ramp.Min.ToString("0.#", CultureInfo.InvariantCulture)</span>
+            <span class="aq-legend-bar" style="background:linear-gradient(90deg,@string.Join(",", l.Ramp.Stops.Select(s => $"{s.Color.Hex} {s.Pos * 100:0}%")))"></span>
+            <span>@l.Ramp.Max.ToString("0.#", CultureInfo.InvariantCulture) @l.Unit</span></div>
+    }
+</div>
+
+@code {
+    public sealed record RasterLayer(string Name, GeoRaster Raster, ColorRamp Ramp, string Unit = "", double Opacity = 1);
+
+    [Parameter, EditorRequired] public IReadOnlyList<RasterLayer> Layers { get; set; } = [];
+    [Parameter] public IReadOnlyList<MapFeature>? Features { get; set; }
+    [Parameter] public string FeaturesName { get; set; } = "Features";
+    [Parameter] public int Width { get; set; } = 640;
+    [Parameter] public int Height { get; set; } = 420;
+    private readonly HashSet<string> _hidden = [];
+
+    private void Toggle(string name, bool on) { if (on) _hidden.Remove(name); else _hidden.Add(name); }
+    private static string F(double v) => v.ToString("0.#", CultureInfo.InvariantCulture);
+
+    private GeoBounds Bounds => Layers.Count > 0 ? Layers[0].Raster.Bounds : new GeoBounds(0, 0, 1, 1);
+
+    private (double X, double Y) Px(GeoCoordinate c)
+    {
+        var b = Bounds;
+        return ((c.Longitude - b.MinLon) / (b.MaxLon - b.MinLon) * Width, (b.MaxLat - c.Latitude) / (b.MaxLat - b.MinLat) * Height);
+    }
+
+    private string Path(GeoPolygon p) => string.Join(" ", p.Ring.Select((c, i) => { var (x, y) = Px(c); return $"{(i == 0 ? "M" : "L")}{F(x)},{F(y)}"; })) + " Z";
+}

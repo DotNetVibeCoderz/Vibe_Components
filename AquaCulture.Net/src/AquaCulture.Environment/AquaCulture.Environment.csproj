@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Environment and weather: observations, Open-Meteo client, deterministic tropical weather generator, weather impact predictor and climate risk analysis for ponds, cages and RAS.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+  </ItemGroup>
+</Project>

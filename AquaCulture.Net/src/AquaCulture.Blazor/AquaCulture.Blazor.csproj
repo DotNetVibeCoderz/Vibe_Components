@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <Description>Blazor UI components for AquaCulture.Net: PondMap, WaterChart, FeedScheduler, SensorGrid, GISViewer, DigitalTwinViewer (Three.js 3D pond), gauges and KPI cards.</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Visualization/AquaCulture.Visualization.csproj" />
+    <ProjectReference Include="../AquaCulture.GIS/AquaCulture.GIS.csproj" />
+    <ProjectReference Include="../AquaCulture.DigitalTwin/AquaCulture.DigitalTwin.csproj" />
+  </ItemGroup>
+</Project>

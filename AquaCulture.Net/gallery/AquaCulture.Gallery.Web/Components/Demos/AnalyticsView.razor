@@ -1,0 +1,43 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Pond", "Kolam")</label>
+        <select @bind="_pond" @bind:after="Run">@foreach (var p in DemoFarm.Farm.Ponds) { <option value="@p.Id">@p.Id</option> }</select></div>
+    <Slider Label="@T("Sale price Rp/kg", "Harga jual Rp/kg")" @bind-Value="_price" Min="40000" Max="110000" Step="1000" Format="N0" OnChange="Run" />
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="ABW" Value="@F(k.Abw, "0.0")" Unit="g" Note="@($"ADG {F(k.Adg, "0.00")} g · SGR {F(k.Sgr, "0.0")} %")" />
+    <KpiCard Label="SR" Value="@F(k.Sr, "0")" Unit="%" />
+    <KpiCard Label="FCR" Value="@F(k.Fcr, "0.00")" />
+    <KpiCard Label="@T("Biomass", "Biomassa")" Value="@F(k.BiomassKg, "N0")" Unit="kg" Note="@($"{F(k.ProductivityTonHa, "0.0")} t/ha")" />
+    <KpiCard Label="@T("Profit (at today's value)", "Laba (nilai hari ini)")" Value="@Rp(k.Profit)" Note="@($"BEP {Rp(k.BreakEvenPrice)}/kg · B/C {F(k.Bcr, "0.00")}")" Tone="@(k.Profit > 0 ? "good" : "alert")" />
+    <KpiCard Label="Water Health Index" Value="@F(k.WaterHealth?.Index ?? double.NaN, "0")" Note="@($"{F(k.WaterHealth?.PercentGoodOrBetter ?? double.NaN, "0")} % {T("good+", "baik+")}")" />
+</div>
+
+<div class="grid three" style="margin-top:14px">
+    <div class="panel"><h2>@T("Cost structure", "Struktur biaya") <small>@_r.PondId</small></h2><SvgMarkup Svg="@_r.CostSvg" /></div>
+    <div class="panel"><h2>@T("FCR by pond", "FCR per kolam")</h2><SvgMarkup Svg="@_r.FcrSvg" /></div>
+    <div class="panel"><h2>@T("Survival by pond", "Kelulushidupan per kolam")</h2><SvgMarkup Svg="@_r.SrSvg" /></div>
+</div>
+<div class="grid two" style="margin-top:14px">
+    <div class="panel"><h2>@T("Benchmarks", "Pembanding")</h2>
+        @foreach (var b in k.Benchmarks) { <div class="decision @(b.Rating is AquaCulture.Analytics.BenchmarkRating.Poor or AquaCulture.Analytics.BenchmarkRating.BelowTarget ? "Warning" : "")"><span class="k">@b.Rating</span><span>@b.Comment[Lang]</span></div> }</div>
+    <div class="panel"><h2>@T("Farm summary", "Ringkasan tambak")</h2>
+        <table class="data">
+            <tr><td>@T("Active cycles", "Siklus aktif")</td><td class="num">@_r.Summary.ActiveCycles / @_r.Summary.Ponds</td></tr>
+            <tr><td>@T("Standing biomass", "Biomassa")</td><td class="num">@F(_r.Summary.StandingBiomassKg, "N0") kg</td></tr>
+            <tr><td>@T("Mean FCR", "FCR rata-rata")</td><td class="num">@F(_r.Summary.MeanFcr, "0.00")</td></tr>
+            <tr><td>@T("Costs to date", "Biaya sampai hari ini")</td><td class="num">@Rp(_r.Summary.Costs)</td></tr>
+            <tr><td>@T("Value of stock", "Nilai stok")</td><td class="num">@Rp(_r.Summary.Revenue)</td></tr>
+        </table></div>
+</div>
+
+@code {
+    private string _pond = "K-04";
+    private double _price = 72_000;
+    private AnalyticsDemoResult _r = null!;
+    private AquaCulture.Analytics.CycleKpis k => _r.Selected;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = AnalyticsDemo.Run(_pond, _price);
+}

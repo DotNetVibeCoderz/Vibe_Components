@@ -1,0 +1,57 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Species", "Spesies")</label>
+        <select @bind="_sp" @bind:after="SpeciesChanged">@foreach (var s in SpeciesCatalog.All) { <option value="@s.Id">@s.Name[Lang]</option> }</select></div>
+    <Slider Label="@T("Water °C", "Air °C")" @bind-Value="_t" Min="20" Max="34" Step="0.5" OnChange="Run" />
+    <Slider Label="@T("24 h swing °C", "Fluktuasi 24 jam °C")" @bind-Value="_swing" Min="0" Max="8" Step="0.5" OnChange="Run" />
+    <Slider Label="@T("Salinity drop ppt", "Penurunan salinitas ppt")" @bind-Value="_drop" Min="0" Max="10" Step="0.5" OnChange="Run" />
+    <Slider Label="DOC" @bind-Value="_doc" Min="1" Max="150" Step="1" Format="0" OnChange="Run" />
+    <Slider Label="@T("Dawn DO", "DO subuh")" @bind-Value="_do" Min="1" Max="8" Step="0.1" OnChange="Run" />
+</div>
+
+<div class="panel"><h2>@T("Clinical signs observed", "Gejala klinis yang terlihat")</h2>
+    <div class="chips">
+        @foreach (var s in _r.Symptoms)
+        {
+            <button type="button" class="chip" aria-pressed="@_signs.Contains(s.Id)" @onclick="() => Toggle(s.Id)">@s.Name[Lang]</button>
+        }
+    </div></div>
+
+<div class="grid wide-left" style="margin-top:14px">
+    <div class="panel"><h2>@T("Diagnosis", "Diagnosis")</h2>
+        <SvgMarkup Svg="@_r.ProbabilitySvg" />
+        <table class="data">
+            <tr><th>@T("Disease", "Penyakit")</th><th>P</th><th>@T("Matched", "Cocok")</th><th>@T("Check for", "Periksa juga")</th></tr>
+            @foreach (var c in _r.Diagnosis.Candidates.Take(5))
+            {
+                <tr><td>@c.Disease.Name[Lang] @if (c.Disease.Notifiable) { <span class="pill alert">WOAH</span> }</td><td class="num">@F(c.Probability * 100, "0") %</td>
+                    <td>@string.Join(", ", c.MatchedSigns.Select(x => AquaCulture.Disease.DiseaseKnowledgeBase.Symptom(x).Name[Lang]))</td>
+                    <td class="note">@string.Join(", ", c.MissingKeySigns.Select(x => AquaCulture.Disease.DiseaseKnowledgeBase.Symptom(x).Name[Lang]))</td></tr>
+            }
+        </table>
+        <div class="decision Warning"><span>@_r.Diagnosis.Advice[Lang]</span></div></div>
+    <div class="panel"><h2>@T("Environmental risk today", "Risiko lingkungan hari ini")</h2><SvgMarkup Svg="@_r.RiskSvg" />
+        @if (_r.Diagnosis.Top is { } top)
+        {
+            <h2 style="font-size:20px;margin-top:10px">@top.Disease.Name[Lang]</h2>
+            <p class="note"><b>@T("Agent", "Penyebab"):</b> @top.Disease.Agent</p>
+            <p><b>@T("Treatment", "Penanganan"):</b> @top.Disease.Treatment[Lang]</p>
+            <p><b>@T("Prevention", "Pencegahan"):</b> @top.Disease.Prevention[Lang]</p>
+        }</div>
+</div>
+
+@code {
+    private string _sp = "vaname";
+    private double _t = 27, _swing = 4, _drop = 5, _doc = 45, _do = 4;
+    private HashSet<string> _signs = [.. DiseaseDemo.DefaultShrimpSigns];
+    private DiseaseDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = DiseaseDemo.Run(_sp, _signs, _t, _swing, _drop, (int)_doc, _do);
+    private void Toggle(string id) { if (!_signs.Add(id)) _signs.Remove(id); Run(); }
+    private void SpeciesChanged()
+    {
+        _signs = SpeciesCatalog.Get(_sp).Group == SpeciesGroup.Shrimp ? [.. DiseaseDemo.DefaultShrimpSigns] : [.. DiseaseDemo.DefaultFishSigns];
+        Run();
+    }
+}

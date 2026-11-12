@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>aqua</ToolCommandName>
+    <IsPackable>true</IsPackable>
+    <PackageId>AquaCulture.Cli</PackageId>
+    <AssemblyName>aqua</AssemblyName>
+    <Description>AquaCulture.Net command-line tool: water quality, feeding, growth and harvest forecast, pond oxygen, disease diagnosis, MSY/YPR, weather impact, Modbus/LoRaWAN decoding, RAS design, reports and the AquaAgent. Made by Gravicode Studios, led by Kang Fadhil.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
+    <PackageTags>aquaculture;fisheries;cli;dotnet-tool;shrimp;fish;water-quality</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(AquaRoot)assets/icon.png" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="$(AquaRoot)PACKAGE.md" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../gallery/AquaCulture.Gallery.Shared/AquaCulture.Gallery.Shared.csproj" />
+  </ItemGroup>
+</Project>

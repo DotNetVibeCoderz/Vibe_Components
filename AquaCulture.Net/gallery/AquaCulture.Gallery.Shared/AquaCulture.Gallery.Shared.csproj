@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Shared use-case scenarios for the AquaCulture.Net Gallery (Blazor + Avalonia).</Description>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/AquaCulture.AI/AquaCulture.AI.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.ComputerVision/AquaCulture.ComputerVision.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.DigitalTwin/AquaCulture.DigitalTwin.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.GIS/AquaCulture.GIS.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.Population/AquaCulture.Population.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.Reporting/AquaCulture.Reporting.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.StockAssessment/AquaCulture.StockAssessment.csproj" />
+  </ItemGroup>
+</Project>

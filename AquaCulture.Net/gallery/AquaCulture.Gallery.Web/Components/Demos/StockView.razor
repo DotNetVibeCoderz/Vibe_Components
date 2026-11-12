@@ -1,0 +1,33 @@
+@inherits DemoBase
+
+<div class="controls">
+    <Slider Label="@T("Effort growth /yr", "Pertumbuhan upaya /thn")" @bind-Value="_eg" Min="0" Max="0.12" Step="0.005" Format="0.000" OnChange="Run" />
+    <Slider Label="@T("Age at first capture", "Umur pertama tertangkap")" @bind-Value="_tc" Min="0.3" Max="3" Step="0.1" OnChange="Run" />
+    <Slider Label="M (yr⁻¹)" @bind-Value="_m" Min="0.3" Max="1.8" Step="0.05" Format="0.00" OnChange="Run" />
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="MSY" Value="@F(_r.Fit.Msy, "N0")" Unit="t" Note="@($"r {F(_r.Fit.R, "0.00")} · K {F(_r.Fit.K, "N0")}")" />
+    <KpiCard Label="B / Bmsy" Value="@F(_r.Fit.BOverBmsy, "0.00")" Tone="@(_r.Fit.BOverBmsy >= 1 ? "good" : "alert")" />
+    <KpiCard Label="F / Fmsy" Value="@F(_r.Fit.FOverFmsy, "0.00")" Tone="@(_r.Fit.FOverFmsy <= 1 ? "good" : "alert")" />
+    <KpiCard Label="@T("Kobe status", "Status Kobe")" Value="@(_r.Fit.Status switch { AquaCulture.StockAssessment.KobeStatus.Healthy => T("Green", "Hijau"), AquaCulture.StockAssessment.KobeStatus.Overfished => T("Red", "Merah"), _ => T("Amber", "Kuning") })" Note="@AquaCulture.StockAssessment.DynamicSchaeferFit.StatusName(_r.Fit.Status)[Lang]" Tone="@(_r.Fit.Status == AquaCulture.StockAssessment.KobeStatus.Healthy ? "good" : "alert")" />
+    <KpiCard Label="Z · M · E" Value="@F(_r.Z, "0.00")" Note="@($"Pauly M {F(_r.PaulyM, "0.00")} · E {F(_r.E, "0.00")}")" Tone="@(_r.E > 0.5 ? "warn" : "good")" />
+</div>
+
+<div class="grid two" style="margin-top:14px">
+    <div class="panel"><h2>@T("CPUE fit (dynamic Schaefer)", "Kecocokan CPUE (Schaefer dinamis)")</h2><SvgMarkup Svg="@_r.CpueSvg" />
+        <table class="data"><tr><th>@T("Model", "Model")</th><th>MSY</th><th>E<sub>msy</sub></th><th>R²</th></tr>
+            <tr><td>Schaefer (Gulland)</td><td class="num">@F(_r.Schaefer.Msy, "N0")</td><td class="num">@F(_r.Schaefer.EffortAtMsy, "N0")</td><td class="num">@F(_r.Schaefer.RSquared, "0.00")</td></tr>
+            <tr><td>Fox</td><td class="num">@F(_r.Fox.Msy, "N0")</td><td class="num">@F(_r.Fox.EffortAtMsy, "N0")</td><td class="num">@F(_r.Fox.RSquared, "0.00")</td></tr>
+        </table></div>
+    <div class="panel"><h2>@T("Kobe plot", "Plot Kobe") <small>@_r.Data[0].Year–@_r.Data[^1].Year</small></h2><SvgMarkup Svg="@_r.KobeSvg" /></div>
+</div>
+<div class="panel" style="margin-top:14px"><h2>@T("Beverton–Holt yield per recruit", "Yield per recruit Beverton–Holt")</h2><SvgMarkup Svg="@_r.YprSvg" />
+    <p class="note">F<sub>max</sub> = @F(_r.Ypr.Fmax, "0.00") · F<sub>0.1</sub> = @F(_r.Ypr.F01, "0.00") · F<sub>40%</sub> = @F(_r.Ypr.F40, "0.00")</p></div>
+
+@code {
+    private double _eg = 0.07, _tc = 0.4, _m = 0.9;
+    private StockDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = StockDemo.Run(_eg, _tc, _m);
+}

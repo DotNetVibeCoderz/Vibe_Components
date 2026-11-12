@@ -1,0 +1,67 @@
+@* Interactive plan view of ponds coloured by a value (DO, WQI, biomass…). Click a pond to select it. *@
+@{
+    var proj = Project();
+}
+<div class="aq-map">
+    <svg viewBox="0 0 @Width @Height" role="img" aria-label="@(Lang == "id" ? "Peta kolam" : "Pond map")">
+        <rect width="@Width" height="@Height" rx="10" class="aq-map-land" />
+        @foreach (var p in Ponds.Where(p => p.Outline is not null))
+        {
+            var d = string.Join(" ", p.Outline!.Ring.Select((c, i) => { var (x, y) = proj(c); return $"{(i == 0 ? "M" : "L")}{F(x)},{F(y)}"; })) + " Z";
+            var (cx, cy) = proj(p.Outline.Centroid);
+            double? v = Values?.GetValueOrDefault(p.Id);
+            <g class="aq-pond @(p.Id == Selected ? "selected" : "")" @onclick="() => Select(p.Id)" tabindex="0" role="button" aria-label="@p.Name"
+               @onkeydown="e => OnKey(e, p.Id)">
+                <path d="@d" fill="@(v is { } vv ? Ramp[vv].Hex : "#7fb8c2")" />
+                <text x="@F(cx)" y="@F(cy - 3)" text-anchor="middle" class="aq-pond-id">@p.Id</text>
+                @if (v is { } val) { <g><text x="@F(cx)" y="@F(cy + 13)" text-anchor="middle" class="aq-pond-val">@val.ToString(Format, CultureInfo.InvariantCulture) @Unit</text></g> }
+            </g>
+        }
+        @if (Sensors is not null)
+        {
+            foreach (var (pt, label, ok) in Sensors)
+            {
+                var (sx, sy) = proj(pt);
+                <circle cx="@F(sx)" cy="@F(sy)" r="5" class="aq-map-sensor @(ok ? "ok" : "bad")"><title>@label</title></circle>
+            }
+        }
+    </svg>
+    <div class="aq-legend">
+        <span>@Ramp.Min.ToString("0.#", CultureInfo.InvariantCulture)</span>
+        <span class="aq-legend-bar" style="background:linear-gradient(90deg,@string.Join(",", Ramp.Stops.Select(s => $"{s.Color.Hex} {s.Pos * 100:0}%")))"></span>
+        <span>@Ramp.Max.ToString("0.#", CultureInfo.InvariantCulture) @Unit</span>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<Pond> Ponds { get; set; } = [];
+    [Parameter] public IReadOnlyDictionary<string, double>? Values { get; set; }
+    [Parameter] public IReadOnlyList<(GeoCoordinate Point, string Label, bool Ok)>? Sensors { get; set; }
+    [Parameter] public ColorRamp Ramp { get; set; } = ColorRamp.Oxygen;
+    [Parameter] public string Unit { get; set; } = "";
+    [Parameter] public string Format { get; set; } = "0.0";
+    [Parameter] public string? Selected { get; set; }
+    [Parameter] public EventCallback<string> SelectedChanged { get; set; }
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public int Width { get; set; } = 640;
+    [Parameter] public int Height { get; set; } = 420;
+
+    private static string F(double v) => v.ToString("0.#", CultureInfo.InvariantCulture);
+
+    private async Task OnKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") await Select(id); }
+
+    private async Task Select(string id) { Selected = id; await SelectedChanged.InvokeAsync(id); }
+
+    private Func<GeoCoordinate, (double X, double Y)> Project()
+    {
+        var all = Ponds.Where(p => p.Outline is not null).SelectMany(p => p.Outline!.Ring).ToList();
+        if (Sensors is not null) all.AddRange(Sensors.Select(s => s.Point));
+        if (all.Count == 0) return _ => (0, 0);
+        var o = new GeoBounds(all.Min(c => c.Latitude), all.Min(c => c.Longitude), all.Max(c => c.Latitude), all.Max(c => c.Longitude)).Center;
+        var loc = all.Select(c => GeoMath.ToLocal(o, c)).ToList();
+        double minE = loc.Min(p => p.East), maxE = loc.Max(p => p.East), minN = loc.Min(p => p.North), maxN = loc.Max(p => p.North);
+        double pad = 18, sc = Math.Min((Width - 2 * pad) / Math.Max(1, maxE - minE), (Height - 2 * pad) / Math.Max(1, maxN - minN));
+        double ox = (Width - (maxE - minE) * sc) / 2, oy = (Height - (maxN - minN) * sc) / 2;
+        return c => { var lp = GeoMath.ToLocal(o, c); return (ox + (lp.East - minE) * sc, Height - oy - (lp.North - minN) * sc); };
+    }
+}

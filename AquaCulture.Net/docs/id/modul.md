@@ -1,0 +1,22 @@
+# Modul
+
+| Modul | Tipe utama | Dasar ilmiah / catatan |
+|---|---|---|
+| Core | `SpeciesCatalog`, `Farm`, `Pond`, `CultureCycle`, `Stats`, `TimeSeries`, `Numerics`, `GeoPolygon` | 10 spesies tropis: rentang toleransi, TGC, von Bertalanffy, panjang–bobot, tabel pakan, harga |
+| WaterQuality | `WaterChemistry`, `WaterQualityIndex`, `AlertEngine`, `RecommendationEngine` | NH₃ Emerson + koreksi salinitas Bower & Bidwell; saturasi DO Benson & Krause (APHA 4500-O); WQI tertimbang + CCME; dosis NaHCO₃, kapur, garam (Cl⁻:NO₂-N 20:1), molase (C:N) |
+| Growth | `GrowthModels`, `GrowthSimulator`, `HarvestPredictor` | TGC harian × pengaruh suhu, DO, NH₃, salinitas, kepadatan, ransum; mortalitas stres; pakan = pertambahan bobot × FCR spesies yang memburuk saat stres |
+| Feeding | `FeedingCalculator`, `FeedOptimizer`, `AutoFeedingAdvisor`, `Fcr` | Tabel pakan, jadwal, biaya per kg pertambahan bobot, metode Pearson, pemberi pakan otomatis berbasis sisa pakan (anco) |
+| Disease | `DiseaseKnowledgeBase`, `DiagnosisEngine` | 15 penyakit; naive Bayes + hipotesis "bukan semuanya"; risiko lingkungan noisy-OR; penanda wajib lapor WOAH |
+| StockAssessment | `SurplusProduction`, `StockRecruitment`, `YieldPerRecruit`, `LengthBased` | Schaefer/Fox, Beverton–Holt, Ricker, Fmax/F0.1/F40 %, M Pauly/Then, Powell–Wetherall, kurva tangkapan, Kobe |
+| Population | `AgeStructuredModel`, `LeslieMatrix`, `PredatorPrey` | Rekrutmen (steepness), musim pemijahan, migrasi, predasi Holling II, aturan panen hockey-stick |
+| Environment | `OpenMeteoClient`, `SyntheticWeather`, `WeatherImpactPredictor`, `ClimateRiskAnalysis` | Suhu air (model jeda), pengenceran hujan, pH turun karena limpasan, indeks fotosintesis, stratifikasi/umbalan, badai |
+| Hydrodynamic | `Grid2D`, `FlowFields`, `ScalarTransport`, `PondOxygenBudget`, `RasMassBalance`, `Sediment` | Adveksi–difusi eksplisit (kernel Rust), neraca oksigen Boyd, AOTR kincir, Timmons & Ebeling untuk RAS |
+| IoT | `MqttSensorTransport`, `Modbus`, `LoRaPayload`, `EdgeAnalytics`, `SimulatedSensorTransport` | Lihat [IoT dan kembaran digital](iot-kembaran.md) |
+| GIS | `GeoJson`, `FarmMapping`, `DrainageAnalysis`, `WaterSourceAnalysis`, `NtsInterop` | IDW, D8, NetTopologySuite + ProjNet (UTM, buffer, union) |
+| AI | `GrowthPredictor`, `MortalityPredictor`, `FeedOptimizationPolicy`, `MlNetGrowthModel`, `OnnxTabularModel`, `AquaAgent` | Lihat [AI dan AquaAgent](agen-ai.md) |
+| ComputerVision | `OnnxDetector`, `YoloDecoder`, `AnimalAnalyzer`, `OpenCvInterop` | YOLO v5/v8 + NMS; penghitungan, ukuran, skrining bintik putih/luka/insang hitam |
+| Forecasting | `HoltLinear`, `HoltWinters`, `Autoregressive`, `DoCrashForecaster`, `HarvestForecaster` | DO subuh = gabungan tren malam teredam dan neraca oksigen; panen P10/P50/P90 |
+| DigitalTwin | `PondTwin`, `FarmTwin` | Fusi sensor, soft-sensor pertumbuhan, keputusan beralasan, perintah aerator, what-if |
+| Analytics | `KpiCalculator` | FCR, SR, ABW, ADG, SGR, produktivitas, struktur biaya (kata kunci dwibahasa), laba, harga impas, B/C, Indeks Kesehatan Air |
+| Reporting | `ReportDocument`, `ReportWriters`, `ComplianceAudit`, `Reports` | XLSX, PDF, DOCX, CSV, JSON, HTML, Markdown; GAP, CBIB, ASC, BAP |
+| Visualization / Blazor | `ColorRamp`, `PngEncoder`, `SvgCharts`; `PondMap`, `WaterChart`, `FeedScheduler`, `SensorGrid`, `GISViewer`, `DigitalTwinViewer` | Sertakan `_content/AquaCulture.Blazor/aquaculture.css` |

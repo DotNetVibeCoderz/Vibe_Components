@@ -1,0 +1,36 @@
+@* Day timeline of meals; operators tick meals as given. *@
+<div class="aq-feed">
+    <div class="aq-feed-head">
+        <strong>@Plan.DailyKg.ToString("0.0", CultureInfo.InvariantCulture) kg</strong>
+        <span>@(Lang == "id" ? "per hari" : "per day") · @Plan.RatePercentBw.ToString("0.00", CultureInfo.InvariantCulture)% BW · @Plan.MealsPerDay× · @(Plan.Feed?.Name ?? $"{Plan.PelletMm} mm")</span>
+    </div>
+    <div class="aq-feed-track">
+        @foreach (var (m, i) in Plan.Meals.Select((m, i) => (m, i)))
+        {
+            var pct = m.Time.ToTimeSpan().TotalHours / 24 * 100;
+            <button type="button" class="aq-meal @(Given.Contains(i) ? "given" : "")" style="left:@(pct.ToString("0.#", CultureInfo.InvariantCulture))%"
+                    aria-pressed="@Given.Contains(i)" @onclick="() => Toggle(i)" title="@m.Time.ToString("HH:mm") · @m.Kg.ToString("0.0", CultureInfo.InvariantCulture) kg">
+                <span class="aq-meal-time">@m.Time.ToString("HH:mm")</span>
+                <span class="aq-meal-kg">@m.Kg.ToString("0.0", CultureInfo.InvariantCulture) kg</span>
+            </button>
+        }
+        @for (int h = 0; h <= 24; h += 6) { <span class="aq-feed-hour" style="left:@(h / 24.0 * 100)%">@h.ToString("00"):00</span> }
+    </div>
+    @if (Plan.Adjustments.Count > 0)
+    {
+        <ul class="aq-feed-adj">@foreach (var a in Plan.Adjustments) { <li>@a[Lang]</li> }</ul>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public FeedingPlan Plan { get; set; } = null!;
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public HashSet<int> Given { get; set; } = [];
+    [Parameter] public EventCallback<(int Index, Meal Meal, bool Given)> OnToggle { get; set; }
+
+    private async Task Toggle(int i)
+    {
+        if (!Given.Add(i)) Given.Remove(i);
+        await OnToggle.InvokeAsync((i, Plan.Meals[i], Given.Contains(i)));
+    }
+}

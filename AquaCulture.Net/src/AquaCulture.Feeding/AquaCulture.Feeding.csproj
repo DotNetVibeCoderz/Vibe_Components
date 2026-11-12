@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Feed management: FCR, species feeding tables, meal schedules, feed cost analysis, least-cost feed selection and blending, auto-feeding recommendations.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+    <ProjectReference Include="../AquaCulture.Growth/AquaCulture.Growth.csproj" />
+  </ItemGroup>
+</Project>

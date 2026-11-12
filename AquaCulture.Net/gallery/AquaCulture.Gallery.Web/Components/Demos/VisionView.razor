@@ -1,0 +1,39 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Animals", "Biota")</label>
+        <select @bind="_shrimp" @bind:after="Run"><option value="shrimp">@T("Shrimp tray", "Nampan udang")</option><option value="fish">@T("Fish sample", "Sampel ikan")</option></select></div>
+    <Slider Label="@T("Count", "Jumlah")" @bind-Value="_n" Min="4" Max="30" Step="1" Format="0" OnChange="Run" />
+    <Slider Label="@T("Diseased share", "Porsi sakit")" @bind-Value="_sick" Min="0" Max="1" Step="0.05" Format="0.00" OnChange="Run" />
+    <Slider Label="@T("Image seed", "Seed citra")" @bind-Value="_seed" Min="1" Max="40" Step="1" Format="0" OnChange="Run" />
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Counted", "Terhitung")" Value="@_r.Result.Count.ToString()" Note="@($"{T("truth", "aktual")} {_r.TruthCount}")" Tone="@(Math.Abs(_r.Result.Count - _r.TruthCount) <= 1 ? "good" : "warn")" />
+    <KpiCard Label="@T("Mean length", "Panjang rata-rata")" Value="@F(_r.Result.MeanLengthCm, "0.0")" Unit="cm" Note="@($"CV {F(_r.Result.CvLengthPct, "0")} %")" />
+    <KpiCard Label="@T("Mean weight", "Bobot rata-rata")" Value="@F(_r.Result.MeanWeightG, "0.0")" Unit="g" />
+    <KpiCard Label="@T("Sample biomass", "Biomassa sampel")" Value="@F(_r.Result.BiomassG, "0")" Unit="g" />
+    <KpiCard Label="@T("Suspicious", "Mencurigakan")" Value="@_r.Result.Suspicious.ToString()" Note="@($"{T("truth", "aktual")} {_r.TruthSick}")" Tone="@(_r.Result.Suspicious > 0 ? "alert" : "good")" />
+</div>
+
+<div class="grid two" style="margin-top:14px">
+    <div class="panel"><h2>@T("Input image", "Citra masukan")</h2><div class="stage"><img src="@Img(_r.Original)" alt="tray" style="image-rendering:auto" /></div></div>
+    <div class="panel"><h2>@T("Detections", "Deteksi")</h2><div class="stage"><img src="@Img(_r.Annotated)" alt="annotated" style="image-rendering:auto" /></div></div>
+</div>
+<div class="panel" style="margin-top:14px"><h2>@T("Per animal", "Per individu")</h2>
+    <table class="data"><tr><th>#</th><th>@T("Length", "Panjang")</th><th>@T("Weight", "Bobot")</th><th>@T("White spots", "Bintik putih")</th><th>@T("Red", "Merah")</th><th>@T("Dark gill", "Insang gelap")</th><th>@T("Finding", "Temuan")</th></tr>
+        @foreach (var a in _r.Result.Animals)
+        {
+            <tr><td>@a.Blob.Id</td><td class="num">@F(a.LengthCm, "0.0") cm</td><td class="num">@F(a.WeightG, "0.0") g</td><td class="num">@F(a.WhiteSpotRatio * 100, "0.0") %</td>
+                <td class="num">@F(a.RedRatio * 100, "0.0") %</td><td class="num">@F(a.DarkHeadRatio * 100, "0.0") %</td>
+                <td><span class="pill @(a.Finding == "healthy" ? "good" : "alert")">@AquaCulture.ComputerVision.AquaLabels.Describe(a.Finding)[Lang]</span></td></tr>
+        }
+    </table></div>
+
+@code {
+    private string _shrimp = "shrimp";
+    private double _n = 18, _sick = 0.35, _seed = 8;
+    private VisionDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = VisionDemo.Run(_shrimp == "shrimp", (int)_n, _sick, (ulong)_seed);
+}

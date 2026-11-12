@@ -1,0 +1,8 @@
+body { margin: 0; font-family: system-ui, "Segoe UI", sans-serif; background: #eef4f2; color: #0b2e36; }
+.page { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-size: 34px; margin: 0 0 16px; } h1 small { font-size: 14px; color: #5b7279; font-weight: 500; }
+h2 { font-size: 18px; margin: 18px 0 8px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+footer { margin-top: 32px; color: #5b7279; font-size: 13px; }
+@media (max-width: 800px) { .row { grid-template-columns: 1fr; } }

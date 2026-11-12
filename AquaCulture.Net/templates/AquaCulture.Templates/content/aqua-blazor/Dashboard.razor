@@ -1,0 +1,49 @@
+@* Pond dashboard: live (simulated) sensors, water-quality grid, feeding plan and the 3D digital pond. *@
+@implements IDisposable
+
+<main class="page">
+    <h1>AquaDashboard <small>@_species.Name.En · K-01</small></h1>
+    <div class="kpis">
+        <KpiCard Label="WQI" Value="@_wq.Wqi.ToString("0")" Note="@_wq.Class.ToString()" Tone="@(_wq.IsHealthy ? "good" : "alert")" />
+        <KpiCard Label="DO" Value="@((_water.DissolvedOxygen ?? 0).ToString("0.0"))" Unit="mg/L" Spark="@_doHistory" />
+        <KpiCard Label="Feed today" Value="@_plan.DailyKg.ToString("0.0")" Unit="kg" />
+    </div>
+    <div class="row">
+        <section><h2>Sensors</h2><SensorGrid Assessment="@_wq" /></section>
+        <section><h2>3D pond</h2><DigitalTwinViewer State="@_state" Aerator="@(_water.DissolvedOxygen < _species.DoOptimal)" BiomassRatio="0.5" Shrimp="@(_species.Group == SpeciesGroup.Shrimp)" /></section>
+    </div>
+    <section><h2>Feeding</h2><FeedScheduler Plan="@_plan" /></section>
+    <footer>AquaCulture.Net — Made by Gravicode Studios, led by Kang Fadhil</footer>
+</main>
+
+@code {
+    private readonly SpeciesProfile _species = SpeciesCatalog.Get("SPECIES_ID");
+    private readonly SimulatedSensorTransport _sim = new([new SimulatedPond("K-01", "buoy-1", SalinityPpt: 18)]) { DropoutProbability = 0 };
+    private readonly List<double> _doHistory = [];
+    private WaterSample _water = new() { PondId = "K-01" };
+    private WaterQualityAssessment _wq = null!;
+    private FeedingPlan _plan = null!;
+    private TwinState? _state;
+    private Timer? _timer;
+    private DateTime _clock = DateTime.Today.AddHours(6);
+
+    protected override void OnInitialized()
+    {
+        Tick();
+        _timer = new Timer(_ => InvokeAsync(() => { Tick(); StateHasChanged(); }), null, 2000, 2000);
+    }
+
+    private void Tick()
+    {
+        _clock = _clock.AddMinutes(30);
+        foreach (var r in _sim.Emit(_clock))
+            if ((int)r.Kind <= (int)SensorKind.Turbidity) _water = _water.With((WaterParameter)(int)r.Kind, r.Value);
+        _doHistory.Add(_water.DissolvedOxygen ?? 0);
+        if (_doHistory.Count > 48) _doHistory.RemoveAt(0);
+        _wq = WaterQualityIndex.Assess(_water, _species);
+        _plan = FeedingCalculator.Plan(_species, _species.MarketWeightG * 0.5, 150_000, _water.TemperatureC ?? 29, _water.DissolvedOxygen, _wq.UnionizedAmmonia);
+        _state = new TwinState { PondId = "K-01", Water = _water, Wqi = _wq.Wqi, BiomassKg = _species.MarketWeightG * 0.5 * 150 };
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

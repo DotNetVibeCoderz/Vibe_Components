@@ -1,0 +1,90 @@
+@inherits LayoutComponentBase
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="shell">
+    <nav class="rail @(_menuOpen ? "open" : "")" aria-label="Gallery">
+        <a class="brand" href="@Href("")" @onclick="CloseMenu">
+            <img class="brand-mark" src="icon-192.png" alt="" />
+            <span class="brand-name">AquaCulture.Net<small>GALLERY · v@(AquaInfo.Version)</small></span>
+        </a>
+        @foreach (var g in GalleryCatalog.Groups)
+        {
+            <div class="nav-group">
+                <div class="nav-group-title">@g.Name[_lang]</div>
+                @foreach (var d in GalleryCatalog.Demos.Where(x => x.Group == g.Key))
+                {
+                    <NavLink class="nav-link" href="@Href($"demo/{d.Slug}")" @onclick="CloseMenu">
+                        <span class="nav-dot acc-@d.Accent"></span><span>@d.Title[_lang]</span>
+                    </NavLink>
+                }
+            </div>
+        }
+        <div class="rail-foot">@GalleryCatalog.Credit[_lang]</div>
+    </nav>
+
+    <div class="main">
+        <header class="topbar">
+            <button class="btn ghost small menu-toggle" @onclick="ToggleMenu" aria-expanded="@_menuOpen">☰ Menu</button>
+            <span class="stamp">@DemoFarm.Name · @DemoFarm.Place · @DemoFarm.Origin · @(_lang == "id" ? "data sintetis deterministik" : "deterministic synthetic data")</span>
+            <div class="seg" role="group" aria-label="Theme">
+                <button aria-pressed="@(_theme == null)" @onclick="ThemeSystem" title="System">◐</button>
+                <button aria-pressed="@(_theme == "light")" @onclick="ThemeLight" title="Light">☀</button>
+                <button aria-pressed="@(_theme == "dark")" @onclick="ThemeDark" title="Dark">☾</button>
+            </div>
+            <div class="seg" role="group" aria-label="Language / Bahasa">
+                <button aria-pressed="@(_lang == "en")" @onclick="LangEn">EN</button>
+                <button aria-pressed="@(_lang == "id")" @onclick="LangId">ID</button>
+            </div>
+        </header>
+        <main class="content">
+            <CascadingValue Value="_lang" Name="Lang">
+                @Body
+            </CascadingValue>
+            <footer class="credit">
+                <span>AquaCulture.Net — @GalleryCatalog.Tagline[_lang]</span>
+                <span>@GalleryCatalog.Credit[_lang]</span>
+            </footer>
+        </main>
+    </div>
+</div>
+
+@code {
+    private string _lang = "en";
+    private string? _theme;
+    private bool _menuOpen;
+
+    protected override void OnInitialized()
+    {
+        var uri = new Uri(Nav.Uri);
+        if (uri.Query.Contains("lang=id")) _lang = "id";
+        if (uri.Query.Contains("theme=dark")) _theme = "dark";
+        if (uri.Query.Contains("theme=light")) _theme = "light";
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _theme is not null) await JS.InvokeVoidAsync("aquaTheme", _theme);
+    }
+
+    private string Href(string path)
+    {
+        var q = new List<string>();
+        if (_lang == "id") q.Add("lang=id");
+        if (_theme is not null) q.Add($"theme={_theme}");
+        return q.Count == 0 ? (path.Length == 0 ? "./" : path) : $"{path}?{string.Join("&", q)}";
+    }
+
+    private void LangEn() => _lang = "en";
+    private void LangId() => _lang = "id";
+    private Task ThemeSystem() => Theme(null);
+    private Task ThemeLight() => Theme("light");
+    private Task ThemeDark() => Theme("dark");
+    private async Task Theme(string? t) { _theme = t; await JS.InvokeVoidAsync("aquaTheme", t); }
+    private void ToggleMenu() => _menuOpen = !_menuOpen;
+    private void OnLocationChanged(object? s, LocationChangedEventArgs e) { _menuOpen = false; InvokeAsync(StateHasChanged); }
+    private void CloseMenu() => _menuOpen = false;
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

@@ -1,0 +1,16 @@
+<div class="aq-kpi @Tone">
+    <div class="aq-kpi-label">@Label</div>
+    <div class="aq-kpi-value">@Value<span class="aq-kpi-unit">@Unit</span></div>
+    @if (Note is not null) { <div class="aq-kpi-note">@Note</div> }
+    @if (Spark is { Count: > 1 }) { <div class="aq-kpi-spark">@((MarkupString)SvgCharts.Sparkline(Spark, 120, 28))</div> }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter, EditorRequired] public string Value { get; set; } = "";
+    [Parameter] public string? Unit { get; set; }
+    [Parameter] public string? Note { get; set; }
+    /// <summary>"good", "warn", "alert" or empty.</summary>
+    [Parameter] public string? Tone { get; set; }
+    [Parameter] public IReadOnlyList<double>? Spark { get; set; }
+}

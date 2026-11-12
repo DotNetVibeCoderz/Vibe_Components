@@ -1,0 +1,18 @@
+[package]
+name = "aqua-native"
+version = "1.0.0"
+edition = "2021"
+description = "High-performance native kernels for AquaCulture.Net (advection-diffusion, water chemistry, statistics, Monte-Carlo growth)."
+license = "MIT"
+authors = ["Gravicode Studios (Kang Fadhil)"]
+
+[lib]
+name = "aqua_native"
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

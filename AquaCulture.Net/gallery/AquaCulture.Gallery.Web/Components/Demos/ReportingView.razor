@@ -1,0 +1,49 @@
+@inherits DemoBase
+@using AquaCulture.Reporting
+@inject IJSRuntime JS
+
+<div class="controls">
+    <div class="control"><label>@T("Standard", "Standar")</label>
+        <select @bind="_std" @bind:after="Reset">@foreach (var s in Enum.GetValues<ComplianceStandard>()) { <option value="@s">@s.ToString().ToUpperInvariant()</option> }</select></div>
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Score", "Skor")" Value="@F(_r.Compliance.ScorePct, "0")" Unit="%" Tone="@(_r.Compliance.ScorePct >= 90 ? "good" : "warn")" />
+    <KpiCard Label="@T("Readiness", "Kesiapan")" Value="@_r.Compliance.Readiness.ToString()" Note="@_r.Compliance.ReadinessText[Lang]" Tone="@(_r.Compliance.Readiness == ReadinessLevel.Ready ? "good" : "alert")" />
+    <KpiCard Label="@T("Major gaps", "Kekurangan mayor")" Value="@_r.Compliance.Majors.ToString()" Tone="@(_r.Compliance.Majors > 0 ? "alert" : "good")" />
+    <KpiCard Label="@T("Clauses", "Butir")" Value="@_r.Compliance.Applicable.ToString()" />
+</div>
+
+<div class="grid wide-left" style="margin-top:14px">
+    <div class="panel"><h2>@T("Self-assessment", "Penilaian mandiri") <small>@_std.ToString().ToUpperInvariant()</small></h2>
+        <div class="answers">
+            @foreach (var it in _r.Checklist)
+            {
+                <div class="answer"><div><span class="sev">@it.Id · @it.Category[Lang] · @it.Severity</span><br />@it.Requirement[Lang]</div>
+                    <select value="@_answers[it.Id]" @onchange="e => Set(it.Id, e.Value)">
+                        @foreach (var a in Enum.GetValues<ComplianceAnswer>()) { <option value="@a">@a</option> }
+                    </select></div>
+            }
+        </div></div>
+    <div class="panel"><h2>@T("Export the report", "Ekspor laporan")</h2>
+        <p class="note">@T("Cycle KPIs, costs, water table and this audit — written by AquaCulture.Reporting with no external libraries.", "KPI siklus, biaya, tabel air dan audit ini — ditulis oleh AquaCulture.Reporting tanpa pustaka eksternal.")</p>
+        <div class="files">
+            @foreach (var f in _r.Files)
+            {
+                <button type="button" class="file" @onclick="() => Download(f)"><b>@System.IO.Path.GetExtension(f.Name).TrimStart('.').ToUpperInvariant()</b><span>@f.Name</span><span>@F(f.Bytes.Length / 1024.0, "0.0") KB</span></button>
+            }
+        </div>
+        <h2 style="font-size:20px;margin-top:14px">@T("Non-conformities", "Ketidaksesuaian")</h2>
+        @foreach (var n in _r.Compliance.NonConformities) { <div class="decision @(n.Item.Severity >= ComplianceSeverity.Major && n.Answer == ComplianceAnswer.No ? "Critical" : "Warning")"><span class="k">@n.Item.Id</span><span>@n.Item.Requirement[Lang]<small>@n.Answer</small></span></div> }</div>
+</div>
+
+@code {
+    private ComplianceStandard _std = ComplianceStandard.Cbib;
+    private Dictionary<string, ComplianceAnswer> _answers = ReportingDemo.DefaultAnswers(ComplianceStandard.Cbib);
+    private ReportingDemoResult _r = null!;
+    protected override void OnParametersSet() => Run();
+    private void Run() => _r = ReportingDemo.Run(_std, _answers, Lang);
+    private void Reset() { _answers = ReportingDemo.DefaultAnswers(_std); Run(); }
+    private void Set(string id, object? v) { if (Enum.TryParse<ComplianceAnswer>(v?.ToString(), out var a)) { _answers[id] = a; Run(); } }
+    private async Task Download(ExportFile f) => await JS.InvokeVoidAsync("aquaDownload", f.Name, f.Mime, Convert.ToBase64String(f.Bytes));
+}

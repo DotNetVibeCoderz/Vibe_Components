@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Computer vision for aquaculture: YOLO/ONNX detection with NMS, shrimp and fish disease detection (WSSV, EMS, EHP, gill disease, fin rot, ulcer), counting and length/weight estimation, OpenCvSharp interop.</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
+    <PackageReference Include="OpenCvSharp4" Version="4.13.0.20261107" />
+  </ItemGroup>
+</Project>

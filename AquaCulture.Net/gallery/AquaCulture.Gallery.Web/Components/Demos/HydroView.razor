@@ -1,0 +1,31 @@
+@inherits DemoBase
+
+<div class="controls">
+    <Slider Label="@T("Paddle wheels", "Jumlah kincir")" @bind-Value="_wheels" Min="0" Max="4" Step="1" Format="0" OnChange="Run" />
+    <Slider Label="@T("Thrust", "Daya dorong")" @bind-Value="_thrust" Min="0.05" Max="0.5" Step="0.05" Format="0.00" OnChange="Run" />
+    <Slider Label="@T("Hours", "Jam")" @bind-Value="_hours" Min="0.5" Max="6" Step="0.5" OnChange="Run" />
+    <Slider Label="@T("Initial DO", "DO awal")" @bind-Value="_init" Min="1" Max="6" Step="0.1" OnChange="Run" />
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Mean DO", "DO rata-rata")" Value="@F(_r.Mean)" Unit="mg/L" />
+    <KpiCard Label="@T("Minimum DO", "DO minimum")" Value="@F(_r.Min)" Unit="mg/L" Tone="@(_r.Min < 3 ? "alert" : "good")" />
+    <KpiCard Label="@T("Area below 5 mg/L", "Area di bawah 5 mg/L")" Value="@F(_r.LowAreaPct, "0")" Unit="%" Tone="@(_r.LowAreaPct > 30 ? "warn" : "good")" />
+    <KpiCard Label="@T("Kernel", "Kernel")" Value="@_r.Backend.ToString()" Note="@($"{_r.Steps:N0} steps · {_r.Milliseconds:0} ms")" />
+</div>
+
+<div class="grid wide-left" style="margin-top:14px">
+    <div class="panel"><h2>@T("Dissolved oxygen field", "Sebaran oksigen terlarut") <small>@_r.Nx × @_r.Ny @T("cells", "sel") · 0.7 m</small></h2>
+        <div class="stage"><img src="@Img(_r.FieldPng)" alt="DO field" /><div class="overlay">@((MarkupString)_r.FlowSvg)</div></div>
+        <div class="aq-legend"><span>0</span><span class="aq-legend-bar" style="background:linear-gradient(90deg,#7a1f1f,#e0614a,#e9b44c,#7cc6a4,#1fa3a8,#0b4f6c)"></span><span>8 mg/L</span></div></div>
+    <div class="panel"><h2>@T("Mean and minimum over time", "Rata-rata dan minimum terhadap waktu")</h2><SvgMarkup Svg="@_r.HistorySvg" />
+        <p class="note">@T("Upwind advection, eddy diffusion, surface reaeration toward saturation, stock and sediment respiration and paddle-wheel oxygen transfer. Dead zones form far from the wheels and in the corners.",
+            "Adveksi upwind, difusi eddy, reaerasi permukaan menuju jenuh, respirasi biota dan sedimen, serta transfer oksigen kincir. Zona mati terbentuk jauh dari kincir dan di sudut kolam.")</p></div>
+</div>
+
+@code {
+    private double _wheels = 2, _thrust = 0.25, _hours = 1.5, _init = 3.2;
+    private HydroDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = HydroDemo.Run((int)_wheels, _thrust, _hours, _init);
+}

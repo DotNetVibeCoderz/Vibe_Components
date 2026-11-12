@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Fisheries stock assessment inspired by FLR, FSA and TropFishR: Schaefer/Fox surplus production, Beverton–Holt, yield per recruit, MSY, length-based methods and Kobe status.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+  </ItemGroup>
+</Project>

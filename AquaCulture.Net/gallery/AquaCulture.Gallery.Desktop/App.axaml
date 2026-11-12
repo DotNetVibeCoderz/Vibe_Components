@@ -1,0 +1,81 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="AquaCulture.Gallery.Desktop.App"
+             RequestedThemeVariant="Light">
+    <!-- AquaCulture.Net Gallery "hydrographic survey chart" palette (shared with the Blazor gallery). -->
+    <Application.Resources>
+        <SolidColorBrush x:Key="Paper" Color="#EEF4F2" />
+        <SolidColorBrush x:Key="PaperRaised" Color="#F8FBFA" />
+        <SolidColorBrush x:Key="PaperSunk" Color="#E1EBE8" />
+        <SolidColorBrush x:Key="Ink" Color="#0B2E36" />
+        <SolidColorBrush x:Key="InkSoft" Color="#3F5A61" />
+        <SolidColorBrush x:Key="Rule" Color="#C6D6D3" />
+        <SolidColorBrush x:Key="Teal" Color="#0F8796" />
+        <SolidColorBrush x:Key="TealBright" Color="#12A4B6" />
+        <SolidColorBrush x:Key="Kelp" Color="#2F8F6A" />
+        <SolidColorBrush x:Key="Coral" Color="#D4553F" />
+        <SolidColorBrush x:Key="Sand" Color="#C9963A" />
+        <SolidColorBrush x:Key="CodeBg" Color="#0B252B" />
+        <FontFamily x:Key="Display">avares://AquaCulture.Gallery.Desktop/Assets/Fonts#Instrument Serif</FontFamily>
+        <FontFamily x:Key="Body">avares://AquaCulture.Gallery.Desktop/Assets/Fonts#Public Sans</FontFamily>
+        <FontFamily x:Key="Mono">avares://AquaCulture.Gallery.Desktop/Assets/Fonts#IBM Plex Mono</FontFamily>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+        <Style Selector="Window">
+            <Setter Property="Background" Value="{StaticResource Paper}" />
+            <Setter Property="FontFamily" Value="{StaticResource Body}" />
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+        </Style>
+        <Style Selector="TextBlock.display">
+            <Setter Property="FontFamily" Value="{StaticResource Display}" />
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+        </Style>
+        <Style Selector="TextBlock.mono">
+            <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="LetterSpacing" Value="1.2" />
+            <Setter Property="Foreground" Value="{StaticResource InkSoft}" />
+        </Style>
+        <Style Selector="TextBlock.soft">
+            <Setter Property="Foreground" Value="{StaticResource InkSoft}" />
+        </Style>
+        <Style Selector="Border.panel">
+            <Setter Property="Background" Value="{StaticResource PaperRaised}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Rule}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="16,14" />
+        </Style>
+        <Style Selector="Button.nav">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="9,6" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+        </Style>
+        <Style Selector="Button.nav:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource PaperSunk}" />
+        </Style>
+        <Style Selector="Button.nav.active /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource Ink}" />
+        </Style>
+        <Style Selector="Button.nav.active TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Paper}" />
+        </Style>
+        <Style Selector="ToggleButton.lang">
+            <Setter Property="Padding" Value="12,4" />
+            <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+        <Style Selector="ToggleButton.lang:checked /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource Ink}" />
+            <Setter Property="Foreground" Value="{StaticResource Paper}" />
+        </Style>
+        <Style Selector="Slider">
+            <Setter Property="Foreground" Value="{StaticResource Teal}" />
+        </Style>
+    </Application.Styles>
+</Application>

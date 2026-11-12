@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Reporting: Excel (XLSX), PDF, Word (DOCX), CSV, JSON, HTML and Markdown writers with no external dependencies, plus GAP, CBIB, ASC and BAP compliance audits.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+    <ProjectReference Include="../AquaCulture.Analytics/AquaCulture.Analytics.csproj" />
+    <ProjectReference Include="../AquaCulture.Visualization/AquaCulture.Visualization.csproj" />
+  </ItemGroup>
+</Project>

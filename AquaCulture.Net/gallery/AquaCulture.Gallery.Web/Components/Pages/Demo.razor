@@ -1,0 +1,52 @@
+@page "/demo/{Slug}"
+
+@if (_info is null)
+{
+    <p>@T("No example with that name. Pick one from the list.", "Contoh tidak ditemukan. Pilih dari daftar.")</p>
+}
+else
+{
+    <PageTitle>@_info.Title[Lang] · AquaCulture.Net Gallery</PageTitle>
+    <header class="demo-head">
+        <div>
+            <div class="crumb">@GalleryCatalog.Groups.First(g => g.Key == _info.Group).Name[Lang]</div>
+            <h1>@_info.Title[Lang]</h1>
+            <p>@_info.Summary[Lang]</p>
+        </div>
+        <span class="badge">@_info.Module</span>
+    </header>
+
+    @switch (Slug)
+    {
+        case "water": <WaterView Lang="@Lang" /> break;
+        case "oxygen": <OxygenView Lang="@Lang" /> break;
+        case "hydro": <HydroView Lang="@Lang" /> break;
+        case "growth": <GrowthView Lang="@Lang" /> break;
+        case "feeding": <FeedingView Lang="@Lang" /> break;
+        case "ai": <AiView Lang="@Lang" /> break;
+        case "disease": <DiseaseView Lang="@Lang" /> break;
+        case "vision": <VisionView Lang="@Lang" /> break;
+        case "twin": <TwinView Lang="@Lang" /> break;
+        case "iot": <IoTView Lang="@Lang" /> break;
+        case "gis": <GisView Lang="@Lang" /> break;
+        case "weather": <WeatherView Lang="@Lang" /> break;
+        case "stock": <StockView Lang="@Lang" /> break;
+        case "population": <PopulationView Lang="@Lang" /> break;
+        case "analytics": <AnalyticsView Lang="@Lang" /> break;
+        case "reporting": <ReportingView Lang="@Lang" /> break;
+        case "agent": <AgentView Lang="@Lang" /> break;
+    }
+
+    <section class="code" aria-label="@T("Source code", "Kode sumber")">
+        <div class="code-head"><span>C# · @_info.Module</span><span>@T("The code behind this example", "Kode di balik contoh ini")</span></div>
+        <pre><code>@_info.Code</code></pre>
+    </section>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    [CascadingParameter(Name = "Lang")] public string Lang { get; set; } = "en";
+    private DemoInfo? _info;
+    protected override void OnParametersSet() => _info = GalleryCatalog.Demos.FirstOrDefault(d => d.Slug == Slug);
+    private string T(string en, string id) => Lang == "id" ? id : en;
+}

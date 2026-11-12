@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>AquaGrowth engine: TGC, von Bertalanffy and Gompertz models with temperature/DO/ammonia/density modifiers, daily cycle simulation, biomass, mortality, harvest date and yield prediction.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+    <ProjectReference Include="../AquaCulture.WaterQuality/AquaCulture.WaterQuality.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,25 @@
+@* Time-series chart of water parameters with species thresholds. *@
+<div class="aq-chart">
+    @((MarkupString)SvgCharts.Line(Series, new ChartOptions
+    {
+        Width = Width, Height = Height, Title = Title, YLabel = YLabel, References = References ?? [], YMin = YMin, YMax = YMax,
+        XFormat = XFormat ?? (x => DateTime.FromOADate(x).ToString("dd MMM HH:mm", CultureInfo.InvariantCulture)),
+    }))
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<Series> Series { get; set; } = [];
+    [Parameter] public IReadOnlyList<Reference>? References { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? YLabel { get; set; }
+    [Parameter] public double? YMin { get; set; }
+    [Parameter] public double? YMax { get; set; }
+    [Parameter] public int Width { get; set; } = 760;
+    [Parameter] public int Height { get; set; } = 280;
+    /// <summary>X values are OLE automation dates by default (use <see cref="FromTimeSeries"/>).</summary>
+    [Parameter] public Func<double, string>? XFormat { get; set; }
+
+    /// <summary>Converts a time series into a chart series (X as OLE date).</summary>
+    public static Series FromTimeSeries(AquaCulture.Core.Data.TimeSeries ts, string? name = null, string? color = null) =>
+        new(name ?? ts.Name, ts.Points.Select(p => (p.Time.ToOADate(), p.Value)).ToList(), color);
+}

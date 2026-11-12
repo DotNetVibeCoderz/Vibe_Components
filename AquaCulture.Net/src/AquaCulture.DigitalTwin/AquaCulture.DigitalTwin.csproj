@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Real-time digital pond and farm twin: sensors, biomass, water quality, feed consumption, disease status and weather impact with explained decisions and what-if simulation.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+    <ProjectReference Include="../AquaCulture.IoT/AquaCulture.IoT.csproj" />
+    <ProjectReference Include="../AquaCulture.WaterQuality/AquaCulture.WaterQuality.csproj" />
+    <ProjectReference Include="../AquaCulture.Growth/AquaCulture.Growth.csproj" />
+    <ProjectReference Include="../AquaCulture.Feeding/AquaCulture.Feeding.csproj" />
+    <ProjectReference Include="../AquaCulture.Disease/AquaCulture.Disease.csproj" />
+    <ProjectReference Include="../AquaCulture.Environment/AquaCulture.Environment.csproj" />
+    <ProjectReference Include="../AquaCulture.Hydrodynamic/AquaCulture.Hydrodynamic.csproj" />
+    <ProjectReference Include="../AquaCulture.Forecasting/AquaCulture.Forecasting.csproj" />
+    <ProjectReference Include="../AquaCulture.Analytics/AquaCulture.Analytics.csproj" />
+  </ItemGroup>
+</Project>

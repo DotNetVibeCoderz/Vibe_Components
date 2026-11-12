@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [ "AquaCulture", "Aquaculture", "IoT", "Worker" ],
+  "identity": "AquaCulture.Templates.IotEdge",
+  "name": "AquaCulture.Net IoT Edge Gateway (MQTT + digital twin)",
+  "shortName": "aqua-iot-edge",
+  "sourceName": "AquaEdgeGateway",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" },
+  "symbols": {
+    "species": { "type": "parameter", "datatype": "string", "defaultValue": "vaname", "replaces": "SPECIES_ID", "description": "Species id: nila, lele, gurame, patin, koi, bandeng, kerapu, kakap, vaname, windu" }
+  }
+}

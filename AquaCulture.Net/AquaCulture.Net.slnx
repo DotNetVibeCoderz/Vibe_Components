@@ -1,0 +1,38 @@
+<Solution>
+  <Folder Name="/gallery/">
+    <Project Path="gallery/AquaCulture.Gallery.Desktop/AquaCulture.Gallery.Desktop.csproj" />
+    <Project Path="gallery/AquaCulture.Gallery.Shared/AquaCulture.Gallery.Shared.csproj" />
+    <Project Path="gallery/AquaCulture.Gallery.Web/AquaCulture.Gallery.Web.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/AquaCulture.AI/AquaCulture.AI.csproj" />
+    <Project Path="src/AquaCulture.Analytics/AquaCulture.Analytics.csproj" />
+    <Project Path="src/AquaCulture.Blazor/AquaCulture.Blazor.csproj" />
+    <Project Path="src/AquaCulture.ComputerVision/AquaCulture.ComputerVision.csproj" />
+    <Project Path="src/AquaCulture.Core/AquaCulture.Core.csproj" />
+    <Project Path="src/AquaCulture.DigitalTwin/AquaCulture.DigitalTwin.csproj" />
+    <Project Path="src/AquaCulture.Disease/AquaCulture.Disease.csproj" />
+    <Project Path="src/AquaCulture.Environment/AquaCulture.Environment.csproj" />
+    <Project Path="src/AquaCulture.Feeding/AquaCulture.Feeding.csproj" />
+    <Project Path="src/AquaCulture.Forecasting/AquaCulture.Forecasting.csproj" />
+    <Project Path="src/AquaCulture.GIS/AquaCulture.GIS.csproj" />
+    <Project Path="src/AquaCulture.Growth/AquaCulture.Growth.csproj" />
+    <Project Path="src/AquaCulture.Hydrodynamic/AquaCulture.Hydrodynamic.csproj" />
+    <Project Path="src/AquaCulture.IoT/AquaCulture.IoT.csproj" />
+    <Project Path="src/AquaCulture.Native/AquaCulture.Native.csproj" />
+    <Project Path="src/AquaCulture.Population/AquaCulture.Population.csproj" />
+    <Project Path="src/AquaCulture.Reporting/AquaCulture.Reporting.csproj" />
+    <Project Path="src/AquaCulture.StockAssessment/AquaCulture.StockAssessment.csproj" />
+    <Project Path="src/AquaCulture.Visualization/AquaCulture.Visualization.csproj" />
+    <Project Path="src/AquaCulture.WaterQuality/AquaCulture.WaterQuality.csproj" />
+  </Folder>
+  <Folder Name="/templates/">
+    <Project Path="templates/AquaCulture.Templates/AquaCulture.Templates.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AquaCulture.Tests/AquaCulture.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/AquaCulture.Cli/AquaCulture.Cli.csproj" />
+  </Folder>
+</Solution>

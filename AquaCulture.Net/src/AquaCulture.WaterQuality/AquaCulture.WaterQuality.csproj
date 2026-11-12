@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Water quality for aquaculture: 15 parameters, unionized ammonia, DO saturation, species-aware WQI and CCME index, alert engine and recommendation engine.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+    <ProjectReference Include="../AquaCulture.Native/AquaCulture.Native.csproj" />
+  </ItemGroup>
+</Project>

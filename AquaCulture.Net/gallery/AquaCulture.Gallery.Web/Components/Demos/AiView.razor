@@ -1,0 +1,40 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Species", "Spesies")</label>
+        <select @bind="_sp" @bind:after="Run">@foreach (var s in SpeciesCatalog.All) { <option value="@s.Id">@s.Name[Lang]</option> }</select></div>
+    <Slider Label="ABW g" @bind-Value="_abw" Min="1" Max="500" Step="1" Format="0" OnChange="Run" />
+    <Slider Label="@T("Water °C", "Air °C")" @bind-Value="_t" Min="22" Max="35" Step="0.5" OnChange="Run" />
+    <Slider Label="@T("Dawn DO", "DO subuh")" @bind-Value="_do" Min="1" Max="8" Step="0.1" OnChange="Run" />
+    <Slider Label="@T("NH₃ × limit", "NH₃ × batas")" @bind-Value="_nh3" Min="0" Max="4" Step="0.1" OnChange="Run" />
+    <Slider Label="@T("Density ratio", "Rasio kepadatan")" @bind-Value="_den" Min="0.1" Max="1.3" Step="0.05" Format="0.00" OnChange="Run" />
+</div>
+
+@if (_r is null) { <p class="note">@T("Training models…", "Melatih model…")</p> }
+else
+{
+    <div class="grid kpis">
+        <KpiCard Label="@T("Predicted ADG", "Prediksi ADG")" Value="@F(_r.Prediction.AdgG, "0.00")" Unit="@T("g/day", "g/hari")" Note="@($"{F(_r.Prediction.WeightIn7DaysG, "0.0")} g {T("in 7 days", "dalam 7 hari")}")" />
+        <KpiCard Label="@T("Growth model R²", "R² model pertumbuhan")" Value="@F(_r.GrowthR2, "0.000")" Note="@($"GBT · ML.NET SDCA R² {F(_r.MlNetR2, "0.00")}")" />
+        <KpiCard Label="@T("Mortality-event risk", "Risiko kematian")" Value="@F(_r.Risk.Probability * 100, "0")" Unit="%" Note="@_r.Risk.Level[Lang]" Tone="@(_r.Risk.Probability > 0.6 ? "alert" : _r.Risk.Probability > 0.3 ? "warn" : "good")" />
+        <KpiCard Label="@T("Mortality AUC", "AUC kematian")" Value="@F(_r.MortalityAuc, "0.000")" />
+        <KpiCard Label="@T("RL feed decision", "Keputusan pakan RL")" Value="@($"{_r.Decision.RationFactor:P0}")" Tone="@(_r.Decision.RationFactor < 1 ? "warn" : "good")" />
+    </div>
+    <div class="grid three" style="margin-top:14px">
+        <div class="panel"><h2>@T("What drives growth", "Pendorong pertumbuhan")</h2><SvgMarkup Svg="@_r.ImportanceSvg" /></div>
+        <div class="panel"><h2>@T("Mortality reasons", "Penyebab risiko kematian")</h2>
+            @foreach (var r in _r.Risk.Reasons) { <div class="decision Warning"><span>@r[Lang]</span></div> }
+            @if (_r.Risk.Reasons.Count == 0) { <p class="note">@T("No stress factor.", "Tidak ada faktor stres.")</p> }</div>
+        <div class="panel"><h2>@T("Learned feeding policy", "Kebijakan pakan hasil belajar") <small>Q-learning</small></h2><SvgMarkup Svg="@_r.PolicySvg" />
+            <div class="decision"><span>@_r.Decision.Explanation[Lang]</span></div></div>
+    </div>
+}
+
+@code {
+    private string _sp = "vaname";
+    private double _abw = 12, _t = 30, _do = 3.4, _nh3 = 1.3, _den = 0.8;
+    private AiDemoResult? _r;
+    protected override async Task OnInitializedAsync() => await RunAsync();
+    private Task Run() => RunAsync();
+    private async Task RunAsync() { string sp = _sp; double a = _abw, t = _t, d = _do, n = _nh3, de = _den; _r = await Task.Run(() => AiDemo.Run(sp, a, t, d, n, de)); }
+}

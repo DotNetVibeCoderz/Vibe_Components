@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [ "AquaCulture", "Aquaculture", "Desktop", "Avalonia" ],
+  "identity": "AquaCulture.Templates.Avalonia",
+  "name": "AquaCulture.Net Pond Monitor (Avalonia desktop)",
+  "shortName": "aqua-avalonia",
+  "sourceName": "AquaPondMonitor",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" },
+  "symbols": {
+    "species": { "type": "parameter", "datatype": "string", "defaultValue": "vaname", "replaces": "SPECIES_ID", "description": "Species id: nila, lele, gurame, patin, koi, bandeng, kerapu, kakap, vaname, windu" }
+  }
+}

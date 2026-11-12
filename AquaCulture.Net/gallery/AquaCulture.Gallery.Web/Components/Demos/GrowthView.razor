@@ -1,0 +1,43 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Species", "Spesies")</label>
+        <select @bind="_sp" @bind:after="Run">@foreach (var s in SpeciesCatalog.All) { <option value="@s.Id">@s.Name[Lang]</option> }</select></div>
+    <Slider Label="@T("Water °C", "Air °C")" @bind-Value="_t" Min="22" Max="34" Step="0.5" OnChange="Run" />
+    <Slider Label="@T("Dawn DO", "DO subuh")" @bind-Value="_do" Min="2" Max="8" Step="0.1" OnChange="Run" />
+    <Slider Label="@T("Stocking /m²", "Tebar /m²")" @bind-Value="_dens" Min="10" Max="250" Step="5" Format="0" OnChange="Run" />
+    <Slider Label="@T("Ration ×", "Ransum ×")" @bind-Value="_feed" Min="0.5" Max="1.2" Step="0.05" Format="0.00" OnChange="Run" />
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Market size reached", "Ukuran pasar tercapai")" Value="@($"DOC {_r.AtTarget.DayOfCulture}")" Note="@($"{_r.Species.MarketWeightG} g · {_r.AtTarget.Date:yyyy-MM-dd}")" />
+    <KpiCard Label="@T("Harvest P10–P90", "Panen P10–P90")" Value="@($"{_r.MonteCarlo.DayP10}–{_r.MonteCarlo.DayP90}")" Unit="@T("days", "hari")" Note="@($"P50 {_r.MonteCarlo.DayP50} · {_r.MonteCarlo.Backend}")" />
+    <KpiCard Label="@T("Survival", "Kelulushidupan")" Value="@F(_r.AtTarget.SurvivalRate * 100, "0")" Unit="%" />
+    <KpiCard Label="FCR" Value="@F(_r.AtTarget.Fcr, "0.00")" Tone="@(_r.AtTarget.Fcr <= _r.Species.TypicalFcr ? "good" : "warn")" />
+    <KpiCard Label="@T("Best harvest day", "Hari panen terbaik")" Value="@($"DOC {_r.Optimal.DayOfCulture}")" Note="@($"{F(_r.Optimal.AbwG, "0.#")} g · {Rp(_r.Optimal.Margin)}")" Tone="good" />
+</div>
+
+<div class="grid two" style="margin-top:14px">
+    <div class="panel"><h2>@T("Average body weight", "Bobot rata-rata")</h2><SvgMarkup Svg="@_r.WeightSvg" /></div>
+    <div class="panel"><h2>@T("Biomass and feed", "Biomassa dan pakan")</h2><SvgMarkup Svg="@_r.BiomassSvg" /></div>
+</div>
+<div class="grid wide-right" style="margin-top:14px">
+    <div class="panel"><h2>@T("Monte-Carlo final weight", "Bobot akhir Monte-Carlo") <small>500 @T("runs", "simulasi")</small></h2><SvgMarkup Svg="@_r.HistogramSvg" /></div>
+    <div class="panel"><h2>@T("At market size", "Pada ukuran pasar")</h2>
+        <table class="data">
+            <tr><td>@T("Biomass", "Biomassa")</td><td class="num">@F(_r.AtTarget.BiomassKg, "N0") kg</td></tr>
+            <tr><td>@T("Yield", "Produktivitas")</td><td class="num">@F(_r.AtTarget.YieldKgPerM2, "0.00") kg/m²</td></tr>
+            <tr><td>@T("Feed used", "Pakan terpakai")</td><td class="num">@F(_r.AtTarget.CumulativeFeedKg, "N0") kg</td></tr>
+            <tr><td>@T("Revenue", "Pendapatan")</td><td class="num">@Rp(_r.AtTarget.Revenue)</td></tr>
+            <tr><td>@T("Feed cost", "Biaya pakan")</td><td class="num">@Rp(_r.AtTarget.FeedCost)</td></tr>
+            <tr><td>@T("Margin after feed and daily costs", "Margin setelah pakan dan biaya harian")</td><td class="num">@Rp(_r.AtTarget.Margin)</td></tr>
+        </table></div>
+</div>
+
+@code {
+    private string _sp = "vaname";
+    private double _t = 29, _do = 5.0, _dens = 125, _feed = 1.0;
+    private GrowthDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = GrowthDemo.Run(_sp, _t, _do, _dens, _feed);
+}

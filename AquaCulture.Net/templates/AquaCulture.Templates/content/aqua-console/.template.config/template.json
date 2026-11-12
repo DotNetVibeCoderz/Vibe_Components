@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [ "AquaCulture", "Aquaculture", "Console" ],
+  "identity": "AquaCulture.Templates.Console",
+  "name": "AquaCulture.Net Pond Advisor (console)",
+  "shortName": "aqua-console",
+  "sourceName": "AquaConsoleApp",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" },
+  "symbols": {
+    "species": { "type": "parameter", "datatype": "string", "defaultValue": "vaname", "replaces": "SPECIES_ID", "description": "Species id: nila, lele, gurame, patin, koi, bandeng, kerapu, kakap, vaname, windu" }
+  }
+}

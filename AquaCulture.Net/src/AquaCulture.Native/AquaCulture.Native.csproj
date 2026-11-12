@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Native (Rust) high-performance kernels for AquaCulture.Net: advection-diffusion, water chemistry batches, statistics and Monte-Carlo growth, with an automatic managed fallback.</Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Prebuilt native binaries produced by build/build-native.ps1 (cargo build, release profile). -->
+    <None Include="runtimes/**/native/*" Pack="true" PackagePath="runtimes/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Link="runtimes/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

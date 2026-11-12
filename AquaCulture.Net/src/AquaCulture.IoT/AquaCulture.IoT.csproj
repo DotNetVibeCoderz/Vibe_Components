@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Aquaculture IoT: devices (ESP32, ESP8266, Arduino, Raspberry Pi, PLC), MQTT, LoRaWAN (Cayenne LPP), Modbus RTU/TCP, REST and OPC-UA mapping, edge analytics and sensor simulation.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="MQTTnet" Version="5.2.0.1603" />
+  </ItemGroup>
+</Project>

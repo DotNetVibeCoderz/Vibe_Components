@@ -1,0 +1,81 @@
+/* AquaCulture.Blazor components. Theme with CSS custom properties (light defaults, dark via prefers-color-scheme or [data-theme=dark]). */
+:root {
+    --aq-ink: #0b2e36; --aq-muted: #5b7279; --aq-grid: #d3e0de; --aq-surface: #f6faf9; --aq-surface-2: #e8f1ef; --aq-line: #c9d8d6;
+    --aq-accent: #12a4b6; --aq-good: #2f8f6a; --aq-warn: #d9a13b; --aq-alert: #e0614a; --aq-land: #dfe9d8; --aq-dike: #8a7a5a;
+    --aq-radius: 10px; --aq-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --aq-ink: #e4f1ef; --aq-muted: #93aaae; --aq-grid: #23393e; --aq-surface: #0f2328; --aq-surface-2: #142d33; --aq-line: #24424a;
+        --aq-land: #1d3328; --aq-dike: #6b5d44;
+    }
+}
+:root[data-theme="dark"] {
+    --aq-ink: #e4f1ef; --aq-muted: #93aaae; --aq-grid: #23393e; --aq-surface: #0f2328; --aq-surface-2: #142d33; --aq-line: #24424a;
+    --aq-land: #1d3328; --aq-dike: #6b5d44;
+}
+
+.aq-svg svg, .aq-chart svg, .aq-gauge svg { width: 100%; height: auto; display: block; }
+
+.aq-kpi { background: var(--aq-surface); border: 1px solid var(--aq-line); border-radius: var(--aq-radius); padding: 12px 14px; min-width: 0; }
+.aq-kpi-label { font: 600 11px/1.2 var(--aq-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--aq-muted); }
+.aq-kpi-value { font-size: 28px; font-weight: 700; color: var(--aq-ink); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.aq-kpi-unit { font-size: 13px; font-weight: 500; color: var(--aq-muted); margin-left: 4px; }
+.aq-kpi-note { font-size: 12.5px; color: var(--aq-muted); margin-top: 2px; }
+.aq-kpi.good .aq-kpi-value { color: var(--aq-good); }
+.aq-kpi.warn .aq-kpi-value { color: var(--aq-warn); }
+.aq-kpi.alert .aq-kpi-value { color: var(--aq-alert); }
+.aq-kpi-spark svg { width: 100%; height: 28px; }
+
+.aq-sensor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }
+.aq-sensor { background: var(--aq-surface); border: 1px solid var(--aq-line); border-left: 4px solid var(--aq-good); border-radius: 8px; padding: 9px 10px; }
+.aq-sensor.acceptable { border-left-color: var(--aq-accent); }
+.aq-sensor.stress { border-left-color: var(--aq-warn); }
+.aq-sensor.critical { border-left-color: var(--aq-alert); background: color-mix(in srgb, var(--aq-alert) 8%, var(--aq-surface)); }
+.aq-sensor-code { font: 600 10.5px var(--aq-mono); letter-spacing: .1em; color: var(--aq-muted); }
+.aq-sensor-value { font-size: 21px; font-weight: 700; color: var(--aq-ink); font-variant-numeric: tabular-nums; }
+.aq-sensor-value small { font-size: 11px; font-weight: 500; color: var(--aq-muted); margin-left: 3px; }
+.aq-sensor-name { font-size: 11.5px; color: var(--aq-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aq-sensor-bar { height: 4px; background: var(--aq-surface-2); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.aq-sensor-bar span { display: block; height: 100%; background: var(--aq-accent); }
+
+.aq-feed { background: var(--aq-surface); border: 1px solid var(--aq-line); border-radius: var(--aq-radius); padding: 14px; }
+.aq-feed-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; color: var(--aq-muted); font-size: 13px; }
+.aq-feed-head strong { font-size: 24px; color: var(--aq-ink); }
+.aq-feed-track { position: relative; height: 78px; margin: 18px 6px 4px; border-bottom: 2px solid var(--aq-line);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--aq-ink) 10%, transparent) 0 25%, transparent 25% 75%, color-mix(in srgb, var(--aq-ink) 10%, transparent) 75%); border-radius: 6px 6px 0 0; }
+.aq-meal { position: absolute; bottom: 8px; transform: translateX(-50%); border: 1px solid var(--aq-accent); background: var(--aq-surface); color: var(--aq-ink);
+    border-radius: 8px; padding: 4px 7px; font: 600 11px var(--aq-mono); cursor: pointer; display: grid; gap: 1px; text-align: center; }
+.aq-meal.given { background: var(--aq-accent); color: #fff; }
+.aq-meal:focus-visible { outline: 2px solid var(--aq-warn); outline-offset: 2px; }
+.aq-meal-kg { font-weight: 500; opacity: .85; }
+.aq-feed-hour { position: absolute; bottom: -18px; transform: translateX(-50%); font: 10px var(--aq-mono); color: var(--aq-muted); }
+.aq-feed-adj { margin: 24px 0 0; padding-left: 18px; font-size: 13px; color: var(--aq-muted); }
+
+.aq-map svg { width: 100%; height: auto; display: block; }
+.aq-map-land { fill: var(--aq-land); }
+.aq-pond path { stroke: var(--aq-dike); stroke-width: 4; stroke-linejoin: round; cursor: pointer; transition: filter .15s; }
+.aq-pond:hover path, .aq-pond:focus path { filter: brightness(1.08); }
+.aq-pond.selected path { stroke: var(--aq-ink); stroke-width: 5; }
+.aq-pond:focus { outline: none; }
+.aq-pond-id { font-size: 13px; font-weight: 700; fill: #0b2e36; pointer-events: none; }
+.aq-pond-val { font-size: 11px; fill: #0b2e36; pointer-events: none; }
+.aq-map-sensor { stroke: #fff; stroke-width: 1.5; }
+.aq-map-sensor.ok { fill: var(--aq-good); }
+.aq-map-sensor.bad { fill: var(--aq-alert); }
+.aq-legend { display: flex; align-items: center; gap: 8px; font: 11px var(--aq-mono); color: var(--aq-muted); margin-top: 6px; }
+.aq-legend-bar { flex: 1; height: 8px; border-radius: 4px; max-width: 260px; }
+
+.aq-gis-layers { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.aq-chip { display: inline-flex; gap: 5px; align-items: center; font-size: 12.5px; padding: 3px 9px; border: 1px solid var(--aq-line); border-radius: 999px; background: var(--aq-surface); color: var(--aq-ink); cursor: pointer; }
+.aq-gis-stage { position: relative; width: 100%; border-radius: var(--aq-radius); overflow: hidden; background: var(--aq-surface-2); }
+.aq-gis-raster, .aq-gis-vector { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+.aq-gis-poly { fill: none; stroke: var(--aq-ink); stroke-width: 1.6; }
+.aq-gis-point { fill: var(--aq-accent); stroke: #fff; stroke-width: 1.5; }
+
+.aq-twin3d { position: relative; width: 100%; border-radius: var(--aq-radius); overflow: hidden; background: #e9f1ee; }
+.aq-twin3d canvas { width: 100%; height: 100%; display: block; }
+.aq-twin3d-hud { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+.aq-twin3d-hud span { background: rgba(11, 46, 54, .78); color: #e8f6f4; font: 12px var(--aq-mono); padding: 4px 8px; border-radius: 6px; backdrop-filter: blur(4px); }
+.aq-twin3d-hud span.on { background: rgba(18, 164, 182, .9); }
+.aq-twin3d-hud span.off { background: rgba(224, 97, 74, .9); }

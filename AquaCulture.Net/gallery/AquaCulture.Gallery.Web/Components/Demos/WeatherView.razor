@@ -1,0 +1,44 @@
+@inherits DemoBase
+
+<div class="controls">
+    <Slider Label="@T("Wet-season strength", "Kekuatan musim hujan")" @bind-Value="_wet" Min="0" Max="2.5" Step="0.1" OnChange="Run" />
+    <div class="control"><label>@T("Culture system", "Sistem budidaya")</label>
+        <select @bind="_sys" @bind:after="Run">@foreach (var s in Systems) { <option value="@s">@s</option> }</select></div>
+    <Slider Label="@T("Depth m", "Kedalaman m")" @bind-Value="_depth" Min="0.6" Max="6" Step="0.1" OnChange="Run" />
+    <Slider Label="@T("Salinity ppt", "Salinitas ppt")" @bind-Value="_sal" Min="0" Max="35" Step="1" Format="0" OnChange="Run" />
+    <Slider Label="@T("Scenario seed", "Seed skenario")" @bind-Value="_seed" Min="1" Max="60" Step="1" Format="0" OnChange="Run" />
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Water temperature", "Suhu air")" Value="@($"{_r.Impact.WaterTempMinC}–{_r.Impact.WaterTempMaxC}")" Unit="°C" />
+    <KpiCard Label="@T("Rain 72 h", "Hujan 72 jam")" Value="@F(_r.Impact.TotalRainMm, "0")" Unit="mm" />
+    <KpiCard Label="@T("Salinity drop", "Penurunan salinitas")" Value="@F(_r.Impact.SalinityDropPpt, "0.0")" Unit="ppt" Tone="@(_r.Impact.SalinityDropPpt > 2 ? "warn" : "")" />
+    <KpiCard Label="@T("Light / clear sky", "Cahaya / langit cerah")" Value="@F(_r.Impact.PhotosynthesisIndex * 100, "0")" Unit="%" Tone="@(_r.Impact.PhotosynthesisIndex < 0.45 ? "warn" : "good")" />
+    <KpiCard Label="@T("Overall impact", "Dampak keseluruhan")" Value="@_r.Impact.Overall.ToString()" Tone="@(_r.Impact.Overall >= AquaCulture.Environment.ImpactSeverity.High ? "alert" : "")" />
+</div>
+
+<div class="grid two" style="margin-top:14px">
+    <div class="panel"><h2>@T("72-hour forecast", "Prakiraan 72 jam")</h2><SvgMarkup Svg="@_r.ForecastSvg" /><SvgMarkup Svg="@_r.RainSvg" /></div>
+    <div class="panel"><h2>@T("Predicted pond effects", "Perkiraan dampak ke kolam")</h2>
+        @foreach (var i in _r.Impact.Impacts) { <div class="decision @(i.Severity >= AquaCulture.Environment.ImpactSeverity.High ? "Critical" : "Warning")"><span class="k">@i.Code</span><span>@i.Effect[Lang]<small>@i.Advice[Lang]</small></span></div> }
+        @if (_r.Impact.Impacts.Count == 0) { <p class="note">@T("No significant weather risk.", "Tidak ada risiko cuaca berarti.")</p> }</div>
+</div>
+<div class="grid wide-right" style="margin-top:14px">
+    <div class="panel"><h2>@T("Climate risk matrix", "Matriks risiko iklim")</h2><SvgMarkup Svg="@_r.MatrixSvg" /></div>
+    <div class="panel"><h2>@T("Yearly hazards", "Bahaya tahunan") <small>@_r.System</small></h2>
+        <table class="data"><tr><th>#</th><th>@T("Hazard", "Bahaya")</th><th>@T("Events/yr", "Kejadian/thn")</th><th>L×I</th><th>@T("Adaptation", "Adaptasi")</th></tr>
+            @foreach (var (h, k) in _r.Climate.Hazards.Select((h, k) => (h, k)))
+            {
+                <tr><td>@(k + 1)</td><td>@h.Name[Lang] <span class="pill @(h.Score >= 15 ? "alert" : h.Score >= 10 ? "warn" : "good")">@h.Level[Lang]</span></td><td class="num">@F(h.EventsPerYear, "0.0")</td><td class="num">@h.Likelihood×@h.Impact</td><td class="note">@h.Adaptation[Lang]</td></tr>
+            }
+        </table></div>
+</div>
+
+@code {
+    private static readonly AquaCulture.Core.Farming.CultureSystem[] Systems = Enum.GetValues<AquaCulture.Core.Farming.CultureSystem>();
+    private double _wet = 1.4, _depth = 1.3, _sal = 18, _seed = 31;
+    private AquaCulture.Core.Farming.CultureSystem _sys = AquaCulture.Core.Farming.CultureSystem.LinedPond;
+    private WeatherDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = WeatherDemo.Run(_wet, _sys, _depth, _sal, (ulong)_seed);
+}

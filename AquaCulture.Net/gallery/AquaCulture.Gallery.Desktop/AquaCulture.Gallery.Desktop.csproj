@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Description>AquaCulture.Net Gallery (Avalonia desktop, ThreeNet 3D).</Description>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <ApplicationIcon>Assets/aquaculture.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <AvaloniaResource Include="Assets/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Headless" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Skia" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
+    <PackageReference Include="Svg.Controls.Skia.Avalonia" Version="12.0.0.17" />
+    <PackageReference Include="ThreeNet.Avalonia" Version="0.12.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Gallery.Shared/AquaCulture.Gallery.Shared.csproj" />
+  </ItemGroup>
+</Project>

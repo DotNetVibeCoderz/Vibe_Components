@@ -1,0 +1,10 @@
+<div class="aq-gauge">@((MarkupString)SvgCharts.Gauge(Value, Max, Label, Unit, Ramp, Size))</div>
+
+@code {
+    [Parameter] public double Value { get; set; }
+    [Parameter] public double Max { get; set; } = 100;
+    [Parameter] public string Label { get; set; } = "WQI";
+    [Parameter] public string Unit { get; set; } = "";
+    [Parameter] public ColorRamp? Ramp { get; set; }
+    [Parameter] public int Size { get; set; } = 220;
+}

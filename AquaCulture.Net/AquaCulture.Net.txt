@@ -1,0 +1,37 @@
+Name: AquaCulture.Net
+
+Deskripsi: The Ultimate Open Source Aquaculture Platform for .NET
+
+Features
+---
+Desain dan Fitur bisa lihat di file @solution-design.md
+
+---
+Notes:
+- Dibangun dengan .NET 10 dan Rust (jika membutuhkan performa tinggi low level library)
+- Optimasi kode dengan best practice, best performance dan efisiensi memory
+- Dokumentasi yang lengkap, jelas, mudah dengan dua Bahasa (English dan Bahasa Indonesia)
+- Tambahkan screenshot-nya ke readme dan docs
+- Tambahkan info pada dokumentasi dan aplikasi: Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil
+- PLAN.md untuk roadmap pengembangan, dan Progress.md untuk tracking development
+- Tambahkan AquaCulture.Net Gallery yaitu gallery penggunaan library dengan berbagai use case, tersedia sample code dibuat UI UX-nya yang keren dan professional dibantu dengan skill 'frontend-design' baik untuk target web dengan Blazor dan desktop dengan Avalonia UI 
+- beberapa template project .NET, cli tool 
+- untuk publish nuget api key ada di 'C:\Users\mifma\Documents\CodeSandbox\PackageCredentials.txt'
+- nuget-nya buatkan icon yang keren
+- ujicoba dengan LLM real bisa dengan api key di 'C:\Users\mifma\Documents\CodeSandbox\testkey.txt' atau hugging face token di 'C:\Users\mifma\Documents\CodeSandbox\HFToken.txt'
+- ada mcp blender dan rodin jika diperlukan untuk bikin asset 3D/art 2D
+- untuk rendering di web bisa gunakan Three.js, sedangkan desktop bisa gunakan ThreeNet (https://github.com/DotNetVibeCoderz/Vibe_Graphics/tree/main/ThreeNet)
+---
+Supporting Library (jika diperlukan):
+Reinforcement Learning -> https://github.com/DotNetVibeCoderz/Vibe_Library/tree/main/RLNet
+Visulization Library -> https://github.com/DotNetVibeCoderz/Vibe_Charting/tree/main/Visual.Net
+multiplatform 3D graphics engine -> https://github.com/DotNetVibeCoderz/Vibe_Graphics/tree/main/ThreeNet
+Numpy, Pandas, Scikit Learn, Scipy -> https://github.com/DotNetVibeCoderz/Vibe_ML/tree/main/GravicodeScience
+Hugging Face support -> https://github.com/DotNetVibeCoderz/Vibe_ML/tree/main/HF.Net
+Google Media Pipe -> https://github.com/DotNetVibeCoderz/Vibe_ML/tree/main/MediaPipeNet
+Gdal -> https://github.com/DotNetVibeCoderz/Vibe_Components/tree/main/GDAL.Net
+IoT Support -> https://github.com/DotNetVibeCoderz/Vibe_IoT/tree/main/IoTComNet 
+dan library lain yang mungkin diperlukan seperti TorchSharp, OpenCVSharp, ML.Net, dsb.
+---
+- sebelum publish nuget pindahkan solusi ke repo di 'C:\experiment\VibeCoding\Vibe_Components', buatkan CI, NUGET_API_KEY sudah di set di repo secret
+---

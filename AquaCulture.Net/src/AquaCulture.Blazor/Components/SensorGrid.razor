@@ -1,0 +1,18 @@
+@* Latest readings scored against the species tolerance. *@
+<div class="aq-sensor-grid">
+    @foreach (var s in Assessment.Scores)
+    {
+        var info = WaterParameters.Info[s.Parameter];
+        <div class="aq-sensor @s.Status.ToString().ToLowerInvariant()" title="@($"{WaterQualityAssessment.StatusName(s.Status)[Lang]} · {info.Name[Lang]}")">
+            <div class="aq-sensor-code">@info.Code</div>
+            <div class="aq-sensor-value">@s.Value.ToString(s.Value >= 100 ? "0" : "0.##", CultureInfo.InvariantCulture)<small>@info.Unit</small></div>
+            <div class="aq-sensor-name">@info.Name[Lang]</div>
+            <div class="aq-sensor-bar"><span style="width:@(s.Score.ToString("0", CultureInfo.InvariantCulture))%"></span></div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public WaterQualityAssessment Assessment { get; set; } = null!;
+    [Parameter] public string Lang { get; set; } = "en";
+}

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Aquaculture analytics: FCR, SR, ABW, ADG, SGR, biomass, productivity, profit, mortality and Water Health Index KPIs, cycle economics and benchmarking.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+    <ProjectReference Include="../AquaCulture.WaterQuality/AquaCulture.WaterQuality.csproj" />
+    <ProjectReference Include="../AquaCulture.Feeding/AquaCulture.Feeding.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Hydrodynamic and mass-balance simulation: 2-D advection–diffusion of oxygen, temperature and waste, paddle-wheel/river/tidal flows, sedimentation, pond oxygen budget and RAS mass balance.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.Core/AquaCulture.Core.csproj" />
+    <ProjectReference Include="../AquaCulture.Native/AquaCulture.Native.csproj" />
+    <ProjectReference Include="../AquaCulture.WaterQuality/AquaCulture.WaterQuality.csproj" />
+    <ProjectReference Include="../AquaCulture.Environment/AquaCulture.Environment.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,51 @@
+@page "/"
+<PageTitle>AquaCulture.Net Gallery</PageTitle>
+
+<section class="hero">
+    <div>
+        <div class="crumb">@T("Open source · .NET 10 · Rust kernels", "Open source · .NET 10 · kernel Rust")</div>
+        <h1>@T("Run the pond", "Kelola kolam")<br /><em>@T("like a survey ship.", "seperti kapal survei.")</em></h1>
+        <p class="lede">@T("AquaCulture.Net brings water-quality modelling, growth and feed science, fish health, IoT, GIS, hydrodynamics, stock assessment, AI and a live digital twin into one .NET platform. Every example below is real library code running on a deterministic demo farm.",
+                           "AquaCulture.Net menyatukan pemodelan kualitas air, sains pertumbuhan dan pakan, kesehatan ikan, IoT, GIS, hidrodinamika, kajian stok, AI, dan kembaran digital langsung dalam satu platform .NET. Setiap contoh di bawah adalah kode pustaka sungguhan yang berjalan pada tambak demo deterministik.")</p>
+        <div class="facts">
+            <div class="fact"><b>20</b><span>@T("modules", "modul")</span></div>
+            <div class="fact"><b>10</b><span>@T("species", "spesies")</span></div>
+            <div class="fact"><b>15</b><span>@T("water parameters", "parameter air")</span></div>
+            <div class="fact"><b>15</b><span>@T("diseases", "penyakit")</span></div>
+            <div class="fact"><b>17</b><span>@T("use cases", "kasus")</span></div>
+        </div>
+    </div>
+    <div class="hero-figure">
+        <SvgMarkup Svg="@Map" />
+        <span class="caption">@DemoFarm.Name · DO mg/L</span>
+    </div>
+</section>
+
+@foreach (var g in GalleryCatalog.Groups)
+{
+    <h2 class="section-title">@g.Name[Lang]</h2>
+    <div class="cards">
+        @foreach (var d in GalleryCatalog.Demos.Where(x => x.Group == g.Key))
+        {
+            <a class="card acc-@d.Accent" href="@($"demo/{d.Slug}{(Lang == "id" ? "?lang=id" : "")}")">
+                <span class="grp">@g.Name[Lang]</span>
+                <h3>@d.Title[Lang]</h3>
+                <p>@d.Summary[Lang]</p>
+                <span class="mod">@d.Module</span>
+            </a>
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter(Name = "Lang")] public string Lang { get; set; } = "en";
+    private string T(string en, string id) => Lang == "id" ? id : en;
+    private static readonly string Map = BuildMap();
+
+    private static string BuildMap()
+    {
+        var farm = DemoFarm.Farm;
+        var dox = TwinDemo.Profiles.ToDictionary(p => p.PondId, p => p.MeanDo);
+        return SvgCharts.Map(farm.Ponds.Select(p => (p.Id, p.Outline!, dox[p.Id], $"{farm.ActiveCycle(p.Id)!.LatestAbwG:0.#} g")).ToList(), ColorRamp.Oxygen.WithRange(0, 8), null, 640, 440);
+    }
+}

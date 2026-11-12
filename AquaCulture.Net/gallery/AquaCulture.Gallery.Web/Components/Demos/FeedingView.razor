@@ -1,0 +1,42 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Species", "Spesies")</label>
+        <select @bind="_sp" @bind:after="Run">@foreach (var s in SpeciesCatalog.All) { <option value="@s.Id">@s.Name[Lang]</option> }</select></div>
+    <Slider Label="ABW g" @bind-Value="_abw" Min="0.5" Max="600" Step="0.5" OnChange="Run" />
+    <Slider Label="@T("Population", "Populasi")" @bind-Value="_pop" Min="1000" Max="300000" Step="1000" Format="N0" OnChange="Run" />
+    <Slider Label="@T("Water °C", "Air °C")" @bind-Value="_t" Min="22" Max="34" Step="0.5" OnChange="Run" />
+    <Slider Label="@T("Dawn DO", "DO subuh")" @bind-Value="_do" Min="2" Max="8" Step="0.1" OnChange="Run" />
+    <Slider Label="@T("Leftover %", "Sisa pakan %")" @bind-Value="_left" Min="0" Max="50" Step="1" Format="0" OnChange="Run" />
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Ration today", "Ransum hari ini")" Value="@F(_r.Plan.DailyKg, "0.0")" Unit="kg" Note="@($"{F(_r.Plan.RatePercentBw, "0.00")} % BW")" />
+    <KpiCard Label="@T("Feed", "Pakan")" Value="@(_r.Plan.Feed?.Id ?? "-")" Note="@($"{_r.Plan.PelletMm} mm")" />
+    <KpiCard Label="@T("Daily cost", "Biaya harian")" Value="@Rp(_r.Plan.DailyCost)" />
+    <KpiCard Label="@T("Next meal (auto feeder)", "Pakan berikutnya (otomatis)")" Value="@(_r.Auto.Skip ? T("skip", "lewati") : F(_r.Auto.Grams / 1000, "0.0"))" Unit="@(_r.Auto.Skip ? "" : "kg")" Tone="@(_r.Auto.Skip ? "alert" : "")" />
+    <KpiCard Label="FCR K-01" Value="@F(_r.CycleFcr, "0.00")" Note="@($"{T("feed cost/kg", "biaya pakan/kg")} {Rp(_r.Cost.FeedCostPerKgProduced)}")" />
+</div>
+
+<div class="stack">
+    <div class="panel"><h2>@T("Meal schedule", "Jadwal pemberian pakan") <small>@T("tap a meal to mark it given", "ketuk jadwal untuk menandai sudah diberi")</small></h2>
+        <FeedScheduler Plan="@_r.Plan" Lang="@Lang" /></div>
+</div>
+
+<div class="grid two" style="margin-top:14px">
+    <div class="panel"><h2>@T("Least-cost feed for this size", "Pakan termurah untuk ukuran ini")</h2>
+        <table class="data"><tr><th>@T("Feed", "Pakan")</th><th>@T("Protein", "Protein")</th><th>FCR</th><th>@T("Cost / kg gain", "Biaya / kg bobot")</th></tr>
+            @foreach (var (f, fcr, c) in _r.Ranking) { <tr><td>@f.Name</td><td class="num">@f.ProteinPct %</td><td class="num">@F(fcr, "0.00")</td><td class="num">@Rp(c)</td></tr> }
+        </table>
+        <p class="note">@T("Pearson square to reach", "Metode Pearson untuk mencapai") @_r.Species.ProteinRequirementPct % @T("protein", "protein"): @F(_r.Blend.FractionHigh * 100, "0") % @T("high-protein", "protein tinggi") + @F(_r.Blend.FractionLow * 100, "0") % @T("low-protein", "protein rendah") = @Rp(_r.Blend.PricePerKg)/kg</p>
+        @foreach (var r in _r.Auto.Reasons) { <div class="decision"><span>@r[Lang]</span></div> }</div>
+    <div class="panel"><h2>@T("FCR by pond", "FCR per kolam")</h2><SvgMarkup Svg="@_r.FcrSvg" /></div>
+</div>
+
+@code {
+    private string _sp = "vaname";
+    private double _abw = 12, _pop = 220_000, _t = 29.5, _do = 4.3, _left = 12;
+    private FeedingDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = FeedingDemo.Run(_sp, _abw, _pop, _t, _do, _left);
+}

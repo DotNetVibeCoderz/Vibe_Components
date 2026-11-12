@@ -1,0 +1,59 @@
+@inherits DemoBase
+@using AquaCulture.AI.Agent
+
+<div class="grid wide-left">
+    <div class="panel"><h2>AquaAgent <small>@_agent.Model.Name</small></h2>
+        <div class="chat" aria-live="polite">
+            @if (_log.Count == 0) { <p class="note">@T("Ask about feeding, water quality, oxygen tonight, harvest, disease or weather for pond K-01.", "Tanyakan pakan, kualitas air, oksigen malam ini, panen, penyakit atau cuaca untuk kolam K-01.")</p> }
+            @foreach (var m in _log)
+            {
+                <div class="msg @(m.User ? "user" : "bot")">@m.Text@if (m.Tools is { Count: > 0 }) { <span class="tools">⚙ @string.Join(" · ", m.Tools)</span> }</div>
+            }
+            @if (_busy) { <div class="msg bot">…</div> }
+        </div>
+        <form class="composer" @onsubmit="Send">
+            <input type="text" @bind="_q" placeholder="@T("Type a question…", "Ketik pertanyaan…")" aria-label="Question" />
+            <button class="btn" disabled="@_busy">@T("Ask", "Tanya")</button>
+        </form></div>
+    <div class="panel"><h2>@T("Try", "Coba")</h2>
+        <div class="chips" style="flex-direction:column;align-items:flex-start">
+            @foreach (var (en, id) in AgentDemo.Suggestions) { <button type="button" class="chip" @onclick="() => AskSuggestion(en, id)">@(Lang == "id" ? id : en)</button> }
+        </div>
+        <h2 style="font-size:20px;margin-top:14px">@T("Context", "Konteks")</h2>
+        <table class="data">
+            <tr><td>@T("Pond", "Kolam")</td><td>@_agent.Context.PondName</td></tr>
+            <tr><td>@T("Species", "Spesies")</td><td>@_agent.Context.Species.Name[Lang]</td></tr>
+            <tr><td>DOC · ABW</td><td class="num">@_agent.Context.DayOfCulture · @F(_agent.Context.AbwG, "0.0") g</td></tr>
+            <tr><td>@T("Population", "Populasi")</td><td class="num">@_agent.Context.Population.ToString("N0")</td></tr>
+        </table>
+        <p class="note">@T("Set AQUA_LLM_PROVIDER / AQUA_LLM_ENDPOINT / AQUA_LLM_API_KEY / AQUA_LLM_MODEL to use Azure OpenAI, OpenAI, Claude, DeepSeek, Hugging Face or Ollama. Without them the offline rule-based model answers from the same tools.",
+            "Atur AQUA_LLM_PROVIDER / AQUA_LLM_ENDPOINT / AQUA_LLM_API_KEY / AQUA_LLM_MODEL untuk memakai Azure OpenAI, OpenAI, Claude, DeepSeek, Hugging Face atau Ollama. Tanpa itu, model offline berbasis aturan menjawab dengan alat yang sama.")</p></div>
+</div>
+
+@code {
+    private sealed record Line(bool User, string Text, IReadOnlyList<string>? Tools = null);
+    private readonly AquaAgent _agent = AgentDemo.Create();
+    private readonly List<Line> _log = [];
+    private string _q = "";
+    private bool _busy;
+
+    private Task Send() => AskAsync(_q);
+    private Task AskSuggestion(string en, string id) => AskAsync(Lang == "id" ? id : en);
+
+    private async Task AskAsync(string q)
+    {
+        if (string.IsNullOrWhiteSpace(q) || _busy) return;
+        _q = ""; _busy = true; _log.Add(new Line(true, q));
+        StateHasChanged();
+        try
+        {
+            var a = await _agent.AskAsync(q);
+            _log.Add(new Line(false, a.Text, a.ToolsUsed));
+        }
+        catch (Exception e) when (e is HttpRequestException or InvalidOperationException or TaskCanceledException)
+        {
+            _log.Add(new Line(false, $"⚠ {e.Message}"));
+        }
+        finally { _busy = false; }
+    }
+}

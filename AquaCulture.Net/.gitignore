@@ -1,0 +1,13 @@
+bin/
+obj/
+target/
+*.user
+.vs/
+artifacts/
+*.nupkg
+*.snupkg
+scratch*/
+TestResults/
+.idea/
+*.suo
+node_modules/

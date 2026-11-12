@@ -1,0 +1,51 @@
+@inherits DemoBase
+
+<div class="controls">
+    <Slider Label="@T("History hours", "Riwayat jam")" @bind-Value="_hours" Min="6" Max="48" Step="2" Format="0" OnChange="Run" />
+    <div class="control"><label>@T("Auto-actuate", "Aktuasi otomatis")</label>
+        <select @bind="_auto" @bind:after="Run"><option value="on">@T("on", "aktif")</option><option value="off">@T("off", "mati")</option></select></div>
+    <div class="control"><label>@T("3D pond", "Kolam 3D")</label>
+        <select @bind="_sel">@foreach (var s in _r.States) { <option value="@s.PondId">@s.PondId</option> }</select></div>
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Readings ingested", "Data sensor masuk")" Value="@_r.Readings.ToString("N0")" Note="@($"{_r.Outliers} {T("outliers rejected", "outlier ditolak")}")" />
+    <KpiCard Label="@T("Standing biomass", "Biomassa")" Value="@F(_r.States.Sum(s => s.BiomassKg), "N0")" Unit="kg" />
+    <KpiCard Label="@T("Decisions", "Keputusan")" Value="@_r.Decisions.Count.ToString()" Note="@($"{_r.Decisions.Count(d => d.Severity == AlertSeverity.Critical)} {T("critical", "kritis")}")" />
+    <KpiCard Label="@T("Commands sent", "Perintah terkirim")" Value="@_r.Commands.Count.ToString()" Note="aerator_on" />
+</div>
+
+<div class="grid wide-left" style="margin-top:14px">
+    <div class="panel"><h2>@T("3D digital pond", "Kolam digital 3D") <small>@Sel.PondId · Three.js</small></h2>
+        <DigitalTwinViewer State="@Sel" Aerator="@(Sel.AeratorOn || _r.Commands.Any(c => c.DeviceId.EndsWith(Sel.PondId.ToLowerInvariant())))"
+                           BiomassRatio="@(Sel.DensityKgM3 / DemoFarm.Species.MaxBiomassKgM3)" Lang="@Lang" Height="400" /></div>
+    <div class="panel"><h2>@T("Farm map", "Peta tambak") <small>DO mg/L</small></h2>
+        <PondMap Ponds="@_r.Ponds" Values="@_r.DoByPond" Ramp="@ColorRamp.Oxygen.WithRange(0, 8)" Unit="mg/L" @bind-Selected="_sel" Lang="@Lang" /></div>
+</div>
+
+<div class="grid two" style="margin-top:14px">
+    <div class="panel"><h2>@T("Explained decisions", "Keputusan beralasan")</h2>
+        @foreach (var d in _r.Decisions.Take(12))
+        {
+            <div class="decision @d.Severity"><span class="k">@d.PondId · @d.Kind</span><span>@d.Title[Lang]<small>@d.Rationale[Lang]</small></span></div>
+        }</div>
+    <div class="panel"><h2>@T("Pond states", "Status kolam")</h2>
+        <table class="data"><tr><th>@T("Pond", "Kolam")</th><th>DOC</th><th>ABW</th><th>@T("Biomass", "Biomassa")</th><th>WQI</th><th>@T("Dawn DO", "DO subuh")</th><th>@T("Feed", "Pakan")</th></tr>
+            @foreach (var s in _r.States)
+            {
+                <tr><td>@s.PondId</td><td class="num">@s.DayOfCulture</td><td class="num">@F(s.AbwG, "0.0") g</td><td class="num">@F(s.BiomassKg, "N0") kg</td>
+                    <td class="num">@F(s.Wqi, "0")</td><td class="num">@F(s.ForecastDawnDo ?? double.NaN, "0.0")</td><td class="num">@F(s.FeedPlannedTodayKg, "0") kg</td></tr>
+            }
+        </table>
+        <h2 style="font-size:20px;margin-top:12px">@T("DO by pond and hour", "DO per kolam dan jam")</h2><SvgMarkup Svg="@_r.HeatSvg" /></div>
+</div>
+
+@code {
+    private double _hours = 30;
+    private string _auto = "on";
+    private string _sel = "K-02";
+    private TwinDemoResult _r = null!;
+    private AquaCulture.DigitalTwin.TwinState Sel => _r.States.FirstOrDefault(s => s.PondId == _sel) ?? _r.States[0];
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = TwinDemo.Run((int)_hours, _auto == "on");
+}

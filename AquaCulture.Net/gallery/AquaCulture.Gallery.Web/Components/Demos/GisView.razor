@@ -1,0 +1,35 @@
+@inherits DemoBase
+
+<div class="controls">
+    <Slider Label="@T("Channel threshold (cells)", "Ambang saluran (sel)")" @bind-Value="_thr" Min="10" Max="200" Step="5" Format="0" OnChange="Run" />
+    <Slider Label="@T("Green-belt buffer m", "Sabuk hijau m")" @bind-Value="_buf" Min="10" Max="200" Step="5" Format="0" OnChange="Run" />
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Water surface", "Luas permukaan air")" Value="@F(_r.FarmAreaM2, "N0")" Unit="m²" />
+    <KpiCard Label="@T("Buffer zone", "Zona penyangga")" Value="@F(_r.BufferAreaM2 / 10000, "0.00")" Unit="ha" />
+    <KpiCard Label="@T("Drainage cells", "Sel drainase")" Value="@_r.Channels.ToString("N0")" />
+    <KpiCard Label="@T("Best water source", "Sumber air terbaik")" Value="@_r.Sources[0].Source.Id" Note="@($"{F(_r.Sources[0].Suitability * 100, "0")} %")" Tone="good" />
+</div>
+
+<div class="grid two" style="margin-top:14px">
+    <div class="panel"><h2>@T("Interpolated DO (IDW)", "DO terinterpolasi (IDW)")</h2>
+        <GISViewer Layers="@([new GISViewer.RasterLayer("DO", _r.DoRaster, ColorRamp.Oxygen.WithRange(0, 8), "mg/L")])" Features="@_r.Features" FeaturesName="@T("Ponds", "Kolam")" Width="96" Height="76" /></div>
+    <div class="panel"><h2>@T("Biomass by pond", "Biomassa per kolam")</h2><SvgMarkup Svg="@_r.MapSvg" /></div>
+</div>
+<div class="grid two" style="margin-top:14px">
+    <div class="panel"><h2>@T("Coastal DEM and D8 drainage", "DEM pesisir dan drainase D8")</h2><div class="stage"><img src="@Img(_r.DrainPng)" alt="DEM" /></div>
+        <p class="note">@T("Transparent cells are drainage channels (flow accumulation above the threshold).", "Sel transparan adalah saluran drainase (akumulasi aliran di atas ambang).")</p></div>
+    <div class="panel"><h2>@T("Water sources", "Sumber air")</h2>
+        <table class="data"><tr><th>@T("Source", "Sumber")</th><th>@T("Distance", "Jarak")</th><th>@T("Head", "Head")</th><th>kWh/@T("day", "hari")</th><th>@T("Score", "Skor")</th></tr>
+            @foreach (var s in _r.Sources) { <tr><td>@s.Source.Id <small class="note">@s.Note[Lang]</small></td><td class="num">@F(s.DistanceM, "N0") m</td><td class="num">@F(s.HeadM, "0.0") m</td><td class="num">@F(s.PumpingKwhPerDay, "0")</td><td class="num">@F(s.Suitability * 100, "0")</td></tr> }
+        </table>
+        <div class="note" style="margin-top:8px">GeoJSON</div><pre class="hex">@_r.GeoJsonSnippet</pre></div>
+</div>
+
+@code {
+    private double _thr = 40, _buf = 50;
+    private GisDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = GisDemo.Run((int)_thr, _buf);
+}
