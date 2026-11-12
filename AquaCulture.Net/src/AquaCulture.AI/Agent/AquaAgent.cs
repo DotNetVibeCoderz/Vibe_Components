@@ -178,27 +178,112 @@ public static class AquaTools
 /// <summary>
 /// Aquaculture assistant: answers farmer questions in English or Bahasa Indonesia, grounded in tool calls to the AquaCulture.Net
 /// models (water quality, feeding, growth, harvest, disease, DO forecast, weather, economics). Works with any <see cref="IChatModel"/>;
-/// without one it uses <see cref="RuleBasedChatModel"/> offline.
+/// without one it uses <see cref="RuleBasedChatModel"/> offline. v1.2: several ponds (<c>list_ponds</c>, <c>select_pond</c>, and a pond
+/// named in the question is selected automatically), long-term <see cref="AgentMemory"/> (<c>remember</c>, <c>recall</c>, relevant notes in the
+/// prompt), bounded history, and voice through an <see cref="IVoiceService"/>.
 /// </summary>
 public sealed class AquaAgent
 {
     private readonly List<ChatMessage> _history = [];
+    private readonly List<AquaContext> _ponds;
+    private readonly Dictionary<AquaContext, IReadOnlyList<AgentTool>> _pondTools = [];
+    private readonly IReadOnlyList<AgentTool> _farmTools;
     private string _lang = "en";
 
-    public AquaAgent(AquaContext context, IChatModel? model = null)
+    public AquaAgent(AquaContext context, IChatModel? model = null, AgentMemory? memory = null) : this([context], model, memory) { }
+
+    public AquaAgent(IEnumerable<AquaContext> ponds, IChatModel? model = null, AgentMemory? memory = null)
     {
-        Context = context;
+        _ponds = ponds.ToList();
+        if (_ponds.Count == 0) throw new ArgumentException("At least one pond is required.", nameof(ponds));
+        Context = _ponds[0];
+        Memory = memory ?? new AgentMemory();
         Model = model ?? (LlmOptions.FromEnvironment() is { } o ? o.CreateModel() : new RuleBasedChatModel());
-        Tools = AquaTools.Create(context, () => _lang);
+        foreach (var c in _ponds) _pondTools[c] = AquaTools.Create(c, () => _lang);
+        _farmTools = FarmTools();
     }
 
-    public AquaContext Context { get; }
+    /// <summary>The pond the agent is currently advising on.</summary>
+    public AquaContext Context { get; private set; }
+    public IReadOnlyList<AquaContext> Ponds => _ponds;
     public IChatModel Model { get; }
-    public IReadOnlyList<AgentTool> Tools { get; }
+    public AgentMemory Memory { get; }
+    public IReadOnlyList<AgentTool> Tools => [.. _pondTools[Context], .. _farmTools];
     public int MaxToolRounds { get; init; } = 4;
+    /// <summary>Messages kept besides the system prompt; older turns are dropped whole (a user message and everything after it up to the next).</summary>
+    public int MaxHistoryMessages { get; init; } = 40;
     public IReadOnlyList<ChatMessage> History => _history;
 
-    private static readonly string[] IndonesianMarkers = ["berapa", "apa", "bagaimana", "kapan", "kolam", "udang", "ikan", "pakan", "panen", "air", "yang", "hari", "saya", "tolong", "apakah", "kenapa", "mengapa"];
+    /// <summary>Switches to a pond by name (case-insensitive, also matches "kolam 3" / "pond 3" against names ending in 3).</summary>
+    public bool SelectPond(string name)
+    {
+        var p = FindPond(name);
+        if (p is null) return false;
+        Context = p;
+        return true;
+    }
+
+    private AquaContext? FindPond(string name)
+    {
+        string n = name.Trim();
+        return _ponds.FirstOrDefault(p => p.PondName.Equals(n, StringComparison.OrdinalIgnoreCase))
+            ?? (Number(n) is { } k ? _ponds.FirstOrDefault(p => Number(p.PondName) == k) : null);
+    }
+
+    /// <summary>The number in a pond name ("P-03" → 3, "kolam 3" → 3), or null.</summary>
+    private static int? Number(string s) => int.TryParse(new string(s.Where(char.IsDigit).ToArray()), out var v) ? v : null;
+
+    /// <summary>A pond named in the question ("P-03", "kolam 3", "pond B2"), if exactly one matches.</summary>
+    private AquaContext? MentionedPond(string question)
+    {
+        if (_ponds.Count < 2) return null;
+        string q = question.ToLowerInvariant();
+        var byName = _ponds.Where(p => q.Contains(p.PondName.ToLowerInvariant(), StringComparison.Ordinal)).ToList();
+        if (byName.Count == 1) return byName[0];
+        var m = System.Text.RegularExpressions.Regex.Match(q, @"\b(?:kolam|pond|tambak|petak)\s*([a-z]?-?\d+)");
+        return m.Success ? FindPond(m.Groups[1].Value) : null;
+    }
+
+    private IReadOnlyList<AgentTool> FarmTools()
+    {
+        string T(string en, string id) => _lang == "id" ? id : en;
+        const string text = """{"type":"object","properties":{"text":{"type":"string","description":"The fact or event to remember, in one sentence."}},"required":["text"]}""";
+        const string query = """{"type":"object","properties":{"query":{"type":"string","description":"What to look for."}},"required":["query"]}""";
+        const string pond = """{"type":"object","properties":{"pond":{"type":"string","description":"Pond name, e.g. P-03."}},"required":["pond"]}""";
+        var tools = new List<AgentTool>
+        {
+            new("remember", "Save a fact or event about the farm or the current pond for future conversations.", text, a =>
+            {
+                string t = a["text"]?.GetValue<string>() ?? "";
+                if (t.Length == 0) return T("Nothing to remember.", "Tidak ada yang dicatat.");
+                Memory.Remember(t, _ponds.Count > 1 ? Context.PondName : null);
+                return T($"Noted: {t}", $"Dicatat: {t}");
+            }),
+            new("recall", "Search the notes remembered from earlier conversations.", query, a =>
+            {
+                var hits = Memory.Recall(a["query"]?.GetValue<string>() ?? "", 5);
+                return hits.Count == 0 ? T("No matching notes.", "Tidak ada catatan yang cocok.")
+                    : string.Join("\n", hits.Select(h => $"- {h.Note.TimeUtc:yyyy-MM-dd}{(h.Note.Pond is null ? "" : " [" + h.Note.Pond + "]")}: {h.Note.Text}"));
+            }),
+        };
+        if (_ponds.Count > 1)
+        {
+            tools.Add(new("list_ponds", "All ponds of the farm ranked by water-quality risk: WQI, DO, NH3, biomass, day of culture.", """{"type":"object","properties":{}}""", _ =>
+            {
+                var rows = _ponds.Select(c => (c, a: WaterQuality.WaterQualityIndex.Assess(c.Water, c.Species))).OrderBy(x => x.a.Wqi).ToList();
+                var sb = new StringBuilder(T("Ponds (worst water first):\n", "Kolam (kualitas air terburuk lebih dulu):\n"));
+                foreach (var (c, a) in rows)
+                    sb.Append(CultureInfo.InvariantCulture, $"- {c.PondName}: {c.Species.Name[_lang]}, DOC {c.DayOfCulture}, WQI {a.Wqi:0} ({a.Class}), DO {c.Water.DissolvedOxygen:0.0} mg/L, biomass {c.BiomassKg:N0} kg{(c == Context ? T(" (selected)", " (dipilih)") : "")}\n");
+                return sb.ToString().TrimEnd();
+            }));
+            tools.Add(new("select_pond", "Switch the conversation to another pond.", pond, a =>
+                SelectPond(a["pond"]?.GetValue<string>() ?? "") ? T($"Now advising on {Context.PondName}.", $"Sekarang membahas {Context.PondName}.")
+                    : T("Unknown pond.", "Kolam tidak dikenal.")));
+        }
+        return tools;
+    }
+
+    private static readonly string[] IndonesianMarkers = ["berapa", "apa", "bagaimana", "kapan", "kolam", "udang", "ikan", "pakan", "panen", "air", "yang", "hari", "saya", "tolong", "apakah", "kenapa", "mengapa", "catat", "ingat", "semua"];
 
     /// <summary>Detects Indonesian vs English from common words.</summary>
     public static string DetectLanguage(string text)
@@ -207,26 +292,36 @@ public sealed class AquaAgent
         return words.Count(w => IndonesianMarkers.Contains(w)) >= 1 ? "id" : "en";
     }
 
-    private string SystemPrompt() =>
-        $"""
+    private string SystemPrompt(string question)
+    {
+        var notes = Memory.Recall(question, 3, Context.PondName);
+        string remembered = notes.Count == 0 ? "" : "\nNotes remembered from earlier conversations (use them when relevant):\n" +
+            string.Join("\n", notes.Select(n => $"- {n.Note.TimeUtc:yyyy-MM-dd}{(n.Note.Pond is null ? "" : " [" + n.Note.Pond + "]")}: {n.Note.Text}"));
+        string farm = _ponds.Count > 1 ? $"\nThe farm has {_ponds.Count} ponds ({string.Join(", ", _ponds.Select(p => p.PondName))}); use list_ponds for a farm-wide view and select_pond to switch." : "";
+        return $"""
         You are AquaCulture.Net's aquaculture advisor for fish and shrimp farmers. Farm context: {Context.Species.Name.En} ({Context.Species.ScientificName}),
         pond "{Context.PondName}", {Context.AreaM2:N0} m², depth {Context.DepthM} m, system {Context.System}, day of culture {Context.DayOfCulture}, ABW {Context.AbwG} g,
         population {Context.Population:N0}. Always call the tools for numbers; never invent values. Answer in {(_lang == "id" ? "Bahasa Indonesia" : "English")},
         concisely (max ~8 lines), practical and actionable, citing the key figures from tool results. If a disease is suspected, recommend laboratory confirmation.
+        When the farmer tells you a fact worth keeping (an event, a preference, a problem), call remember.{farm}{remembered}
         """;
+    }
 
     public string Ask(string question) => AskAsync(question).GetAwaiter().GetResult().Text;
 
     public async Task<AgentAnswer> AskAsync(string question, CancellationToken ct = default)
     {
         _lang = DetectLanguage(question);
-        if (_history.Count == 0 || _history[0].Role != ChatRole.System) _history.Insert(0, new ChatMessage(ChatRole.System, SystemPrompt()));
-        else _history[0] = new ChatMessage(ChatRole.System, SystemPrompt());
+        if (MentionedPond(question) is { } mentioned) Context = mentioned;
+        if (_history.Count == 0 || _history[0].Role != ChatRole.System) _history.Insert(0, new ChatMessage(ChatRole.System, SystemPrompt(question)));
+        else _history[0] = new ChatMessage(ChatRole.System, SystemPrompt(question));
+        Trim();
         _history.Add(new ChatMessage(ChatRole.User, question));
         var used = new List<string>();
         for (int round = 0; round <= MaxToolRounds; round++)
         {
-            var resp = await Model.CompleteAsync(_history, round == MaxToolRounds ? [] : Tools, ct).ConfigureAwait(false);
+            var tools = Tools;
+            var resp = await Model.CompleteAsync(_history, round == MaxToolRounds ? [] : tools, ct).ConfigureAwait(false);
             if (resp.ToolCalls.Count == 0)
             {
                 string text = resp.Content ?? "";
@@ -236,7 +331,7 @@ public sealed class AquaAgent
             _history.Add(new ChatMessage(ChatRole.Assistant, resp.Content, resp.ToolCalls));
             foreach (var call in resp.ToolCalls)
             {
-                var tool = Tools.FirstOrDefault(t => t.Name == call.Name);
+                var tool = tools.FirstOrDefault(t => t.Name == call.Name);
                 string result;
                 try
                 {
@@ -249,6 +344,26 @@ public sealed class AquaAgent
             }
         }
         return new AgentAnswer("", used, Model.Name, _lang);
+    }
+
+    /// <summary>Drops the oldest whole turns so the history stays within <see cref="MaxHistoryMessages"/> (tool calls are never orphaned).</summary>
+    private void Trim()
+    {
+        while (_history.Count - 1 > MaxHistoryMessages)
+        {
+            int next = _history.FindIndex(2, m => m.Role == ChatRole.User);
+            if (next < 0) break;
+            _history.RemoveRange(1, next - 1);
+        }
+    }
+
+    /// <summary>Spoken question → transcript → grounded answer → speech.</summary>
+    public async Task<VoiceAnswer> AskVoiceAsync(IVoiceService voice, byte[] audio, string fileName = "audio.wav", string? language = "id", CancellationToken ct = default)
+    {
+        string transcript = await voice.TranscribeAsync(audio, fileName, language, ct).ConfigureAwait(false);
+        var answer = await AskAsync(transcript, ct).ConfigureAwait(false);
+        var speech = await voice.SpeakAsync(answer.Text, null, ct).ConfigureAwait(false);
+        return new VoiceAnswer(transcript, answer, speech);
     }
 
     public void Reset() => _history.Clear();

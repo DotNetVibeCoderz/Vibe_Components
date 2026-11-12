@@ -195,6 +195,9 @@ public sealed class RuleBasedChatModel : IChatModel
         ("harvest_forecast", ["panen", "harvest", "kapan", "when", "biomassa", "biomass", "yield", "hasil"]),
         ("weather_impact", ["cuaca", "hujan", "weather", "rain", "panas", "heat", "angin", "storm"]),
         ("economics", ["untung", "profit", "biaya", "cost", "harga", "price", "margin", "impas", "break-even"]),
+        ("list_ponds", ["semua kolam", "all ponds", "kolam mana", "which pond", "every pond", "tiap kolam", "setiap kolam"]),
+        ("remember", ["catat ", "ingat bahwa", "ingatlah", "remember that", "note that", "tolong ingat"]),
+        ("recall", ["pernah", "catatan", "what did i", "apa yang saya", "kemarin", "last time", "sebelumnya"]),
     ];
 
     public string Name => "rule-based (offline)";
@@ -211,6 +214,15 @@ public sealed class RuleBasedChatModel : IChatModel
         string q = " " + (last.Content ?? "").ToLowerInvariant() + " ";
         var hits = Intents.Where(i => i.Keywords.Any(q.Contains)).Select(i => i.Tool).Where(t => tools.Any(x => x.Name == t)).Distinct().Take(2).ToList();
         if (hits.Count == 0) hits = ["pond_overview"];
-        return Task.FromResult(new ChatResponse(null, hits.Select((h, i) => new ToolCall($"call_{i}", h, "{}")).ToList()));
+        string userText = last.Content ?? "";
+        string Args(string tool) => tool switch
+        {
+            "remember" => new System.Text.Json.Nodes.JsonObject { ["text"] = userText }.ToJsonString(),
+            "recall" => new System.Text.Json.Nodes.JsonObject { ["query"] = userText }.ToJsonString(),
+            _ => "{}",
+        };
+        // remembering is the whole request: do not mix it with another intent
+        if (hits.Contains("remember")) hits = ["remember"];
+        return Task.FromResult(new ChatResponse(null, hits.Select((h, i) => new ToolCall($"call_{i}", h, Args(h))).ToList()));
     }
 }

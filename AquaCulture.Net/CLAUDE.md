@@ -10,7 +10,7 @@ Its home is the `AquaCulture.Net/` folder of the `DotNetVibeCoderz/Vibe_Componen
 
 ```bash
 dotnet build AquaCulture.Net.slnx
-dotnet test tests/AquaCulture.Tests                                               # 132 xUnit tests
+dotnet test tests/AquaCulture.Tests                                               # 136 xUnit tests
 dotnet test tests/AquaCulture.Tests --filter "FullyQualifiedName~WaterQualityTests"                 # one class
 dotnet test tests/AquaCulture.Tests --filter "FullyQualifiedName~WaterQualityTests.Do_saturation_matches_reference_tables"  # one test
 cd native/aqua-native && cargo test --release                                     # Rust kernels
@@ -47,7 +47,8 @@ A running gallery server locks DLLs and makes builds fail with MSB3027; stop `Aq
 - `PondTwin` forecasts dawn DO assuming installed aerators run at the species DO optimum; `DoCrashForecaster` damps the evening slope (τ = 5 h).
 - `AquaCulture.AI.Agent.AquaAgent` grounds every answer in tool calls (`AquaTools`). `LlmOptions.FromEnvironment()` reads `AQUA_LLM_PROVIDER`
   (azure|openai|anthropic|deepseek|hf|ollama|custom), `AQUA_LLM_ENDPOINT`, `AQUA_LLM_API_KEY`, `AQUA_LLM_MODEL`, `AQUA_LLM_WORKSPACE` (Anthropic org keys);
-  without them `RuleBasedChatModel` routes by bilingual keywords offline.
+  without them `RuleBasedChatModel` routes by bilingual keywords offline. `AquaAgent` takes several `AquaContext` ponds (auto-selects a pond
+  named in the question), an `AgentMemory` (JSON + BM25) and an `IVoiceService` (`OpenAiVoiceService`).
 - The gallery's computation lives in `gallery/AquaCulture.Gallery.Shared` (`GalleryCatalog`, `DemoFarm`, `*Demo.Run`); the Blazor views
   (`Components/Demos/*View.razor`) and the Avalonia views (`Views.cs`, code-first kit in `Ui.cs`, ThreeNet scene in `Twin3D.cs`) only render results.
   `GalleryScenarioTests` runs every scenario. SVG uses `var(--aq-*, #fallback)`; `SvgTheme.Resolve` swaps in literals for Svg.Skia.

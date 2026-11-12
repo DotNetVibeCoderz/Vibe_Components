@@ -21,7 +21,7 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | AquaCulture.IoT.OpcUa (v1.1) | ✅ | OPC UA reader/writer (OPC Foundation 1.5.378) and pond simulator; integration-tested client ↔ server |
 | AquaCulture.IoT.IoTCom (v1.1, preview) | ✅ | IoTCom.Net 0.22 preview: Modbus transport (in-memory server test), SenML JSON/CBOR, NMEA MTW/DPT/DBT + drift, AIS zone watch, Sparkplug B (tested against a local broker and host); v1.2: LoRaWAN network server, LwM2M gateway, M-Bus energy (all tested against IoTCom.Net simulators) |
 | AquaCulture.AI.Torch (v1.2) | ✅ | LSTM DO forecaster on TorchSharp 0.107 (tests use TorchSharp-cpu) |
-| AquaCulture.AI | ✅ | GBT growth, logistic mortality, disease/harvest outlook, Q-learning feed policy, ML.NET, ONNX, v1.2: SAC aeration/feeding environments (RLNet), `GbtDoForecaster` (ML.NET FastTree, skill vs persistence/diurnal), `FarmGrowthLearner`; AquaAgent (live-tested: Azure OpenAI gpt-5-mini, Anthropic claude-sonnet-5-5) |
+| AquaCulture.AI | ✅ | GBT growth, logistic mortality, disease/harvest outlook, Q-learning feed policy, ML.NET, ONNX, v1.2: agent memory / multi-pond / voice, SAC aeration/feeding environments (RLNet), `GbtDoForecaster` (ML.NET FastTree, skill vs persistence/diurnal), `FarmGrowthLearner`; AquaAgent (live-tested: Azure OpenAI gpt-5-mini, Anthropic claude-sonnet-5-5) |
 | AquaCulture.ComputerVision | 🟡 | YOLO/ONNX decode + NMS, model-free counting/sizing/screening, OpenCvSharp interop; trained disease models ⏳ v1.2 |
 | AquaCulture.Forecasting | ✅ | Holt, Holt–Winters, AR, auto; dawn-DO forecast; Monte-Carlo harvest |
 | AquaCulture.DigitalTwin | ✅ | Pond/farm twins, explained decisions, actuator commands, what-if |
@@ -29,7 +29,7 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | AquaCulture.Reporting | ✅ | XLSX/PDF/DOCX/CSV/JSON/HTML/MD (no third-party libs), GAP/CBIB/ASC/BAP |
 | AquaCulture.Visualization / Blazor | ✅ | SVG/PNG charts; 6 domain components incl. Three.js 3D pond |
 | AquaCulture.Native (Rust) | ✅ | 7 Rust tests; bit-identical managed fallback; CI builds 5 RIDs |
-| Tests | ✅ | 132 xUnit tests (reference values, native/managed parity, determinism, file-format validity, every gallery scenario) |
+| Tests | ✅ | 136 xUnit tests (reference values, native/managed parity, determinism, file-format validity, every gallery scenario) |
 | Gallery: Blazor | ✅ | 17 demos, EN/ID, light/dark, screenshots in docs/images |
 | Gallery: Avalonia | ✅ | 17 demos, ThreeNet 3D pond (interactive + offscreen), headless screenshot mode |
 | CLI (`aqua`) | ✅ | 21 commands (v1.1: bmkg, history, marine, export, opcua) |

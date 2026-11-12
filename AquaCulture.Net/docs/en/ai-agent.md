@@ -93,6 +93,24 @@ Console.WriteLine(string.Join(", ", answer.ToolsUsed));
 Tools: `pond_overview`, `water_quality_check`, `feeding_plan`, `growth_projection`, `harvest_forecast`, `disease_diagnosis`, `disease_risk`,
 `do_forecast`, `weather_impact`, `economics`. The system prompt tells the model to take every number from a tool.
 
+### Several ponds, memory and voice (v1.2)
+
+```csharp
+var memory = new AgentMemory("farm-memory.json");            // notes persist between sessions (BM25, Indonesian + English)
+var agent = new AquaAgent([pond1, pond2, pond3], memory: memory);
+await agent.AskAsync("Bagaimana kondisi semua kolam?");       // list_ponds: worst water first
+await agent.AskAsync("Berapa pakan untuk kolam 3 hari ini?");  // "kolam 3" selects P-03 automatically
+await agent.AskAsync("Tolong ingat bahwa udang di kolam 3 mulai lemas pagi ini");   // remember (tagged with the pond)
+
+// voice: OpenAI-compatible /audio/transcriptions and /audio/speech (OpenAI, Azure OpenAI v1, or a local gateway)
+var voice = new OpenAiVoiceService(LlmOptions.FromEnvironment()!);
+VoiceAnswer v = await agent.AskVoiceAsync(voice, File.ReadAllBytes("question.wav"));   // transcript, grounded answer, MP3
+```
+
+- Relevant notes (BM25 over the question) are added to the system prompt, and the model can also call `recall`.
+- History is cut in whole turns (`MaxHistoryMessages`), so a tool result never loses its call.
+- Transcription asks for Indonesian by default and gives the model a prompt of farm vocabulary (kolam, kincir, vaname…).
+
 ### Providers
 
 | `AQUA_LLM_PROVIDER` | Settings |

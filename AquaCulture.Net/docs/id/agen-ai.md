@@ -86,6 +86,24 @@ Console.WriteLine(jawaban.Text);   // menjawab sesuai bahasa pertanyaan, angka d
 Alat: `pond_overview`, `water_quality_check`, `feeding_plan`, `growth_projection`, `harvest_forecast`, `disease_diagnosis`, `disease_risk`,
 `do_forecast`, `weather_impact`, `economics`.
 
+### Banyak kolam, memori, dan suara (v1.2)
+
+```csharp
+var memori = new AgentMemory("memori-tambak.json");          // catatan tersimpan antar sesi (BM25, bahasa Indonesia + Inggris)
+var agen = new AquaAgent([kolam1, kolam2, kolam3], memory: memori);
+await agen.AskAsync("Bagaimana kondisi semua kolam?");        // list_ponds: kualitas air terburuk lebih dulu
+await agen.AskAsync("Berapa pakan untuk kolam 3 hari ini?");   // "kolam 3" otomatis memilih P-03
+await agen.AskAsync("Tolong ingat bahwa udang di kolam 3 mulai lemas pagi ini");   // remember (ditandai dengan kolamnya)
+
+// suara: /audio/transcriptions dan /audio/speech yang kompatibel OpenAI (OpenAI, Azure OpenAI v1, atau gateway lokal)
+var suara = new OpenAiVoiceService(LlmOptions.FromEnvironment()!);
+VoiceAnswer v = await agen.AskVoiceAsync(suara, File.ReadAllBytes("pertanyaan.wav"));   // transkrip, jawaban berbasis data, MP3
+```
+
+- Catatan yang relevan (BM25 terhadap pertanyaan) dimasukkan ke system prompt, dan model juga bisa memanggil `recall`.
+- Riwayat dipangkas per giliran utuh (`MaxHistoryMessages`), sehingga hasil tool tidak pernah kehilangan panggilannya.
+- Transkripsi meminta bahasa Indonesia secara bawaan dan memberi model prompt berisi kosakata tambak (kolam, kincir, vaname…).
+
 ### Penyedia LLM
 
 | `AQUA_LLM_PROVIDER` | Pengaturan |

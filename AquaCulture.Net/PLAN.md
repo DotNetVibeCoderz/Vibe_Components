@@ -26,7 +26,7 @@ so the versions below deepen them rather than introduce them.
 - HF.Net model hub integration; MediaPipeNet for fish pose/length estimation from video
 - ✅ Gradient-boosted (ML.NET FastTree) and LSTM (TorchSharp, `AquaCulture.AI.Torch`) DO forecasters with baseline skill; farm-data growth learning
 - ✅ Gravicode.RLNet SAC policies for hourly aeration and daily feeding (continuous actions), evaluated against farmer baselines
-- AquaAgent memory, multi-pond context, voice (Indonesian ASR/TTS) for farmers
+- ✅ AquaAgent long-term memory (BM25 notes), multi-pond context, bounded history, voice (OpenAI-compatible ASR/TTS, Indonesian)
 
 ## v1.3: Science fidelity
 - Bioenergetic growth model (Wisconsin-style) and DEB option; stage-specific shrimp moult cycle
