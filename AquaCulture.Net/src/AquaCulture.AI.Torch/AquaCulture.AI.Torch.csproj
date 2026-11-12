@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>LSTM dissolved-oxygen forecaster for AquaCulture.Net on TorchSharp (libtorch). Add a backend package such as TorchSharp-cpu or TorchSharp-cuda-windows to your app.</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+    <PackageTags>$(PackageTags);lstm;torchsharp;forecasting;dissolved-oxygen</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.AI/AquaCulture.AI.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="TorchSharp" Version="0.107.0" />
+  </ItemGroup>
+</Project>

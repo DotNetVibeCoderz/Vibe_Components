@@ -36,6 +36,7 @@ RAS indoor, akuaponik, riset perikanan dan kelautan, pemantauan pemerintah, dan 
 | `AquaCulture.IoT.IoTCom` (preview) | Adaptor IoTCom.Net: transport Modbus TCP/RTU/ASCII, SenML, sensor KJA NMEA 0183 dan deteksi hanyut, pemantauan kapal AIS di zona KJA, Sparkplug B ke SCADA |
 | `AquaCulture.GIS.Gdal` | GeoTIFF dan 200+ format raster lewat GDAL.Net; warna air Sentinel-2: NDWI, MNDWI, klorofil-a NDCI, kekeruhan, status trofik |
 | `AquaCulture.AI` | Model pertumbuhan gradient boosting, risiko kematian, prakiraan penyakit dan panen, kebijakan pakan Q-learning, backend ML.NET dan ONNX, **AquaAgent** LLM |
+| `AquaCulture.AI.Torch` | Forecaster DO berbasis LSTM di TorchSharp (tambahkan backend libtorch seperti TorchSharp-cpu) |
 | `AquaCulture.ComputerVision` | Detektor YOLO/ONNX, penghitungan / pengukuran / skrining bintik putih, luka dan insang hitam, interop OpenCvSharp |
 | `AquaCulture.Forecasting` | Holt, Holt–Winters, AR, prakiraan DO subuh, prakiraan panen Monte-Carlo P10/P50/P90 |
 | `AquaCulture.DigitalTwin` | Kembaran digital kolam dan tambak dengan keputusan beralasan, perintah aktuator, what-if |

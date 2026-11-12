@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Aquaculture AI: growth, mortality, disease and harvest prediction, feed optimisation policy, ML.NET and ONNX Runtime backends and an LLM aquaculture agent with grounded tool calls.</Description>
+    <Description>Aquaculture AI: growth, mortality, disease and harvest prediction, feed optimisation policy, gradient-boosted DO forecasting and farm-data growth learning, ML.NET and ONNX Runtime backends and an LLM aquaculture agent with grounded tool calls.</Description>
     <IsAotCompatible>false</IsAotCompatible>
   </PropertyGroup>
   <ItemGroup>
@@ -15,6 +15,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.ML" Version="6.0.0" />
+    <PackageReference Include="Microsoft.ML.FastTree" Version="6.0.0" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
   </ItemGroup>
 </Project>

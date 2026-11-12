@@ -7,6 +7,8 @@
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
+    <!-- libtorch CPU backend for the LSTM tests -->
+    <PackageReference Include="TorchSharp-cpu" Version="0.107.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.15" />
   </ItemGroup>
@@ -15,6 +17,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/AquaCulture.AI/AquaCulture.AI.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.AI.Torch/AquaCulture.AI.Torch.csproj" />
     <ProjectReference Include="../../gallery/AquaCulture.Gallery.Shared/AquaCulture.Gallery.Shared.csproj" />
     <ProjectReference Include="../../src/AquaCulture.ComputerVision/AquaCulture.ComputerVision.csproj" />
     <ProjectReference Include="../../src/AquaCulture.DigitalTwin/AquaCulture.DigitalTwin.csproj" />

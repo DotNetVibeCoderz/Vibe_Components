@@ -6,6 +6,7 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/AquaCulture.AI/AquaCulture.AI.csproj" />
+    <Project Path="src/AquaCulture.AI.Torch/AquaCulture.AI.Torch.csproj" />
     <Project Path="src/AquaCulture.Analytics/AquaCulture.Analytics.csproj" />
     <Project Path="src/AquaCulture.Blazor/AquaCulture.Blazor.csproj" />
     <Project Path="src/AquaCulture.ComputerVision/AquaCulture.ComputerVision.csproj" />

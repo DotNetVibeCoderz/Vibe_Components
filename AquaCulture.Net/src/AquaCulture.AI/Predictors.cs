@@ -74,6 +74,9 @@ public sealed class GrowthPredictor
         HoldoutR2 = Math.Round(Metrics.R2(_model, test), 3);
     }
 
+    /// <summary>Raw model output (daily growth, % body weight) for a feature vector built by <see cref="PondState.Features"/>.</summary>
+    public double PredictRaw(ReadOnlySpan<double> features) => _model.Predict(features);
+
     public GrowthPrediction Predict(PondState state)
     {
         double pct = Math.Max(0, _model.Predict(state.Features(Species)));

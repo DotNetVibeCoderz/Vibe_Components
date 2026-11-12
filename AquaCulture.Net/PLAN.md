@@ -24,7 +24,7 @@ so the versions below deepen them rather than introduce them.
 - Gallery demos for the v1.1 connectors (store browser, BMKG/marine panel, chlorophyll map)
 - Trained ONNX models: shrimp disease (WSSV/AHPND/black gill) and fish counting/sizing (YOLO) with datasets and training notebooks
 - HF.Net model hub integration; MediaPipeNet for fish pose/length estimation from video
-- LSTM / gradient-boosted DO and growth forecasters on farm data (GravicodeScience, ML.NET, TorchSharp)
+- ✅ Gradient-boosted (ML.NET FastTree) and LSTM (TorchSharp, `AquaCulture.AI.Torch`) DO forecasters with baseline skill; farm-data growth learning
 - Gravicode.RLNet policies for aeration scheduling and feeding with continuous actions
 - AquaAgent memory, multi-pond context, voice (Indonesian ASR/TTS) for farmers
 
