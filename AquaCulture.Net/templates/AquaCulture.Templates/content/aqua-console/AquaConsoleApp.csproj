@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="AquaCulture.AI" Version="1.0.0" />
-    <PackageReference Include="AquaCulture.Analytics" Version="1.0.0" />
+    <PackageReference Include="AquaCulture.AI" Version="1.1.0" />
+    <PackageReference Include="AquaCulture.Analytics" Version="1.1.0" />
   </ItemGroup>
 </Project>

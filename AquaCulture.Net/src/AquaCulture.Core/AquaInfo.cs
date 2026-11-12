@@ -4,7 +4,7 @@ namespace AquaCulture.Core;
 public static class AquaInfo
 {
     public const string Name = "AquaCulture.Net";
-    public const string Version = "1.0.0";
+    public const string Version = "1.1.0";
     public const string Tagline = "The Ultimate Open Source Aquaculture Platform for .NET";
     public const string TaglineId = "Platform Akuakultur Open Source Terlengkap untuk .NET";
     public const string CreditEn = "Made by Gravicode Studios, led by Kang Fadhil";

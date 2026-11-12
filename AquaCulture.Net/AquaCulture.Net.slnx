@@ -10,14 +10,17 @@
     <Project Path="src/AquaCulture.Blazor/AquaCulture.Blazor.csproj" />
     <Project Path="src/AquaCulture.ComputerVision/AquaCulture.ComputerVision.csproj" />
     <Project Path="src/AquaCulture.Core/AquaCulture.Core.csproj" />
+    <Project Path="src/AquaCulture.Data/AquaCulture.Data.csproj" />
     <Project Path="src/AquaCulture.DigitalTwin/AquaCulture.DigitalTwin.csproj" />
     <Project Path="src/AquaCulture.Disease/AquaCulture.Disease.csproj" />
     <Project Path="src/AquaCulture.Environment/AquaCulture.Environment.csproj" />
     <Project Path="src/AquaCulture.Feeding/AquaCulture.Feeding.csproj" />
     <Project Path="src/AquaCulture.Forecasting/AquaCulture.Forecasting.csproj" />
+    <Project Path="src/AquaCulture.GIS.Gdal/AquaCulture.GIS.Gdal.csproj" />
     <Project Path="src/AquaCulture.GIS/AquaCulture.GIS.csproj" />
     <Project Path="src/AquaCulture.Growth/AquaCulture.Growth.csproj" />
     <Project Path="src/AquaCulture.Hydrodynamic/AquaCulture.Hydrodynamic.csproj" />
+    <Project Path="src/AquaCulture.IoT.OpcUa/AquaCulture.IoT.OpcUa.csproj" />
     <Project Path="src/AquaCulture.IoT/AquaCulture.IoT.csproj" />
     <Project Path="src/AquaCulture.Native/AquaCulture.Native.csproj" />
     <Project Path="src/AquaCulture.Population/AquaCulture.Population.csproj" />

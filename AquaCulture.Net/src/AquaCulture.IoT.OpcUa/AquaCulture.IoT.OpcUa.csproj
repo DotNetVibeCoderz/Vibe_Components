@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>OPC UA for AquaCulture.Net over the OPC Foundation .NET Standard stack: an IOpcUaReader for PLCs and SCADA (read, write, reconnect) and an OPC UA pond simulator server for tests and demos.</Description>
+    <!-- The OPC Foundation stack uses reflection-based encoders; this package is not trimming/AOT safe. -->
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.IoT/AquaCulture.IoT.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua.Client" Version="1.5.378.182" />
+    <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua.Server" Version="1.5.378.182" />
+  </ItemGroup>
+</Project>

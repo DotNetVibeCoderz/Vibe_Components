@@ -10,7 +10,7 @@ Its home is the `AquaCulture.Net/` folder of the `DotNetVibeCoderz/Vibe_Componen
 
 ```bash
 dotnet build AquaCulture.Net.slnx
-dotnet test tests/AquaCulture.Tests                                               # 102 xUnit tests
+dotnet test tests/AquaCulture.Tests                                               # 116 xUnit tests
 dotnet test tests/AquaCulture.Tests --filter "FullyQualifiedName~WaterQualityTests"                 # one class
 dotnet test tests/AquaCulture.Tests --filter "FullyQualifiedName~WaterQualityTests.Do_saturation_matches_reference_tables"  # one test
 cd native/aqua-native && cargo test --release                                     # Rust kernels
@@ -30,7 +30,11 @@ A running gallery server locks DLLs and makes builds fail with MSB3027; stop `Aq
 - `src/AquaCulture.Core` is the base: `SpeciesCatalog` (10 species with tolerance bands, TGC, VBGF, length–weight, feeding tables), `Farm`/`Pond`/`CultureCycle`,
   `Stats`, `TimeSeries`, `Numerics`, geo types, `DeterministicRandom`, `services.AddAquaCulture(b => b.AddX())` (each module's `AddX` calls `TryAddModule` once), `IAquaEventBus`.
 - Layering: Native → WaterQuality → Growth → Feeding → Analytics → Reporting; Environment + WaterQuality → Hydrodynamic → Forecasting → AI;
-  IoT + everything → DigitalTwin → Blazor. GIS, StockAssessment, Population, ComputerVision depend only on Core.
+  IoT + everything → DigitalTwin → Blazor → Data (EF Core/SQLite, ParquetSharp). GIS, StockAssessment, Population, ComputerVision depend only on Core;
+  GIS.Gdal → GIS (Gravicode.GDAL.Net), IoT.OpcUa → IoT (OPC Foundation stack).
+- v1.1 connectors: `BmkgClient`, `NasaPowerClient`, `MarineForecastClient` (Environment) and `ChirpStack`, `ModbusRtuClient` (IoT) each have a static `Parse`
+  tested against recorded JSON in `tests/AquaCulture.Tests/Fixtures`. Do not switch Parquet back to Parquet.Net: its `Parquet.dll` shadows GDAL's native
+  `parquet.dll` on Windows.
 - `AquaCulture.Native` P/Invokes the Rust crate `native/aqua-native` (C ABI `aq_*`) via `LibraryImport` with a resolver for the app folder and
   `runtimes/<rid>/native`. `AquaKernels` has a managed fallback with identical formulas; the Rust PRNG is bit-identical to `DeterministicRandom` (tests check parity).
 - `GrowthSimulator` drives growth by TGC × modifiers; feed is derived from gain × species FCR worsened by stress (keeps simulated FCR realistic) — do not go back to
@@ -46,7 +50,7 @@ A running gallery server locks DLLs and makes builds fail with MSB3027; stop `Aq
 
 ## Conventions
 
-- Libraries stay dependency-light and AOT-compatible (`IsAotCompatible`), except AI (ML.NET), ComputerVision (ONNX/OpenCvSharp), GIS (NTS) and Blazor.
+- Libraries stay dependency-light and AOT-compatible (`IsAotCompatible`), except AI (ML.NET), ComputerVision (ONNX/OpenCvSharp), GIS (NTS), GIS.Gdal, Data, IoT.OpcUa and Blazor.
   Reporting writes OOXML/PDF by hand — keep it free of third-party packages. Use `JsonNode`/`JsonDocument`, not reflection serialization.
 - The namespace `AquaCulture.Environment` shadows `System.Environment` inside `AquaCulture.*` — write `System.Environment` explicitly.
 - Synthetic data must be deterministic (`DeterministicRandom`, never `HashCode`). Format numbers with `CultureInfo.InvariantCulture`.

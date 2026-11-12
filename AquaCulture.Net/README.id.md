@@ -27,10 +27,13 @@ RAS indoor, akuaponik, riset perikanan dan kelautan, pemantauan pemerintah, dan 
 | `AquaCulture.Disease` | 15 penyakit (WSSV, AHPND/EMS, EHP, IMNV, vibriosis, kotoran putih, insang hitam, kolumnaris, busuk sirip, borok MAS, streptokokosis, TiLV, Ich, KHV, saprolegniasis); diagnosis Bayesian; risiko lingkungan |
 | `AquaCulture.StockAssessment` | Schaefer dan Fox (keseimbangan dan dinamis), Beverton–Holt dan Ricker, yield per recruit (Fmax, F0.1, F40 %), M Pauly/Then, Powell–Wetherall, kurva tangkapan berbasis panjang, status Kobe |
 | `AquaCulture.Population` | Model berstruktur umur: rekrutmen, musim pemijahan, migrasi, predasi (Holling II), aturan panen; matriks Leslie; mangsa–pemangsa |
-| `AquaCulture.Environment` | Klien Open-Meteo, generator cuaca tropis, dampak cuaca pada kolam, matriks risiko iklim |
+| `AquaCulture.Environment` | Klien Open-Meteo, BMKG, NASA POWER, dan Open-Meteo Marine; generator cuaca tropis, dampak cuaca pada kolam, matriks risiko iklim |
 | `AquaCulture.Hydrodynamic` | Adveksi–difusi–reaksi 2-D (kernel Rust), arus kincir/sungai/pasang surut, sedimentasi dan sebaran limbah KJA, neraca oksigen kolam per jam, neraca massa RAS |
-| `AquaCulture.IoT` | Perangkat ESP32 / ESP8266 / Arduino / Raspberry Pi / PLC; MQTT, LoRaWAN, Modbus RTU/TCP, REST, pemetaan OPC-UA; analitik edge; simulator |
+| `AquaCulture.IoT` | Perangkat ESP32 / ESP8266 / Arduino / Raspberry Pi / PLC; MQTT, LoRaWAN, Modbus RTU/TCP dan RTU serial, webhook ChirpStack v4, REST, pemetaan OPC-UA; analitik edge; simulator |
 | `AquaCulture.GIS` | Tata letak kolam, GeoJSON, interpolasi IDW, analisis sumber air, drainase D8; NetTopologySuite + ProjNet |
+| `AquaCulture.Data` | Penyimpanan EF Core / SQLite untuk tambak, siklus, pembacaan sensor, dan keputusan kembaran; transport perekam; ekspor deret waktu CSV dan Apache Parquet |
+| `AquaCulture.IoT.OpcUa` | Klien OPC UA untuk PLC/SCADA (stack OPC Foundation) dan simulator kolam OPC UA |
+| `AquaCulture.GIS.Gdal` | GeoTIFF dan 200+ format raster lewat GDAL.Net; warna air Sentinel-2: NDWI, MNDWI, klorofil-a NDCI, kekeruhan, status trofik |
 | `AquaCulture.AI` | Model pertumbuhan gradient boosting, risiko kematian, prakiraan penyakit dan panen, kebijakan pakan Q-learning, backend ML.NET dan ONNX, **AquaAgent** LLM |
 | `AquaCulture.ComputerVision` | Detektor YOLO/ONNX, penghitungan / pengukuran / skrining bintik putih, luka dan insang hitam, interop OpenCvSharp |
 | `AquaCulture.Forecasting` | Holt, Holt–Winters, AR, prakiraan DO subuh, prakiraan panen Monte-Carlo P10/P50/P90 |

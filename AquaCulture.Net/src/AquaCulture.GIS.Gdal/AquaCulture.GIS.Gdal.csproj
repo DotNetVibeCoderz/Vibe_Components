@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>GDAL raster I/O for AquaCulture.Net (GeoTIFF and 200+ formats via Gravicode.GDAL.Net) plus Sentinel-2 water-colour indices: NDWI, MNDWI, NDCI chlorophyll-a, turbidity and trophic state for ponds, reservoirs and KJA zones.</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.GIS/AquaCulture.GIS.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Gravicode.GDAL.Net" Version="1.0.0" />
+  </ItemGroup>
+</Project>

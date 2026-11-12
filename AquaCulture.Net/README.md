@@ -27,10 +27,13 @@ indoor RAS, aquaponics, fisheries and marine research, government monitoring and
 | `AquaCulture.Disease` | 15 diseases (WSSV, AHPND/EMS, EHP, IMNV, vibriosis, white feces, black gill, columnaris, fin rot, MAS ulcer, streptococcosis, TiLV, Ich, KHV, saprolegniasis); Bayesian diagnosis; environmental risk |
 | `AquaCulture.StockAssessment` | Schaefer and Fox (equilibrium and dynamic), Beverton–Holt and Ricker S-R, yield per recruit (Fmax, F0.1, F40 %), Pauly/Then M, Powell–Wetherall, length-converted catch curve, Kobe status |
 | `AquaCulture.Population` | Age-structured model with recruitment, spawning season, migration, predation (Holling II) and harvest control rules; Leslie matrix; predator–prey |
-| `AquaCulture.Environment` | Open-Meteo client, deterministic tropical weather generator, weather impact on ponds (temperature, dilution, pH, plankton/DO, stratification, storms), climate risk matrix |
+| `AquaCulture.Environment` | Open-Meteo, BMKG village forecasts, NASA POWER history and Open-Meteo Marine clients, deterministic tropical weather generator, weather impact on ponds (temperature, dilution, pH, plankton/DO, stratification, storms), climate risk matrix |
 | `AquaCulture.Hydrodynamic` | 2-D advection–diffusion–reaction (Rust kernel) for DO, temperature and waste; paddle-wheel, river and tidal flows; sedimentation and cage plumes; hourly pond oxygen budget; RAS mass balance |
-| `AquaCulture.IoT` | ESP32 / ESP8266 / Arduino / Raspberry Pi / PLC devices; MQTT (MQTTnet), LoRaWAN (Cayenne LPP, TTN webhook, 12-byte pond codec), Modbus RTU/TCP, REST polling, OPC-UA node mapping; edge analytics (Hampel, stuck sensor, calibration); simulator |
+| `AquaCulture.IoT` | ESP32 / ESP8266 / Arduino / Raspberry Pi / PLC devices; MQTT (MQTTnet), LoRaWAN (Cayenne LPP, TTN webhook, 12-byte pond codec), Modbus RTU/TCP and RTU over serial, ChirpStack v4 webhook, REST polling, OPC-UA node mapping; edge analytics (Hampel, stuck sensor, calibration); simulator |
 | `AquaCulture.GIS` | Pond layout, GeoJSON, IDW interpolation, water-source analysis, D8 drainage; NetTopologySuite + ProjNet (UTM, buffers, unions) |
+| `AquaCulture.Data` | EF Core / SQLite store for farms, cycles, readings and twin decisions; recording transport; CSV and Apache Parquet time-series export |
+| `AquaCulture.IoT.OpcUa` | OPC UA client for PLC/SCADA (OPC Foundation stack) and a pond OPC UA simulator |
+| `AquaCulture.GIS.Gdal` | GeoTIFF and 200+ raster formats via GDAL.Net; Sentinel-2 water colour: NDWI, MNDWI, NDCI chlorophyll-a, turbidity, trophic state |
 | `AquaCulture.AI` | Gradient-boosted growth model, logistic mortality risk, disease outlook, harvest outlook, Q-learning feed policy, ML.NET and ONNX Runtime backends, **AquaAgent** LLM with grounded tools |
 | `AquaCulture.ComputerVision` | YOLO/ONNX detector with letterbox and NMS, model-free counting / sizing / white-spot, lesion and black-gill screening, OpenCvSharp interop |
 | `AquaCulture.Forecasting` | Holt, Holt–Winters, AR (Yule–Walker), auto selection; dawn DO-crash forecast; Monte-Carlo harvest P10/P50/P90 |
@@ -103,7 +106,7 @@ dotnet new aqua-blazor -n MyFarm --species vaname
 
 ```bash
 dotnet build AquaCulture.Net.slnx
-dotnet test tests/AquaCulture.Tests                  # 102 tests
+dotnet test tests/AquaCulture.Tests                  # 116 tests
 cd native/aqua-native && cargo test --release        # Rust kernels
 pwsh build/build-native.ps1                          # copy kernel into AquaCulture.Native/runtimes/<rid>/native
 pwsh build/pack.ps1                                  # NuGet packages → artifacts/packages

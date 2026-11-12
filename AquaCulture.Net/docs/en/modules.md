@@ -42,6 +42,12 @@ photosynthesis index, stratification, storms), `ClimateRiskAnalysis` (heatwave, 
 (Stokes velocity, plume, waste load), `PondOxygenBudget` (photosynthesis, plankton/animal respiration, SOD, wind reaeration, aerator AOTR; set-point or schedule),
 `RasMassBalance`.
 
+## AquaCulture.Data, IoT.OpcUa, GIS.Gdal (v1.1)
+`AquaStore` (EF Core / SQLite: farms, cycles and logs, readings, decisions; `SeriesAsync` → `TimeSeries`, retention), `RecordingTransport`,
+`TimeSeriesExport` (CSV, Parquet via ParquetSharp); `OpcUaReader` and `PondOpcUaSimulator` (OPC Foundation stack); `GdalRaster` (GeoTIFF via GDAL.Net) and
+`WaterColour` (NDWI, MNDWI, NDCI → chlorophyll-a after Mishra & Mishra 2012, turbidity after Dogliotti et al. 2015, trophic state).
+Environment adds `BmkgClient`, `NasaPowerClient`, `MarineForecastClient`; IoT adds `ModbusRtuClient` (serial) and `ChirpStack`. See [Data and connectors](data-connectors.md).
+
 ## AquaCulture.IoT, GIS, DigitalTwin
 See [IoT and digital twin](iot-twin.md). GIS: `GeoJson`, `FarmMapping` (pond blocks, features, IDW), `WaterSourceAnalysis`, `DrainageAnalysis` (D8),
 `NtsInterop` (UTM via ProjNet, buffers and unions via NetTopologySuite).

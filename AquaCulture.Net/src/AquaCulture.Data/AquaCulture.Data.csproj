@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Persistence for AquaCulture.Net: EF Core / SQLite store for farms, culture cycles, sensor readings and twin decisions, a recording transport, and CSV / Apache Parquet (ParquetSharp) time-series export.</Description>
+    <!-- EF Core uses reflection; ParquetSharp ships native code; not trimming/AOT safe. -->
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.DigitalTwin/AquaCulture.DigitalTwin.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.15" />
+    <!-- ParquetSharp (Apache Arrow C++). Parquet.Net is avoided: its Parquet.dll collides with GDAL's native parquet.dll on Windows. -->
+    <PackageReference Include="ParquetSharp" Version="25.0.1.2" />
+  </ItemGroup>
+</Project>

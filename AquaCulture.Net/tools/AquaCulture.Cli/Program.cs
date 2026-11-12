@@ -4,6 +4,7 @@ using AquaCulture.AI.Agent;
 using AquaCulture.Core;
 using AquaCulture.Core.Data;
 using AquaCulture.Core.Species;
+using AquaCulture.Data;
 using AquaCulture.Disease;
 using AquaCulture.Environment;
 using AquaCulture.Feeding;
@@ -12,6 +13,7 @@ using AquaCulture.Gallery.Shared;
 using AquaCulture.Growth;
 using AquaCulture.Hydrodynamic;
 using AquaCulture.IoT;
+using AquaCulture.IoT.OpcUa;
 using AquaCulture.Native;
 using AquaCulture.Reporting;
 using AquaCulture.StockAssessment;
@@ -40,6 +42,11 @@ try
         case "msy": Msy(); break;
         case "ypr": Ypr(); break;
         case "weather": await Weather(); break;
+        case "bmkg": await Bmkg(); break;
+        case "history": await History(); break;
+        case "marine": await Marine(); break;
+        case "export": await Export(); break;
+        case "opcua": await OpcUa(); break;
         case "modbus": ModbusCmd(); break;
         case "lora": Lora(); break;
         case "ras": Ras(); break;
@@ -77,6 +84,16 @@ void Help() => Console.WriteLine($"""
       ypr --winf 2000 --k 0.3 --t0 -0.2 --m 0.4 --tr 0.5 --tc 1.5
       weather --lat -6.33 --lon 108.32 [--days 3 --depth 1.3 --sal 18 --offline]
                                              Open-Meteo forecast and pond impact
+      bmkg --adm4 31.71.03.1001 [--depth 1.3 --sal 0]
+                                             BMKG village forecast (Indonesia) and pond impact
+      history --lat -6.33 --lon 108.32 [--start 2015-01-01 --end 2024-12-31 --system EarthenPond]
+                                             NASA POWER daily history and climate-risk ranking
+      marine --lat -5.85 --lon 106.6 [--species kerapu --days 3]
+                                             waves, currents and SST for floating net cages
+      export --db aqua.db --pond P-01 --out readings.parquet|csv [--from 2026-11-01 --to 2026-11-12 --demo]
+                                             export stored readings (--demo fills the db with a simulated day)
+      opcua [--port 4841 --ponds P-01,P-02 --seconds 30]
+                                             run the OPC UA pond simulator and print what a client reads
       modbus <hex frame> [--unit 1]          decode a Modbus RTU 0x03 response with the typical probe map
       lora <hex payload>                     decode a 12-byte pond payload or Cayenne LPP
       ras --feed 10 --protein 40 --volume 20 RAS mass balance (flow, biofilter, oxygen)
@@ -211,6 +228,79 @@ async Task Weather()
     Console.WriteLine($"{T("Water", "Air")} {r.WaterTempMinC}–{r.WaterTempMaxC} °C · {T("rain", "hujan")} {r.TotalRainMm} mm · {T("light", "cahaya")} {r.PhotosynthesisIndex:P0} · wind max {r.MaxWindMs} m/s");
     foreach (var i in r.Impacts) Console.WriteLine($"  [{i.Severity}] {i.Effect[lang]} → {i.Advice[lang]}");
     if (r.Impacts.Count == 0) Console.WriteLine(T("  No significant risk.", "  Tidak ada risiko berarti."));
+}
+
+async Task Bmkg()
+{
+    var f = await new BmkgClient().GetForecastAsync(opt.Str("adm4", "31.71.03.1001"));
+    Console.WriteLine($"BMKG {f.Location.Village}, {f.Location.District}, {f.Location.Regency} ({f.Location.Latitude:0.###}, {f.Location.Longitude:0.###}) · {f.Hourly.Count} × 3 h");
+    foreach (var (t, d) in f.Conditions.Take(8)) Console.WriteLine($"  {t:yyyy-MM-dd HH:mm}  {d[lang]}");
+    var hourly = BmkgClient.ToHourly(f.Hourly, f.Location.Latitude);
+    var r = WeatherImpactPredictor.Predict(hourly, new PondExposure(opt.Num("depth", 1.3), opt.Num("sal", 0)));
+    Console.WriteLine($"{T("Water", "Air")} {r.WaterTempMinC}–{r.WaterTempMaxC} °C · {T("rain", "hujan")} {r.TotalRainMm} mm · wind max {r.MaxWindMs} m/s");
+    foreach (var i in r.Impacts) Console.WriteLine($"  [{i.Severity}] {i.Effect[lang]} → {i.Advice[lang]}");
+    if (r.Impacts.Count == 0) Console.WriteLine(T("  No significant risk.", "  Tidak ada risiko berarti."));
+}
+
+async Task History()
+{
+    double lat = opt.Num("lat", -6.333), lon = opt.Num("lon", 108.321);
+    var end = opt.Has("end") ? DateOnly.Parse(opt.Str("end"), CultureInfo.InvariantCulture) : new DateOnly(DateTime.Today.Year - 1, 12, 31);
+    var start = opt.Has("start") ? DateOnly.Parse(opt.Str("start"), CultureInfo.InvariantCulture) : new DateOnly(end.Year - 9, 1, 1);
+    var days = await new NasaPowerClient().GetDailyAsync(lat, lon, start, end);
+    var system = Enum.Parse<AquaCulture.Core.Farming.CultureSystem>(opt.Str("system", "EarthenPond"), true);
+    var risk = ClimateRiskAnalysis.Analyze(days, system);
+    double meanT = days.Where(d => !double.IsNaN(d.TmeanC)).Average(d => d.TmeanC);
+    double rain = days.Where(d => !double.IsNaN(d.RainMm)).Sum(d => d.RainMm) / Math.Max(1, risk.Years);
+    Console.WriteLine($"NASA POWER {start:yyyy-MM-dd} … {end:yyyy-MM-dd}: {days.Count} {T("days", "hari")} · {T("mean", "rata-rata")} {meanT:0.0} °C · {T("rain", "hujan")} {rain:0} mm/{T("year", "tahun")}");
+    foreach (var h in risk.Hazards) Console.WriteLine($"  {h.Score,2} {h.Level[lang],-14} {h.Name[lang]} ({h.EventsPerYear:0.#}/{T("yr", "thn")}) → {h.Adaptation[lang]}");
+}
+
+async Task Marine()
+{
+    var sea = await new MarineForecastClient().GetHourlyAsync(opt.Num("lat", -5.85), opt.Num("lon", 106.6), (int)opt.Num("days", 3));
+    var r = MarineForecastClient.Assess(sea, SpeciesCatalog.Get(opt.Str("species", "kerapu")));
+    Console.WriteLine($"Open-Meteo Marine: {sea.Count} h · {T("waves", "gelombang")} max {r.MaxWaveM:0.0} m · {T("current", "arus")} max {r.MaxCurrentMs:0.00} m/s · SST {r.MeanSstC:0.0} °C");
+    foreach (var i in r.Impacts) Console.WriteLine($"  [{i.Severity}] {i.Effect[lang]} → {i.Advice[lang]}");
+    if (r.Impacts.Count == 0) Console.WriteLine(T("  Safe for cage work.", "  Aman untuk kegiatan KJA."));
+}
+
+async Task Export()
+{
+    string db = opt.Str("db", "aqua.db"), pond = opt.Str("pond", "P-01"), outPath = opt.Str("out", "readings.parquet");
+    using var store = AquaStore.OpenSqlite(db);
+    if (opt.Has("demo"))
+    {
+        var sim = new SimulatedSensorTransport([new SimulatedPond(pond, "probe-" + pond)]);
+        var t0 = DateTime.UtcNow.Date;
+        var rows = Enumerable.Range(0, 144).SelectMany(i => sim.Emit(t0.AddMinutes(10 * i))).ToList();
+        Console.WriteLine($"{await store.AppendReadingsAsync(rows)} {T("simulated readings stored in", "pembacaan simulasi disimpan di")} {db}");
+    }
+    var styles = DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal;
+    DateTime? from = opt.Has("from") ? DateTime.Parse(opt.Str("from"), CultureInfo.InvariantCulture, styles) : null;
+    DateTime? to = opt.Has("to") ? DateTime.Parse(opt.Str("to"), CultureInfo.InvariantCulture, styles) : null;
+    var readings = await store.QueryReadingsAsync(pond, null, from, to);
+    if (outPath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)) File.WriteAllText(outPath, TimeSeriesExport.WriteCsv(readings));
+    else { await using var fs = File.Create(outPath); await TimeSeriesExport.WriteParquetAsync(readings, fs); }
+    Console.WriteLine($"{outPath}: {readings.Count} {T("readings", "pembacaan")} ({new FileInfo(outPath).Length:N0} bytes)");
+}
+
+async Task OpcUa()
+{
+    var ponds = opt.Str("ponds", "P-01,P-02").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    await using var sim = new PondOpcUaSimulator(ponds, (int)opt.Num("port", 4841));
+    await sim.StartAsync();
+    Console.WriteLine($"OPC UA {T("pond simulator at", "simulator kolam di")} {sim.EndpointUrl}");
+    await using var reader = new OpcUaReader(new OpcUaReaderOptions(sim.EndpointUrl));
+    await reader.ConnectAsync();
+    var poller = new OpcUaSensorPoller(reader, sim.NodeMap());
+    var stop = DateTime.UtcNow.AddSeconds(opt.Num("seconds", 30));
+    while (DateTime.UtcNow < stop)
+    {
+        var r = await poller.PollAsync();
+        Console.WriteLine(string.Join("  |  ", r.GroupBy(x => x.PondId).Select(g => $"{g.Key}: " + string.Join(" ", g.Select(x => $"{x.Kind}={x.Value:0.##}")))));
+        await Task.Delay(1000);
+    }
 }
 
 void ModbusCmd()

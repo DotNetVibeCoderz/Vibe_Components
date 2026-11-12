@@ -12,13 +12,16 @@ so the versions below deepen them rather than introduce them.
 - Hydrodynamic, StockAssessment (design v4.0) — first versions; plus Population, Environment, Forecasting, Visualization, Blazor
 - Rust kernels with managed fallback; gallery (Blazor + Avalonia/ThreeNet, 17 use cases); CLI; 4 templates; bilingual docs; NuGet packaging and CI
 
-## v1.1: Data and connectors
-- Persistence: EF Core / SQLite store for farms, cycles, readings and decisions; time-series export (Parquet/CSV)
-- BMKG weather and marine forecasts; NASA POWER history for climate risk
-- ChirpStack webhook; Modbus RTU over serial (System.IO.Ports); OPC-UA client package (OPC Foundation stack); IoTComNet adapters
-- GDAL.Net raster I/O (GeoTIFF DEMs, Sentinel-2 water-colour / chlorophyll for reservoirs and KJA zones)
+## v1.1: Data and connectors ✅ (2026-11-12)
+- ✅ Persistence: `AquaCulture.Data`, an EF Core / SQLite store for farms, cycles, readings and decisions, with time-series export (Parquet via ParquetSharp, CSV)
+- ✅ BMKG village weather forecasts; NASA POWER history for climate risk. Marine forecasts use Open-Meteo Marine because BMKG's maritime API is not a stable public API
+- ✅ ChirpStack v4 webhook parser; Modbus RTU over serial (System.IO.Ports); OPC UA client package `AquaCulture.IoT.OpcUa` (OPC Foundation stack) with a pond simulator
+- ⏳ IoTComNet adapters: moved to v1.2, waiting for IoTCom.Net on NuGet
+- ✅ GDAL.Net raster I/O (`AquaCulture.GIS.Gdal`: GeoTIFF read/write with WGS-84 warp) and Sentinel-2 water colour (NDWI, MNDWI, NDCI chlorophyll-a, turbidity, trophic state)
 
 ## v1.2: AI depth
+- IoTComNet adapters (carried over from v1.1)
+- Gallery demos for the v1.1 connectors (store browser, BMKG/marine panel, chlorophyll map)
 - Trained ONNX models: shrimp disease (WSSV/AHPND/black gill) and fish counting/sizing (YOLO) with datasets and training notebooks
 - HF.Net model hub integration; MediaPipeNet for fish pose/length estimation from video
 - LSTM / gradient-boosted DO and growth forecasters on farm data (GravicodeScience, ML.NET, TorchSharp)

@@ -17,6 +17,11 @@ aqua help
 | `msy` | `aqua msy --csv catch.csv` (`year,catch,effort`; built-in demo data without `--csv`) |
 | `ypr` | `aqua ypr --winf 2000 --k 0.3 --t0 -0.2 --m 0.4 --tr 0.5 --tc 1.5` |
 | `weather` | `aqua weather --lat -6.33 --lon 108.32 --days 3 --sal 18` (Open-Meteo; `--offline` for synthetic) |
+| `bmkg` | `aqua bmkg --adm4 31.71.03.1001` (BMKG village forecast and pond impact) |
+| `history` | `aqua history --lat -6.33 --lon 108.32 --start 2015-01-01 --end 2024-12-31` (NASA POWER → climate risk) |
+| `marine` | `aqua marine --lat -5.85 --lon 106.6 --species kerapu` (waves, currents, SST for cages) |
+| `export` | `aqua export --db aqua.db --pond P-01 --out readings.parquet` (`.csv` too; `--demo` fills a simulated day) |
+| `opcua` | `aqua opcua --port 4841 --seconds 30` (OPC UA pond simulator and client) |
 | `modbus` | `aqua modbus 07 03 0C 02 00 01 23 03 11 FF 88 00 B6 01 57 24 CD` |
 | `lora` | `aqua lora 021E0B3B0313009B03480F50` |
 | `ras` | `aqua ras --feed 10 --protein 40 --volume 20` |

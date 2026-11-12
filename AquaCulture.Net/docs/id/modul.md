@@ -9,9 +9,12 @@
 | Disease | `DiseaseKnowledgeBase`, `DiagnosisEngine` | 15 penyakit; naive Bayes + hipotesis "bukan semuanya"; risiko lingkungan noisy-OR; penanda wajib lapor WOAH |
 | StockAssessment | `SurplusProduction`, `StockRecruitment`, `YieldPerRecruit`, `LengthBased` | Schaefer/Fox, Beverton–Holt, Ricker, Fmax/F0.1/F40 %, M Pauly/Then, Powell–Wetherall, kurva tangkapan, Kobe |
 | Population | `AgeStructuredModel`, `LeslieMatrix`, `PredatorPrey` | Rekrutmen (steepness), musim pemijahan, migrasi, predasi Holling II, aturan panen hockey-stick |
-| Environment | `OpenMeteoClient`, `SyntheticWeather`, `WeatherImpactPredictor`, `ClimateRiskAnalysis` | Suhu air (model jeda), pengenceran hujan, pH turun karena limpasan, indeks fotosintesis, stratifikasi/umbalan, badai |
+| Environment | `OpenMeteoClient`, `BmkgClient`, `NasaPowerClient`, `MarineForecastClient`, `SyntheticWeather`, `WeatherImpactPredictor`, `ClimateRiskAnalysis` | Suhu air (model jeda), pengenceran hujan, pH turun karena limpasan, indeks fotosintesis, stratifikasi/umbalan, badai |
 | Hydrodynamic | `Grid2D`, `FlowFields`, `ScalarTransport`, `PondOxygenBudget`, `RasMassBalance`, `Sediment` | Adveksi–difusi eksplisit (kernel Rust), neraca oksigen Boyd, AOTR kincir, Timmons & Ebeling untuk RAS |
-| IoT | `MqttSensorTransport`, `Modbus`, `LoRaPayload`, `EdgeAnalytics`, `SimulatedSensorTransport` | Lihat [IoT dan kembaran digital](iot-kembaran.md) |
+| IoT | `MqttSensorTransport`, `Modbus`, `ModbusRtuClient`, `ChirpStack`, `LoRaPayload`, `EdgeAnalytics`, `SimulatedSensorTransport` | Lihat [IoT dan kembaran digital](iot-kembaran.md) |
+| Data | `AquaStore`, `RecordingTransport`, `TimeSeriesExport` | EF Core / SQLite untuk tambak, siklus, pembacaan, keputusan; ekspor CSV dan Parquet. Lihat [Data dan konektor](data-konektor.md) |
+| IoT.OpcUa | `OpcUaReader`, `PondOpcUaSimulator` | Klien OPC UA (stack OPC Foundation) dan simulator kolam |
+| GIS.Gdal | `GdalRaster`, `WaterColour` | GeoTIFF lewat GDAL.Net; NDWI, MNDWI, klorofil-a dari NDCI (Mishra & Mishra 2012), kekeruhan (Dogliotti 2015), status trofik |
 | GIS | `GeoJson`, `FarmMapping`, `DrainageAnalysis`, `WaterSourceAnalysis`, `NtsInterop` | IDW, D8, NetTopologySuite + ProjNet (UTM, buffer, union) |
 | AI | `GrowthPredictor`, `MortalityPredictor`, `FeedOptimizationPolicy`, `MlNetGrowthModel`, `OnnxTabularModel`, `AquaAgent` | Lihat [AI dan AquaAgent](agen-ai.md) |
 | ComputerVision | `OnnxDetector`, `YoloDecoder`, `AnimalAnalyzer`, `OpenCvInterop` | YOLO v5/v8 + NMS; penghitungan, ukuran, skrining bintik putih/luka/insang hitam |

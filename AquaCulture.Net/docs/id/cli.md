@@ -18,6 +18,11 @@ Tambahkan `--lang id` untuk keluaran Bahasa Indonesia.
 | `diagnose` | `aqua diagnose --species vaname --signs white_spots_shell,red_body` |
 | `msy` / `ypr` | kajian stok |
 | `weather` | `aqua weather --lat -6.33 --lon 108.32 --sal 18` (Open-Meteo) |
+| `bmkg` | `aqua bmkg --adm4 31.71.03.1001 --lang id` (prakiraan BMKG per desa dan dampaknya ke kolam) |
+| `history` | `aqua history --lat -6.33 --lon 108.32 --start 2015-01-01 --end 2024-12-31 --lang id` (NASA POWER → risiko iklim) |
+| `marine` | `aqua marine --lat -5.85 --lon 106.6 --species kerapu` (gelombang, arus, suhu laut untuk KJA) |
+| `export` | `aqua export --db aqua.db --pond P-01 --out readings.parquet` (bisa `.csv`; `--demo` mengisi data simulasi sehari) |
+| `opcua` | `aqua opcua --seconds 30` (simulator kolam OPC UA dan kliennya) |
 | `modbus` / `lora` | dekode frame sensor |
 | `ras` | neraca massa RAS |
 | `audit` | `aqua audit --standard cbib --lang id` |
