@@ -1,0 +1,35 @@
+@inherits DemoBase
+
+<div class="controls">
+    <Slider Label="@T("Cage nutrient load", "Beban nutrien KJA")" @bind-Value="_load" Min="0" Max="2" Step="0.1" OnChange="Run" />
+    <Slider Label="@T("Background Chl-a µg/L", "Chl-a latar µg/L")" @bind-Value="_bg" Min="2" Max="40" Step="1" Format="0" OnChange="Run" />
+    <Slider Label="@T("Scene seed", "Seed citra")" @bind-Value="_seed" Min="1" Max="40" Step="1" Format="0" OnChange="Run" />
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Water area", "Luas perairan")" Value="@_r.WaterAreaHa.ToString("N0")" Unit="ha" />
+    <KpiCard Label="@T("Median Chl-a", "Median Chl-a")" Value="@F(_r.Stats.Median)" Unit="µg/L" />
+    <KpiCard Label="@T("Trophic state", "Status trofik")" Value="@_r.Trophic[Lang]" Tone="@(_r.Stats.Median >= 20 ? "warn" : "good")" />
+    <KpiCard Label="@T("Worst cage zone", "Zona KJA terburuk")" Value="@F(_r.Zones.Max(z => z.MeanChl))" Unit="µg/L" Tone="@(_r.Zones.Max(z => z.MeanChl) >= 56 ? "alert" : "warn")" />
+</div>
+
+<div class="grid wide-right" style="margin-top:14px">
+    <div class="panel"><h2>@T("Water mask (NDWI)", "Masker air (NDWI)")</h2><div class="stage"><img src="@Img(_r.NdwiPng)" alt="NDWI" /></div></div>
+    <div class="panel"><h2>@T("Chlorophyll-a (NDCI, Mishra & Mishra 2012)", "Klorofil-a (NDCI, Mishra & Mishra 2012)")</h2>
+        <div class="stage"><img src="@Img(_r.ChlPng)" alt="Chl-a" /><div class="overlay">@((MarkupString)_r.ZonesSvg)</div></div></div>
+</div>
+<div class="grid two" style="margin-top:14px">
+    <div class="panel"><h2>@T("Chl-a by zone", "Chl-a per zona")</h2><SvgMarkup Svg="@_r.LegendSvg" /></div>
+    <div class="panel"><h2>@T("Cage zones", "Zona KJA")</h2>
+        <table class="data"><tr><th>@T("Zone", "Zona")</th><th>@T("Mean", "Rata-rata")</th><th>Max</th><th>@T("State", "Status")</th></tr>
+            @foreach (var z in _r.Zones) { <tr><td>@z.Zone</td><td class="num">@F(z.MeanChl)</td><td class="num">@F(z.MaxChl)</td><td>@AquaCulture.GIS.WaterColour.TrophicState(z.MeanChl)[Lang]</td></tr> }</table>
+        <p class="note">@T("Synthetic Sentinel-2 bands generated from a chlorophyll field; real L2A scenes are read with GdalRaster.ReadAllBands. Calibrate the global NDCI curve with local samples.",
+                          "Band Sentinel-2 sintetis dibuat dari medan klorofil; citra L2A nyata dibaca dengan GdalRaster.ReadAllBands. Kalibrasi kurva NDCI global dengan sampel lokal.")</p></div>
+</div>
+
+@code {
+    private double _load = 1, _bg = 12, _seed = 4;
+    private ChlorophyllDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = ChlorophyllDemo.Run(_load, _bg, (ulong)_seed);
+}

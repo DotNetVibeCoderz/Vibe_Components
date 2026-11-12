@@ -31,6 +31,7 @@ internal static class Views
             "water" => Water(), "oxygen" => Oxygen(), "hydro" => Hydro(), "growth" => Growth(), "feeding" => Feeding(), "ai" => Ai(),
             "disease" => Disease(), "vision" => Vision(), "twin" => Twin(), "iot" => IoT(), "gis" => Gis(), "weather" => Weather(),
             "stock" => Stock(), "population" => Population(), "analytics" => Analytics(), "reporting" => Reporting(), "agent" => Agent(),
+            "connectors" => Connectors(), "chlorophyll" => Chlorophyll(), "learning" => Learning(),
             _ => Text("Unknown demo"),
         };
     }
@@ -391,6 +392,99 @@ internal static class Views
             Slider(T("Depth m", "Kedalaman m"), 0.6, 6, depth, 0.1, "0.0", v => { depth = v; refresh(); }),
             Slider(T("Salinity ppt", "Salinitas"), 0, 35, sal, 1, "0", v => { sal = v; refresh(); }),
             Slider(T("Scenario seed", "Seed"), 1, 60, seed, 1, "0", v => { seed = v; refresh(); }));
+    }
+
+    // ───────── v1.2: data & connectors ─────────
+    private static Control Connectors()
+    {
+        string species = "kerapu"; double depth = 1.3;
+        Action refresh = () => { };
+        Control R()
+        {
+            var r = ConnectorsDemo.Run(species, depth);
+            var marine = new StackPanel();
+            foreach (var i in r.Marine.Impacts) marine.Children.Add(Note(i.Effect[_lang], i.Advice[_lang], i.Severity >= ImpactSeverity.High ? "critical" : "warn", i.Code));
+            if (r.Marine.Impacts.Count == 0) marine.Children.Add(Note(T("Safe for cage work.", "Aman untuk kegiatan KJA."), $"SST {N(r.Marine.MeanSstC)} °C", "good"));
+            var bmkg = new StackPanel();
+            foreach (var i in r.BmkgImpact.Impacts) bmkg.Children.Add(Note(i.Effect[_lang], i.Advice[_lang], "warn", i.Code));
+            return Stack(
+                Text(T("Recorded responses from BMKG, NASA POWER and Open-Meteo Marine; aqua bmkg / history / marine call the live services.",
+                       "Respons terekam dari BMKG, NASA POWER, dan Open-Meteo Marine; aqua bmkg / history / marine memanggil layanan langsung."), 12.5, "soft"),
+                Kpis(Kpi("BMKG", r.Bmkg.Location.Village, null, r.Bmkg.Location.Regency), Kpi(T("Water temperature", "Suhu air"), $"{r.BmkgImpact.WaterTempMinC}–{r.BmkgImpact.WaterTempMaxC}", "°C"),
+                     Kpi(T("Max wave", "Gelombang maks"), N(r.Marine.MaxWaveM), "m", null, r.Marine.MaxWaveM > 1.5 ? "alert" : "good"),
+                     Kpi(T("Readings stored", "Pembacaan tersimpan"), r.StoredReadings.ToString("N0"), "SQLite"),
+                     Kpi("Parquet / CSV", $"{r.ParquetBytes / 1024.0:0.0} / {r.CsvBytes / 1024.0:0}", "KB", null, "good")),
+                Columns(2, Panel(T("BMKG village forecast", "Prakiraan BMKG per desa"), Stack(SvgView(r.BmkgSvg), bmkg), "adm4 " + r.Bmkg.Location.Adm4),
+                    Panel(T("NASA POWER daily history", "Riwayat harian NASA POWER"), SvgView(r.NasaSvg), "Indramayu · Jan 2025")),
+                Columns(2, Panel(T("Sea state for floating net cages", "Kondisi laut untuk KJA"), Stack(SvgView(r.MarineSvg), marine)),
+                    Panel(T("Store, ChirpStack & export", "Penyimpanan, ChirpStack & ekspor"), Stack(SvgView(r.StoreSvg),
+                        Table(["ChirpStack", T("Value", "Nilai")], r.ChirpStack.Select(x => (IReadOnlyList<string>)[$"{x.PondId} · {x.Kind}", $"{N(x.Value, "0.##")} {x.Unit}"])), Code(r.CsvHead)))));
+        }
+        return Live(R, out refresh,
+            Combo(T("Cage species", "Spesies KJA"), new[] { "kerapu", "kakap", "bandeng" }.Select(i => (i, SpeciesCatalog.Get(i).Name[_lang])).ToList(), species, v => { species = v; refresh(); }),
+            Slider(T("Pond depth m", "Kedalaman m"), 0.6, 3, depth, 0.1, "0.0", v => { depth = v; refresh(); }));
+    }
+
+    // ───────── v1.2: chlorophyll ─────────
+    private static Control Chlorophyll()
+    {
+        double load = 1, bg = 12, seed = 4;
+        Action refresh = () => { };
+        Control R()
+        {
+            var r = ChlorophyllDemo.Run(load, bg, (ulong)seed);
+            double worst = r.Zones.Max(z => z.MeanChl);
+            return Stack(
+                Kpis(Kpi(T("Water area", "Luas perairan"), r.WaterAreaHa.ToString("N0"), "ha"), Kpi(T("Median Chl-a", "Median Chl-a"), N(r.Stats.Median), "µg/L"),
+                     Kpi(T("Trophic state", "Status trofik"), r.Trophic[_lang], null, null, r.Stats.Median >= 20 ? "warn" : "good"),
+                     Kpi(T("Worst cage zone", "Zona KJA terburuk"), N(worst), "µg/L", null, worst >= 56 ? "alert" : "warn")),
+                Columns([1, 1.6], Panel(T("Water mask (NDWI)", "Masker air (NDWI)"), Png(r.NdwiPng, 330)),
+                    Panel(T("Chlorophyll-a (NDCI)", "Klorofil-a (NDCI)"), new Grid { MaxHeight = 430, Children = { Png(r.ChlPng, 430), SvgView(r.ZonesSvg, 430) } }, "Mishra & Mishra 2012")),
+                Columns(2, Panel(T("Chl-a by zone", "Chl-a per zona"), SvgView(r.LegendSvg)),
+                    Panel(T("Cage zones", "Zona KJA"), Table([T("Zone", "Zona"), T("Mean", "Rata-rata"), "Max", T("State", "Status")],
+                        r.Zones.Select(z => (IReadOnlyList<string>)[z.Zone, N(z.MeanChl), N(z.MaxChl), AquaCulture.GIS.WaterColour.TrophicState(z.MeanChl)[_lang]])))));
+        }
+        return Live(R, out refresh,
+            Slider(T("Cage nutrient load", "Beban nutrien KJA"), 0, 2, load, 0.1, "0.0", v => { load = v; refresh(); }),
+            Slider(T("Background Chl-a", "Chl-a latar"), 2, 40, bg, 1, "0", v => { bg = v; refresh(); }),
+            Slider(T("Scene seed", "Seed citra"), 1, 40, seed, 1, "0", v => { seed = v; refresh(); }));
+    }
+
+    // ───────── v1.2: learning ─────────
+    private static Control Learning()
+    {
+        double days = 30, biomass = 4000, seed = 5;
+        Action refresh = () => { };
+        Control R()
+        {
+            var r = LearningDemo.Run((int)days, (ulong)seed, 12, biomass);
+            double crit = SpeciesCatalog.Vaname.DoCritical;
+            var rows = r.Aeration.Select(a => (IReadOnlyList<string>)[a.Policy, a.CostIdr.ToString("N0"), N(a.Kwh, "0"), N(a.HoursBelowCritical), N(a.MinDo)]).ToList();
+            var table = new ContentControl { Content = Table([T("Policy", "Kebijakan"), T("Cost IDR", "Biaya IDR"), "kWh", T("h < critical", "jam < kritis"), T("Min DO", "DO min")], rows) };
+            var train = new Button { Content = T("Train SAC policy (≈30 s)", "Latih kebijakan SAC (≈30 dtk)"), Margin = new Thickness(0, 10, 0, 0) };
+            train.Click += async (_, _) =>
+            {
+                train.IsEnabled = false; train.Content = T("Training SAC…", "Melatih SAC…");
+                var e = await Task.Run(() => LearningDemo.TrainSac());
+                rows.Add([e.Policy, e.CostIdr.ToString("N0"), N(e.Kwh, "0"), N(e.HoursBelowCritical), N(e.MinDo)]);
+                table.Content = Table([T("Policy", "Kebijakan"), T("Cost IDR", "Biaya IDR"), "kWh", T("h < critical", "jam < kritis"), T("Min DO", "DO min")], rows);
+                train.Content = T("Trained", "Selesai dilatih");
+            };
+            var risk = r.Curve.FirstRiskBelow(crit);
+            return Stack(
+                Kpis(Kpi(T("Forecast minimum", "Minimum prakiraan"), N(r.Curve.Minimum.Do), "mg/L", r.Curve.Minimum.Time.ToString("ddd HH:mm"), r.Curve.Minimum.Do < crit ? "alert" : "good"),
+                     Kpi(T("RMSE +6 h", "RMSE +6 jam"), N(r.Skill[5].Rmse, "0.00"), "mg/L"),
+                     Kpi(T("Skill +6 h", "Skill +6 jam"), N(r.Skill[5].SkillScore * 100, "0"), "%", null, r.Skill[5].SkillScore > 0 ? "good" : "warn"),
+                     Kpi(T("Training", "Pelatihan"), N(r.TrainSeconds), "s", "ML.NET FastTree × 12")),
+                Columns(2, Panel(T("Next 12 hours", "12 jam ke depan"), Stack(SvgView(r.ForecastSvg),
+                        risk is { } t ? Note(T($"Risk of DO below critical from {t:HH:mm}", $"Risiko DO di bawah kritis mulai {t:HH:mm}"), T("Start aerators before then.", "Nyalakan aerator sebelum itu."), "critical", "DO") : Text(""))),
+                    Panel(T("Skill against naive forecasts", "Skill dibanding prakiraan naif"), SvgView(r.SkillSvg))),
+                Panel(T("Aeration policies (72 h episodes)", "Kebijakan aerasi (episode 72 jam)"), Stack(table, train)));
+        }
+        return Live(R, out refresh,
+            Slider(T("History days", "Hari riwayat"), 10, 45, days, 1, "0", v => { days = v; refresh(); }),
+            Slider(T("Biomass at end kg", "Biomassa akhir kg"), 1500, 6000, biomass, 100, "N0", v => { biomass = v; refresh(); }),
+            Slider(T("Pond seed", "Seed kolam"), 1, 30, seed, 1, "0", v => { seed = v; refresh(); }));
     }
 
     // ───────── stock ─────────

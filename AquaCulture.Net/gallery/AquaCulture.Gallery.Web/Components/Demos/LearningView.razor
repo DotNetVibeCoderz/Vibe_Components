@@ -1,0 +1,42 @@
+@inherits DemoBase
+
+<div class="controls">
+    <Slider Label="@T("History days", "Hari riwayat")" @bind-Value="_days" Min="10" Max="45" Step="1" Format="0" OnChange="Run" />
+    <Slider Label="@T("Biomass at end kg", "Biomassa akhir kg")" @bind-Value="_biomass" Min="1500" Max="6000" Step="100" Format="N0" OnChange="Run" />
+    <Slider Label="@T("Pond seed", "Seed kolam")" @bind-Value="_seed" Min="1" Max="30" Step="1" Format="0" OnChange="Run" />
+</div>
+
+<div class="grid kpis">
+    <KpiCard Label="@T("Forecast minimum", "Minimum prakiraan")" Value="@F(_r.Curve.Minimum.Do)" Unit="mg/L" Note="@_r.Curve.Minimum.Time.ToString("ddd HH:mm")"
+             Tone="@(_r.Curve.Minimum.Do < AquaCulture.Core.Species.SpeciesCatalog.Vaname.DoCritical ? "alert" : "good")" />
+    <KpiCard Label="@T("RMSE +6 h", "RMSE +6 jam")" Value="@F(_r.Skill[5].Rmse, "0.00")" Unit="mg/L" />
+    <KpiCard Label="@T("Skill +6 h", "Skill +6 jam")" Value="@F(_r.Skill[5].SkillScore * 100, "0")" Unit="%" Tone="@(_r.Skill[5].SkillScore > 0 ? "good" : "warn")" />
+    <KpiCard Label="@T("Training", "Pelatihan")" Value="@F(_r.TrainSeconds)" Unit="s" Note="ML.NET FastTree × 12" />
+</div>
+
+<div class="grid two" style="margin-top:14px">
+    <div class="panel"><h2>@T("Next 12 hours", "12 jam ke depan")</h2><SvgMarkup Svg="@_r.ForecastSvg" />
+        @if (_r.Curve.FirstRiskBelow(AquaCulture.Core.Species.SpeciesCatalog.Vaname.DoCritical) is { } risk)
+        { <div class="decision Critical"><span class="k">DO</span><span>@T($"Risk of DO below critical from {risk:HH:mm}", $"Risiko DO di bawah kritis mulai {risk:HH:mm}")<small>@T("Start aerators before then.", "Nyalakan aerator sebelum itu.")</small></span></div> }</div>
+    <div class="panel"><h2>@T("Skill against naive forecasts", "Skill dibanding prakiraan naif")</h2><SvgMarkup Svg="@_r.SkillSvg" />
+        <p class="note">@T("Beyond about 9 hours tomorrow's clouds dominate; add weather-forecast inputs for longer horizons.", "Lebih dari sekitar 9 jam, awan esok hari mendominasi; tambahkan input prakiraan cuaca untuk horizon lebih panjang.")</p></div>
+</div>
+<div class="panel" style="margin-top:14px"><h2>@T("Aeration policies (72 h episodes)", "Kebijakan aerasi (episode 72 jam)")</h2>
+    <table class="data"><tr><th>@T("Policy", "Kebijakan")</th><th>@T("Cost IDR", "Biaya IDR")</th><th>kWh</th><th>@T("h below critical", "jam < kritis")</th><th>@T("Min DO", "DO min")</th></tr>
+        @foreach (var a in _aeration) { <tr><td>@a.Policy</td><td class="num">@a.CostIdr.ToString("N0")</td><td class="num">@F(a.Kwh, "0")</td><td class="num">@F(a.HoursBelowCritical, "0.0")</td><td class="num">@F(a.MinDo)</td></tr> }</table>
+    <button class="btn" disabled="@_training" @onclick="TrainAsync">@(_training ? T("Training SAC…", "Melatih SAC…") : T("Train SAC policy (≈30 s)", "Latih kebijakan SAC (≈30 dtk)"))</button></div>
+
+@code {
+    private double _days = 30, _biomass = 4000, _seed = 5;
+    private bool _training;
+    private LearningDemoResult _r = null!;
+    private List<AquaCulture.AI.Rl.AerationEvaluation> _aeration = [];
+    protected override void OnInitialized() => Run();
+    private void Run() { _r = LearningDemo.Run((int)_days, (ulong)_seed, 12, _biomass); _aeration = [.. _r.Aeration]; }
+    private async Task TrainAsync()
+    {
+        _training = true;
+        try { var e = await Task.Run(() => LearningDemo.TrainSac()); _aeration.Add(e); }
+        finally { _training = false; }
+    }
+}

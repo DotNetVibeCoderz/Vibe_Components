@@ -1,0 +1,42 @@
+@inherits DemoBase
+
+<div class="controls">
+    <div class="control"><label>@T("Cage species (marine)", "Spesies KJA (laut)")</label>
+        <select @bind="_species" @bind:after="Run">@foreach (var s in new[] { "kerapu", "kakap", "bandeng" }) { <option value="@s">@AquaCulture.Core.Species.SpeciesCatalog.Get(s).Name[Lang]</option> }</select></div>
+    <Slider Label="@T("Pond depth m", "Kedalaman kolam m")" @bind-Value="_depth" Min="0.6" Max="3" Step="0.1" OnChange="Run" />
+</div>
+<p class="note">@T("Recorded responses from BMKG, NASA POWER and Open-Meteo Marine; the CLI commands aqua bmkg / history / marine call the live services with the same code.",
+                   "Respons terekam dari BMKG, NASA POWER, dan Open-Meteo Marine; perintah CLI aqua bmkg / history / marine memanggil layanan langsung dengan kode yang sama.")</p>
+
+<div class="grid kpis">
+    <KpiCard Label="BMKG" Value="@_r.Bmkg.Location.Village" Unit="@_r.Bmkg.Location.Regency" />
+    <KpiCard Label="@T("Water temperature", "Suhu air")" Value="@($"{_r.BmkgImpact.WaterTempMinC}–{_r.BmkgImpact.WaterTempMaxC}")" Unit="°C" />
+    <KpiCard Label="@T("Max wave", "Gelombang maks")" Value="@F(_r.Marine.MaxWaveM)" Unit="m" Tone="@(_r.Marine.MaxWaveM > 1.5 ? "alert" : "good")" />
+    <KpiCard Label="@T("Readings stored", "Pembacaan tersimpan")" Value="@_r.StoredReadings.ToString("N0")" Unit="SQLite" />
+    <KpiCard Label="Parquet / CSV" Value="@($"{_r.ParquetBytes / 1024.0:0.0} / {_r.CsvBytes / 1024.0:0}")" Unit="KB" Tone="good" />
+</div>
+
+<div class="grid two" style="margin-top:14px">
+    <div class="panel"><h2>@T("BMKG village forecast", "Prakiraan BMKG per desa") <small>adm4 @_r.Bmkg.Location.Adm4</small></h2><SvgMarkup Svg="@_r.BmkgSvg" />
+        @foreach (var (t, d) in _r.Bmkg.Conditions.Take(4)) { <span class="pill">@t.ToString("ddd HH:mm") · @d[Lang]</span> }
+        @foreach (var i in _r.BmkgImpact.Impacts) { <div class="decision Warning"><span class="k">@i.Code</span><span>@i.Effect[Lang]<small>@i.Advice[Lang]</small></span></div> }</div>
+    <div class="panel"><h2>@T("NASA POWER daily history", "Riwayat harian NASA POWER") <small>Indramayu · Jan 2025</small></h2><SvgMarkup Svg="@_r.NasaSvg" />
+        <p class="note">@T("Decades of daily data feed the climate-risk ranking (aqua history).", "Data harian puluhan tahun dipakai untuk peringkat risiko iklim (aqua history).")</p></div>
+</div>
+<div class="grid two" style="margin-top:14px">
+    <div class="panel"><h2>@T("Sea state for floating net cages", "Kondisi laut untuk KJA")</h2><SvgMarkup Svg="@_r.MarineSvg" />
+        @foreach (var i in _r.Marine.Impacts) { <div class="decision @(i.Severity >= AquaCulture.Environment.ImpactSeverity.High ? "Critical" : "Warning")"><span class="k">@i.Code</span><span>@i.Effect[Lang]<small>@i.Advice[Lang]</small></span></div> }
+        @if (_r.Marine.Impacts.Count == 0) { <p class="note">@T("Safe for cage work.", "Aman untuk kegiatan KJA.") SST @F(_r.Marine.MeanSstC) °C</p> }</div>
+    <div class="panel"><h2>@T("Store, ChirpStack & export", "Penyimpanan, ChirpStack & ekspor")</h2><SvgMarkup Svg="@_r.StoreSvg" />
+        <table class="data"><tr><th>ChirpStack</th><th>@T("Value", "Nilai")</th></tr>
+            @foreach (var x in _r.ChirpStack) { <tr><td>@x.PondId · @x.Kind</td><td class="num">@F(x.Value, "0.##") @x.Unit</td></tr> }</table>
+        <pre class="code" style="padding:10px 12px;margin-top:12px;font-size:11.5px;overflow-x:auto;white-space:pre">@_r.CsvHead</pre></div>
+</div>
+
+@code {
+    private string _species = "kerapu";
+    private double _depth = 1.3;
+    private ConnectorsDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = ConnectorsDemo.Run(_species, _depth);
+}

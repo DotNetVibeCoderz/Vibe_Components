@@ -11,7 +11,7 @@
 | [Data dan konektor](data-konektor.md) | Penyimpanan SQLite/EF Core, ekspor Parquet/CSV, BMKG, NASA POWER, prakiraan laut, Modbus RTU serial, ChirpStack, OPC UA, IoTCom.Net (SenML, NMEA/AIS, Sparkplug B), warna air GDAL |
 | [AI dan AquaAgent](agen-ai.md) | Model prediktif, kebijakan pakan RL, ML.NET/ONNX, penyedia LLM dan alat |
 | [Kernel native](native.md) | Crate Rust, C ABI, fallback managed, build untuk platform lain |
-| [Galeri](galeri.md) | 17 kasus penggunaan, cara menjalankan aplikasi web dan desktop, tangkapan layar |
+| [Galeri](galeri.md) | 20 kasus penggunaan, cara menjalankan aplikasi web dan desktop, tangkapan layar |
 | [CLI](cli.md) | Perintah `aqua` |
 | [Templat](templat.md) | Templat `dotnet new` |
 

@@ -129,6 +129,34 @@ public static class GalleryCatalog
             var impact   = WeatherImpactPredictor.Predict(forecast, new PondExposure(depthM: 1.3, salinityPpt: 18));
             var risk     = ClimateRiskAnalysis.Analyze(DailyWeather.FromHourly(history), CultureSystem.FloatingNetCage);
             """, "amber"),
+        new("connectors", "farm", new("Data & connectors: BMKG, NASA, marine, store", "Data & konektor: BMKG, NASA, laut, penyimpanan"),
+            new("BMKG village forecast, NASA POWER history and Open-Meteo Marine (recorded responses), a ChirpStack uplink, and a SQLite store exported to Parquet and CSV.",
+                "Prakiraan BMKG per desa, riwayat NASA POWER dan Open-Meteo Marine (respons terekam), uplink ChirpStack, serta penyimpanan SQLite yang diekspor ke Parquet dan CSV."),
+            "AquaCulture.Environment · AquaCulture.IoT · AquaCulture.Data", """
+            var bmkg = await new BmkgClient().GetForecastAsync("31.71.03.1001");      // or BmkgClient.Parse(json)
+            var sea  = MarineForecastClient.Assess(await new MarineForecastClient().GetHourlyAsync(lat, lon), SpeciesCatalog.Get("kerapu"));
+            using var store = AquaStore.OpenSqlite("farm.db");
+            await store.AppendReadingsAsync(readings);
+            await TimeSeriesExport.WriteParquetAsync(await store.QueryReadingsAsync("P-02"), File.Create("p02.parquet"));
+            """, "blue"),
+        new("chlorophyll", "farm", new("Satellite chlorophyll around cages", "Klorofil satelit di sekitar KJA"),
+            new("Sentinel-2 water colour on a reservoir with floating net cages: NDWI water mask, NDCI chlorophyll-a, trophic state per cage zone.",
+                "Warna air Sentinel-2 di waduk dengan keramba jaring apung: masker air NDWI, klorofil-a NDCI, dan status trofik per zona KJA."),
+            "AquaCulture.GIS · AquaCulture.GIS.Gdal", """
+            var b = GdalRaster.ReadAllBands("S2_L2A_reservoir.tif");
+            var water = WaterColour.WaterMask(WaterColour.Ndwi(b[2], b[7]));
+            var chl = WaterColour.Chlorophyll(WaterColour.Ndci(b[4], b[3]), water);   // Mishra & Mishra 2012
+            var s = WaterColour.Summarize(chl, water);                               // median µg/L, area ha
+            """, "green"),
+        new("learning", "water", new("Learned DO forecast & RL aeration", "Prakiraan DO hasil belajar & aerasi RL"),
+            new("A gradient-boosted forecaster learns the pond's own oxygen rhythm (skill against naive forecasts shown); aeration policies compared, with SAC reinforcement learning on demand.",
+                "Forecaster gradient boosting mempelajari ritme oksigen kolam sendiri (skill dibanding prakiraan naif ditampilkan); kebijakan aerasi dibandingkan, dengan reinforcement learning SAC sesuai permintaan."),
+            "AquaCulture.AI.Learning · AquaCulture.AI.Rl", """
+            var gbt = new GbtDoForecaster(horizon: 12).Train(DoHistory.FromSeries(doSeries, tempSeries));
+            var curve = gbt.Forecast(recent);                     // point + 90 % band; gbt.Skill vs persistence
+            var policy = AerationPolicy.Train(steps: 20_000);     // RLNet SAC, continuous aerator power
+            var eval = AerationEnvironment.Evaluate("sac", policy.Decide);
+            """, "blue"),
         new("stock", "science", new("Stock assessment: MSY & Kobe", "Kajian stok: MSY & Kobe"),
             new("Fit a dynamic Schaefer model to catch and effort, read MSY and the Kobe status, and find Fmax and F0.1 from Beverton–Holt yield per recruit.",
                 "Paskan model Schaefer dinamis ke data tangkapan dan upaya, baca MSY dan status Kobe, lalu temukan Fmax dan F0.1 dari yield per recruit Beverton–Holt."),

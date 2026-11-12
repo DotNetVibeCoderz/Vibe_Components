@@ -62,7 +62,7 @@ Panduan lengkap: [docs/id/memulai.md](docs/id/memulai.md).
 
 ## Galeri
 
-17 kasus penggunaan interaktif dalam aplikasi web **Blazor** dan desktop **Avalonia** (dengan kolam 3D **ThreeNet**).
+20 kasus penggunaan interaktif dalam aplikasi web **Blazor** dan desktop **Avalonia** (dengan kolam 3D **ThreeNet**).
 
 ```bash
 dotnet run --project gallery/AquaCulture.Gallery.Web --urls http://localhost:5390

@@ -76,7 +76,7 @@ More in [docs/en/getting-started.md](docs/en/getting-started.md).
 
 ## Gallery
 
-Seventeen interactive use cases, each in a **Blazor** web app and an **Avalonia** desktop app (with a **ThreeNet** 3D pond), sharing one scenario library.
+Twenty interactive use cases, each in a **Blazor** web app and an **Avalonia** desktop app (with a **ThreeNet** 3D pond), sharing one scenario library.
 
 ```bash
 dotnet run --project gallery/AquaCulture.Gallery.Web --urls http://localhost:5390
@@ -109,7 +109,7 @@ dotnet new aqua-blazor -n MyFarm --species vaname
 
 ```bash
 dotnet build AquaCulture.Net.slnx
-dotnet test tests/AquaCulture.Tests                  # 139 tests
+dotnet test tests/AquaCulture.Tests                  # 142 tests
 cd native/aqua-native && cargo test --release        # Rust kernels
 pwsh build/build-native.ps1                          # copy kernel into AquaCulture.Native/runtimes/<rid>/native
 pwsh build/pack.ps1                                  # NuGet packages → artifacts/packages

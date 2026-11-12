@@ -11,7 +11,7 @@
 | [Data and connectors](data-connectors.md) | SQLite/EF Core store, Parquet/CSV export, BMKG, NASA POWER, marine forecasts, Modbus RTU serial, ChirpStack, OPC UA, IoTCom.Net (SenML, NMEA/AIS, Sparkplug B), GDAL water colour |
 | [AI and the AquaAgent](ai-agent.md) | Predictive models, RL feed policy, ML.NET/ONNX, LLM providers and tools |
 | [Native kernels](native.md) | Rust crate, C ABI, managed fallback, building for other platforms |
-| [Gallery](gallery.md) | The 17 use cases, how to run the web and desktop apps, screenshots |
+| [Gallery](gallery.md) | The 20 use cases, how to run the web and desktop apps, screenshots |
 | [CLI](cli.md) | The `aqua` dotnet tool |
 | [Templates](templates.md) | `dotnet new` templates |
 

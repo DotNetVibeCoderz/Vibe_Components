@@ -27,6 +27,9 @@ enam kolam HDPE udang vaname di Indramayu, Jawa Barat.
 | 15 | KPI & ekonomi siklus | Analytics |
 | 16 | Laporan & GAP / CBIB / ASC / BAP | Reporting |
 | 17 | AquaAgent | AI.Agent |
+| 18 | Data & konektor: BMKG, NASA, laut, penyimpanan (v1.2) | Environment, IoT, Data |
+| 19 | Klorofil satelit di sekitar KJA (v1.2) | GIS (WaterColour), GIS.Gdal |
+| 20 | Prakiraan DO hasil belajar & aerasi RL (v1.2) | AI.Learning, AI.Rl |
 
 | | |
 |---|---|

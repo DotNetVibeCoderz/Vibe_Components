@@ -28,6 +28,6 @@ function Shot([string]$name, [string]$path, [string]$scheme = "light", [int]$hei
 Shot "web-home" "" "light" 1700
 Shot "web-home-dark" "" "dark" 1700
 Shot "web-home-id" "?lang=id" "light" 1200
-$demos = "water","oxygen","hydro","growth","feeding","ai","disease","vision","twin","iot","gis","weather","stock","population","analytics","reporting","agent"
+$demos = "water","oxygen","learning","hydro","growth","feeding","ai","disease","vision","twin","iot","connectors","chlorophyll","gis","weather","stock","population","analytics","reporting","agent"
 foreach ($d in $demos) { Shot "web-$d" "demo/$d" }
 Shot "web-twin-dark" "demo/twin" "dark"

@@ -11,7 +11,7 @@ public class GalleryScenarioTests
     [Fact]
     public void Catalog_is_complete_and_bilingual()
     {
-        Assert.Equal(17, GalleryCatalog.Demos.Length);
+        Assert.Equal(20, GalleryCatalog.Demos.Length);
         Assert.All(GalleryCatalog.Demos, d => { Assert.NotEqual(d.Title.En, d.Title.Id); Assert.Contains(GalleryCatalog.Groups, g => g.Key == d.Group); });
         Assert.Equal(6, DemoFarm.Farm.Ponds.Count);
     }
@@ -28,6 +28,9 @@ public class GalleryScenarioTests
     [Fact] public void Iot() { var r = IoTDemo.Run(); Svg(r.EdgeSvg); Assert.InRange(r.Outliers, 2, 3); Assert.Equal(5.12, r.ModbusValues[0].Value, 6); Assert.Equal(5, r.MqttReadings.Count); /* temp, do, ph, sal, rssi */ }
     [Fact] public void Gis() { var r = GisDemo.Run(); Svg(r.MapSvg); Assert.True(r.BufferAreaM2 > r.FarmAreaM2); Assert.Equal("sea-intake", r.Sources[0].Source.Id); /* brackish intake suits whiteleg shrimp */ }
     [Fact] public void Weather() { var r = WeatherDemo.Run(); Svg(r.ForecastSvg); Svg(r.MatrixSvg); Assert.Equal(6, r.Climate.Hazards.Count); }
+    [Fact] public void Connectors() { var r = ConnectorsDemo.Run(); Svg(r.BmkgSvg); Svg(r.NasaSvg); Svg(r.MarineSvg); Svg(r.StoreSvg); Assert.Equal("Kemayoran", r.Bmkg.Location.Village); Assert.Equal(31, r.NasaDays.Count); Assert.Equal(r.StoredReadings / 2, r.QueriedReadings); Assert.True(r.ParquetBytes < r.CsvBytes); Assert.Equal("P-03", r.ChirpStack[0].PondId); }
+    [Fact] public void Chlorophyll() { var r = ChlorophyllDemo.Run(); Svg(r.ZonesSvg); Svg(r.LegendSvg); Assert.True(r.WaterAreaHa > 100); Assert.All(r.Zones, z => Assert.True(z.MeanChl > r.Stats.Median, z.Zone)); Assert.True(ChlorophyllDemo.Run(cageLoad: 0).Zones.Max(z => z.MeanChl) < r.Zones.Min(z => z.MeanChl)); }
+    [Fact] public void Learning() { var r = LearningDemo.Run(); Svg(r.ForecastSvg); Svg(r.SkillSvg); Assert.Equal(12, r.Curve.Point.Length); Assert.True(r.Skill[5].SkillScore > 0); Assert.Equal(0, r.Aeration[0].HoursBelowCritical); }
     [Fact] public void Stock() { var r = StockDemo.Run(); Svg(r.KobeSvg); Svg(r.YprSvg); Assert.True(r.Fit.Msy > 0); Assert.Equal(2.4, r.Z, 1); }
     [Fact] public void Population() { var r = PopulationDemo.Run(); Svg(r.BiomassSvg); Svg(r.PredatorSvg); Assert.True(r.ConstantF[^1].SpawningBiomass < r.NoFishing[^1].SpawningBiomass); }
     [Fact] public void Analytics() { var r = AnalyticsDemo.Run(); Svg(r.CostSvg); Assert.Equal(6, r.Summary.Cycles.Count); Assert.True(r.Selected.Revenue > 0); }

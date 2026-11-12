@@ -6,10 +6,15 @@
   <ItemGroup>
     <ProjectReference Include="../../src/AquaCulture.AI/AquaCulture.AI.csproj" />
     <ProjectReference Include="../../src/AquaCulture.ComputerVision/AquaCulture.ComputerVision.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.Data/AquaCulture.Data.csproj" />
     <ProjectReference Include="../../src/AquaCulture.DigitalTwin/AquaCulture.DigitalTwin.csproj" />
     <ProjectReference Include="../../src/AquaCulture.GIS/AquaCulture.GIS.csproj" />
     <ProjectReference Include="../../src/AquaCulture.Population/AquaCulture.Population.csproj" />
     <ProjectReference Include="../../src/AquaCulture.Reporting/AquaCulture.Reporting.csproj" />
     <ProjectReference Include="../../src/AquaCulture.StockAssessment/AquaCulture.StockAssessment.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- recorded API responses (shared with the tests) for the offline connectors demo -->
+    <EmbeddedResource Include="../../tests/AquaCulture.Tests/Fixtures/*.json" LogicalName="AquaCulture.Gallery.Shared.Fixtures.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

@@ -11,7 +11,7 @@ Versi 1.1 menghubungkan AquaCulture.Net ke penyimpanan data, data cuaca dan laut
 | `AquaCulture.IoT` | `ModbusRtuClient` lewat serial RS-485 (System.IO.Ports) atau stream apa pun; `ChirpStack.ParseUplink` untuk integrasi HTTP ChirpStack v4 |
 | `AquaCulture.IoT.OpcUa` | `OpcUaReader` (stack OPC Foundation) untuk PLC/SCADA, serta `PondOpcUaSimulator` untuk uji tanpa perangkat keras |
 | `AquaCulture.IoT.IoTCom` (preview) | Adaptor IoTCom.Net: transport Modbus TCP/RTU/ASCII, SenML, sensor KJA NMEA 0183 dan deteksi hanyut, pemantauan kapal AIS, Sparkplug B |
-| `AquaCulture.GIS.Gdal` | `GdalRaster`: baca/tulis GeoTIFF lewat GDAL.Net (otomatis diproyeksikan ke WGS-84); `WaterColour`: NDWI, MNDWI, klorofil-a dari NDCI, kekeruhan, dan status trofik |
+| `AquaCulture.GIS.Gdal` | `GdalRaster`: baca/tulis GeoTIFF lewat GDAL.Net (otomatis diproyeksikan ke WGS-84). `WaterColour` (NDWI, MNDWI, klorofil-a NDCI, kekeruhan, status trofik) pindah ke `AquaCulture.GIS` di v1.2, sehingga bisa dipakai tanpa GDAL |
 
 ## Penyimpanan
 

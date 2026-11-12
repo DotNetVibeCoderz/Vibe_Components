@@ -27,6 +27,9 @@ All computation lives in `gallery/AquaCulture.Gallery.Shared` (`GalleryCatalog`,
 | 15 | KPIs & cycle economics | Analytics |
 | 16 | Reports & GAP / CBIB / ASC / BAP | Reporting |
 | 17 | AquaAgent | AI.Agent |
+| 18 | Data & connectors: BMKG, NASA, marine, store (v1.2) | Environment, IoT, Data |
+| 19 | Satellite chlorophyll around cages (v1.2) | GIS (WaterColour), GIS.Gdal |
+| 20 | Learned DO forecast & RL aeration (v1.2) | AI.Learning, AI.Rl |
 
 ## Screenshots
 
@@ -45,4 +48,6 @@ Web (`pwsh build/screenshots-web.ps1` with the web gallery running) and desktop
 | ![](../images/web-stock.png) | ![](../images/web-population.png) |
 | ![](../images/web-analytics.png) | ![](../images/web-reporting.png) |
 | ![](../images/web-agent.png) | ![](../images/desktop-twin.png) |
+| ![](../images/web-connectors.png) | ![](../images/web-chlorophyll.png) |
+| ![](../images/web-learning.png) | ![](../images/desktop-chlorophyll-id.png) |
 | ![](../images/desktop-water.png) | ![](../images/desktop-growth.png) |

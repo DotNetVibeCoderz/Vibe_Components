@@ -21,7 +21,7 @@ so the versions below deepen them rather than introduce them.
 
 ## v1.2: AI depth
 - ✅ More IoTCom.Net adapters: LwM2M server (IPSO objects), farm-local LoRaWAN network server (Semtech UDP, AS923-2), M-Bus aerator energy meters
-- Gallery demos for the v1.1 connectors (store browser, BMKG/marine panel, chlorophyll map)
+- ✅ Gallery demos: data & connectors (BMKG, NASA POWER, marine, ChirpStack, SQLite → Parquet), satellite chlorophyll around cages, learned DO forecast & RL aeration
 - 🟡 Trained ONNX models: training notebook (`notebooks/train-yolo-aquaculture.ipynb`, YOLO → ONNX → Hub) done; trained weights wait for a licensed, labelled shrimp/fish dataset (none permissive on the Hub yet)
 - ✅ Hub integration (`ModelHub`: licence check, cached download, ONNX detector) and MediaPipeNet fish length/weight from photos and video (`FishMeasurer`)
 - ✅ Gradient-boosted (ML.NET FastTree) and LSTM (TorchSharp, `AquaCulture.AI.Torch`) DO forecasters with baseline skill; farm-data growth learning

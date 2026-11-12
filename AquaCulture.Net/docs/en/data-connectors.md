@@ -11,7 +11,7 @@ Version 1.1 connects AquaCulture.Net to storage, public weather and ocean data, 
 | `AquaCulture.IoT` | `ModbusRtuClient` over serial RS-485 (System.IO.Ports) or any stream; `ChirpStack.ParseUplink` for ChirpStack v4 HTTP integrations |
 | `AquaCulture.IoT.OpcUa` | `OpcUaReader` (OPC Foundation stack) for PLC/SCADA, plus `PondOpcUaSimulator` for testing without hardware |
 | `AquaCulture.IoT.IoTCom` (preview) | IoTCom.Net adapters: Modbus TCP/RTU/ASCII transport, SenML, NMEA 0183 cage sensors and mooring drift, AIS vessel watch, Sparkplug B |
-| `AquaCulture.GIS.Gdal` | `GdalRaster` GeoTIFF read/write through GDAL.Net (warps to WGS-84); `WaterColour` NDWI, MNDWI, NDCI chlorophyll-a, turbidity and trophic state |
+| `AquaCulture.GIS.Gdal` | `GdalRaster` GeoTIFF read/write through GDAL.Net (warps to WGS-84). `WaterColour` (NDWI, MNDWI, NDCI chlorophyll-a, turbidity, trophic state) moved to `AquaCulture.GIS` in v1.2, so it works without GDAL |
 
 ## Persistence
 

@@ -30,9 +30,9 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | AquaCulture.Reporting | ✅ | XLSX/PDF/DOCX/CSV/JSON/HTML/MD (no third-party libs), GAP/CBIB/ASC/BAP |
 | AquaCulture.Visualization / Blazor | ✅ | SVG/PNG charts; 6 domain components incl. Three.js 3D pond |
 | AquaCulture.Native (Rust) | ✅ | 7 Rust tests; bit-identical managed fallback; CI builds 5 RIDs |
-| Tests | ✅ | 139 xUnit tests (reference values, native/managed parity, determinism, file-format validity, every gallery scenario) |
-| Gallery: Blazor | ✅ | 17 demos, EN/ID, light/dark, screenshots in docs/images |
-| Gallery: Avalonia | ✅ | 17 demos, ThreeNet 3D pond (interactive + offscreen), headless screenshot mode |
+| Tests | ✅ | 142 xUnit tests (reference values, native/managed parity, determinism, file-format validity, every gallery scenario) |
+| Gallery: Blazor | ✅ | 20 demos (v1.2: connectors, chlorophyll, learning), EN/ID, light/dark, screenshots in docs/images |
+| Gallery: Avalonia | ✅ | 20 demos, ThreeNet 3D pond (interactive + offscreen), headless screenshot mode |
 | CLI (`aqua`) | ✅ | 21 commands (v1.1: bmkg, history, marine, export, opcua) |
 | Templates | ✅ | 4 templates, verified to build from the packed feed |
 | NuGet icon & packages | ✅ | 26 packages (v1.1, IoT.IoTCom as preview) + symbols; icon generated with Rodin (Nano Banana 2) |
