@@ -13,6 +13,17 @@ Library GDAL native gagal dimuat.
 - Container Linux butuh runtime C/C++ standar (`libstdc++`). Alpine/musl tidak didukung oleh build bawaan.
 - `Gdal.NativeLibraryPath` menunjukkan library yang dimuat.
 
+## "GDAL cannot be loaded: the managed assembly 'Parquet.dll' … is already loaded" (Windows)
+
+`gdal.dll` native mengimpor `parquet.dll` (Apache Arrow). Windows mencocokkan impor berdasarkan nama modul lebih dulu: jika modul dengan nama
+file itu sudah ada di proses, modul tersebut dipakai ulang, dari folder mana pun asalnya. Flag pencarian dan activation context tidak bisa
+mengubah aturan itu. Jika **Parquet.Net** (assembly managed-nya bernama `Parquet.dll`) dipakai sebelum GDAL, GDAL akan terikat ke file managed
+tersebut. Sejak 1.0.1, GDAL.Net mendeteksi kasus ini dan menampilkan pesan di atas, bukan `BadImageFormatException` tanpa penjelasan.
+
+Solusi: panggil `Gdal.Initialize()` saat aplikasi mulai, sebelum apa pun memakai Parquet.Net. Setelah itu keduanya bisa berjalan bersama.
+Jika urutannya tidak bisa diatur, jalankan GDAL di proses terpisah. Penulis Parquet lain seperti ParquetSharp, yang library native-nya bernama
+`ParquetSharpNative.dll`, tidak bentrok.
+
 ## "PROJ: proj_create_from_database: Cannot find proj.db"
 
 Ini berarti `Gdal.ProjDataPath` bernilai `null`. Paket runtime menyertakan `proj.db` di `runtimes/<rid>/native/maxrev.gdal.core.libshared/`. Jika Anda publish dengan tata letak khusus, salin folder itu ke samping aplikasi, atau set `PROJ_DATA` ke folder berisi `proj.db` sebelum panggilan GDAL pertama.

@@ -69,6 +69,7 @@ internal static class NativeLibraryLoader
             foreach (var name in names)
             {
                 var full = Path.Combine(dir, name);
+                if (scanGdalSonames && OperatingSystem.IsWindows() && File.Exists(full)) ThrowIfDependencyShadowed(dir);
                 if (File.Exists(full) && NativeLibrary.TryLoad(full, out var handle))
                 {
                     loadedPath = full;
@@ -107,6 +108,67 @@ internal static class NativeLibraryLoader
         loadedPath = null;
         return 0;
     }
+
+    /// <summary>
+    /// Windows resolves a DLL import by module name first: if a module with the same file name is already loaded, the loader reuses it
+    /// whatever its directory, and neither search flags nor activation contexts override that. A managed assembly with the same file
+    /// name as one of GDAL's native dependencies (Parquet.Net's <c>Parquet.dll</c> versus GDAL's <c>parquet.dll</c>) therefore breaks
+    /// GDAL with a bare <see cref="BadImageFormatException"/> when it is loaded first. This turns that into an explanation.
+    /// </summary>
+    private static void ThrowIfDependencyShadowed(string nativeDir)
+    {
+        var shadowed = FindShadowingManagedModules(nativeDir);
+        if (shadowed.Count == 0) return;
+        var (name, from) = shadowed[0];
+        throw new GdalException(
+            $"GDAL cannot be loaded: the managed assembly '{Path.GetFileName(from)}' ({from}) is already loaded and has the same file name as " +
+            $"GDAL's native dependency '{name}'. Windows reuses an already-loaded module by name, so GDAL would bind to the managed file. " +
+            "Call GDAL.Net.Gdal.Initialize() at application start-up, before the library that brings the managed assembly (for example " +
+            "Parquet.Net) is first used; after that both work side by side. Alternatively run GDAL in a separate process.");
+    }
+
+    /// <summary>
+    /// Managed assemblies currently loaded as Windows modules whose file name equals a native library in <paramref name="nativeDir"/>
+    /// (and that are not that library). Empty on other platforms.
+    /// </summary>
+    internal static IReadOnlyList<(string NativeName, string LoadedFrom)> FindShadowingManagedModules(string nativeDir)
+    {
+        if (!OperatingSystem.IsWindows() || !Directory.Exists(nativeDir)) return [];
+        var result = new List<(string, string)>();
+        foreach (var file in Directory.EnumerateFiles(nativeDir, "*.dll"))
+        {
+            var name = Path.GetFileName(file);
+            nint module = GetModuleHandleW(name);
+            if (module == 0) continue;
+            var buffer = new char[32768];
+            int len = GetModuleFileNameW(module, buffer, buffer.Length);
+            if (len <= 0) continue;
+            var loaded = new string(buffer, 0, len);
+            if (string.Equals(Path.GetFullPath(loaded), Path.GetFullPath(file), StringComparison.OrdinalIgnoreCase)) continue;
+            if (IsManagedImage(loaded)) result.Add((name, loaded));
+        }
+        return result;
+    }
+
+    private static bool IsManagedImage(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var pe = new System.Reflection.PortableExecutable.PEReader(stream);
+            return pe.PEHeaders.CorHeader is not null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or BadImageFormatException)
+        {
+            return false;
+        }
+    }
+
+    [DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern nint GetModuleHandleW(string moduleName);
+
+    [DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern int GetModuleFileNameW(nint module, [Out] char[] fileName, int size);
 
     private static IEnumerable<string> GdalCandidates()
     {

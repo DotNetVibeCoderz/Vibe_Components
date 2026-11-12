@@ -37,6 +37,11 @@ Legend: ✅ done · 🟡 in progress · ⏳ planned
   - Blazor and Avalonia component libraries and gallery apps finished, with screenshots.
   - Fixes: vsicurl HTTPS (bundled CA certificates), `MdArray.NoDataValue` error handling.
   - NuGet packages built.
+- **2026-11-12** (1.0.1)
+  - `NativeLibraryLoader` detects a managed assembly that shadows a native GDAL dependency by file name (Parquet.Net's `Parquet.dll`
+    versus GDAL's `parquet.dll`, which Windows resolves by module name) and throws a `GdalException` explaining it; `Gdal.Initialize()`
+    rethrows it instead of a `TypeInitializationException`. Load-order tests showed search flags and activation contexts cannot override the
+    loaded-module rule, so calling `Gdal.Initialize()` first remains the fix. Troubleshooting docs EN/ID, 2 tests.
 - **2026-10-26**
   - Solution scaffolded; core library, Rust kernels and the test suite are complete.
   - Gallery catalog finished: 30 use cases with synthetic Bandung DEM/scene data, Indonesian cities, land cover and a climate cube.

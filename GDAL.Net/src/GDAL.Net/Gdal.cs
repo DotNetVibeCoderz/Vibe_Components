@@ -9,7 +9,12 @@ namespace GDAL.Net;
 public static class Gdal
 {
     /// <summary>Forces native initialization (optional: it happens automatically on first use).</summary>
-    public static void Initialize() => _ = GdalNative.GDALGetDriverCount();
+    public static void Initialize()
+    {
+        try { _ = GdalNative.GDALGetDriverCount(); }
+        catch (TypeInitializationException e) when (e.GetBaseException() is GdalException g) { throw g; }
+        catch (GdalException) { throw; }
+    }
 
     /// <summary>GDAL release name, e.g. "3.13.3".</summary>
     public static string Version => Interop.PtrToString(GdalNative.GDALVersionInfo("RELEASE_NAME")) ?? "unknown";
