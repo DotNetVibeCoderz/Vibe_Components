@@ -16,6 +16,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.ML" Version="6.0.0" />
     <PackageReference Include="Microsoft.ML.FastTree" Version="6.0.0" />
+    <PackageReference Include="Gravicode.RLNet" Version="0.3.0" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
   </ItemGroup>
 </Project>

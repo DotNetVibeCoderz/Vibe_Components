@@ -10,7 +10,7 @@ Its home is the `AquaCulture.Net/` folder of the `DotNetVibeCoderz/Vibe_Componen
 
 ```bash
 dotnet build AquaCulture.Net.slnx
-dotnet test tests/AquaCulture.Tests                                               # 128 xUnit tests
+dotnet test tests/AquaCulture.Tests                                               # 132 xUnit tests
 dotnet test tests/AquaCulture.Tests --filter "FullyQualifiedName~WaterQualityTests"                 # one class
 dotnet test tests/AquaCulture.Tests --filter "FullyQualifiedName~WaterQualityTests.Do_saturation_matches_reference_tables"  # one test
 cd native/aqua-native && cargo test --release                                     # Rust kernels
@@ -42,6 +42,8 @@ A running gallery server locks DLLs and makes builds fail with MSB3027; stop `Aq
   table-only feeding. `PondOxygenBudget` respiration constants are calibrated to literature (shrimp ≈ 600, fish ≈ 300 mg O₂/kg/h at 30 °C).
 - v1.2 learning: `AquaCulture.AI.Learning` (`DoHistory`, `GbtDoForecaster` one FastTree per horizon with skill vs persistence and
   same-hour-yesterday, `FarmGrowthLearner`); `AquaCulture.AI.Torch` (`LstmDoForecaster`) references TorchSharp only, the tests add TorchSharp-cpu.
+- `AquaCulture.AI.Rl`: RLNet `AerationEnvironment` (hourly, `PondOxygenBudget.StepHour`) and `FeedingEnvironment` (daily, AquaGrowth +
+  TAN, uneaten feed is wasted) with SAC trainers; evaluations use episodes ≥ 10 000, never seen in training. RL tests take ~30 s each.
 - `PondTwin` forecasts dawn DO assuming installed aerators run at the species DO optimum; `DoCrashForecaster` damps the evening slope (τ = 5 h).
 - `AquaCulture.AI.Agent.AquaAgent` grounds every answer in tool calls (`AquaTools`). `LlmOptions.FromEnvironment()` reads `AQUA_LLM_PROVIDER`
   (azure|openai|anthropic|deepseek|hf|ollama|custom), `AQUA_LLM_ENDPOINT`, `AQUA_LLM_API_KEY`, `AQUA_LLM_MODEL`, `AQUA_LLM_WORKSPACE` (Anthropic org keys);

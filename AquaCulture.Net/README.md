@@ -108,7 +108,7 @@ dotnet new aqua-blazor -n MyFarm --species vaname
 
 ```bash
 dotnet build AquaCulture.Net.slnx
-dotnet test tests/AquaCulture.Tests                  # 128 tests
+dotnet test tests/AquaCulture.Tests                  # 132 tests
 cd native/aqua-native && cargo test --release        # Rust kernels
 pwsh build/build-native.ps1                          # copy kernel into AquaCulture.Native/runtimes/<rid>/native
 pwsh build/pack.ps1                                  # NuGet packages → artifacts/packages

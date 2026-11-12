@@ -25,7 +25,7 @@ so the versions below deepen them rather than introduce them.
 - Trained ONNX models: shrimp disease (WSSV/AHPND/black gill) and fish counting/sizing (YOLO) with datasets and training notebooks
 - HF.Net model hub integration; MediaPipeNet for fish pose/length estimation from video
 - ✅ Gradient-boosted (ML.NET FastTree) and LSTM (TorchSharp, `AquaCulture.AI.Torch`) DO forecasters with baseline skill; farm-data growth learning
-- Gravicode.RLNet policies for aeration scheduling and feeding with continuous actions
+- ✅ Gravicode.RLNet SAC policies for hourly aeration and daily feeding (continuous actions), evaluated against farmer baselines
 - AquaAgent memory, multi-pond context, voice (Indonesian ASR/TTS) for farmers
 
 ## v1.3: Science fidelity

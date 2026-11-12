@@ -63,30 +63,45 @@ public static class PondOxygenBudget
         double peakSolar = Math.Max(400, hourly.Max(h => h.SolarWm2));
         foreach (var (h, i) in hourly.Select((h, i) => (h, i)))
         {
-            double t = tw[i];
-            double cs = WaterChemistry.OxygenSaturation(t, p.SalinityPpt, p.AltitudeM);
-            double theta = Math.Pow(1.047, t - 20);
-            double light = h.SolarWm2 / (h.SolarWm2 + 250) * (1 + 250 / peakSolar);
-            double photo = 0.018 * p.ChlorophyllUgL * Math.Min(1.1, light) * theta;                                 // mg/L/h
-            double plankton = 0.004 * p.ChlorophyllUgL * theta;
-            double animals = p.BiomassKg * AnimalRespiration(p.Group, p.MeanWeightG, t) / (p.VolumeM3 * 1000);      // mg/L/h
-            double sod = p.SedimentOxygenDemand / 24 / p.DepthM * theta;
-            double reaer = WindTransferVelocity(h.WindMs) / 24 / p.DepthM * (cs - c);
             bool on = p.AeratorKw > 0 && aeratorOn(h.Time, c);
-            double aer = 0;
-            if (on)
-            {
-                double cs20 = WaterChemistry.OxygenSaturation(20, 0);
-                double aotr = p.AeratorKw * p.SaeKgPerKwh * Math.Max(0, cs - c) / cs20 * Math.Pow(1.024, t - 20) * 0.9; // kg/h
-                aer = aotr * 1e6 / (p.VolumeM3 * 1000);
-                kwh += p.AeratorKw;
-            }
-            double resp = plankton + animals + sod;
-            c = Math.Max(0, c + photo - resp + reaer + aer);
-            hours.Add(new OxygenHour(h.Time, Math.Round(c, 3), Math.Round(t, 2), Math.Round(cs, 2), photo, resp, reaer, aer, on));
+            var step = StepHour(p, h, tw[i], c, on ? 1 : 0, peakSolar);
+            kwh += step.AeratorKwh;
+            c = step.Do;
+            hours.Add(step.Hour);
         }
         var min = hours.MinBy(x => x.Do)!;
         return new OxygenBudgetResult(hours, min.Do, min.Time, hours.Max(x => x.Do), kwh);
+    }
+
+    /// <summary>
+    /// One hour of the budget: photosynthesis, plankton/animal/sediment respiration, wind reaeration and mechanical aeration at
+    /// <paramref name="aeratorFraction"/> of the installed power (0–1, a variable-speed drive or the share of paddle wheels running).
+    /// <paramref name="peakSolar"/> is the day's peak radiation used to scale the light response (W/m²).
+    /// </summary>
+    public static (double Do, double AeratorKwh, OxygenHour Hour) StepHour(OxygenBudgetParameters p, WeatherObservation h, double waterTempC, double doNow,
+        double aeratorFraction, double peakSolar = 900)
+    {
+        double t = waterTempC, c = doNow, f = Math.Clamp(aeratorFraction, 0, 1);
+        double cs = WaterChemistry.OxygenSaturation(t, p.SalinityPpt, p.AltitudeM);
+        double theta = Math.Pow(1.047, t - 20);
+        peakSolar = Math.Max(400, peakSolar);
+        double light = h.SolarWm2 / (h.SolarWm2 + 250) * (1 + 250 / peakSolar);
+        double photo = 0.018 * p.ChlorophyllUgL * Math.Min(1.1, light) * theta;                                 // mg/L/h
+        double plankton = 0.004 * p.ChlorophyllUgL * theta;
+        double animals = p.BiomassKg * AnimalRespiration(p.Group, p.MeanWeightG, t) / (p.VolumeM3 * 1000);      // mg/L/h
+        double sod = p.SedimentOxygenDemand / 24 / p.DepthM * theta;
+        double reaer = WindTransferVelocity(h.WindMs) / 24 / p.DepthM * (cs - c);
+        double aer = 0, kwh = 0;
+        if (p.AeratorKw > 0 && f > 0)
+        {
+            double cs20 = WaterChemistry.OxygenSaturation(20, 0);
+            double aotr = f * p.AeratorKw * p.SaeKgPerKwh * Math.Max(0, cs - c) / cs20 * Math.Pow(1.024, t - 20) * 0.9; // kg/h
+            aer = aotr * 1e6 / (p.VolumeM3 * 1000);
+            kwh = f * p.AeratorKw;
+        }
+        double resp = plankton + animals + sod;
+        c = Math.Max(0, c + photo - resp + reaer + aer);
+        return (c, kwh, new OxygenHour(h.Time, Math.Round(c, 3), Math.Round(t, 2), Math.Round(cs, 2), photo, resp, reaer, aer, f > 0));
     }
 
     /// <summary>Aerators run whenever DO falls below a set-point (DO-controlled aeration).</summary>

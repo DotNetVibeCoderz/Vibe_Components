@@ -45,6 +45,38 @@ var predictor = FarmGrowthLearner.Fit(SpeciesCatalog.Vaname, rows);
   dawn DO, NH₃, density and the feed actually given compared with the feeding table). In the tests, a farm that grows 30 % faster than the
   catalogue halves the hold-out error after five cycles.
 
+## Reinforcement learning with continuous actions (v1.2, Gravicode.RLNet)
+
+```csharp
+using AquaCulture.AI.Rl;
+
+// hourly aeration: action = aerator power fraction 0–1, reward = −(PLN tariff × kWh + cost of DO stress)
+var aeration = AerationPolicy.Train(steps: 20_000);                 // SAC, about a minute of CPU
+var result = AerationEnvironment.Evaluate("sac", aeration.Decide);
+var baseline = AerationEnvironment.Evaluate("set-point 5", AerationEnvironment.SetPoint(5));
+
+// daily feeding: action = ration factor 0.4–1.3 of the feeding table; uneaten feed costs money, adds TAN and lowers dawn DO
+var feeding = FeedingRlPolicy.Train(steps: 15_000);
+var f = FeedingEnvironment.Evaluate("sac", feeding.Decide);
+var table = FeedingEnvironment.Evaluate("table + DO/NH3 corrections", FeedingEnvironment.AdjustedTable);
+```
+
+Both environments are RLNet `ContinuousEnvironmentBase` classes driven by the platform's own models: `PondOxygenBudget.StepHour` with
+synthetic tropical weather, and the AquaGrowth simulator with a pond TAN balance. Every evaluation runs on held-out episodes, compared with
+what farmers actually do.
+
+| Problem | Policy | Result (mean per episode) |
+|---|---|---|
+| Aeration, 72 h | always on | 482,585 IDR, 0 h below critical DO |
+| | night timer 22–06 | 450,243 IDR, 4.8 h below critical |
+| | set point 5 mg/L | 207,005 IDR, 0 h below critical |
+| | **SAC, 20k steps** | 225,034 IDR, 0 h below critical: it learned set-point-like control without being given a set point |
+| Feeding, 60 days | table with DO/NH₃ corrections | 118.6 M IDR profit, 10.9 kg wasted |
+| | **SAC, 15k steps** | **134.7 M IDR profit (+14 %)**, 7.5 kg wasted |
+
+With a linear electricity cost, a well-tuned set point is already close to optimal for aeration. RL pays off when the trade-off is
+richer, as in feeding. Re-train when tariffs, prices or penalties change.
+
 ## AquaAgent
 
 ```csharp

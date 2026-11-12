@@ -21,7 +21,7 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | AquaCulture.IoT.OpcUa (v1.1) | ✅ | OPC UA reader/writer (OPC Foundation 1.5.378) and pond simulator; integration-tested client ↔ server |
 | AquaCulture.IoT.IoTCom (v1.1, preview) | ✅ | IoTCom.Net 0.22 preview: Modbus transport (in-memory server test), SenML JSON/CBOR, NMEA MTW/DPT/DBT + drift, AIS zone watch, Sparkplug B (tested against a local broker and host); v1.2: LoRaWAN network server, LwM2M gateway, M-Bus energy (all tested against IoTCom.Net simulators) |
 | AquaCulture.AI.Torch (v1.2) | ✅ | LSTM DO forecaster on TorchSharp 0.107 (tests use TorchSharp-cpu) |
-| AquaCulture.AI | ✅ | GBT growth, logistic mortality, disease/harvest outlook, Q-learning feed policy, ML.NET, ONNX, v1.2: `GbtDoForecaster` (ML.NET FastTree, skill vs persistence/diurnal), `FarmGrowthLearner`; AquaAgent (live-tested: Azure OpenAI gpt-5-mini, Anthropic claude-sonnet-5-5) |
+| AquaCulture.AI | ✅ | GBT growth, logistic mortality, disease/harvest outlook, Q-learning feed policy, ML.NET, ONNX, v1.2: SAC aeration/feeding environments (RLNet), `GbtDoForecaster` (ML.NET FastTree, skill vs persistence/diurnal), `FarmGrowthLearner`; AquaAgent (live-tested: Azure OpenAI gpt-5-mini, Anthropic claude-sonnet-5-5) |
 | AquaCulture.ComputerVision | 🟡 | YOLO/ONNX decode + NMS, model-free counting/sizing/screening, OpenCvSharp interop; trained disease models ⏳ v1.2 |
 | AquaCulture.Forecasting | ✅ | Holt, Holt–Winters, AR, auto; dawn-DO forecast; Monte-Carlo harvest |
 | AquaCulture.DigitalTwin | ✅ | Pond/farm twins, explained decisions, actuator commands, what-if |
@@ -29,7 +29,7 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | AquaCulture.Reporting | ✅ | XLSX/PDF/DOCX/CSV/JSON/HTML/MD (no third-party libs), GAP/CBIB/ASC/BAP |
 | AquaCulture.Visualization / Blazor | ✅ | SVG/PNG charts; 6 domain components incl. Three.js 3D pond |
 | AquaCulture.Native (Rust) | ✅ | 7 Rust tests; bit-identical managed fallback; CI builds 5 RIDs |
-| Tests | ✅ | 128 xUnit tests (reference values, native/managed parity, determinism, file-format validity, every gallery scenario) |
+| Tests | ✅ | 132 xUnit tests (reference values, native/managed parity, determinism, file-format validity, every gallery scenario) |
 | Gallery: Blazor | ✅ | 17 demos, EN/ID, light/dark, screenshots in docs/images |
 | Gallery: Avalonia | ✅ | 17 demos, ThreeNet 3D pond (interactive + offscreen), headless screenshot mode |
 | CLI (`aqua`) | ✅ | 21 commands (v1.1: bmkg, history, marine, export, opcua) |
@@ -53,3 +53,6 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
   drops ONNX Runtime's iOS/Android bundles (233 → 118 MB, below the 1.0.0 size of 167 MB). `pack.ps1` reads the version from `Directory.Build.props`. Version 1.1.0.
 - **2026-11-12**: IoTCom.Net is on nuget.org (id `IoTCom.Net`, preview only; the search index did not list it, so it was first thought missing). Added
   `AquaCulture.IoT.IoTCom`, packed as `-preview.1` so a stable package never depends on a prerelease; pinned System.Formats.Cbor 10.0.15 (advisory on 10.0.12).
+- **2026-11-12**: v1.2 RL: `PondOxygenBudget.StepHour` extracted (aerator power fraction; `Simulate` unchanged, all reference tests pass).
+  First feeding environment was degenerate (feed above appetite had no cost); it now wastes uneaten feed (cost, TAN, lower dawn DO).
+  SAC aeration ≈ tuned set point (no critical-DO hours); SAC feeding +14 % profit over the adjusted feeding table.
