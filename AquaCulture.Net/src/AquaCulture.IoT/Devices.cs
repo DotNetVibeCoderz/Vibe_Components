@@ -19,6 +19,12 @@ public enum SensorKind
     Power,
     /// <summary>Cumulative electrical energy (kWh).</summary>
     Energy,
+    /// <summary>Secchi-disk transparency (cm), a field measurement of plankton density.</summary>
+    Transparency,
+    /// <summary>Average body weight from a cast-net or tray sampling (g per animal).</summary>
+    AverageWeight,
+    /// <summary>Dead animals counted (animals since the previous count).</summary>
+    Mortality,
 }
 
 /// <summary>A sensor reading.</summary>
@@ -44,6 +50,9 @@ public sealed record SensorReading(string DeviceId, string PondId, SensorKind Ki
         SensorKind.Rssi => "dBm",
         SensorKind.Power => "kW",
         SensorKind.Energy => "kWh",
+        SensorKind.Transparency => "cm",
+        SensorKind.AverageWeight => "g",
+        SensorKind.Mortality => "animals",
         _ => "",
     };
 
@@ -76,6 +85,9 @@ public sealed record SensorReading(string DeviceId, string PondId, SensorKind Ki
             case "wind": kind = SensorKind.WindSpeed; return true;
             case "solar" or "rad": kind = SensorKind.SolarRadiation; return true;
             case "bat" or "vbat": kind = SensorKind.Battery; return true;
+            case "secchi" or "kecerahan": kind = SensorKind.Transparency; return true;
+            case "abw" or "mbw" or "berat_rata": kind = SensorKind.AverageWeight; return true;
+            case "dead" or "mati" or "kematian": kind = SensorKind.Mortality; return true;
         }
         return false;
     }

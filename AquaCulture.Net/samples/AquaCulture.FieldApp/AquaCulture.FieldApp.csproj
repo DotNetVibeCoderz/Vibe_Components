@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    AquaCulture Field: .NET MAUI app for pond-side sampling (Android, Windows; iOS builds on a Mac by adding net10.0-ios).
+    Made by Gravicode Studios, led by Kang Fadhil.
+    Needs the MAUI workload:  dotnet workload install maui-android maui-windows
+      dotnet build samples/AquaCulture.FieldApp -f net10.0-android
+      dotnet build samples/AquaCulture.FieldApp -f net10.0-windows10.0.19041.0
+  -->
+  <PropertyGroup>
+    <!-- Directory.Build.props sets TargetFramework=net10.0 for the repo; this app is multi-targeted instead -->
+    <TargetFramework></TargetFramework>
+    <TargetFrameworks>net10.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>AquaCulture.FieldApp</RootNamespace>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <ApplicationTitle>AquaCulture Field</ApplicationTitle>
+    <ApplicationId>com.gravicode.aquaculture.field</ApplicationId>
+    <ApplicationDisplayVersion>$(VersionPrefix)</ApplicationDisplayVersion>
+    <ApplicationVersion>21</ApplicationVersion>
+    <WindowsPackageType>None</WindowsPackageType>
+
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">23.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+    <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#0E6E7E" />
+    <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#0E6E7E" BaseSize="128,128" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AquaCulture.FieldApp.Core/AquaCulture.FieldApp.Core.csproj" />
+  </ItemGroup>
+</Project>

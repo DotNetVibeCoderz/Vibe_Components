@@ -1,4 +1,4 @@
-# Edge gateway, offline sync and performance (v2.1)
+# Edge gateway, field app, offline sync and performance (v2.1)
 
 *Made by Gravicode Studios, led by Kang Fadhil.* · [Bahasa Indonesia](../id/edge-platform.md)
 
@@ -49,6 +49,35 @@ Restart=always
 WantedBy=multi-user.target
 ```
 
+## Field-sampling app (`samples/AquaCulture.FieldApp`, .NET MAUI)
+
+For technicians on the pond bank: enter a visit (hand-held meter or test kit, a cast-net sampling, dead counted), get the
+assessment at once, and save it on the phone. The app works without signal and uploads over the same sync as the gateway.
+
+| On screen | From |
+|---|---|
+| WQI, class, NH₃, issues | `WaterQualityIndex.Assess` for the pond's species |
+| Dosed actions (lime, aeration, water exchange, …) | `RecommendationEngine` with the pond's volume and aeration |
+| Average weight, biomass, growth since the last visit | the cast-net sample (`kg × 1000 / count`) and the journal |
+| Today's feed (kg, meals, adjustments) | `FeedingCalculator.Plan`, reduced for the DO and NH₃ just measured |
+| Typing checks ("pH 78 is outside 4–11") | `FieldSample.Check` |
+
+- Saved samples go into an `EdgeOutbox` as readings, including the new kinds `Transparency` (Secchi, cm), `AverageWeight` (g) and
+  `Mortality`. They are uploaded to `aqua-cloud` by `CloudSyncClient` when the phone has internet: after saving, when the app resumes,
+  or with "Sync now". The device id is `field-xxxxxxxx`.
+- The API key is kept in `SecureStorage`. History can be exported as CSV through the share sheet.
+- Ponds are edited as lines of `id, name, species, area m², depth m, population, aerator kW`.
+- The logic lives in `samples/AquaCulture.FieldApp.Core` (net10.0, unit-tested); the MAUI pages only render it.
+
+```bash
+dotnet workload install maui-android maui-windows
+dotnet build samples/AquaCulture.FieldApp -f net10.0-windows10.0.19041.0
+dotnet publish samples/AquaCulture.FieldApp -f net10.0-android -c Release -p:AndroidPackageFormats=apk
+```
+
+CI builds the Windows target and publishes an Android APK as the `aquaculture-field-android` artifact (signed with the debug key;
+sign with your own key before distributing). iOS builds on a Mac after adding `net10.0-ios` to `TargetFrameworks`.
+
 ## Offline-first sync (`AquaCulture.IoT`, `AquaCulture.Data`, `aqua-cloud`)
 
 ```csharp
@@ -94,7 +123,7 @@ dotnet run -c Release --project benchmarks/AquaCulture.Benchmarks -- --budgets b
 `budgets.json` holds a ceiling for each benchmark: mean time per operation in µs, and bytes allocated per operation. The run
 exits with code 1 when a budget is exceeded or a budgeted benchmark did not run, and writes a table to the GitHub job summary.
 
-- Time budgets are about 4× a desktop run, because hosted runners are slower and noisy.
+- Time budgets are the larger of 3× the CI runner and 1.5× a desktop run, so a slowdown of about 3× fails CI while runner noise does not.
 - Allocation budgets are tight, because allocations are deterministic. The kernels must allocate nothing.
 - Release publishing waits for the budgets.
 

@@ -9,7 +9,7 @@
 | [Modul](modul.md) | Fungsi setiap paket, tipe utama dan dasar ilmiahnya |
 | [IoT dan kembaran digital](iot-kembaran.md) | Perangkat, topik MQTT, codec LoRaWAN, peta Modbus, analitik edge, kembaran kolam dan tambak |
 | [Data dan konektor](data-konektor.md) | Penyimpanan SQLite/EF Core, ekspor Parquet/CSV, BMKG, NASA POWER, prakiraan laut, Modbus RTU serial, ChirpStack, OPC UA, IoTCom.Net (SenML, NMEA/AIS, Sparkplug B), warna air GDAL |
-| [Gateway edge, sinkronisasi, dan performa](edge-platform.md) | v2.1: gateway NativeAOT untuk Raspberry Pi, sinkronisasi offline-first dengan cloud, benchmark dan anggaran performa |
+| [Gateway edge, aplikasi lapangan, sinkronisasi, dan performa](edge-platform.md) | v2.1: gateway NativeAOT untuk Raspberry Pi, aplikasi sampling lapangan MAUI, sinkronisasi offline-first dengan cloud, benchmark dan anggaran performa |
 | [Edisi enterprise](enterprise.md) | v2.0: ketertelusuran GS1/EPCIS, akuntansi ESG, hatchery, ERP, copilot lintas tambak |
 | [AI dan AquaAgent](agen-ai.md) | Model prediktif, kebijakan pakan RL, ML.NET/ONNX, penyedia LLM dan alat |
 | [Kernel native](native.md) | Crate Rust, C ABI, fallback managed, build untuk platform lain |

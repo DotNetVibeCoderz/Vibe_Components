@@ -1,4 +1,4 @@
-# Gateway edge, sinkronisasi offline, dan performa (v2.1)
+# Gateway edge, aplikasi lapangan, sinkronisasi offline, dan performa (v2.1)
 
 *Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil.* · [English](../en/edge-platform.md)
 
@@ -57,6 +57,37 @@ Restart=always
 WantedBy=multi-user.target
 ```
 
+## Aplikasi sampling lapangan (`samples/AquaCulture.FieldApp`, .NET MAUI)
+
+Aplikasi ini untuk teknisi di pematang kolam. Teknisi mencatat kunjungan: hasil alat ukur genggam atau test kit, sampling jala, dan
+jumlah udang/ikan mati. Penilaian langsung muncul, lalu data disimpan di ponsel. Aplikasi tetap jalan tanpa sinyal dan mengunggah
+data lewat sinkronisasi yang sama dengan gateway.
+
+| Yang tampil | Sumbernya |
+|---|---|
+| WQI, kelas, NH₃, masalah | `WaterQualityIndex.Assess` untuk spesies di kolam itu |
+| Tindakan beserta dosisnya (kapur, aerasi, ganti air, …) | `RecommendationEngine` dengan volume dan aerasi kolam |
+| Berat rata-rata, biomassa, pertumbuhan sejak kunjungan terakhir | sampling jala (`kg × 1000 / jumlah ekor`) dan riwayat |
+| Pakan hari ini (kg, frekuensi, penyesuaian) | `FeedingCalculator.Plan`, dikurangi sesuai DO dan NH₃ yang baru diukur |
+| Pemeriksaan salah ketik ("pH 78 di luar 4–11") | `FieldSample.Check` |
+
+- Sampel yang disimpan masuk ke `EdgeOutbox` sebagai pembacaan, termasuk jenis baru `Transparency` (kecerahan Secchi, cm),
+  `AverageWeight` (g), dan `Mortality`. Data diunggah ke `aqua-cloud` oleh `CloudSyncClient` saat ponsel tersambung internet: setelah
+  menyimpan, saat aplikasi dibuka kembali, atau lewat tombol "Sinkron sekarang". Id perangkatnya `field-xxxxxxxx`.
+- API key disimpan di `SecureStorage`. Riwayat bisa diekspor sebagai CSV lewat menu berbagi.
+- Daftar kolam diisi per baris dengan format `id, nama, spesies, luas m², kedalaman m, populasi, kincir kW`.
+- Logikanya ada di `samples/AquaCulture.FieldApp.Core` (net10.0, punya unit test). Halaman MAUI hanya menampilkan hasilnya.
+
+```bash
+dotnet workload install maui-android maui-windows
+dotnet build samples/AquaCulture.FieldApp -f net10.0-windows10.0.19041.0
+dotnet publish samples/AquaCulture.FieldApp -f net10.0-android -c Release -p:AndroidPackageFormats=apk
+```
+
+CI mem-build target Windows dan mem-publish APK Android sebagai artifact `aquaculture-field-android`. APK itu ditandatangani dengan
+debug key, jadi tanda tangani dengan kunci Anda sendiri sebelum dibagikan. iOS bisa di-build di Mac setelah `net10.0-ios`
+ditambahkan ke `TargetFrameworks`.
+
 ## Sinkronisasi offline-first (`AquaCulture.IoT`, `AquaCulture.Data`, `aqua-cloud`)
 
 ```csharp
@@ -111,7 +142,7 @@ dotnet run -c Release --project benchmarks/AquaCulture.Benchmarks -- --budgets b
 Run gagal (exit code 1) jika ada anggaran yang terlampaui atau ada benchmark beranggaran yang tidak berjalan. Hasilnya ditulis
 sebagai tabel di ringkasan job GitHub.
 
-- Anggaran waktu sekitar 4× hasil di desktop, karena runner hosted lebih lambat dan hasilnya fluktuatif.
+- Anggaran waktu adalah nilai terbesar antara 3× hasil di runner CI dan 1,5× hasil di desktop. Perlambatan sekitar 3× akan menggagalkan CI, tetapi fluktuasi runner tidak.
 - Anggaran alokasi dibuat ketat karena jumlah alokasi deterministik. Kernel tidak boleh mengalokasikan memori sama sekali.
 - Publish rilis menunggu sampai anggaran ini lolos.
 

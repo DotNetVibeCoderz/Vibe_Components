@@ -9,6 +9,7 @@
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/AquaCulture.EdgeGateway/AquaCulture.EdgeGateway.csproj" />
+    <Project Path="samples/AquaCulture.FieldApp.Core/AquaCulture.FieldApp.Core.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/AquaCulture.AI.Torch/AquaCulture.AI.Torch.csproj" />

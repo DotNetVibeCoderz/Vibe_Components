@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Logic of the field-sampling app (UI-free, tested). Made by Gravicode Studios, led by Kang Fadhil. -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>AquaCulture.FieldApp</RootNamespace>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/AquaCulture.IoT/AquaCulture.IoT.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.WaterQuality/AquaCulture.WaterQuality.csproj" />
+    <ProjectReference Include="../../src/AquaCulture.Feeding/AquaCulture.Feeding.csproj" />
+  </ItemGroup>
+</Project>

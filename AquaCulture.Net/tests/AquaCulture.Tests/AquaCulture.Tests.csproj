@@ -17,6 +17,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/AquaCulture.AI/AquaCulture.AI.csproj" />
+    <ProjectReference Include="../../samples/AquaCulture.FieldApp.Core/AquaCulture.FieldApp.Core.csproj" />
     <ProjectReference Include="../../src/AquaCulture.AI.Torch/AquaCulture.AI.Torch.csproj" />
     <ProjectReference Include="../../gallery/AquaCulture.Gallery.Shared/AquaCulture.Gallery.Shared.csproj" />
     <ProjectReference Include="../../src/AquaCulture.ComputerVision/AquaCulture.ComputerVision.csproj" />
