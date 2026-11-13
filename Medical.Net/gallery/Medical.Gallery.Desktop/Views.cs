@@ -30,6 +30,8 @@ internal static class Views
     private sealed class TermState { public string Query = "gagal jantung"; }
     private sealed class RiskState { public double Det = 0.7; }
     private sealed class PrivacyState { public bool Pseudo; }
+    private sealed class OrderState { public string Type = "ORM"; public bool Broken; }
+    private sealed class ClaimState { public bool Broken; }
     private sealed class ChatState
     {
         public ClinicalAssistant Assistant = Scenarios.Assistant();
@@ -237,6 +239,70 @@ internal static class Views
                         Table(["MRN", T("Name", "Nama"), T("City", "Kota")], v.Search.Select(p => new[] { p.Mrn, p.Name.Full, p.City ?? "" }), 0), v.Provider),
                     Panel(T("Audit trail", "Jejak audit"), Table([T("User", "Pengguna"), T("Action", "Aksi"), T("Resource", "Sumber")],
                         v.Audit.Select(a => new[] { a.User, a.Action.ToString(), $"{a.Resource} {a.PatientId}" }))));
+            }
+            case "fhir-server":
+            {
+                var v = Scenarios.FhirServer();
+                var checks = Stack(8, v.Validation.Select(r => Alert(r.Ok ? "info" : "critical", r.Profile, r.Resource,
+                    r.Ok ? T("Conforms to the profile.", "Sesuai profil.") : string.Join("\n", r.Issues.Take(3)))).ToArray());
+                return Columns([1, 1],
+                    Panel(T("Search", "Pencarian"), Stack(10,
+                        Table([T("Request", "Permintaan"), T("Match", "Cocok"), "Incl."], v.Queries.Select(q => new[] { $"{q.Query.Replace("&", "\n      &")}\n  → {q.Note}", $"{q.Total}", q.Included == 0 ? "—" : $"{q.Included}" }), 0, 1, 2),
+                        Eyebrow("_history · Patient/pat-00002"),
+                        Table(["vid", T("Method", "Metode"), "lastUpdated", T("Change", "Perubahan")], v.History.Select(h => new[] { h.Version, h.Method, h.LastUpdated, h.Change }), 0, 1, 2)),
+                        $"{v.Stored} {T("resources stored", "resource tersimpan")}"),
+                    Panel(T("Profile validation", "Validasi profil"), Stack(10, checks, Eyebrow("SMART on FHIR · scopes"),
+                        Table(["scope", T("Meaning", "Arti")], v.Scopes.Select(sc => new[] { sc.Scope, sc.Normalised is { } n && n != sc.Scope ? $"{sc.Meaning[lang]}  → {n}" : sc.Meaning[lang] }), 0)), "Firely · hl7.fhir.r4.core"));
+            }
+            case "hl7-orders":
+            {
+                var st = S<OrderState>();
+                var v = Scenarios.Hl7Orders(st.Type);
+                var c = st.Broken ? v.Broken : v.Conformance;
+                var issues = c.Issues.Count == 0
+                    ? Alert("info", "OK", T("All segments and fields satisfy the profile.", "Semua segmen dan field memenuhi profil."), T("Usage, cardinality, length and HL7 tables checked.", "Usage, kardinalitas, panjang dan tabel HL7 diperiksa."))
+                    : Stack(6, c.Issues.Select(i => Alert(i.Severity == Medical.Hl7.Conformance.ConformanceSeverity.Error ? "critical" : "warning", i.Location, i.Message, "")).ToArray());
+                return Stack(16,
+                    Controls(Segmented([("ORM", "ORM^O01"), ("OML", "OML^O21"), ("SIU", "SIU^S12"), ("MDM", "MDM^T02")], st.Type, x => { st.Type = x; rerender(); }),
+                        Segmented([(false, T("As built", "Sesuai bentukan")), (true, T("Broken", "Dirusak"))], st.Broken, x => { st.Broken = x; rerender(); })),
+                    Columns([1, 1],
+                        Panel($"{c.Profile} · HL7 v2.5.1", Mono(st.Broken ? v.BrokenEr7 : v.Er7, 11)),
+                        Panel(T("Conformance", "Kesesuaian"), Stack(10, issues, Eyebrow(T("Mapped to FHIR", "Dipetakan ke FHIR")),
+                            Table(["Resource", T("Summary", "Ringkasan")], v.Fhir.Select(f => new[] { f.Resource, f.Summary }), 0)),
+                            c.IsValid ? T("conformant", "sesuai") : T("not conformant", "tidak sesuai"))));
+            }
+            case "satusehat":
+            {
+                var v = Scenarios.SatuSehat();
+                return Columns([3, 2],
+                    Panel(T("Transaction bundle", "Bundle transaksi"), Stack(10,
+                        Table(["Resource", T("References", "Referensi"), T("Content", "Isi")], v.Entries.Select(e => new[] { e.Resource, e.Links.Replace(", ", "\n"), e.Summary }), 0, 1),
+                        Stack(6, v.Warnings.Select(w => Alert("warning", "KFA", w, "")).ToArray())),
+                        $"{v.Entries.Count} {T("entries", "entri")} · {v.Medications} {T("KFA medications", "obat KFA")}"),
+                    Panel("POST /fhir-r4/v1", Mono(v.Json[..Math.Min(2600, v.Json.Length)] + "\n…", 11), "Bearer · RetryHandler"));
+            }
+            case "bpjs":
+            {
+                var st = S<ClaimState>();
+                var v = Scenarios.Bpjs(broken: st.Broken);
+                var idr = System.Globalization.CultureInfo.GetCultureInfo("id-ID");
+                int errors = v.Issues.Count(i => i.Severity == Medical.Bpjs.InaCbg.ClaimIssueSeverity.Error);
+                var checks = v.Issues.Count == 0
+                    ? Alert("info", "OK", T("Ready for the INA-CBG grouper.", "Siap untuk grouper INA-CBG."), "SEP, ICD-10 / ICD-9-CM, LOS, tarif")
+                    : Stack(6, v.Issues.Select(i => Alert(i.Severity == Medical.Bpjs.InaCbg.ClaimIssueSeverity.Error ? "critical" : "warning", i.Field, i.Message[lang], "")).ToArray());
+                return Stack(16,
+                    Controls(Segmented([(false, T("Clean claim", "Klaim bersih")), (true, T("Coding errors", "Kesalahan koding"))], st.Broken, x => { st.Broken = x; rerender(); })),
+                    Columns([1, 1],
+                        Panel("E-Klaim · set_claim_data", Stack(10,
+                            Table([T("Field", "Kolom"), T("Value", "Nilai")], v.Data.Select(d => new[] { d.Field, d.Value }), 0, 1),
+                            Eyebrow($"tarif_rs · Rp {v.Claim.Tariff.Total.ToString("N0", idr)}"),
+                            Table([T("Component", "Komponen"), "Rp"], v.Tariff.Select(t => new[] { t.Component, t.Amount.ToString("N0", idr) }), 0, 1)),
+                            $"LOS {v.Claim.LengthOfStay} {T("days", "hari")}"),
+                        Panel(T("Pre-grouping checks", "Pemeriksaan sebelum grouping"), Stack(10, checks,
+                            Eyebrow(T("VClaim request headers (demo credentials)", "Header VClaim (kredensial demo)")),
+                            Table(["Header", T("Value", "Nilai")], v.Headers.Select(h => new[] { h.Header, h.Value }), 0, 1),
+                            Eyebrow($"LZ-String · {v.PlainLength} → {v.Compressed.Length}"), Mono(v.Compressed, 11)),
+                            $"{errors} {T("errors", "galat")}")));
             }
             default:
                 return Text(T("Pick a use case from the list.", "Pilih kasus dari daftar."));

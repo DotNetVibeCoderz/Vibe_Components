@@ -1,10 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Medical.Net FHIR R4 on the Firely .NET SDK: domain ↔ FHIR mapping (Patient, Encounter, Observation, Condition, MedicationRequest, AllergyIntolerance), transaction and International Patient Summary bundles, JSON round-trip, validation, FHIRPath, an in-memory FHIR store and an Indonesian SATUSEHAT client.</Description>
+    <Description>Medical.Net FHIR R4 on the Firely .NET SDK: domain ↔ FHIR mapping (Patient, Encounter, Observation, Condition, MedicationRequest, AllergyIntolerance), transaction and International Patient Summary bundles, JSON round-trip, validation, FHIRPath, a versioned FHIR repository (search, _include/_revinclude, _history, transactions), profile validation (Firely validator, IG packages), SMART on FHIR client and an Indonesian SATUSEHAT workflow client with KFA and retry/backoff.</Description>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Hl7.Fhir.R4" Version="6.8.0" />
+    <PackageReference Include="Hl7.Fhir.Specification.R4" Version="6.8.0" />
+    <PackageReference Include="Firely.Fhir.Validation.R4" Version="3.6.0" />
+    <PackageReference Include="Firely.Fhir.Packages" Version="6.2.0" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="$(MsExtVersion)" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="buildTransitive/Medical.Fhir.targets" Pack="true" PackagePath="buildTransitive/;build/" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Medical.Core/Medical.Core.csproj" />

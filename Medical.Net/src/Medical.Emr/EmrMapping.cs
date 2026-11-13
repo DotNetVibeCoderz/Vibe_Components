@@ -1,6 +1,7 @@
 using Medical.Core;
 using Medical.Emr.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -100,6 +101,8 @@ public sealed class EmrOptions
     public string? Redis { get; set; }
     /// <summary>Persist audit events in the EMR database instead of memory.</summary>
     public bool PersistAudit { get; set; } = true;
+    /// <summary>Store FHIR resources in the database (<see cref="Fhir.EfFhirRepository"/>) instead of memory.</summary>
+    public bool PersistFhir { get; set; } = true;
 }
 
 public static class EmrBuilderExtensions
@@ -120,6 +123,20 @@ public static class EmrBuilderExtensions
                 };
             }
             s.AddPooledDbContextFactory<MedicalDbContext>(Options);
+            if (o.PersistFhir)
+            {
+                s.AddPooledDbContextFactory<Fhir.FhirDbContext>(b =>
+                {
+                    _ = o.Provider switch
+                    {
+                        EmrProvider.SqlServer => b.UseSqlServer(o.ConnectionString, x => x.EnableRetryOnFailure()),
+                        EmrProvider.InMemory => b.UseInMemoryDatabase(o.ConnectionString + "-fhir"),
+                        _ => b.UseSqlite(o.ConnectionString),
+                    };
+                });
+                s.TryAddSingleton(sp => new Fhir.EfFhirRepository(sp.GetRequiredService<IDbContextFactory<Fhir.FhirDbContext>>(), sp.GetService<TimeProvider>()));
+                s.Replace(ServiceDescriptor.Singleton<Medical.Fhir.Search.IFhirRepository>(sp => sp.GetRequiredService<Fhir.EfFhirRepository>()));
+            }
             s.TryAddScoped(sp => sp.GetRequiredService<IDbContextFactory<MedicalDbContext>>().CreateDbContext());
             if (o.Redis is { } redis) s.AddStackExchangeRedisCache(r => { r.Configuration = redis; r.InstanceName = "mednet:"; });
             else s.AddDistributedMemoryCache();
@@ -128,10 +145,26 @@ public static class EmrBuilderExtensions
                 sp.GetService<IDistributedCache>(), sp.GetService<TimeProvider>()));
         });
 
-    /// <summary>Creates the schema if missing (use EF migrations for production deployments).</summary>
+    /// <summary>Creates the EMR and FHIR schemas if missing (use EF migrations for production deployments).</summary>
     public static async Task EnsureEmrDatabaseAsync(this IServiceProvider sp, CancellationToken ct = default)
     {
-        await using var db = await sp.GetRequiredService<IDbContextFactory<MedicalDbContext>>().CreateDbContextAsync(ct).ConfigureAwait(false);
-        await db.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
+        await using (var db = await sp.GetRequiredService<IDbContextFactory<MedicalDbContext>>().CreateDbContextAsync(ct).ConfigureAwait(false))
+            await db.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
+        if (sp.GetService<IDbContextFactory<Fhir.FhirDbContext>>() is not { } ff) return;
+        await using var fdb = await ff.CreateDbContextAsync(ct).ConfigureAwait(false);
+        if (!fdb.Database.IsRelational()) { await fdb.Database.EnsureCreatedAsync(ct).ConfigureAwait(false); return; }
+        // Both contexts share one database, where EnsureCreated is a no-op once it exists: create the FHIR tables explicitly.
+        var creator = (Microsoft.EntityFrameworkCore.Storage.RelationalDatabaseCreator)fdb.Database.GetService<Microsoft.EntityFrameworkCore.Storage.IDatabaseCreator>();
+        if (!await creator.ExistsAsync(ct).ConfigureAwait(false)) await creator.CreateAsync(ct).ConfigureAwait(false);
+        string? probe = fdb.Database.ProviderName switch
+        {
+            { } p when p.Contains("Sqlite", StringComparison.Ordinal) => "SELECT COUNT(*) AS \"Value\" FROM sqlite_master WHERE type = 'table' AND name = 'FhirResources'",
+            { } p when p.Contains("SqlServer", StringComparison.Ordinal) => "SELECT COUNT(*) AS [Value] FROM sys.tables WHERE name = 'FhirResources'",
+            _ => null,
+        };
+        // Probe first so restarts don't log a failed CREATE TABLE.
+        if (probe is not null && await fdb.Database.SqlQueryRaw<int>(probe).SingleAsync(ct).ConfigureAwait(false) > 0) return;
+        try { await creator.CreateTablesAsync(ct).ConfigureAwait(false); }
+        catch (Exception e) when (e.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase) || e.Message.Contains("There is already an object", StringComparison.OrdinalIgnoreCase)) { }
     }
 }

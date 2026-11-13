@@ -1,0 +1,39 @@
+@inherits DemoBase
+@using Medical.Hl7.Conformance
+@{ var v = Scenarios.Hl7Orders(_type); var c = _broken ? v.Broken : v.Conformance; }
+<div class="controls">
+    <div class="seg">
+        @foreach (var (t, label) in Types)
+        {
+            <button class="@(_type == t ? "on" : "")" @onclick="() => _type = t">@label</button>
+        }
+    </div>
+    <label><input type="checkbox" @bind="_broken" /> @T("Break it (drop PID-3, bad table value)", "Rusak (hapus PID-3, nilai tabel salah)")</label>
+</div>
+<div class="grid-2">
+    <div class="panel">
+        <h3>@c.Profile · HL7 v2.5.1</h3>
+        <pre class="er7"><code>@(_broken ? v.BrokenEr7 : v.Er7)</code></pre>
+    </div>
+    <div class="panel">
+        <h3>@T("Conformance", "Kesesuaian") <small class="@(c.IsValid ? "" : "bad")">@(c.IsValid ? T("conformant", "sesuai") : T("not conformant", "tidak sesuai"))</small></h3>
+        @if (c.Issues.Count == 0)
+        {
+            <div class="alert"><strong>@T("All segments and fields satisfy the profile.", "Semua segmen dan field memenuhi profil.")</strong><span>@T("Usage R/RE/O/X, cardinality, length and HL7 tables checked.", "Usage R/RE/O/X, kardinalitas, panjang dan tabel HL7 diperiksa.")</span></div>
+        }
+        @foreach (var i in c.Issues)
+        {
+            <div class="alert @(i.Severity == ConformanceSeverity.Error ? "critical" : "warning")"><strong><code>@i.Location</code> @i.Message</strong></div>
+        }
+        <p class="label">@T("Mapped to FHIR", "Dipetakan ke FHIR")</p>
+        <table class="data">
+            <thead><tr><th>Resource</th><th>@T("Summary", "Ringkasan")</th></tr></thead>
+            <tbody>@foreach (var (r, s) in v.Fhir) { <tr><td class="mono">@r</td><td>@s</td></tr> }</tbody>
+        </table>
+    </div>
+</div>
+@code {
+    private string _type = "ORM";
+    private bool _broken;
+    private static readonly (string, string)[] Types = [("ORM", "ORM^O01"), ("OML", "OML^O21"), ("SIU", "SIU^S12"), ("MDM", "MDM^T02")];
+}

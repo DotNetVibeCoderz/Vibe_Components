@@ -1,0 +1,11 @@
+<Project>
+  <!-- Copies the FHIR R4 core specification.zip (used by FhirProfileValidator) into the output of apps that
+       reference Medical.Fhir directly or transitively. NuGet does not flow contentFiles transitively.
+       NuGetPackageRoot has no trailing slash when NUGET_PACKAGES is set, so normalise it. -->
+  <PropertyGroup>
+    <_MedicalFhirSpecZip Condition="'$(NuGetPackageRoot)' != ''">$([MSBuild]::EnsureTrailingSlash('$(NuGetPackageRoot)'))hl7.fhir.specification.data.r4/6.8.0/contentFiles/any/any/specification.zip</_MedicalFhirSpecZip>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(_MedicalFhirSpecZip)' != '' And Exists('$(_MedicalFhirSpecZip)')">
+    <None Include="$(_MedicalFhirSpecZip)" Link="specification.zip" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+</Project>

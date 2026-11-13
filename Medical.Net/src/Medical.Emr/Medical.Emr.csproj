@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Medical.Net EMR/EHR persistence on Entity Framework Core: patients, encounters, vitals, observations, problems, medications, allergies and a persistent audit trail; SQL Server, SQLite or in-memory providers; Redis / distributed cache for patient records; synthetic seeding.</Description>
+    <Description>Medical.Net EMR/EHR persistence on Entity Framework Core: patients, encounters, vitals, observations, problems, medications, allergies and a persistent audit trail; SQL Server, SQLite or in-memory providers; Redis / distributed cache for patient records; synthetic seeding; durable FHIR R4 repository (versions, history, search index).</Description>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="$(MsExtVersion)" />
@@ -11,6 +11,6 @@
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="$(MsExtVersion)" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../Medical.Core/Medical.Core.csproj" />
+    <ProjectReference Include="../Medical.Fhir/Medical.Fhir.csproj" />
   </ItemGroup>
 </Project>

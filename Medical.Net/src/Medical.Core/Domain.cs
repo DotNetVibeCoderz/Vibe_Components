@@ -153,6 +153,9 @@ public sealed record PatientRecord
     public IReadOnlyList<Condition> Conditions { get; init; } = [];
     public IReadOnlyList<MedicationOrder> Medications { get; init; } = [];
     public IReadOnlyList<Allergy> Allergies { get; init; } = [];
+    public IReadOnlyList<ServiceOrder> Orders { get; init; } = [];
+    public IReadOnlyList<Appointment> Appointments { get; init; } = [];
+    public IReadOnlyList<ClinicalDocument> Documents { get; init; } = [];
     public double? WeightKg { get; init; }
     public double? HeightCm { get; init; }
 

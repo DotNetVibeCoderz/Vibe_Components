@@ -81,3 +81,18 @@ Masking.Nik("3201234567890001");                               // 3201********00
 var r = await repo.GetRecordAsync("pat-00007", purpose: "treatment");   // EF Core + cache, tercatat di audit
 string svg = Charts.ObservationChart(record.Vitals, lang: "id");
 ```
+
+## Medical.Bpjs — BPJS Kesehatan
+
+```csharp
+var vclaim = new VClaimClient(http, BpjsCredentials.FromEnvironment());
+JsonNode peserta = await vclaim.PesertaByKartuAsync("0001234567890", DateOnly.FromDateTime(DateTime.Today));
+
+InaCbgClaim klaim = InaCbgClaimBuilder.FromRecord(record, nomorSep, nomorKartu, tarif, nikKoder, ["87.44"]);
+IReadOnlyList<ClaimIssue> masalah = InaCbgClaimBuilder.Validate(klaim);     // sebelum grouper INA-CBG
+var eklaim = new EKlaimClient(http, "http://eklaim/E-Klaim/ws.php", kunciHex);
+await eklaim.NewClaimAsync(klaim); await eklaim.SetClaimDataAsync(klaim);
+JsonNode cbg = await eklaim.GrouperAsync(klaim.NomorSep);
+```
+
+Tambahan v1.1 untuk Medical.Fhir (repositori FHIR, pencarian, riwayat, validasi profil, SMART, alur SATUSEHAT, KFA) dan Medical.Hl7 (ORM/OML/SIU/MDM, kesesuaian) dijelaskan di [Interoperabilitas](interoperability.md).

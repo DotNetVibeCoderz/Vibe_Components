@@ -44,6 +44,7 @@ public static class SatuSehatSystems
 {
     public const string Nik = CodeSystems.Nik;
     public const string IhsNumber = "https://fhir.kemkes.go.id/id/ihs-number";
+    public const string Kfa = CodeSystems.Kfa;
     public static string Organization(string orgId) => $"http://sys-ids.kemkes.go.id/organization/{orgId}";
     public static string Encounter(string orgId) => $"http://sys-ids.kemkes.go.id/encounter/{orgId}";
     public static string Observation(string orgId) => $"http://sys-ids.kemkes.go.id/observation/{orgId}";
@@ -99,26 +100,49 @@ public sealed class SatuSehatClient(HttpClient http, SatuSehatOptions options, T
     /// <summary>Builds a request without sending it (useful for logging / dry runs).</summary>
     public HttpRequestMessage BuildRequest(HttpMethod method, string relative, Resource? body, string token)
     {
-        var req = new HttpRequestMessage(method, $"{Options.FhirBaseUrl}/{relative}");
+        var req = new HttpRequestMessage(method, relative.Length == 0 ? Options.FhirBaseUrl : $"{Options.FhirBaseUrl}/{relative}");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         if (body is not null) req.Content = new StringContent(FhirJson.Serialize(body, false), Encoding.UTF8, "application/json");
         return req;
     }
 
+    /// <summary>POST a transaction bundle to the FHIR base (all-or-nothing on the platform).</summary>
+    public Task<Bundle> PostTransactionAsync(Bundle bundle, CancellationToken ct = default) =>
+        SendAsync<Bundle>(HttpMethod.Post, "", bundle, ct);
+
+    /// <summary>GET {type}?{query}, e.g. <c>SearchAsync("Encounter", "subject=P0123")</c>.</summary>
+    public Task<Bundle> SearchAsync(string type, string query, CancellationToken ct = default) =>
+        SendAsync<Bundle>(HttpMethod.Get, $"{type}?{query}", null, ct);
+
+    /// <summary>An <see cref="HttpClient"/> with exponential-backoff retries (<see cref="Http.RetryHandler"/>) for SATUSEHAT.</summary>
+    public static HttpClient CreateHttpClient(Http.RetryOptions? retry = null, HttpMessageHandler? inner = null) =>
+        new(new Http.RetryHandler(retry, inner ?? new HttpClientHandler())) { Timeout = TimeSpan.FromSeconds(100) };
+
+    /// <summary>Forgets the cached token (next call re-authenticates).</summary>
+    public void InvalidateToken() => _token = null;
+
     private async Task<T> SendAsync<T>(HttpMethod method, string relative, Resource? body, CancellationToken ct) where T : Resource
     {
-        string token = await GetAccessTokenAsync(ct).ConfigureAwait(false);
-        using var req = BuildRequest(method, relative, body, token);
-        using var res = await http.SendAsync(req, ct).ConfigureAwait(false);
-        string json = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-        if (!res.IsSuccessStatusCode)
+        for (int attempt = 0; ; attempt++)
         {
-            string detail = FhirJson.TryParse(json, out var r, out _) && r is OperationOutcome oo
-                ? string.Join("; ", oo.Issue.Select(i => i.Diagnostics ?? i.Details?.Text)) : json;
-            throw new HttpRequestException($"SATUSEHAT {method} {relative} failed ({(int)res.StatusCode}): {detail}", null, res.StatusCode);
+            string token = await GetAccessTokenAsync(ct).ConfigureAwait(false);
+            using var req = BuildRequest(method, relative, body, token);
+            using var res = await http.SendAsync(req, ct).ConfigureAwait(false);
+            if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized && attempt == 0)
+            {
+                InvalidateToken(); // token revoked or expired early: re-authenticate once
+                continue;
+            }
+            string json = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode)
+            {
+                string detail = FhirJson.TryParse(json, out var r, out _) && r is OperationOutcome oo
+                    ? string.Join("; ", oo.Issue.Select(i => i.Diagnostics ?? i.Details?.Text)) : json;
+                throw new HttpRequestException($"SATUSEHAT {method} {relative} failed ({(int)res.StatusCode}): {detail}", null, res.StatusCode);
+            }
+            return FhirJson.Parse<T>(json);
         }
-        return FhirJson.Parse<T>(json);
     }
 
     /// <summary>Adds SATUSEHAT-required identifiers/references to an encounter produced by <see cref="FhirMapper"/>.</summary>
@@ -139,15 +163,17 @@ public sealed class SatuSehatClient(HttpClient http, SatuSehatOptions options, T
 
 public static class FhirBuilderExtensions
 {
-    /// <summary>Registers <see cref="FhirMapper"/>, a singleton <see cref="InMemoryFhirStore"/> and (optionally) <see cref="SatuSehatClient"/>.</summary>
-    public static MedicalBuilder AddFhir(this MedicalBuilder builder, FhirMappingOptions? mapping = null, SatuSehatOptions? satuSehat = null) =>
+    /// <summary>Registers <see cref="FhirMapper"/>, an in-memory <see cref="Search.IFhirRepository"/> (replaced by Medical.Emr when persisted), the profile validator and (optionally) <see cref="SatuSehatClient"/>.</summary>
+    public static MedicalBuilder AddFhir(this MedicalBuilder builder, FhirMappingOptions? mapping = null, SatuSehatOptions? satuSehat = null, Validation.FhirValidationOptions? validation = null) =>
         builder.TryAddModule("fhir", s =>
         {
             s.TryAddSingleton(new FhirMapper(mapping));
             s.TryAddSingleton(sp => new InMemoryFhirStore(sp.GetService<TimeProvider>()));
+            s.TryAddSingleton<Search.IFhirRepository>(sp => sp.GetRequiredService<InMemoryFhirStore>());
+            s.TryAddSingleton(new Validation.FhirProfileValidator(validation));
             if (satuSehat is not null)
             {
-                s.AddHttpClient("satusehat");
+                s.AddHttpClient("satusehat").AddHttpMessageHandler(() => new Http.RetryHandler());
                 s.TryAddSingleton(sp => new SatuSehatClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("satusehat"), satuSehat, sp.GetService<TimeProvider>()));
             }
         });

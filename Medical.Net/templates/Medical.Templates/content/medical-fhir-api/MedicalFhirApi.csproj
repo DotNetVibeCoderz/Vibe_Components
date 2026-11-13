@@ -6,5 +6,8 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Medical.AspNetCore" Version="MEDICALNET_VERSION" />
+    <!--#if (persist) -->
+    <PackageReference Include="Medical.Emr" Version="MEDICALNET_VERSION" />
+    <!--#endif -->
   </ItemGroup>
 </Project>

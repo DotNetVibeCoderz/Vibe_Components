@@ -4,6 +4,8 @@ using Medical.Clinical;
 using Medical.Core;
 using Medical.Fhir;
 using Medical.Hl7;
+using Medical.Hl7.Conformance;
+using Medical.Fhir.Search;
 using Medical.Privacy;
 using Medical.Rules;
 using Medical.Terminology;
@@ -63,6 +65,13 @@ public static class ClinicalEndpoints
             }
         });
 
+        g.MapPost("/hl7/conformance", async (HttpRequest req, Hl7ConformanceValidator validator) =>
+        {
+            using var reader = new StreamReader(req.Body, Encoding.UTF8);
+            var result = validator.Validate(await reader.ReadToEndAsync());
+            return Results.Ok(new { result.Profile, result.IsValid, issues = result.Issues.Select(i => new { severity = i.Severity.ToString(), i.Location, i.Message }) });
+        });
+
         g.MapPost("/privacy/deidentify", async (HttpRequest req, TextDeidentifier deid, IAuditLog audit) =>
         {
             using var reader = new StreamReader(req.Body, Encoding.UTF8);
@@ -81,12 +90,14 @@ public sealed class MllpListenerOptions
 {
     public int Port { get; set; } = 2575;
     public IPAddress Address { get; set; } = IPAddress.Any;
-    /// <summary>Write received ADT/ORU content into the FHIR store.</summary>
+    /// <summary>Write received ADT/ORU/ORM/OML/SIU/MDM content into the FHIR repository.</summary>
     public bool StoreInFhir { get; set; } = true;
+    /// <summary>Reject (ACK AE) messages that violate their conformance profile instead of only logging the issues.</summary>
+    public bool EnforceConformance { get; set; }
 }
 
 /// <summary>Hosted HL7 v2 MLLP listener: ACKs every message, converts it to FHIR and runs decision support on ORU results.</summary>
-public sealed class MllpListenerService(MllpListenerOptions options, InMemoryFhirStore store, FhirMapper mapper, IMedicalEventBus bus, ILogger<MllpListenerService> log) : BackgroundService
+public sealed class MllpListenerService(MllpListenerOptions options, IFhirRepository store, FhirMapper mapper, Hl7ConformanceValidator conformance, IMedicalEventBus bus, ILogger<MllpListenerService> log) : BackgroundService
 {
     private MllpServer? _server;
 
@@ -105,6 +116,13 @@ public sealed class MllpListenerService(MllpListenerOptions options, InMemoryFhi
     private ValueTask<string> Handle(Hl7Message m, CancellationToken ct)
     {
         log.LogInformation("HL7 {Type} #{Control} from {App}", m.Type, m.ControlId, m.SendingApplication);
+        var check = conformance.Validate(m);
+        if (!check.IsValid)
+        {
+            string summary = string.Join("; ", check.Issues.Where(i => i.Severity == ConformanceSeverity.Error).Take(3));
+            log.LogWarning("HL7 #{Control} violates {Profile}: {Issues}", m.ControlId, check.Profile, summary);
+            if (options.EnforceConformance) return ValueTask.FromResult(Hl7V2.BuildAck(m, "AE", summary));
+        }
         if (options.StoreInFhir && m.Segments("PID").Count > 0)
             store.Process(Hl7Mapping.ToFhirTransaction(m, mapper));
         return ValueTask.FromResult(Hl7V2.BuildAck(m));
@@ -115,7 +133,8 @@ public static class MedicalAspNetCoreExtensions
 {
     /// <summary>Registers what the endpoints need (FHIR, terminology, rules, privacy) on top of <c>AddMedical()</c>.</summary>
     public static MedicalBuilder AddMedicalApi(this MedicalBuilder builder) =>
-        builder.AddFhir().AddTerminology().AddRules().AddPrivacy().AddHl7();
+        builder.AddFhir().AddTerminology().AddRules().AddPrivacy().AddHl7()
+            .TryAddModule("hl7-conformance", s => s.TryAddSingleton(new Hl7ConformanceValidator()));
 
     /// <summary>Adds the hosted MLLP listener.</summary>
     public static MedicalBuilder AddMllpListener(this MedicalBuilder builder, Action<MllpListenerOptions>? configure = null) =>

@@ -10,6 +10,10 @@ using Medical.Dicom;
 using Medical.Emr;
 using Medical.Fhir;
 using Medical.Hl7;
+using Medical.Hl7.Conformance;
+using Medical.Bpjs.InaCbg;
+using Medical.Fhir.SatuSehat;
+using Medical.Fhir.Validation;
 using Medical.Privacy;
 using Medical.Rules;
 using Medical.Signals;
@@ -43,6 +47,8 @@ try
         "risk" => Risk(),
         "ask" => await Ask(),
         "emr" => await Emr(),
+        "bpjs" => Bpjs(),
+        "satusehat" => SatuSehat(),
         _ => Fail($"Unknown command '{a.Command}'. Run 'medical help'."),
     };
 }
@@ -78,9 +84,11 @@ int Help()
           code validate <icd10|snomed|loinc|rxnorm> <code>       code map <sctid>
           interactions <drug> <drug> ... [--allergy penicillin]
         Interoperability
-          fhir patient|record|ips [--index 3] [--out file.json]   fhir validate <file.json>
-          hl7 sample [--out file.hl7]   hl7 parse|to-fhir <file.hl7>
+          fhir patient|record|ips [--index 3] [--out file.json]   fhir validate <file.json> [--profile <url>]
+          hl7 sample [--type oru|adt|orm|oml|siu|mdm] [--out file.hl7]   hl7 parse|to-fhir|conform <file.hl7>
           hl7 send <host:port> <file.hl7>   hl7 listen [--port 2575]
+          satusehat bundle [--index 3]   (Encounter -> Condition -> Observation -> MedicationRequest transaction)
+          bpjs claim [--index 3] [--sep 0301R0011126V000123]   (INA-CBG claim data + coding validation)
         Imaging
           dicom phantom [--kind head|chest] [--slices 24] [--size 256] --out <dir>
           dicom info|render <file.dcm> [--window brain|lung|bone...] [--out file.png]
@@ -198,7 +206,10 @@ int Fhir()
         case "ips": json = FhirJson.Serialize(mapper.ToPatientSummary(rec)); break;
         case "validate":
             var res = FhirJson.Parse(File.ReadAllText(a.Positional(1, "file")));
-            var oo = FhirJson.Validate(res);
+            var oo = a.Opt("profile") is not null || res.Meta?.Profile.Any() == true
+                ? new FhirProfileValidator().Validate(res, a.Opt("profile"))
+                : FhirJson.Validate(res);
+            oo.Issue.RemoveAll(i => i.Severity is Hl7.Fhir.Model.OperationOutcome.IssueSeverity.Information);
             Console.WriteLine(oo.Issue.Count == 0 ? $"{res.TypeName}/{res.Id}: valid" : string.Join(Environment.NewLine, oo.Issue.Select(i => $"{i.Severity}: {i.Diagnostics}")));
             return oo.Issue.Count == 0 ? 0 : 2;
         default: return Fail("fhir patient|record|ips|validate");
@@ -219,7 +230,24 @@ async Task<int> Hl7Cmd()
     {
         case "sample":
             var rec = SyntheticData.Record((int)(a.OptNum("index") ?? 1), 0.6);
-            return Write(Hl7V2.Encode(Hl7V2.BuildResults(rec.Patient, rec.Observations, new("LIS", "LAB"), new("EMR", "RS"))).Replace("\r", Environment.NewLine));
+            var now = DateTimeOffset.Now;
+            var lab = new ServiceOrder { PatientId = rec.Patient.Id, PlacerOrderNumber = "PO-" + now.ToString("HHmmss"), Code = Loinc.Glucose, Priority = OrderPriority.Stat, OrderedAt = now, Requester = "dr. Ratna", Specimen = "SER" };
+            NHapi.Base.Model.IMessage msg = (a.Opt("type") ?? "oru").ToLowerInvariant() switch
+            {
+                "oru" => Hl7V2.BuildResults(rec.Patient, rec.Observations, new("LIS", "LAB"), new("EMR", "RS")),
+                "adt" => Hl7V2.BuildAdmit(rec.Patient, rec.Encounters[0], new("ADT", "RS"), new("EMR", "RS")),
+                "orm" => Hl7V2.BuildOrder(rec.Patient, [lab], new("EMR", "RS"), new("LIS", "LAB")),
+                "oml" => Hl7V2.BuildLabOrder(rec.Patient, [lab], new("EMR", "RS"), new("LIS", "LAB")),
+                "siu" => Hl7V2.BuildAppointment(rec.Patient, new Appointment { PatientId = rec.Patient.Id, Start = now.AddDays(1), End = now.AddDays(1).AddMinutes(15), Practitioner = "dr. Ratna", Location = "Poli Penyakit Dalam", Reason = "Kontrol" }, new("SCH", "RS"), new("EMR", "RS")),
+                "mdm" => Hl7V2.BuildDocument(rec.Patient, new ClinicalDocument { PatientId = rec.Patient.Id, Type = ClinicalCode.Loinc("11506-3", "Progress note"), Title = "CPPT", Author = "dr. Ratna", Created = now, Text = "S: sesak napas 2 hari\nO: RR 24, SpO2 93%\nA: pneumonia\nP: ceftriaxone 1 g IV" }, new("EMR", "RS"), new("DMS", "RS"), rec.Encounters[0]),
+                var t => throw new ArgumentException($"Unknown HL7 sample type '{t}' (oru|adt|orm|oml|siu|mdm)."),
+            };
+            return Write(Hl7V2.Encode(msg).Replace("\r", Environment.NewLine));
+        case "conform":
+            var result = new Hl7ConformanceValidator().Validate(File.ReadAllText(a.Positional(1, "file")).Replace("\r\n", "\r").Replace('\n', '\r'));
+            Console.WriteLine($"Profile {result.Profile}: {(result.IsValid ? "conformant" : "NOT conformant")}");
+            foreach (var issue in result.Issues) Console.WriteLine($"  {issue}");
+            return result.IsValid ? 0 : 2;
         case "parse":
             var m = Hl7V2.Parse(File.ReadAllText(a.Positional(1, "file")));
             Console.WriteLine($"{m}  from {m.SendingApplication}@{m.SendingFacility}");
@@ -249,7 +277,7 @@ async Task<int> Hl7Cmd()
                 await done.Task;
             }
             return 0;
-        default: return Fail("hl7 sample|parse|to-fhir|send|listen");
+        default: return Fail("hl7 sample|parse|to-fhir|conform|send|listen");
     }
 }
 
@@ -382,6 +410,34 @@ static int Fail(string message)
 {
     Console.Error.WriteLine($"error: {message}");
     return 1;
+}
+
+int SatuSehat()
+{
+    if (a.Positional(0, "sub-command") != "bundle") return Fail("satusehat bundle [--index 3]");
+    var rec = SyntheticData.Record((int)(a.OptNum("index") ?? 1), 0.3);
+    var ctx = new SatuSehatContext
+    {
+        PatientIhs = a.Opt("patient-ihs") ?? "P00000000000", PatientName = rec.Patient.Name.ToString(),
+        PractitionerIhs = a.Opt("practitioner-ihs") ?? "N00000000", PractitionerName = "dr. Ratna",
+        LocationId = a.Opt("location") ?? "00000000-0000-0000-0000-000000000000", LocationName = "Poli Penyakit Dalam",
+        OrganizationId = a.Opt("org") ?? Environment.GetEnvironmentVariable("SATUSEHAT_ORG_ID") ?? "10000000",
+    };
+    var sub = SatuSehatWorkflow.BuildOutpatientVisit(rec, ctx);
+    foreach (var w in sub.Warnings) Console.Error.WriteLine($"warning: {w}");
+    return Write(FhirJson.Serialize(sub.Bundle));
+}
+
+int Bpjs()
+{
+    if (a.Positional(0, "sub-command") != "claim") return Fail("bpjs claim [--index 3] [--sep <19 chars>]");
+    var rec = SyntheticData.Record((int)(a.OptNum("index") ?? 1), 0.6);
+    var claim = InaCbgClaimBuilder.FromRecord(rec, a.Opt("sep") ?? "0301R0011126V000123", a.Opt("card") ?? "0001234567890",
+        new HospitalTariff { Kamar = 1_500_000, Obat = 650_000, Laboratorium = 420_000, Radiologi = 250_000 }, a.Opt("coder") ?? "3201234505900001");
+    var issues = InaCbgClaimBuilder.Validate(claim);
+    foreach (var i in issues) Console.Error.WriteLine($"{i.Severity}: {i.Field} - {i.Message[lang]}");
+    Write(claim.ClaimData().ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+    return InaCbgClaimBuilder.IsValid(issues) ? 0 : 2;
 }
 
 namespace Medical.Cli

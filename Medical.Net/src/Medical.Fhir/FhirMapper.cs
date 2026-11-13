@@ -130,7 +130,7 @@ public sealed class FhirMapper(FhirMappingOptions? options = null)
                 Id = $"{patientId}-{slug}-{stamp}",
                 Meta = new Meta { Profile = [$"http://hl7.org/fhir/StructureDefinition/{profile}"] },
                 Status = ObservationStatus.Final,
-                Category = [new CodeableConcept(ObservationCategory, "vital-signs", "Vital Signs")],
+                Category = [Cc(ObservationCategory, "vital-signs", "Vital Signs")],
                 Code = Concept(code),
                 Subject = Ref("Patient", patientId),
                 Encounter = encounterId is null ? null : Ref("Encounter", encounterId),
@@ -149,8 +149,15 @@ public sealed class FhirMapper(FhirMappingOptions? options = null)
             Vital("rr", M.Loinc.RespiratoryRate, "resprate", v.RespiratoryRate, "/min", "breaths/minute"),
             bp,
             Vital("temp", M.Loinc.BodyTemperature, "bodytemp", v.TemperatureC, "Cel", "°C"),
-            Vital("spo2", M.Loinc.OxygenSaturation, "oxygensat", v.SpO2, "%", "%"),
+            SpO2(Vital("spo2", M.Loinc.OxygenSaturation, "oxygensat", v.SpO2, "%", "%")),
         ];
+
+        // The core oxygensat profile requires LOINC 2708-6 alongside the pulse-oximetry code.
+        static Observation SpO2(Observation o)
+        {
+            o.Code.Coding.Add(new Coding("http://loinc.org", "2708-6", "Oxygen saturation in Arterial blood"));
+            return o;
+        }
     }
 
     /// <summary>Maps a lab result (with reference range and interpretation) to a laboratory Observation.</summary>
@@ -167,7 +174,7 @@ public sealed class FhirMapper(FhirMappingOptions? options = null)
                 M.ObservationStatus.Cancelled => ObservationStatus.Cancelled,
                 _ => ObservationStatus.Final,
             },
-            Category = [new CodeableConcept(ObservationCategory, "laboratory", "Laboratory")],
+            Category = [Cc(ObservationCategory, "laboratory", "Laboratory")],
             Code = Concept(o.Code),
             Subject = Ref("Patient", o.PatientId),
             Encounter = o.EncounterId is null ? null : Ref("Encounter", o.EncounterId),
@@ -190,7 +197,7 @@ public sealed class FhirMapper(FhirMappingOptions? options = null)
             M.ResultFlag.Abnormal => ("A", "Abnormal"),
             _ => ("N", "Normal"),
         };
-        r.Interpretation.Add(new CodeableConcept(Interpretation, ic, id));
+        r.Interpretation.Add(Cc(Interpretation, ic, id));
         return r;
     }
 
@@ -230,9 +237,9 @@ public sealed class FhirMapper(FhirMappingOptions? options = null)
         return new Condition
         {
             Id = c.Id,
-            ClinicalStatus = new CodeableConcept(ConditionClinical, status),
-            VerificationStatus = new CodeableConcept(ConditionVerification, "confirmed"),
-            Category = [new CodeableConcept(ConditionCategory, "problem-list-item", "Problem List Item")],
+            ClinicalStatus = Cc(ConditionClinical, status),
+            VerificationStatus = Cc(ConditionVerification, "confirmed"),
+            Category = [Cc(ConditionCategory, "problem-list-item", "Problem List Item")],
             Code = Concept(c.Code),
             Subject = Ref("Patient", c.PatientId),
             Onset = c.Onset is { } d ? new FhirDateTime(d.Year, d.Month, d.Day) : null,
@@ -266,8 +273,8 @@ public sealed class FhirMapper(FhirMappingOptions? options = null)
         var r = new AllergyIntolerance
         {
             Id = a.Id,
-            ClinicalStatus = new CodeableConcept(AllergyClinical, "active"),
-            VerificationStatus = new CodeableConcept(AllergyVerification, "confirmed"),
+            ClinicalStatus = Cc(AllergyClinical, "active"),
+            VerificationStatus = Cc(AllergyVerification, "confirmed"),
             Code = code,
             Patient = Ref("Patient", a.PatientId),
         };
@@ -284,6 +291,117 @@ public sealed class FhirMapper(FhirMappingOptions? options = null)
         return r;
     }
 
+    // ------------------------------------------------------------------ Orders, appointments, documents
+
+    public ServiceRequest ToFhir(M.ServiceOrder o)
+    {
+        var r = new ServiceRequest
+        {
+            Id = o.Id,
+            Identifier =
+            [
+                new Identifier("urn:medical-net:placer-order", o.PlacerOrderNumber)
+                {
+                    Type = Cc("http://terminology.hl7.org/CodeSystem/v2-0203", "PLAC", "Placer Identifier"),
+                },
+            ],
+            Status = o.Status switch
+            {
+                M.OrderStatus.Active => RequestStatus.Active,
+                M.OrderStatus.Completed => RequestStatus.Completed,
+                M.OrderStatus.Cancelled => RequestStatus.Revoked,
+                _ => RequestStatus.Active,
+            },
+            Intent = RequestIntent.Order,
+            Category =
+            [
+                o.Category switch
+                {
+                    M.OrderCategory.Laboratory => Cc(M.CodeSystems.Snomed, "108252007", "Laboratory procedure"),
+                    M.OrderCategory.Radiology => Cc(M.CodeSystems.Snomed, "363679005", "Imaging"),
+                    _ => Cc(M.CodeSystems.Snomed, "387713003", "Surgical procedure"),
+                },
+            ],
+            Priority = o.Priority switch { M.OrderPriority.Stat => RequestPriority.Stat, M.OrderPriority.Urgent => RequestPriority.Urgent, _ => RequestPriority.Routine },
+            Code = Concept(o.Code),
+            Subject = Ref("Patient", o.PatientId),
+            Encounter = o.EncounterId is null ? null : Ref("Encounter", o.EncounterId),
+            AuthoredOn = o.OrderedAt.ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture),
+            Requester = o.Requester is null ? null : new ResourceReference { Display = o.Requester },
+        };
+        if (o.FillerOrderNumber is { } filler)
+            r.Identifier.Add(new Identifier("urn:medical-net:filler-order", filler)
+            {
+                Type = Cc("http://terminology.hl7.org/CodeSystem/v2-0203", "FILL", "Filler Identifier"),
+            });
+        if (o.Specimen is { } sp) r.Note.Add(new Annotation { Text = $"Specimen: {sp}" });
+        if (o.ClinicalInfo is { } ci) r.Note.Add(new Annotation { Text = ci });
+        return r;
+    }
+
+    public Appointment ToFhir(M.Appointment a)
+    {
+        var r = new Appointment
+        {
+            Id = a.Id,
+            Status = a.Status switch
+            {
+                M.AppointmentStatus.Proposed => Appointment.AppointmentStatus.Proposed,
+                M.AppointmentStatus.Arrived => Appointment.AppointmentStatus.Arrived,
+                M.AppointmentStatus.Fulfilled => Appointment.AppointmentStatus.Fulfilled,
+                M.AppointmentStatus.Cancelled => Appointment.AppointmentStatus.Cancelled,
+                M.AppointmentStatus.NoShow => Appointment.AppointmentStatus.Noshow,
+                _ => Appointment.AppointmentStatus.Booked,
+            },
+            Start = a.Start,
+            End = a.End,
+            MinutesDuration = (int)Math.Round((a.End - a.Start).TotalMinutes),
+            Description = a.Reason,
+            Participant =
+            [
+                new Appointment.ParticipantComponent { Actor = Ref("Patient", a.PatientId), Status = ParticipationStatus.Accepted },
+            ],
+        };
+        if (a.ServiceType is { } st) r.ServiceType.Add(Concept(st));
+        if (a.Practitioner is { } pr) r.Participant.Add(new Appointment.ParticipantComponent { Actor = new ResourceReference { Display = pr }, Status = ParticipationStatus.Accepted });
+        if (a.Location is { } loc) r.Participant.Add(new Appointment.ParticipantComponent { Actor = new ResourceReference { Display = loc }, Status = ParticipationStatus.Accepted });
+        return r;
+    }
+
+    public DocumentReference ToFhir(M.ClinicalDocument d)
+    {
+        var r = new DocumentReference
+        {
+            Id = d.Id,
+            Status = DocumentReferenceStatus.Current,
+            DocStatus = d.Status switch
+            {
+                M.DocumentStatus.Preliminary => CompositionStatus.Preliminary,
+                M.DocumentStatus.Amended => CompositionStatus.Amended,
+                _ => CompositionStatus.Final,
+            },
+            Type = Concept(d.Type),
+            Category = [Cc("http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category", "clinical-note", "Clinical Note")],
+            Subject = Ref("Patient", d.PatientId),
+            Date = d.Created,
+            Description = d.Title,
+            Content =
+            [
+                new DocumentReference.ContentComponent
+                {
+                    Attachment = new Attachment
+                    {
+                        ContentType = "text/plain; charset=utf-8", Language = "id", Title = d.Title,
+                        Data = System.Text.Encoding.UTF8.GetBytes(d.Text), Creation = d.Created.ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture),
+                    },
+                },
+            ],
+        };
+        if (d.Author is { } au) r.Author.Add(new ResourceReference { Display = au });
+        if (d.EncounterId is { } enc) r.Context = new DocumentReference.ContextComponent { Encounter = [Ref("Encounter", enc)] };
+        return r;
+    }
+
     // ------------------------------------------------------------------ Bundles
 
     /// <summary>All resources of a patient record (patient first).</summary>
@@ -297,6 +415,9 @@ public sealed class FhirMapper(FhirMappingOptions? options = null)
         list.AddRange(record.Medications.Select(ToFhir));
         list.AddRange(record.Observations.Select(ToFhir));
         if (record.LatestVitals is { } v) list.AddRange(ToFhir(v, record.Patient.Id, enc));
+        list.AddRange(record.Orders.Select(ToFhir));
+        list.AddRange(record.Appointments.Select(ToFhir));
+        list.AddRange(record.Documents.Select(ToFhir));
         return list;
     }
 
@@ -344,7 +465,7 @@ public sealed class FhirMapper(FhirMappingOptions? options = null)
                 Text = new Narrative { Status = Narrative.NarrativeStatus.Generated, Div = sb.ToString() },
                 Entry = arr.Select(RefTo).ToList(),
             };
-            if (arr.Length == 0) s.EmptyReason = new CodeableConcept("http://terminology.hl7.org/CodeSystem/list-empty-reason", "unavailable", "Unavailable");
+            if (arr.Length == 0) s.EmptyReason = Cc("http://terminology.hl7.org/CodeSystem/list-empty-reason", "unavailable", "Unavailable");
             return s;
         }
 
@@ -353,7 +474,7 @@ public sealed class FhirMapper(FhirMappingOptions? options = null)
         {
             Id = $"ips-{record.Patient.Id}",
             Status = CompositionStatus.Final,
-            Type = new CodeableConcept(M.CodeSystems.Loinc, "60591-5", "Patient summary Document"),
+            Type = Cc(M.CodeSystems.Loinc, "60591-5", "Patient summary Document"),
             Subject = RefTo(patient),
             Date = when.ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture),
             Author = [new ResourceReference { Display = Options.Organization }],
@@ -397,7 +518,14 @@ public sealed class FhirMapper(FhirMappingOptions? options = null)
 
     // ------------------------------------------------------------------ helpers
 
-    public static CodeableConcept Concept(M.ClinicalCode c) => new(c.System, c.Code, c.Display) { Text = c.Display };
+    public static CodeableConcept Concept(M.ClinicalCode c) => Cc(c.System, c.Code, c.Display, c.Display);
+
+    /// <summary>
+    /// A CodeableConcept with one coding whose <c>display</c> is set. (Firely's 3-argument constructor sets
+    /// <c>CodeableConcept.text</c>, not <c>Coding.display</c> — SATUSEHAT and IG validators look at the coding.)
+    /// </summary>
+    public static CodeableConcept Cc(string system, string code, string? display = null, string? text = null) =>
+        new() { Coding = [new Coding(system, code, display)], Text = text };
 
     public static ResourceReference Ref(string type, string id) => new($"{type}/{id}");
 

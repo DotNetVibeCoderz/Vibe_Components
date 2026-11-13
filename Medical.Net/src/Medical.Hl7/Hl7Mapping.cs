@@ -95,7 +95,10 @@ public static class Hl7Mapping
         {
             Patient = p,
             Encounters = enc is null ? [] : [enc],
-            Observations = ToObservations(m, p.Id),
+            Observations = m.Type.StartsWith("ORU", StringComparison.Ordinal) || m.Type.StartsWith("ADT", StringComparison.Ordinal) ? ToObservations(m, p.Id) : [],
+            Orders = m.Type.StartsWith("ORM", StringComparison.Ordinal) || m.Type.StartsWith("OML", StringComparison.Ordinal) ? Hl7WorkflowMapping.ToOrders(m, p.Id) : [],
+            Appointments = m.Type.StartsWith("SIU", StringComparison.Ordinal) && Hl7WorkflowMapping.ToAppointment(m, p.Id) is { } ap ? [ap] : [],
+            Documents = m.Type.StartsWith("MDM", StringComparison.Ordinal) && Hl7WorkflowMapping.ToDocument(m, p.Id) is { } doc ? [doc] : [],
         };
         return mapper.ToTransaction(record);
     }

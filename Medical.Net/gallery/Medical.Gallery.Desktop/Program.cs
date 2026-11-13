@@ -50,7 +50,7 @@ internal static class Screenshots
         var window = new MainWindow { Width = 1440, Height = 960 };
         window.Show();
         window.SetLang(lang);
-        foreach (var slug in new[] { "news2", "cds", "dicom", "hemorrhage", "ecg", "terminology", "risk", "assistant" })
+        foreach (var slug in new[] { "news2", "cds", "dicom", "hemorrhage", "ecg", "terminology", "risk", "assistant", "fhir-server", "hl7-orders", "satusehat", "bpjs" })
         {
             window.Navigate(slug);
             for (int i = 0; i < 5; i++) Avalonia.Threading.Dispatcher.UIThread.RunJobs();

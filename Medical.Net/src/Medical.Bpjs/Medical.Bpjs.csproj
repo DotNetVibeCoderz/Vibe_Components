@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Medical.Net BPJS Kesehatan (Indonesian national health insurance, JKN): INA-CBG claim input builder with coding validation and the E-Klaim web-service client (encrypted payloads), VClaim and PCare clients with request signing, AES response decryption and LZ-String decompression.</Description>
+    <PackageTags>medical;healthcare;bpjs;jkn;ina-cbg;eklaim;vclaim;pcare;indonesia</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" Version="$(MsExtVersion)" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Medical.Terminology/Medical.Terminology.csproj" />
+    <ProjectReference Include="../Medical.Fhir/Medical.Fhir.csproj" />
+  </ItemGroup>
+</Project>

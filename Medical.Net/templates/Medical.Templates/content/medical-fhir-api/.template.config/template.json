@@ -9,7 +9,7 @@
   ],
   "identity": "Medical.Templates.MedicalFhirApi",
   "name": "Medical.Net FHIR API Server",
-  "description": "ASP.NET Core FHIR R4 server (CRUD, search, transactions, $everything) with clinical JSON API and HL7 MLLP listener, seeded with synthetic patients. Made by Gravicode Studios, led by Kang Fadhil.",
+  "description": "ASP.NET Core FHIR R4 server (CRUD, search with _include/_revinclude, _history, transactions, $validate, $everything) with clinical JSON API and HL7 MLLP listener, optional SMART on FHIR (--smart) and durable EF Core storage (--persist), seeded with synthetic patients. Made by Gravicode Studios, led by Kang Fadhil.",
   "shortName": "medical-fhir-api",
   "sourceName": "MedicalFhirApi",
   "preferNameDirectory": true,
@@ -21,9 +21,21 @@
     "MedicalNetVersion": {
       "type": "parameter",
       "datatype": "string",
-      "defaultValue": "1.0.0",
+      "defaultValue": "1.1.0",
       "replaces": "MEDICALNET_VERSION",
       "description": "Medical.Net package version"
+    },
+    "smart": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "Protect the FHIR API with SMART on FHIR (authorization code + PKCE, client credentials)."
+    },
+    "persist": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "Store FHIR resources durably (EF Core, SQLite by default) instead of in memory."
     }
   }
 }

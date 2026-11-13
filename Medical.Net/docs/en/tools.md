@@ -13,8 +13,10 @@ medical help
 | Calculators | `medical egfr --cr 1.2 --age 60 --sex f [--weight 60]` · `medical bmi --weight 70 --height 172` · `medical dose amoxicillin --weight 25 [--crcl 40]` |
 | Terminology | `medical code search gagal jantung [--system icd10]` · `medical code validate loinc 2345-7` · `medical code map 44054006` |
 | Drug safety | `medical interactions warfarin ibuprofen metronidazole --allergy penicillin` |
-| FHIR | `medical fhir patient|record|ips --index 3 --out ips.json` · `medical fhir validate ips.json` |
-| HL7 | `medical hl7 sample --out oru.hl7` · `medical hl7 parse|to-fhir oru.hl7` · `medical hl7 send localhost:2575 oru.hl7` · `medical hl7 listen --port 2575` |
+| FHIR | `medical fhir patient|record|ips --index 3 --out ips.json` · `medical fhir validate ips.json [--profile <url>]` |
+| HL7 | `medical hl7 sample [--type oru|adt|orm|oml|siu|mdm] --out msg.hl7` · `medical hl7 conform msg.hl7` · `medical hl7 parse|to-fhir oru.hl7` · `medical hl7 send localhost:2575 oru.hl7` · `medical hl7 listen --port 2575` |
+| SATUSEHAT | `medical satusehat bundle --index 3 --out visit.json` (Encounter → Condition → Observation → MedicationRequest) |
+| BPJS | `medical bpjs claim --index 7 [--sep 0301R0011126V000123]` (INA-CBG claim data + coding checks; exit code 2 on errors) |
 | DICOM | `medical dicom phantom --kind head --out ct` · `medical dicom info|render ct/IM015.dcm --window brain` · `medical dicom anonymize in.dcm out.dcm --secret …` · `medical dicom hemorrhage ct` · `medical dicom echo pacs 104` |
 | Signals | `medical ecg --rhythm af --hr 90` |
 | Privacy | `medical deid "Ny. Siti, HP 0812…"` · `--file note.txt --pseudonyms --secret …` |
@@ -32,16 +34,16 @@ dotnet new install Medical.Templates
 | Template | Creates |
 |---|---|
 | `medical-console` | Console app: NEWS2, decision support, bilingual problem list, IPS export |
-| `medical-fhir-api` | ASP.NET Core FHIR server + clinical API + MLLP listener, seeded with synthetic patients |
+| `medical-fhir-api` | ASP.NET Core FHIR server (search, `_history`, `$validate`) + clinical API + MLLP listener, seeded with synthetic patients. `--smart` adds SMART on FHIR authorization; `--persist` stores FHIR in EF Core (SQLite) |
 | `medical-hl7-gateway` | Worker service: MLLP → FHIR, CDS alerts in logs, optional forwarding to a FHIR server |
 | `medical-blazor` | Blazor ward board ranked by NEWS2 with observation charts and alerts |
 | `medical-avalonia` | Avalonia DICOM viewer with window presets, HU statistics and haemorrhage screening |
 
-All templates accept `--MedicalNetVersion` (default `1.0.0`).
+All templates accept `--MedicalNetVersion` (default `1.1.0`).
 
 ## Gallery
 
-Thirteen use cases — early warning, decision support, calculators, DICOM viewer, haemorrhage screen, ECG, FHIR patient summary, HL7 feed, terminology, clinical assistant, risk models, de-identification, EMR — in two apps that share `gallery/Medical.Gallery.Shared`:
+Seventeen use cases — early warning, decision support, calculators, DICOM viewer, haemorrhage screen, ECG, FHIR patient summary, HL7 feed, **FHIR server**, **HL7 orders & scheduling**, terminology, **SATUSEHAT visit**, **BPJS claim (INA-CBG)**, clinical assistant, risk models, de-identification, EMR — in two apps that share `gallery/Medical.Gallery.Shared`:
 
 ```bash
 dotnet run --project gallery/Medical.Gallery.Web --urls http://localhost:5290      # /?lang=id for Indonesian
@@ -54,5 +56,6 @@ dotnet run --project gallery/Medical.Gallery.Desktop -- --screenshot docs/images
 | ![](../images/web-dicom.png) | ![](../images/web-ecg.png) |
 | ![](../images/web-terminology.png) | ![](../images/web-risk.png) |
 | ![](../images/desktop-hemorrhage.png) | ![](../images/desktop-cds.png) |
+| ![](../images/web-hl7-orders.png) | ![](../images/desktop-satusehat.png) |
 
-Web screenshots are produced with headless Chrome (`--screenshot`, `--blink-settings=preferredColorScheme=1` for light mode).
+Web screenshots are produced with headless Chrome (`--screenshot`, `--blink-settings=preferredColorScheme=1` for light mode, `--force-prefers-reduced-motion` so the ECG draw-on animation is complete).

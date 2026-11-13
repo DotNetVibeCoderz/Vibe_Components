@@ -2,29 +2,44 @@
 
 Made by Gravicode Studios, led by Kang Fadhil. Status as of 2026-11-13. Roadmap: [PLAN.md](PLAN.md).
 
-## v1.0.0 — complete, not yet published
+## v1.0.0 — published ✅
+16 packages on nuget.org (tag `medical-net-v1.0.0`). `Medical.Cli` was installed from nuget.org and runs.
+
+## v1.1.0 — Interoperability depth: complete, not yet published
 
 | Area | Status | Verified by |
 |---|---|---|
-| Rust kernels (`native/medical-native`) | ✅ | `cargo test` (5); Rust/managed parity test |
-| 15 libraries in `src/` | ✅ | Release build, 0 warnings |
-| Tests (`tests/Medical.Tests`) | ✅ 94/94 | `dotnet test` |
-| CLI `medical` | ✅ | every command run end-to-end |
-| Templates (5) | ✅ | installed from the packed `.nupkg` into an isolated hive; each one built (console and Blazor also run) |
-| NuGet packaging (16 packages, icon, readme) | ✅ | `build/pack.ps1`; package IDs free on nuget.org |
-| Live LLM | ✅ | Claude `claude-opus-5-5` (Anthropic SDK 13.8) — tool calls, Indonesian answer |
-| Imaging AI service (`services/medical-ai-service`) | ✅ | FastAPI classical pipeline matches C# screener exactly (3.47 mL, slices 13–16); client fallback when offline |
-| Gallery web (Blazor, 13 demos, EN/ID, light/dark) | ✅ | all pages HTTP 200; screenshots reviewed |
-| Gallery desktop (Avalonia, 13 demos, EN/ID) | ✅ | headless screenshots reviewed |
-| Docs EN + ID, README, screenshots (32) | ✅ | `docs/en`, `docs/id`, `docs/images` |
-| Monorepo move + CI (`.github/workflows/medical-net.yml`) | ✅ | Release build + tests in `Vibe_Components/Medical.Net` |
+| FHIR repository: `FhirRepositoryBase` with search (token/reference/string/date, prefixes, `:not` `:missing` `:exact` `:contains` `:Type`), `_include`/`_revinclude`, `_sort`, paging, `_summary=count` | ✅ | `FhirServerTests` run on the in-memory **and** SQLite repositories |
+| Versioning: `_history`, vread, `If-Match` (412), 410 Gone, atomic transactions with `urn:uuid` rewrite and `ifNoneExist` | ✅ | same, plus HTTP tests via TestServer |
+| Durable `EfFhirRepository` (Medical.Emr; JSON versions + search index; DB transaction) | ✅ | restart test (new provider, same DB); template `--persist` restarted with no duplicate seeding and no failed-DDL log |
+| Profile validation (`FhirProfileValidator`, R4 core + IG packages, `$validate`, 422 on write) | ✅ | heart-rate profile errors; all mapped vital signs conform (SpO₂ now carries LOINC 2708-6); `specification.zip` reaches consuming apps (fixed `NuGetPackageRoot` without a trailing slash) |
+| SMART on FHIR (discovery, authorize + PKCE S256, token, client_credentials, v1/v2 scopes, patient compartment) | ✅ | `SmartTests` end-to-end; template `--smart` probed with curl (401 → token → 200/403) |
+| SATUSEHAT workflow (Encounter → Condition → Observation → Medication/KFA → MedicationRequest), `KfaClient`/`KfaCatalog`, `RetryHandler`, 401 refresh | ✅ | `SatuSehatTests` (bundle linkage, processable, every coding has a display, backoff/idempotency, token refresh, KFA parsing) |
+| HL7 v2 ORM^O01, OML^O21, SIU^S12, MDM^T02 + `Hl7WorkflowMapping` + FHIR | ✅ | round-trip tests |
+| HL7 conformance profiles (6 built-in), `/api/hl7/conformance`, MLLP `EnforceConformance` | ✅ | built messages conform; broken ones are flagged; MDM always emits PV1 |
+| `Medical.Bpjs`: VClaim, PCare, E-Klaim, INA-CBG claim builder + coding checks, LZ-String | ✅ | lz-string 1.5.0 vectors, HMAC signature reference, E-Klaim tamper detection, client mocks |
+| CLI: `fhir validate --profile`, `hl7 sample --type …`, `hl7 conform`, `satusehat bundle`, `bpjs claim` | ✅ | run end-to-end; also from the packed tool |
+| Template `medical-fhir-api --smart --persist` (+ version 1.1.0 for all templates) | ✅ | all 5 templates + the smart/persist variant built from the local feed |
+| Gallery: 4 new demos (FHIR server, HL7 orders & scheduling, SATUSEHAT visit, BPJS claim), 17 in total, web + desktop, EN/ID | ✅ | screenshots reviewed; all 44 images refreshed for v1.1.0 |
+| Docs: `interoperability.md` (EN/ID), README/README.id, modules, tools, deployment, CLAUDE.md | ✅ | |
+| Tests | ✅ 125/125 | `dotnet test -c Release` (in `build/pack.ps1`) |
+| Packages (17, incl. new `Medical.Bpjs`) | ✅ | `build/pack.ps1 -Version 1.1.0` |
+
+Bugs found and fixed during v1.1:
+- `FhirMapper` codings had no `display`: Firely's 3-argument `CodeableConcept` constructor sets `text`. Fixed with `FhirMapper.Cc`.
+- Conditional-create `urn:uuid` remap.
+- The `clinical-status` search parameter was missing.
+- E-Klaim birth-date format.
+- The SEP number is alphanumeric.
 
 ## To publish
-1. Commit `Medical.Net/`, `.github/workflows/medical-net.yml` and the README row, then push to `main` (CI builds the kernels for 5 RIDs, tests and packs).
-2. Tag `medical-net-v1.0.0` and push the tag — the workflow publishes with the `NUGET_API_KEY` secret.
+1. Commit `Medical.Net/` and push to `main` (CI builds the kernels for 5 RIDs, tests and packs).
+2. Tag `medical-net-v1.1.0` and push the tag. The workflow publishes the 17 packages with the `NUGET_API_KEY` secret.
 
 ## Known limitations
 - Embedded terminology is a curated subset; load licensed full releases (SNOMED CT RF2, LOINC, ICD-10-CM, RxNorm) with `ReleaseLoaders`.
 - `DrugKnowledge` and dosing tables are illustrative; integrate a licensed drug database for production.
 - Risk models are trained on synthetic cohorts; the MONAI path needs trained weights (`MEDNET_MONAI_WEIGHTS`).
-- `InMemoryFhirStore` is for development, tests and edge gateways.
+- The built-in SMART authorization server auto-approves (development); production needs an identity provider in front of `/auth/authorize`.
+- The BPJS and SATUSEHAT clients are verified against mocks and reference crypto vectors, not against live BPJS / Kemenkes sandboxes, which need facility credentials. KFA codes in the gallery are illustrative.
+- `EfFhirRepository` pre-filters token/reference criteria in SQL and evaluates the rest in memory. For very large stores, use a dedicated FHIR server.

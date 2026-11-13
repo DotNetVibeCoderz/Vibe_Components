@@ -1,7 +1,7 @@
-# Packs every Medical.Net NuGet package (libraries, CLI tool, templates) into artifacts/packages.
-# Usage: ./build/pack.ps1 [-Version 1.0.0] [-SkipNative] [-SkipTests]
+﻿# Packs every Medical.Net NuGet package (libraries, CLI tool, templates) into artifacts/packages.
+# Usage: ./build/pack.ps1 [-Version 1.1.0] [-SkipNative] [-SkipTests]
 param(
-    [string]$Version = "1.0.0",
+    [string]$Version = "1.1.0",
     [switch]$SkipNative,
     [switch]$SkipTests
 )

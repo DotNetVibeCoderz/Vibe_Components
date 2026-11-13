@@ -9,5 +9,6 @@
     <ProjectReference Include="../../src/Medical.Signals/Medical.Signals.csproj" />
     <ProjectReference Include="../../src/Medical.Visualization/Medical.Visualization.csproj" />
     <ProjectReference Include="../../src/Medical.Emr/Medical.Emr.csproj" />
+    <ProjectReference Include="../../src/Medical.Bpjs/Medical.Bpjs.csproj" />
   </ItemGroup>
 </Project>

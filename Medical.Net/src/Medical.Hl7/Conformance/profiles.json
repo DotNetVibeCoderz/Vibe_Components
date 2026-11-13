@@ -1,0 +1,79 @@
+[
+  {
+    "messageType": "ADT^A01", "description": "Admit / visit notification (Medical.Net baseline, HL7 v2.5.1)",
+    "segments": [
+      { "name": "MSH", "usage": "R", "min": 1, "max": 1, "fields": [
+        { "index": 3, "usage": "R" }, { "index": 4, "usage": "R" }, { "index": 7, "usage": "R" }, { "index": 9, "usage": "R" },
+        { "index": 10, "usage": "R", "maxLength": 50 }, { "index": 11, "usage": "R", "table": ["P", "T", "D"] }, { "index": 12, "usage": "R" } ] },
+      { "name": "EVN", "usage": "R", "min": 1, "max": 1 },
+      { "name": "PID", "usage": "R", "min": 1, "max": 1, "fields": [
+        { "index": 3, "usage": "R" }, { "index": 5, "usage": "R" }, { "index": 7, "usage": "RE" },
+        { "index": 8, "usage": "RE", "table": ["F", "M", "O", "U", "A", "N"] } ] },
+      { "name": "PV1", "usage": "R", "min": 1, "max": 1, "fields": [
+        { "index": 2, "usage": "R", "table": ["E", "I", "O", "P", "R", "B", "C", "N", "U"] }, { "index": 19, "usage": "RE" } ] }
+    ]
+  },
+  {
+    "messageType": "ORU^R01", "description": "Unsolicited observation result",
+    "segments": [
+      { "name": "MSH", "usage": "R", "min": 1, "max": 1, "fields": [ { "index": 9, "usage": "R" }, { "index": 10, "usage": "R", "maxLength": 50 }, { "index": 12, "usage": "R" } ] },
+      { "name": "PID", "usage": "R", "min": 1, "max": 1, "fields": [ { "index": 3, "usage": "R" }, { "index": 5, "usage": "R" } ] },
+      { "name": "OBR", "usage": "R", "min": 1, "max": "*", "fields": [ { "index": 4, "usage": "R" } ] },
+      { "name": "OBX", "usage": "R", "min": 1, "max": "*", "fields": [
+        { "index": 2, "usage": "R", "table": ["NM", "ST", "TX", "FT", "CE", "CWE", "SN", "DT", "TS", "DTM", "ED", "NA"] },
+        { "index": 3, "usage": "R" }, { "index": 5, "usage": "RE" },
+        { "index": 8, "usage": "RE", "table": ["L", "H", "LL", "HH", "N", "A", "AA", "<", ">", "U", "D", "B", "W", "S", "R", "I", "MS", "VS"] },
+        { "index": 11, "usage": "R", "table": ["F", "P", "C", "X", "D", "R", "I", "W", "N", "O", "S", "U"] } ] }
+    ]
+  },
+  {
+    "messageType": "ORM^O01", "description": "General order",
+    "segments": [
+      { "name": "MSH", "usage": "R", "min": 1, "max": 1, "fields": [ { "index": 9, "usage": "R" }, { "index": 10, "usage": "R" } ] },
+      { "name": "PID", "usage": "R", "min": 1, "max": 1, "fields": [ { "index": 3, "usage": "R" }, { "index": 5, "usage": "R" } ] },
+      { "name": "PV1", "usage": "O", "min": 0, "max": 1, "fields": [ { "index": 2, "usage": "R", "table": ["E", "I", "O", "P", "R", "B", "C", "N", "U"] } ] },
+      { "name": "ORC", "usage": "R", "min": 1, "max": "*", "fields": [
+        { "index": 1, "usage": "R", "table": ["NW", "OK", "CA", "CR", "DC", "XO", "XR", "SC", "SN", "SS", "RE", "OC", "OD", "HD", "RL"] },
+        { "index": 2, "usage": "R", "maxLength": 50 } ] },
+      { "name": "OBR", "usage": "R", "min": 1, "max": "*", "fields": [ { "index": 4, "usage": "R" } ] }
+    ]
+  },
+  {
+    "messageType": "OML^O21", "description": "Laboratory order",
+    "segments": [
+      { "name": "MSH", "usage": "R", "min": 1, "max": 1, "fields": [ { "index": 9, "usage": "R" }, { "index": 10, "usage": "R" } ] },
+      { "name": "PID", "usage": "R", "min": 1, "max": 1, "fields": [ { "index": 3, "usage": "R" }, { "index": 5, "usage": "R" } ] },
+      { "name": "PV1", "usage": "O", "min": 0, "max": 1, "fields": [ { "index": 2, "usage": "R", "table": ["E", "I", "O", "P", "R", "B", "C", "N", "U"] } ] },
+      { "name": "ORC", "usage": "R", "min": 1, "max": "*", "fields": [
+        { "index": 1, "usage": "R", "table": ["NW", "OK", "CA", "CR", "DC", "XO", "XR", "SC", "SN", "SS", "RE", "OC", "OD", "HD", "RL"] },
+        { "index": 2, "usage": "R", "maxLength": 50 } ] },
+      { "name": "OBR", "usage": "R", "min": 1, "max": "*", "fields": [ { "index": 4, "usage": "R" } ] },
+      { "name": "SPM", "usage": "RE", "min": 0, "max": "*", "fields": [ { "index": 4, "usage": "R" } ] }
+    ]
+  },
+  {
+    "messageType": "SIU^S12", "description": "New appointment booking",
+    "segments": [
+      { "name": "MSH", "usage": "R", "min": 1, "max": 1, "fields": [ { "index": 9, "usage": "R" }, { "index": 10, "usage": "R" } ] },
+      { "name": "SCH", "usage": "R", "min": 1, "max": 1, "fields": [ { "index": 1, "usage": "RE" }, { "index": 2, "usage": "RE" }, { "index": 11, "usage": "R" } ] },
+      { "name": "PID", "usage": "R", "min": 1, "max": "*", "fields": [ { "index": 3, "usage": "R" } ] },
+      { "name": "RGS", "usage": "R", "min": 1, "max": "*" },
+      { "name": "AIS", "usage": "RE", "min": 0, "max": "*", "fields": [ { "index": 3, "usage": "R" } ] },
+      { "name": "AIL", "usage": "RE", "min": 0, "max": "*" },
+      { "name": "AIP", "usage": "RE", "min": 0, "max": "*" }
+    ]
+  },
+  {
+    "messageType": "MDM^T02", "description": "Original document notification with content",
+    "segments": [
+      { "name": "MSH", "usage": "R", "min": 1, "max": 1, "fields": [ { "index": 9, "usage": "R" }, { "index": 10, "usage": "R" } ] },
+      { "name": "EVN", "usage": "R", "min": 1, "max": 1 },
+      { "name": "PID", "usage": "R", "min": 1, "max": 1, "fields": [ { "index": 3, "usage": "R" } ] },
+      { "name": "PV1", "usage": "R", "min": 1, "max": 1 },
+      { "name": "TXA", "usage": "R", "min": 1, "max": 1, "fields": [
+        { "index": 2, "usage": "R" }, { "index": 12, "usage": "R" },
+        { "index": 17, "usage": "R", "table": ["DI", "DO", "IN", "IP", "AU", "LA", "PA"] } ] },
+      { "name": "OBX", "usage": "R", "min": 1, "max": "*", "fields": [ { "index": 2, "usage": "R" }, { "index": 5, "usage": "R" } ] }
+    ]
+  }
+]

@@ -7,6 +7,7 @@
   <Folder Name="/src/">
     <Project Path="src/Medical.AI/Medical.AI.csproj" />
     <Project Path="src/Medical.AspNetCore/Medical.AspNetCore.csproj" />
+    <Project Path="src/Medical.Bpjs/Medical.Bpjs.csproj" />
     <Project Path="src/Medical.Clinical/Medical.Clinical.csproj" />
     <Project Path="src/Medical.Core/Medical.Core.csproj" />
     <Project Path="src/Medical.Dicom/Medical.Dicom.csproj" />

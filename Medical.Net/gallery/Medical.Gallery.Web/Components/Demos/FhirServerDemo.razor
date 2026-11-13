@@ -1,0 +1,41 @@
+@inherits DemoBase
+@{ var v = Scenarios.FhirServer(); }
+<div class="grid-2 wide-right">
+    <div class="panel">
+        <h3>@T("Search", "Pencarian") <small>@v.Stored @T("resources stored", "resource tersimpan")</small></h3>
+        <table class="data">
+            <thead><tr><th>@T("Request", "Permintaan")</th><th>@T("Match", "Cocok")</th><th>Incl.</th></tr></thead>
+            <tbody>
+                @foreach (var q in v.Queries)
+                {
+                    <tr><td class="mono small wrap">@q.Query<br /><span class="tag">@q.Note</span></td><td class="mono">@q.Total</td><td class="mono">@(q.Included == 0 ? "—" : q.Included)</td></tr>
+                }
+            </tbody>
+        </table>
+        <p class="label">_history · Patient/pat-00002</p>
+        <table class="data">
+            <thead><tr><th>vid</th><th>@T("Method", "Metode")</th><th>lastUpdated</th><th>@T("Change", "Perubahan")</th></tr></thead>
+            <tbody>@foreach (var h in v.History) { <tr><td class="mono">@h.Version</td><td class="mono">@h.Method</td><td class="mono small">@h.LastUpdated</td><td>@h.Change</td></tr> }</tbody>
+        </table>
+        <p class="small">PUT @T("with", "dengan") <code>If-Match: W/"1"</code> @T("once version 2 exists", "setelah versi 2 ada") → <b>412 Precondition Failed</b>; @T("reading a deleted resource", "membaca resource terhapus") → <b>410 Gone</b>.</p>
+    </div>
+    <div class="panel">
+        <h3>@T("Profile validation", "Validasi profil") <small>Firely · hl7.fhir.r4.core</small></h3>
+        @foreach (var r in v.Validation)
+        {
+            <div class="alert @(r.Ok ? "" : "critical")">
+                <strong>@r.Resource <span class="tag @(r.Ok ? "" : "warn")">@r.Profile</span></strong>
+                @if (r.Ok)
+                {
+                    <span>@T("Conforms to the profile.", "Sesuai profil.")</span>
+                }
+                else
+                {
+                    foreach (var i in r.Issues.Take(4)) { <span>@i</span> }
+                }
+            </div>
+        }
+        <p class="label">SMART on FHIR · scopes</p>
+        <dl class="kv">@foreach (var (s, m, n) in v.Scopes) { <dt class="mono small">@s</dt><dd class="small">@m[Lang]@(n is not null && n != s ? $"  → {n}" : "")</dd> }</dl>
+    </div>
+</div>

@@ -46,7 +46,7 @@ public sealed record PrivacyView(string Original, string Redacted, IReadOnlyList
 public sealed record EmrView(int Patients, IReadOnlyList<Patient> Search, IReadOnlyList<AuditEvent> Audit, string Provider);
 
 /// <summary>Computes every gallery demo. Results are deterministic so screenshots and docs stay reproducible.</summary>
-public static class Scenarios
+public static partial class Scenarios
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
     private static readonly Lazy<IReadOnlyList<DicomFile>> HeadCt = new(() => DicomPhantom.CreateSeries(PhantomKind.Head, 24, 256));

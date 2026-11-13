@@ -1,0 +1,37 @@
+@inherits DemoBase
+@using Medical.Bpjs.InaCbg
+@{
+    var v = Scenarios.Bpjs(_patient, _broken);
+    int errors = v.Issues.Count(i => i.Severity == ClaimIssueSeverity.Error);
+    var idr = System.Globalization.CultureInfo.GetCultureInfo("id-ID");
+}
+<div class="controls">
+    <label>@T("Synthetic patient", "Pasien sintetis") <input type="number" min="1" max="200" @bind="_patient" /></label>
+    <label><input type="checkbox" @bind="_broken" /> @T("Introduce coding errors", "Masukkan kesalahan koding")</label>
+</div>
+<div class="grid-2">
+    <div class="panel">
+        <h3>E-Klaim · set_claim_data <small>@(v.Claim.JenisRawat == CareType.Inpatient ? T("inpatient", "rawat inap") : T("outpatient", "rawat jalan")) · LOS @v.Claim.LengthOfStay @T("days", "hari")</small></h3>
+        <dl class="kv">@foreach (var (k, val) in v.Data) { <dt class="mono small">@k</dt><dd class="mono small">@val</dd> }</dl>
+        <p class="label">tarif_rs · Rp @v.Claim.Tariff.Total.ToString("N0", idr)</p>
+        <table class="data">
+            <tbody>@foreach (var (k, amt) in v.Tariff) { <tr><td class="mono small">@k</td><td class="mono">@amt.ToString("N0", idr)</td></tr> }</tbody>
+        </table>
+    </div>
+    <div class="panel">
+        <h3>@T("Pre-grouping checks", "Pemeriksaan sebelum grouping") <small class="@(errors == 0 ? "" : "bad")">@errors @T("errors", "galat") · @(v.Issues.Count - errors) @T("warnings", "peringatan")</small></h3>
+        @if (v.Issues.Count == 0)
+        {
+            <div class="alert"><strong>@T("Ready for the INA-CBG grouper.", "Siap untuk grouper INA-CBG.")</strong><span>SEP, @T("card", "kartu"), ICD-10 / ICD-9-CM, LOS, @T("tariff", "tarif").</span></div>
+        }
+        @foreach (var i in v.Issues)
+        {
+            <div class="alert @(i.Severity == ClaimIssueSeverity.Error ? "critical" : "warning")"><strong><code>@i.Field</code></strong><span>@i.Message[Lang]</span></div>
+        }
+        <p class="label">VClaim · @T("request headers (demo credentials)", "header permintaan (kredensial demo)")</p>
+        <dl class="kv">@foreach (var (h, val) in v.Headers) { <dt class="mono small">@h</dt><dd class="mono small">@val</dd> }</dl>
+        <p class="label">@T("Response: AES-256-CBC, then LZ-String", "Respons: AES-256-CBC, lalu LZ-String") · @v.PlainLength → @v.Compressed.Length @T("chars", "karakter")</p>
+        <pre class="json wrap"><code>@v.Compressed</code></pre>
+    </div>
+</div>
+@code { private int _patient = 7; private bool _broken; }

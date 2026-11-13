@@ -71,7 +71,7 @@ public sealed class Hl7Message
 }
 
 /// <summary>HL7 v2 parsing, construction (2.5.1) and acknowledgement.</summary>
-public static class Hl7V2
+public static partial class Hl7V2
 {
     private static readonly PipeParser Parser = new();
 
@@ -87,9 +87,9 @@ public static class Hl7V2
 
     public static string Encode(IMessage message) => Parser.Encode(message);
 
-    private static string Ts(DateTimeOffset t) => t.ToString("yyyyMMddHHmmsszzz", CultureInfo.InvariantCulture).Replace(":", "");
+    internal static string Ts(DateTimeOffset t) => t.ToString("yyyyMMddHHmmsszzz", CultureInfo.InvariantCulture).Replace(":", "");
 
-    private static void Header(Terser t, string code, string trigger, string structure, Hl7Endpoint from, Hl7Endpoint to, string controlId, DateTimeOffset at)
+    internal static void Header(Terser t, string code, string trigger, string structure, Hl7Endpoint from, Hl7Endpoint to, string controlId, DateTimeOffset at)
     {
         t.Set("/MSH-1", "|");
         t.Set("/MSH-2", "^~\\&");
@@ -106,7 +106,7 @@ public static class Hl7V2
         t.Set("/MSH-12-1", "2.5.1");
     }
 
-    private static void Pid(Terser t, string prefix, Patient p)
+    internal static void Pid(Terser t, string prefix, Patient p)
     {
         t.Set($"{prefix}PID-1", "1");
         t.Set($"{prefix}PID-3(0)-1", p.Mrn);

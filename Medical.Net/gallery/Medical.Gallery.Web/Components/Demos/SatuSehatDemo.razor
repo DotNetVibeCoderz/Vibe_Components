@@ -1,0 +1,24 @@
+@inherits DemoBase
+@{ var v = Scenarios.SatuSehat(_patient, _kfa); }
+<div class="controls">
+    <label>@T("Synthetic patient", "Pasien sintetis") <input type="number" min="1" max="200" @bind="_patient" /></label>
+    <label><input type="checkbox" @bind="_kfa" /> @T("KFA catalogue loaded", "Katalog KFA dimuat")</label>
+</div>
+<div class="grid-2 wide-left">
+    <div class="panel">
+        <h3>@T("Transaction bundle", "Bundle transaksi") <small>@v.Entries.Count @T("entries", "entri") · @v.Medications @T("KFA medications", "obat KFA")</small></h3>
+        <table class="data">
+            <thead><tr><th>Resource</th><th>fullUrl</th><th>@T("Content", "Isi")</th><th>@T("References", "Referensi")</th></tr></thead>
+            <tbody>@foreach (var e in v.Entries) { <tr><td class="mono">@e.Resource</td><td class="mono small">@e.FullUrl</td><td>@e.Summary</td><td class="mono small wrap">@e.Links</td></tr> }</tbody>
+        </table>
+        @foreach (var w in v.Warnings)
+        {
+            <div class="alert warning"><strong>KFA</strong><span>@w</span></div>
+        }
+    </div>
+    <div class="panel">
+        <h3>POST /fhir-r4/v1 <small>Bearer · RetryHandler</small></h3>
+        <pre class="json"><code>@v.Json[..Math.Min(v.Json.Length, 3600)]…</code></pre>
+    </div>
+</div>
+@code { private int _patient = 3; private bool _kfa = true; }

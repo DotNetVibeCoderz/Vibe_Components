@@ -18,6 +18,7 @@ public static class GalleryCatalog
         new("imaging", new("Imaging", "Pencitraan")),
         new("signals", new("Biosignals", "Biosinyal")),
         new("interop", new("Interoperability", "Interoperabilitas")),
+        new("national", new("Indonesia: SATUSEHAT & BPJS", "Indonesia: SATUSEHAT & BPJS")),
         new("ai", new("Clinical AI", "AI klinis")),
         new("data", new("Data & privacy", "Data & privasi")),
     ];
@@ -105,6 +106,56 @@ public static class GalleryCatalog
             Bundle tx = Hl7Mapping.ToFhirTransaction(msg);
 
             await using var server = new MllpServer(new(IPAddress.Any, 2575), MllpServer.AcceptAll);
+            """),
+        new("fhir-server", "interop", new("FHIR server", "Server FHIR"),
+            new("A versioned FHIR R4 repository: chained search with _include / _revinclude, _history and vread, If-Match, profile validation against the R4 spec and SMART on FHIR scopes.",
+                "Repositori FHIR R4 berversi: pencarian dengan _include / _revinclude, _history dan vread, If-Match, validasi profil terhadap spesifikasi R4, dan scope SMART on FHIR."),
+            "Medical.Fhir · Medical.AspNetCore", """
+            services.AddMedical(m => m.AddMedicalApi()
+                .AddEmr(o => o.PersistFhir = true)           // EF Core: versions + search index
+                .AddSmartOnFhir(o => o.Clients.Add(new("ward-app", ["https://app/cb"], "launch/patient patient/*.rs"))));
+            app.MapMedicalFhir();                            // /fhir/{type}?…, /_history, $validate, transaction
+            app.MapSmartAuthorization();                     // .well-known/smart-configuration, /auth/*
+
+            Bundle labs = repo.Search("Observation", [new("patient", "pat-00003"), new("_include", "Observation:patient")]);
+            OperationOutcome oo = new FhirProfileValidator().Validate(obs, "http://hl7.org/fhir/StructureDefinition/heartrate");
+            """),
+        new("hl7-orders", "interop", new("HL7 orders & scheduling", "Order & jadwal HL7"),
+            new("ORM^O01 / OML^O21 orders, SIU^S12 appointments and MDM^T02 documents, checked by segment-level conformance profiles and mapped to FHIR.",
+                "Order ORM^O01 / OML^O21, janji temu SIU^S12 dan dokumen MDM^T02, diperiksa profil kesesuaian tingkat segmen dan dipetakan ke FHIR."),
+            "Medical.Hl7", """
+            ORM_O01 orm = Hl7V2.BuildOrder(patient, orders, new("EMR", "RSUD"), new("LIS", "LAB"));
+            SIU_S12 siu = Hl7V2.BuildAppointment(patient, appointment, new("SIMRS", "RSUD"), new("EMR", "RSUD"));
+            MDM_T02 mdm = Hl7V2.BuildDocument(patient, cppt, new("EMR", "RSUD"), new("DMS", "RSUD"), encounter);
+
+            ConformanceResult r = new Hl7ConformanceValidator().Validate(Hl7V2.Parse(Hl7V2.Encode(orm)));
+            // r.IsValid, r.Issues: "Error PID-3: Required field missing", "Error ORC-1: 'ZZ' not in table"
+            Bundle tx = Hl7Mapping.ToFhirTransaction(msg);   // → ServiceRequest / Appointment / DocumentReference
+            """),
+        new("satusehat", "national", new("SATUSEHAT visit", "Kunjungan SATUSEHAT"),
+            new("One outpatient visit as a SATUSEHAT transaction: Encounter → Condition → Observation → Medication (KFA) → MedicationRequest, linked by urn:uuid, posted with token refresh and retry/backoff.",
+                "Satu kunjungan rawat jalan sebagai transaksi SATUSEHAT: Encounter → Condition → Observation → Medication (KFA) → MedicationRequest, ditautkan urn:uuid, dikirim dengan pembaruan token dan retry/backoff."),
+            "Medical.Fhir", """
+            var kfa = new KfaCatalog();
+            await new KfaClient(http, satuSehat).ResolveIntoAsync(kfa, record.Medications.Select(m => m.Generic));
+
+            SatuSehatSubmission s = SatuSehatWorkflow.BuildOutpatientVisit(record, context, kfa);
+            // s.Warnings: medications without a KFA code are skipped, never sent uncoded
+            Bundle result = await satuSehat.PostTransactionAsync(s.Bundle);   // 429/5xx → RetryHandler
+            """),
+        new("bpjs", "national", new("BPJS claim (INA-CBG)", "Klaim BPJS (INA-CBG)"),
+            new("Build E-Klaim claim data from the record, check INA-CBG coding rules before grouping, and sign VClaim / PCare requests with HMAC-SHA256 + LZ-String responses.",
+                "Susun data klaim E-Klaim dari rekam medis, periksa aturan koding INA-CBG sebelum grouping, dan tandatangani permintaan VClaim / PCare dengan HMAC-SHA256 + respons LZ-String."),
+            "Medical.Bpjs", """
+            InaCbgClaim claim = InaCbgClaimBuilder.FromRecord(record, nomorSep, nomorKartu, tariff, coderNik, ["87.44"]);
+            IReadOnlyList<ClaimIssue> issues = InaCbgClaimBuilder.Validate(claim);   // SEP, ICD-10 rules, LOS, tariff
+
+            var eklaim = new EKlaimClient(http, "http://eklaim/E-Klaim/ws.php", hexKey);
+            await eklaim.NewClaimAsync(claim); await eklaim.SetClaimDataAsync(claim);
+            JsonNode cbg = await eklaim.GrouperAsync(claim.NomorSep);                 // → CBG code + tariff
+
+            var vclaim = new VClaimClient(http, BpjsCredentials.FromEnvironment());
+            JsonNode peserta = await vclaim.PesertaByKartuAsync("0001234567890", today);
             """),
         new("terminology", "interop", new("Terminology", "Terminologi"),
             new("Search ICD-10, SNOMED CT, LOINC and RxNorm in English or Bahasa Indonesia, walk the SNOMED hierarchy and map to ICD-10.",

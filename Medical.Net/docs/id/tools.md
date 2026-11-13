@@ -46,3 +46,23 @@ dotnet run --project gallery/Medical.Gallery.Desktop -- --screenshot docs/images
 |---|---|
 | ![](../images/desktop-news2-id.png) | ![](../images/desktop-cds-id.png) |
 | ![](../images/desktop-dicom-id.png) | ![](../images/desktop-terminology-id.png) |
+
+## Baru di 1.1
+
+| Perintah | Contoh |
+|---|---|
+| Validasi profil FHIR | `medical fhir validate obs.json --profile http://hl7.org/fhir/StructureDefinition/heartrate` |
+| Order / jadwal / dokumen HL7 | `medical hl7 sample --type orm|oml|siu|mdm --out msg.hl7` · `medical hl7 conform msg.hl7` |
+| SATUSEHAT | `medical satusehat bundle --index 3 --out kunjungan.json` |
+| BPJS | `medical bpjs claim --index 7 --lang id` (data klaim INA-CBG + pemeriksaan koding; kode keluar 2 bila ada galat) |
+
+Templat `medical-fhir-api` kini menerima `--smart` (otorisasi SMART on FHIR) dan `--persist` (FHIR tersimpan di EF Core/SQLite); `--MedicalNetVersion` bawaan `1.1.0`.
+
+Galeri kini berisi tujuh belas kasus, termasuk **Server FHIR**, **Order & jadwal HL7**, **Kunjungan SATUSEHAT** dan **Klaim BPJS (INA-CBG)**:
+
+| | |
+|---|---|
+| ![](../images/desktop-fhir-server-id.png) | ![](../images/desktop-hl7-orders-id.png) |
+| ![](../images/desktop-satusehat-id.png) | ![](../images/desktop-bpjs-id.png) |
+
+Tangkapan layar web dibuat dengan Chrome headless (`--screenshot`, `--blink-settings=preferredColorScheme=1` untuk mode terang, `--force-prefers-reduced-motion` agar animasi EKG sudah selesai).

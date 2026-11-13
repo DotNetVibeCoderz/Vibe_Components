@@ -112,3 +112,18 @@ var r = await repo.GetRecordAsync("pat-00007", purpose: "treatment");   // cache
 ## Medical.Visualization
 
 `Charts.EcgStrip`, `ObservationChart` (NEWS2), `Trend`, `DivergingBars`, `Histogram`, `Gauge` return SVG strings that use CSS variables (`--ink`, `--teal`, `--ecg-major`…). Use `SvgTheme.Resolve(svg)` for renderers without CSS (Svg.Skia, PDFs).
+
+## Medical.Bpjs — BPJS Kesehatan
+
+```csharp
+var vclaim = new VClaimClient(http, BpjsCredentials.FromEnvironment());
+JsonNode peserta = await vclaim.PesertaByKartuAsync("0001234567890", DateOnly.FromDateTime(DateTime.Today));
+
+InaCbgClaim claim = InaCbgClaimBuilder.FromRecord(record, nomorSep, nomorKartu, tariff, coderNik, ["87.44"]);
+IReadOnlyList<ClaimIssue> issues = InaCbgClaimBuilder.Validate(claim);      // before the INA-CBG grouper
+var eklaim = new EKlaimClient(http, "http://eklaim/E-Klaim/ws.php", hexKey);
+await eklaim.NewClaimAsync(claim); await eklaim.SetClaimDataAsync(claim);
+JsonNode cbg = await eklaim.GrouperAsync(claim.NomorSep);
+```
+
+v1.1 additions to Medical.Fhir (FHIR repository, search, history, profile validation, SMART, SATUSEHAT workflow, KFA) and Medical.Hl7 (ORM/OML/SIU/MDM, conformance) are documented in [Interoperability](interoperability.md).

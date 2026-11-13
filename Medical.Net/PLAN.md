@@ -14,11 +14,12 @@ Made by Gravicode Studios, led by Kang Fadhil. Status details: [Progress.md](Pro
 - Rust kernels with managed fallback; SVG visualization
 - CLI, 5 templates, Blazor + Avalonia gallery, bilingual docs, CI and NuGet publishing
 
-## v1.1 — Interoperability depth
+## v1.1 — Interoperability depth ✅
 - FHIR: persistence-backed FHIR server (EF Core), `_include`/`_revinclude`, `_history`, profile validation against IG packages (Firely `Hl7.Fhir.Specification`), SMART on FHIR launch
 - SATUSEHAT: full Encounter→Condition→Observation→MedicationRequest workflow helpers, KFA drug codes, retry/backoff
 - HL7 v2: ORM/OML orders, SIU scheduling, MDM documents, segment-level conformance profiles
 - BPJS: INA-CBG grouping inputs, VClaim/PCare clients
+- Delivered in 1.1.0 — see [docs/en/interoperability.md](docs/en/interoperability.md). Carried forward: SATUSEHAT inpatient / ED workflows and ServiceRequest-Specimen-DiagnosticReport lab flow; HL7 v2.3 / 2.4 conformance profiles; E-Klaim iDRG (when published by Kemenkes)
 
 ## v1.2 — Imaging and signals
 - Transcoding of compressed transfer syntaxes (JPEG 2000 / JPEG-LS) in the pipeline

@@ -42,3 +42,21 @@ Daftar di portal pengembang SATUSEHAT, atur `SATUSEHAT_CLIENT_ID`, `SATUSEHAT_CL
 - **Privasi**: de-identifikasi sebelum ekspor penelitian; samarkan identitas di layar (`Masking`); hormati persetujuan (`ConsentRegistry`) — UU PDP No. 27/2022, Permenkes 24/2022 tentang rekam medis elektronik, HIPAA.
 - **Keselamatan klinis**: validasi skor, aturan, dan model secara lokal; tampilkan disclaimer; perlakukan keluaran AI sebagai pendukung keputusan.
 - **Transport**: TLS untuk HTTP; jalankan MLLP di jaringan tepercaya atau melalui terowongan TLS.
+
+## Baru di 1.1: server FHIR, SMART dan BPJS
+
+| Endpoint | Fungsi |
+|---|---|
+| `GET /fhir/{type}?…` | pencarian dengan `_include`/`_revinclude`, `_sort`, `_count`/`_offset`, prefiks tanggal dan modifier |
+| `GET /fhir/{type}/{id}/_history[/{vid}]`, `/fhir/{type}/_history`, `/fhir/_history` | riwayat dan vread (resource terhapus dijawab 410 Gone) |
+| `PUT /fhir/{type}/{id}` dengan `If-Match` | pembaruan bersyarat (412 bila versi berubah) |
+| `POST /fhir/{type}/$validate[?profile=…]` | validasi profil (inti R4 + paket IG) |
+| `/fhir/.well-known/smart-configuration`, `/auth/*` | SMART on FHIR (`AddSmartOnFhir` + `MapSmartAuthorization`) |
+| `POST /api/hl7/conformance` | validasi kesesuaian HL7 v2 |
+
+- **Persistensi**: dengan `AddEmr()` endpoint FHIR memakai `EfFhirRepository` (semua versi disimpan, indeks pencarian di SQL).
+- **Kontrol akses**: aktifkan SMART on FHIR; scope diperiksa pada setiap interaksi dan kompartemen pasien ditegakkan. Pasang `/auth/authorize` di belakang penyedia identitas Anda.
+- **SATUSEHAT**: `HttpClient` `"satusehat"` mengulang 429/5xx dengan backoff; susun kunjungan dengan `SatuSehatWorkflow.BuildOutpatientVisit` dan kode obat dengan `KfaClient`.
+- **BPJS Kesehatan**: setel `BPJS_CONS_ID`, `BPJS_SECRET_KEY`, `BPJS_USER_KEY` lalu `AddBpjs(o => { o.Environment = BpjsEnvironment.Production; o.EKlaimUrl = …; o.EKlaimKey = …; })`. Simpan kunci E-Klaim di secret store dan jalankan server E-Klaim di jaringan internal rumah sakit.
+
+Detail: [Interoperabilitas](interoperability.md).

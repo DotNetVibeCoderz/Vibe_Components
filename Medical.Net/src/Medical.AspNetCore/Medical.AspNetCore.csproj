@@ -1,9 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Medical.Net for ASP.NET Core: FHIR R4 REST facade (CRUD, search, transactions, $everything, CapabilityStatement), clinical JSON API (scores, decision support, terminology, HL7→FHIR, de-identification) and a hosted HL7 MLLP listener.</Description>
+    <Description>Medical.Net for ASP.NET Core: FHIR R4 REST server (CRUD, vread, _history, search with _include/_revinclude, transactions, $everything, $validate, CapabilityStatement), SMART on FHIR authorization server with scope and patient-compartment enforcement, clinical JSON API (scores, decision support, terminology, HL7→FHIR, de-identification) and a hosted HL7 MLLP listener.</Description>
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="$(MsExtVersion)" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Medical.Hl7/Medical.Hl7.csproj" />
