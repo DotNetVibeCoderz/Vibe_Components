@@ -4,7 +4,7 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 
 | Area | Status | Notes |
 |---|---|---|
-| Solution scaffold (.NET 10, slnx, shared props) | ✅ | 38 projects (30 libraries, gallery ×3, CLI, templates, tests, benchmarks, edge gateway), Release build without code warnings (NU190x: ImageSharp via MediaPipeNet, upstream) |
+| Solution scaffold (.NET 10, slnx, shared props) | ✅ | 39 projects in the solution + the MAUI app (30 libraries, gallery ×3, CLI, templates, tests, benchmarks, edge gateway), Release build without code warnings (NU190x: ImageSharp via MediaPipeNet, upstream) |
 | AquaCulture.Core | ✅ | 10 species, farm/pond/cycle model, SIMD stats, numerics, geo, deterministic RNG, DI, event bus |
 | AquaCulture.WaterQuality | ✅ | 15 parameters, NH₃, DO saturation (verified against APHA tables), WQI + CCME, alerts with hysteresis and DO trend, dosed recommendations |
 | AquaCulture.Growth | ✅ | v1.3: Wisconsin bioenergetics, DEB, shrimp moult cycle · TGC / VBGF / Gompertz, environmental modifiers, mortality, feed calibrated to species FCR, harvest optimum |
@@ -30,14 +30,14 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | AquaCulture.Reporting | ✅ | XLSX/PDF/DOCX/CSV/JSON/HTML/MD (no third-party libs), GAP/CBIB/ASC/BAP |
 | AquaCulture.Visualization / Blazor | ✅ | SVG/PNG charts; 6 domain components incl. Three.js 3D pond |
 | AquaCulture.Native (Rust) | ✅ | 7 Rust tests; bit-identical managed fallback; CI builds 5 RIDs |
-| Tests | ✅ | 180 xUnit tests (reference values, native/managed parity, determinism, file-format validity, every gallery scenario) |
+| Tests | ✅ | 184 xUnit tests (reference values, native/managed parity, determinism, file-format validity, every gallery scenario) |
 | Gallery: Blazor | ✅ | 20 demos (v1.2: connectors, chlorophyll, learning), EN/ID, light/dark, screenshots in docs/images |
 | Gallery: Avalonia | ✅ | 20 demos, ThreeNet 3D pond (interactive + offscreen), headless screenshot mode |
 | CLI (`aqua`) | ✅ | 21 commands (v1.1: bmkg, history, marine, export, opcua) |
 | Templates | ✅ | 5 templates (v2.0: aqua-cloud), verified to build from the packed feed |
 | v2.0 Enterprise | ✅ | Traceability (GS1/EPCIS 2.0), Esg, Hatchery, Operations (inventory, purchasing, payroll), FarmCopilot, AquaTenants + aqua-cloud template |
-| v2.1 Edge and platform | ✅ | NativeAOT gateway `aqua-edge` (4.4 MB, self-test 1 s; CI: linux-arm64 + linux-x64), offline-first sync with per-gateway watermarks, BenchmarkDotNet with budgets in CI. Not released yet |
-| MAUI field-sampling client | ⏳ | |
+| v2.1 Edge and platform | ✅ | NativeAOT gateway `aqua-edge` (4.4 MB, self-test 1 s; CI: linux-arm64 + linux-x64), offline-first sync with per-gateway watermarks, BenchmarkDotNet with budgets in CI. tag `aquaculture-net-v2.1.0` |
+| MAUI field-sampling client (v2.1) | ✅ | `samples/AquaCulture.FieldApp` (+ `.Core`, 4 tests): sampling, instant assessment, offline journal + sync, CSV export, EN/ID; CI builds Windows and an Android APK (CI run 43332754752) |
 | Marketplace (v5.0) | ⏳ | |
 | NuGet icon & packages | ✅ | 31 packages + IoT.IoTCom (preview) + symbols; icon generated with Rodin (Nano Banana 2) |
 | Docs EN / ID | ✅ | 12 guides each (v2.0: enterprise, v2.1: edge and platform) + README / README.id |
@@ -84,4 +84,7 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
   Verified end to end: the native gateway against the template server built from the 2.1.0 packages, through an outage and back:
   640/640 readings stored, 0 duplicates, cloud set point applied. The ILCompiler bundled with SDK 10.0.4xx (10.0.12) has advisory
   GHSA-p3jp-9v83-76w9; on such SDKs the gateway publishes with ILCompiler/runtime 10.0.15 (`KnownILCompilerPack` update, RID builds only).
-  Version 2.1.0 (not tagged).
+  Version 2.1.0.
+- **2026-11-13**: MAUI field-sampling app (Android, Windows) and `SensorKind.Transparency/AverageWeight/Mortality`. CI found one compile
+  error that could not be seen locally (the `maui-android` workload is not installed here); fixed. Time budgets tightened to
+  max(3× runner, 1.5× desktop) after the first CI run showed the runner faster than the desktop. Tagged `aquaculture-net-v2.1.0`.

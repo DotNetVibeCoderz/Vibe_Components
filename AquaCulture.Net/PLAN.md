@@ -45,6 +45,8 @@ so the versions below deepen them rather than introduce them.
   self-test; CI publishes it for linux-arm64 (Raspberry Pi 4/5) and linux-x64 and runs the native binary
 - ✅ Offline-first sync: `EdgeOutbox` (durable, power-cut safe, capped), `CloudSyncClient` (batches, backoff, config pull with ETag),
   idempotent per-gateway watermarks in `AquaStore` and the `aqua-cloud` sync endpoints
+- ✅ .NET MAUI field-sampling app (`samples/AquaCulture.FieldApp`, Android + Windows): instant WQI, dosed actions, ABW/biomass, feeding plan,
+  offline journal synced over the same protocol; CI builds Windows and an Android APK
 - ✅ BenchmarkDotNet project (`benchmarks/AquaCulture.Benchmarks`, Rust vs managed kernels and the hot models) with time and allocation
   budgets enforced in CI before publishing
 
@@ -56,4 +58,4 @@ so the versions below deepen them rather than introduce them.
 ## Platform
 - ✅ NativeAOT samples for edge gateways (Raspberry Pi 4/5) (v2.1)
 - ✅ BenchmarkDotNet project and performance budgets in CI (v2.1)
-- ⏳ MAUI/mobile client for field sampling
+- ✅ MAUI/mobile client for field sampling (v2.1)
