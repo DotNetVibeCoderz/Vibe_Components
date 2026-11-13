@@ -32,6 +32,9 @@ internal static class Views
     private sealed class PrivacyState { public bool Pseudo; }
     private sealed class OrderState { public string Type = "ORM"; public bool Broken; }
     private sealed class ClaimState { public bool Broken; }
+    private sealed class MprState { public bool Chest; public double Pos = 0.5; public Medical.Native.SlabMode Mode = Medical.Native.SlabMode.Max; public double Slab = 30; }
+    private sealed class AiState { public bool Chest; }
+    private sealed class Ecg12State { public Medical.Signals.StPattern Pattern = Medical.Signals.StPattern.InferiorStemi; public double Hr = 72, Qtc = 400; public bool Af, Female; }
     private sealed class ChatState
     {
         public ClinicalAssistant Assistant = Scenarios.Assistant();
@@ -303,6 +306,85 @@ internal static class Views
                             Table(["Header", T("Value", "Nilai")], v.Headers.Select(h => new[] { h.Header, h.Value }), 0, 1),
                             Eyebrow($"LZ-String · {v.PlainLength} → {v.Compressed.Length}"), Mono(v.Compressed, 11)),
                             $"{errors} {T("errors", "galat")}")));
+            }
+            case "mpr":
+            {
+                var st = S<MprState>();
+                var v = Scenarios.Mpr(st.Chest, st.Pos, st.Mode, st.Slab);
+                string Plane(string p) => p switch { "Axial" => T("Axial", "Aksial"), "Coronal" => T("Coronal", "Koronal"), _ => T("Sagittal", "Sagital") };
+                Control Img(PlaneImage p, double w) => new Image { Source = new Avalonia.Media.Imaging.Bitmap(new MemoryStream(p.Png)), Stretch = Stretch.Uniform, MaxWidth = w, MaxHeight = w };
+                return Stack(16,
+                    Controls(Segmented([(false, T("Head CT", "CT kepala")), (true, T("Chest CT", "CT toraks"))], st.Chest, x => { st.Chest = x; rerender(); }),
+                        Slider(T("Position", "Posisi"), 0.05, 0.95, st.Pos, 0.05, x => { st.Pos = x; rerender(); }, x => $"{x * 100:0} %"),
+                        Segmented([(Medical.Native.SlabMode.Max, "MIP"), (Medical.Native.SlabMode.Min, "MinIP"), (Medical.Native.SlabMode.Mean, "AvgIP")], st.Mode, x => { st.Mode = x; rerender(); }),
+                        Slider(T("Slab", "Slab"), 5, 120, st.Slab, 5, x => { st.Slab = x; rerender(); }, x => $"{x:0} mm")),
+                    Columns([1, 1, 1], v.Planes.Select(p => (Control)Panel(Plane(p.Label), Stack(6, Img(p, 330), Mono(p.Description, 11)))).ToArray()),
+                    Columns([3, 2],
+                        Panel(v.Slab.Label, Stack(6, Img(v.Slab, 520), Mono(v.Slab.Description, 11)), T("slab projection", "proyeksi slab")),
+                        Panel(T("Volume", "Volume"), Stack(8,
+                            Table([T("Item", "Butir"), T("Value", "Nilai")], [["Grid", v.Volume], ["Kernel", $"{v.Backend} · mdn_slab_i16"], [T("Compute", "Komputasi"), $"{v.Ms} ms"]], 1),
+                            Text(T("Square output pixels keep thick-slice reformats in proportion; projections along an acquisition axis sample each voxel layer once.",
+                                   "Piksel keluaran persegi menjaga proporsi rekonstruksi irisan tebal; proyeksi sepanjang sumbu akuisisi mengambil setiap lapis voksel sekali."), 13, "muted")))));
+            }
+            case "volume3d":
+            {
+                var v = Scenarios.Volume3D();
+                Control view = Program.Headless
+                    ? (Volume3D.RenderPng(v) is { } png ? new Image { Source = new Avalonia.Media.Imaging.Bitmap(new MemoryStream(png)), Stretch = Stretch.Uniform, MaxHeight = 460 } : Text(T("No GPU adapter for ThreeNet.", "Tidak ada adaptor GPU untuk ThreeNet."), 14, "muted"))
+                    : Volume3D.CreateView(v) ?? Text(T("ThreeNet needs a GPU adapter (Vulkan / Metal / DirectX 12).", "ThreeNet memerlukan adaptor GPU (Vulkan / Metal / DirectX 12)."), 14, "muted");
+                return Columns([3, 2],
+                    Panel(T("Skull and haemorrhage", "Tengkorak dan perdarahan"), view, $"ThreeNet · {T("drag to orbit", "seret untuk memutar")}"),
+                    Panel(T("Meshes", "Mesh"), Stack(10,
+                        Table([T("Surface", "Permukaan"), T("Triangles", "Segitiga"), "mL"],
+                            [[T("Bone (300 HU)", "Tulang (300 HU)"), v.Skull.Triangles.ToString("N0"), $"{v.Skull.VolumeMl}"], [T("Haemorrhage", "Perdarahan"), v.Lesion.Triangles.ToString("N0"), $"{v.LesionMl}"]], 1, 2),
+                        Mono($"{v.Volume}\nsurface nets · {v.ExtractMs} ms · STL {v.StlBytes / 1024} KB", 11.5),
+                        Text(T("One vertex per boundary cell, no case tables, a closed mesh; Taubin smoothing for display. The web gallery shows the same meshes with three.js.",
+                               "Satu verteks per sel batas, tanpa tabel kasus, mesh tertutup; penghalusan Taubin untuk tampilan. Galeri web menampilkan mesh yang sama dengan three.js."), 13, "muted"))));
+            }
+            case "codecs":
+            {
+                var rows = Scenarios.Codecs(14);
+                return Columns([3, 2],
+                    Panel(T("Transfer syntaxes", "Sintaks transfer"), Table([T("Syntax", "Sintaks"), T("Bytes", "Byte"), T("Ratio", "Rasio"), T("Max error", "Galat maks")],
+                        new[] { new[] { "Explicit VR Little Endian", "131,072", "1.0 : 1", "—" } }.Concat(rows.Select(r => new[] { r.Name, r.Bytes.ToString("N0"), $"{r.Ratio} : 1", r.Lossless ? T("0 (bit-exact)", "0 (identik)") : $"{r.MaxError} HU" })), 1, 2, 3),
+                        T("head CT slice 15, 256 × 256 × 16 bit", "CT kepala irisan 15, 256 × 256 × 16 bit")),
+                    Panel(T("How it works", "Cara kerja"), Text(T("fo-dicom.Codecs (libijg, CharLS, OpenJPEG, OpenJPH) for Windows / Linux / macOS on x64 and Arm64. Compressed pixel data is decoded on demand, so rendering, volumes, MPR and AI read compressed studies directly.",
+                        "fo-dicom.Codecs (libijg, CharLS, OpenJPEG, OpenJPH) untuk Windows / Linux / macOS di x64 dan Arm64. Piksel terkompresi didekode sesuai kebutuhan, sehingga render, volume, MPR dan AI membaca studi terkompresi langsung."), 13.5)));
+            }
+            case "imaging-ai":
+            {
+                var st = S<AiState>();
+                var v = Scenarios.ImagingAi(st.Chest);
+                return Stack(16,
+                    Controls(Segmented([(false, T("Head CT · haemorrhage", "CT kepala · perdarahan")), (true, T("Chest CT · lung nodules", "CT toraks · nodul paru"))], st.Chest, x => { st.Chest = x; rerender(); })),
+                    Columns([1, 1],
+                        Panel(T("Read back from the DICOM SEG", "Dibaca ulang dari DICOM SEG"), Stack(8, Png(v.Overlay, 440), Text(v.Impression[lang], 13.5)), $"{v.SegFrames} frames · {v.SegBytes / 1024} KB"),
+                        Panel(T("Findings", "Temuan"), Stack(8,
+                            Stack(6, v.Findings.Select(f => Alert(f.Category.Contains('4') ? "critical" : "warning", f.Category, f.Label, f.Detail)).ToArray()),
+                            Eyebrow($"TID 1500 Measurement Report · {v.SrBytes / 1024} KB"), Mono(v.SrTree, 10.5)), v.Method)));
+            }
+            case "ecg12":
+            {
+                var st = S<Ecg12State>();
+                var v = Scenarios.Ecg12(st.Pattern, st.Hr, st.Qtc, st.Af, st.Female ? Gender.Female : Gender.Male, 58, lang);
+                var a = v.Analysis;
+                return Stack(16,
+                    Controls(Segmented([(Medical.Signals.StPattern.None, "Normal"), (Medical.Signals.StPattern.InferiorStemi, T("Inferior STEMI", "STEMI inferior")),
+                            (Medical.Signals.StPattern.AnteriorStemi, T("Anterior STEMI", "STEMI anterior")), (Medical.Signals.StPattern.LateralStemi, T("Lateral STEMI", "STEMI lateral")),
+                            (Medical.Signals.StPattern.DiffuseDepression, T("Diffuse ST↓", "ST↓ difus"))], st.Pattern, x => { st.Pattern = x; rerender(); }),
+                        Slider(T("Rate", "Frekuensi"), 45, 130, st.Hr, 5, x => { st.Hr = x; rerender(); }, x => $"{x:0} bpm"),
+                        Slider("QTc", 360, 540, st.Qtc, 10, x => { st.Qtc = x; rerender(); }, x => $"{x:0} ms"),
+                        Segmented([(false, T("Sinus", "Sinus")), (true, T("AF", "FA"))], st.Af, x => { st.Af = x; rerender(); }),
+                        Segmented([(false, T("Male", "Laki-laki")), (true, T("Female", "Perempuan"))], st.Female, x => { st.Female = x; rerender(); })),
+                    new Border { Classes = { "panel" }, Padding = new Thickness(0), ClipToBounds = true, Child = SvgView(v.Grid) },
+                    Columns([2, 3],
+                        Panel(T("Measurements", "Pengukuran"), Stack(8,
+                            Table([T("Interval", "Interval"), "ms"], [[T("Rate", "Frekuensi"), $"{a.HeartRateBpm} bpm"], ["PR", a.PrMs is { } pr ? $"{pr}" : "—"], ["QRS", $"{a.QrsMs}"], ["QT", $"{a.QtMs}"],
+                                ["QTc Bazett", $"{a.QtcBazettMs}"], ["QTc Fridericia", $"{a.QtcFridericiaMs}"], ["QTc Framingham", $"{a.QtcFraminghamMs}"], ["QTc Hodges", $"{a.QtcHodgesMs}"],
+                                [T("Axis", "Aksis"), $"{a.QrsAxisDeg}°"]], 1),
+                            Alert(a.MeetsStemiCriteria || a.Qtc >= Medical.Signals.QtcCategory.MarkedlyProlonged ? "critical" : a.StDepressionLeads.Count > 0 ? "warning" : "info",
+                                a.MeetsStemiCriteria ? "STEMI · " + string.Join(", ", a.StemiTerritories) : Scenarios.RhythmName(a.Rhythm)[lang], T("Interpretation", "Interpretasi"), a.Interpretation[lang])), "median beat"),
+                        Panel(T("Median beats and fiducials", "Denyut median dan titik acuan"), SvgView(v.Medians))));
             }
             default:
                 return Text(T("Pick a use case from the list.", "Pilih kasus dari daftar."));

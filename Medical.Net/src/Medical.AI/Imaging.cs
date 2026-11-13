@@ -55,6 +55,26 @@ public static class HemorrhageScreener
         return new HemorrhageReport(suspected, ml, findings, series.Count, "HU-threshold 50–90 + bone suppression + connected components", text);
     }
 
+    /// <summary>
+    /// The same screen on a whole volume: a voxel mask (1 = suspected haemorrhage) on the volume grid, for DICOM SEG
+    /// export and 3D rendering. Each slice uses the 2D rule of <see cref="Analyze"/>; components below
+    /// <paramref name="minAreaPixels"/> are dropped.
+    /// </summary>
+    public static byte[] SegmentVolume(DicomVolume volume, int minAreaPixels = 12)
+    {
+        int w = volume.Width, h = volume.Height, plane = w * h;
+        var result = new byte[volume.Voxels.Length];
+        var hu = new float[plane];
+        for (int k = 0; k < volume.Depth; k++)
+        {
+            for (int i = 0; i < plane; i++) hu[i] = volume.Voxels[k * plane + i];
+            var mask = Mask(hu, w, h);
+            foreach (var c in Components(mask, w, h).Where(c => c.Count >= minAreaPixels))
+                foreach (int i in c) result[k * plane + i] = 1;
+        }
+        return result;
+    }
+
     /// <summary>True for CT series of the head/brain (BodyPartExamined or description).</summary>
     public static bool IsHeadCt(DicomImageInfo i) =>
         i.Modality == "CT" && ((i.BodyPart?.Contains("HEAD", StringComparison.OrdinalIgnoreCase) ?? false) || (i.BodyPart?.Contains("BRAIN", StringComparison.OrdinalIgnoreCase) ?? false)
@@ -184,6 +204,45 @@ public sealed class ImagingAiClient(HttpClient http, string baseUrl)
             e.GetProperty("mean_hu").GetDouble(), e.GetProperty("centroid_x").GetDouble(), e.GetProperty("centroid_y").GetDouble())).ToArray();
         return new HemorrhageReport(root.GetProperty("suspected").GetBoolean(), root.GetProperty("volume_ml").GetDouble(), findings,
             root.GetProperty("slices_analyzed").GetInt32(), root.GetProperty("method").GetString() ?? "service",
+            new(root.GetProperty("impression_en").GetString() ?? "", root.GetProperty("impression_id").GetString() ?? ""));
+    }
+
+    /// <summary>
+    /// Pulmonary nodule detection by the service (MONAI <c>lung_nodule_ct_detection</c> when the bundle is configured,
+    /// classical otherwise); falls back to <see cref="LungNoduleDetector"/> locally when the service is unreachable.
+    /// Service results carry no voxel mask, so <see cref="LungNoduleReport.Mask"/> is empty for them.
+    /// </summary>
+    public async Task<LungNoduleReport> LungNodulesAsync(IReadOnlyList<DicomFile> series, CancellationToken ct = default)
+    {
+        if (!await IsHealthyAsync(ct).ConfigureAwait(false))
+        {
+            var local = LungNoduleDetector.Detect(DicomVolume.FromSeries(series));
+            return local with { Method = "local fallback: " + local.Method };
+        }
+        using var content = new MultipartFormDataContent();
+        int i = 0;
+        foreach (var f in series)
+        {
+            var ms = new MemoryStream();
+            await f.SaveAsync(ms).ConfigureAwait(false);
+            var part = new ByteArrayContent(ms.ToArray());
+            part.Headers.ContentType = new MediaTypeHeaderValue("application/dicom");
+            content.Add(part, "files", $"slice{i++:000}.dcm");
+        }
+        using var res = await http.PostAsync($"{_base}/v1/ct/lung-nodules", content, ct).ConfigureAwait(false);
+        res.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await res.Content.ReadAsStreamAsync(ct).ConfigureAwait(false));
+        var root = doc.RootElement;
+        static double D(JsonElement e, string p) => e.TryGetProperty(p, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : double.NaN;
+        var nodules = root.GetProperty("nodules").EnumerateArray().Select(e =>
+        {
+            var c = e.GetProperty("center_mm").EnumerateArray().Select(x => x.GetDouble()).ToArray();
+            return new LungNodule(e.GetProperty("id").GetInt32(), new Medical.Native.Vector3d(c[0], c[1], c[2]),
+                e.TryGetProperty("center_slice", out var cs) && cs.ValueKind == JsonValueKind.Number ? cs.GetInt32() : -1,
+                D(e, "long_axis_mm"), D(e, "short_axis_mm"), D(e, "volume_mm3"), D(e, "mean_hu"), e.GetProperty("lung_rads").GetString() ?? "",
+                new(e.GetProperty("recommendation_en").GetString() ?? "", e.GetProperty("recommendation_id").GetString() ?? ""));
+        }).ToArray();
+        return new LungNoduleReport(nodules, [], D(root, "lung_volume_ml"), root.GetProperty("method").GetString() ?? "service",
             new(root.GetProperty("impression_en").GetString() ?? "", root.GetProperty("impression_id").GetString() ?? ""));
     }
 }

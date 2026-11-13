@@ -119,6 +119,8 @@ public static class DicomPhantom
         ds.Add(DicomTag.ImageType, "ORIGINAL", "PRIMARY", "AXIAL");
         ds.Add(DicomTag.SliceThickness, (decimal)thickness);
         ds.Add(DicomTag.SliceLocation, (decimal)Math.Round(location, 2));
+        ds.Add(DicomTag.FrameOfReferenceUID, Uid($"{series}/for"));
+        ds.Add(DicomTag.PositionReferenceIndicator, "");
         ds.Add(DicomTag.ImagePositionPatient, (decimal)(-size * spacing / 2), (decimal)(-size * spacing / 2), (decimal)Math.Round(location, 2));
         ds.Add(DicomTag.ImageOrientationPatient, 1m, 0m, 0m, 0m, 1m, 0m);
         ds.Add(DicomTag.PixelSpacing, (decimal)Math.Round(spacing, 4), (decimal)Math.Round(spacing, 4));

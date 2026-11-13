@@ -5,6 +5,9 @@ pydicom==3.0.1
 numpy>=1.26
 httpx>=0.27  # TestClient (CI smoke test)
 scipy>=1.11
-# Optional learned model (set MEDNET_MONAI_WEIGHTS):
+# Optional learned models:
+#   haemorrhage UNet weights      -> MEDNET_MONAI_WEIGHTS
+#   lung_nodule_ct_detection      -> MEDNET_MONAI_LUNG_BUNDLE (python -m monai.bundle download lung_nodule_ct_detection --bundle_dir models)
 # torch>=2.3
+# torchvision>=0.18
 # monai>=1.4

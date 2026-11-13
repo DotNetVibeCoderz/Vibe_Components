@@ -1,0 +1,55 @@
+@inherits DemoBase
+@using Medical.Signals
+@using Medical.Core
+@{ var v = Scenarios.Ecg12(_pattern, _hr, _qtc, _af, _female ? Gender.Female : Gender.Male, 58, Lang); var a = v.Analysis; }
+<div class="controls">
+    <div class="seg">
+        @foreach (var (p, en, id) in Patterns)
+        {
+            <button class="@(_pattern == p ? "on" : "")" @onclick="() => _pattern = p">@T(en, id)</button>
+        }
+    </div>
+    <label>@T("Rate", "Frekuensi") <input type="range" min="45" max="130" step="5" @bind="_hr" @bind:event="oninput" /> <output>@_hr bpm</output></label>
+    <label>QTc <input type="range" min="360" max="540" step="10" @bind="_qtc" @bind:event="oninput" /> <output>@_qtc ms</output></label>
+    <label><input type="checkbox" @bind="_af" /> @T("Atrial fibrillation", "Fibrilasi atrium")</label>
+    <label><input type="checkbox" @bind="_female" /> @T("Female", "Perempuan")</label>
+</div>
+<div class="panel ecg12">@Svg(v.Grid)</div>
+<div class="grid-2">
+    <div class="panel">
+        <h3>@T("Measurements", "Pengukuran") <small>@T("median beat", "denyut median")</small></h3>
+        <dl class="kv cols">
+            <dt>@T("Rate", "Frekuensi")</dt><dd class="mono">@a.HeartRateBpm bpm</dd>
+            <dt>PR</dt><dd class="mono">@(a.PrMs is { } pr ? $"{pr} ms" : "—")</dd>
+            <dt>QRS</dt><dd class="mono">@a.QrsMs ms</dd>
+            <dt>QT</dt><dd class="mono">@a.QtMs ms</dd>
+            <dt>@T("Axis", "Aksis")</dt><dd class="mono">@a.QrsAxisDeg°</dd>
+            <dt>@T("Rhythm", "Irama")</dt><dd>@Scenarios.RhythmName(a.Rhythm)[Lang]</dd>
+        </dl>
+        <table class="data">
+            <thead><tr><th>QTc</th><th>ms</th></tr></thead>
+            <tbody>@foreach (var (f, ms) in v.Qtc) { <tr class="@(f == "Fridericia" && a.Qtc >= QtcCategory.Prolonged ? "flag" : "")"><td>@f</td><td class="mono">@ms</td></tr> }</tbody>
+        </table>
+        <div class="alert @(a.MeetsStemiCriteria || a.Qtc >= QtcCategory.MarkedlyProlonged ? "critical" : a.StDepressionLeads.Count > 0 || a.Qtc >= QtcCategory.Prolonged ? "warning" : "")">
+            <strong>@(a.MeetsStemiCriteria ? $"STEMI · {string.Join(", ", a.StemiTerritories)}" : T("Interpretation", "Interpretasi"))</strong>
+            <span>@a.Interpretation[Lang]</span>
+        </div>
+    </div>
+    <div class="panel">
+        <h3>@T("Median beats and fiducials", "Denyut median dan titik acuan")</h3>
+        <div class="ecg12">@Svg(v.Medians)</div>
+        <p class="small">@T("QT from QRS onset to the T end (area-curve method, Zhang 2006). On the PhysioNet QT Database held-out half: median |error| 18 ms vs cardiologist annotations. Criteria: 4th Universal Definition of MI (2018), AHA/ACCF/HRS 2009.",
+                             "QT dari awal QRS sampai akhir T (metode kurva area, Zhang 2006). Pada separuh uji PhysioNet QT Database: median |galat| 18 md terhadap anotasi kardiolog. Kriteria: Definisi Universal IM ke-4 (2018), AHA/ACCF/HRS 2009.")</p>
+    </div>
+</div>
+@code {
+    private StPattern _pattern = StPattern.InferiorStemi;
+    private int _hr = 72, _qtc = 400;
+    private bool _af, _female;
+    private static readonly (StPattern, string, string)[] Patterns =
+    [
+        (StPattern.None, "Normal", "Normal"), (StPattern.InferiorStemi, "Inferior STEMI", "STEMI inferior"),
+        (StPattern.AnteriorStemi, "Anterior STEMI", "STEMI anterior"), (StPattern.LateralStemi, "Lateral STEMI", "STEMI lateral"),
+        (StPattern.DiffuseDepression, "Diffuse ST↓ / aVR↑", "ST↓ difus / aVR↑"),
+    ];
+}

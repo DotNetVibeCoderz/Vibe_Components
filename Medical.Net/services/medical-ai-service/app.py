@@ -5,10 +5,16 @@ Contract used by Medical.AI.ImagingAiClient:
   POST /v1/ct/hemorrhage            multipart field "files": DICOM instances of one non-contrast head CT series
                                     -> {suspected, volume_ml, slices_analyzed, method, impression_en, impression_id,
                                         findings: [{slice, area_pixels, area_mm2, mean_hu, centroid_x, centroid_y}]}
+  POST /v1/ct/lung-nodules          multipart field "files": DICOM instances of one chest CT series
+                                    -> {nodules: [{id, center_mm (LPS), long_axis_mm, short_axis_mm, mean_diameter_mm,
+                                        volume_mm3, mean_hu, lung_rads, recommendation_en, recommendation_id, score}],
+                                        category, lung_volume_ml, slices_analyzed, method, impression_en, impression_id}
 
 Backends:
   * MONAI / PyTorch 3D UNet when MEDNET_MONAI_WEIGHTS points to a state_dict trained for 2-class haemorrhage
     segmentation (input: HU clipped to [0, 100] and scaled to [0, 1]).
+  * Lung nodules: the MONAI Model Zoo bundle lung_nodule_ct_detection (RetinaNet trained on LUNA16) when
+    MEDNET_MONAI_LUNG_BUNDLE points to the downloaded bundle; otherwise the classical detector (see lung.py).
   * Otherwise the same explainable classical pipeline as Medical.AI.HemorrhageScreener
     (3x3 smoothing, 50-90 HU, bone/air-edge suppression, connected components).
 
@@ -26,7 +32,9 @@ import pydicom
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from scipy import ndimage
 
-app = FastAPI(title="Medical.Net imaging AI", version="1.0.0")
+import lung
+
+app = FastAPI(title="Medical.Net imaging AI", version="1.2.0")
 
 WEIGHTS = os.environ.get("MEDNET_MONAI_WEIGHTS")
 _model = None
@@ -88,7 +96,19 @@ def _monai_masks(slices: list[Slice]) -> list[np.ndarray]:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "model": "monai-unet" if WEIGHTS else "classical", "service": "Medical.Net imaging AI"}
+    return {"status": "ok", "model": "monai-unet" if WEIGHTS else "classical",
+            "lung_model": "monai-retinanet" if lung.BUNDLE else "classical", "service": "Medical.Net imaging AI"}
+
+
+@app.post("/v1/ct/lung-nodules")
+async def lung_nodules(files: list[UploadFile] = File(...)):
+    blobs = [await f.read() for f in files]
+    if not blobs:
+        raise HTTPException(400, "No DICOM instances received.")
+    try:
+        return lung.detect(blobs)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
 
 
 @app.post("/v1/ct/hemorrhage")

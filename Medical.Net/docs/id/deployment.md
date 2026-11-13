@@ -60,3 +60,10 @@ Daftar di portal pengembang SATUSEHAT, atur `SATUSEHAT_CLIENT_ID`, `SATUSEHAT_CL
 - **BPJS Kesehatan**: setel `BPJS_CONS_ID`, `BPJS_SECRET_KEY`, `BPJS_USER_KEY` lalu `AddBpjs(o => { o.Environment = BpjsEnvironment.Production; o.EKlaimUrl = …; o.EKlaimKey = …; })`. Simpan kunci E-Klaim di secret store dan jalankan server E-Klaim di jaringan internal rumah sakit.
 
 Detail: [Interoperabilitas](interoperability.md).
+
+## Baru di 1.2: layanan pencitraan
+
+- `POST /v1/ct/lung-nodules` — deteksi nodul paru (klasik, atau bundle MONAI `lung_nodule_ct_detection` bila `MEDNET_MONAI_LUNG_BUNDLE` disetel; perlu `torch` + `torchvision`, GPU sangat disarankan).
+- `ImagingAiClient.LungNodulesAsync` memakai layanan dan kembali ke `LungNoduleDetector` lokal bila layanan tidak terjangkau.
+- Simpan hasil sebagai DICOM SEG + SR (`ImagingAiReports`) ke PACS di samping studi aslinya.
+- Codec native (`fo-dicom.Codecs`) memerlukan Visual C++ 14 runtime di Windows; tersedia untuk win/linux/osx x64 dan arm64.

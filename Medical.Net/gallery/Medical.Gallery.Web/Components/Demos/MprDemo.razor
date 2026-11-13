@@ -1,0 +1,52 @@
+@inherits DemoBase
+@using Medical.Native
+@{ var v = Scenarios.Mpr(_chest, _pos / 100.0, _mode, _slab); }
+<div class="controls">
+    <div class="seg">
+        <button class="@(!_chest ? "on" : "")" @onclick="() => _chest = false">@T("Head CT", "CT kepala")</button>
+        <button class="@(_chest ? "on" : "")" @onclick="() => _chest = true">@T("Chest CT", "CT toraks")</button>
+    </div>
+    <label>@T("Position", "Posisi") <input type="range" min="5" max="95" step="1" @bind="_pos" @bind:event="oninput" /> <output>@_pos %</output></label>
+    <div class="seg">
+        @foreach (var (m, label) in Modes)
+        {
+            <button class="@(_mode == m ? "on" : "")" @onclick="() => _mode = m">@label</button>
+        }
+    </div>
+    <label>@T("Slab", "Slab") <input type="range" min="5" max="120" step="5" @bind="_slab" @bind:event="oninput" /> <output>@_slab mm</output></label>
+</div>
+<div class="grid-3">
+    @foreach (var p in v.Planes)
+    {
+        <div class="panel viewer">
+            <h3>@PlaneName(p.Label)</h3>
+            <img class="ct" src="@DataUri(p.Png)" alt="@p.Description" />
+            <p class="small mono">@p.Description</p>
+        </div>
+    }
+</div>
+<div class="grid-2 wide-left">
+    <div class="panel viewer">
+        <h3>@v.Slab.Label <small>@T("slab projection", "proyeksi slab")</small></h3>
+        <img class="ct" src="@DataUri(v.Slab.Png)" alt="@v.Slab.Description" />
+        <p class="small mono">@v.Slab.Description</p>
+    </div>
+    <div class="panel">
+        <h3>@T("Volume", "Volume")</h3>
+        <dl class="kv">
+            <dt>@T("Grid", "Grid")</dt><dd class="mono">@v.Volume</dd>
+            <dt>@T("Kernel", "Kernel")</dt><dd class="ok">@v.Backend · mdn_slab_i16</dd>
+            <dt>@T("Compute", "Komputasi")</dt><dd class="mono">@v.Ms ms @T("for 3 planes + slab", "untuk 3 bidang + slab")</dd>
+        </dl>
+        <p class="small">@T("Output pixels are square with the finest in-plane spacing, so thick-slice reformats keep their proportions. Projections along an acquisition axis sample one voxel layer per step — no interpolation can hide a maximum.",
+                             "Piksel keluaran persegi dengan spasi terhalus, sehingga rekonstruksi irisan tebal tetap proporsional. Proyeksi sepanjang sumbu akuisisi mengambil satu lapis voksel per langkah — interpolasi tidak menyembunyikan nilai maksimum.")</p>
+    </div>
+</div>
+@code {
+    private bool _chest;
+    private int _pos = 50;
+    private int _slab = 30;
+    private SlabMode _mode = SlabMode.Max;
+    private static readonly (SlabMode, string)[] Modes = [(SlabMode.Max, "MIP"), (SlabMode.Min, "MinIP"), (SlabMode.Mean, "AvgIP")];
+    private string PlaneName(string p) => p switch { "Axial" => T("Axial", "Aksial"), "Coronal" => T("Coronal", "Koronal"), _ => T("Sagittal", "Sagital") };
+}

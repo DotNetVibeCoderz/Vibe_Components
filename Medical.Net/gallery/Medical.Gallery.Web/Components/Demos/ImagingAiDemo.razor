@@ -1,0 +1,27 @@
+@inherits DemoBase
+@{ var v = Scenarios.ImagingAi(_chest); }
+<div class="controls">
+    <div class="seg">
+        <button class="@(!_chest ? "on" : "")" @onclick="() => _chest = false">@T("Head CT · haemorrhage", "CT kepala · perdarahan")</button>
+        <button class="@(_chest ? "on" : "")" @onclick="() => _chest = true">@T("Chest CT · lung nodules", "CT toraks · nodul paru")</button>
+    </div>
+</div>
+<div class="grid-2">
+    <div class="panel viewer">
+        <h3>@T("Segmentation read back from the DICOM SEG", "Segmentasi dibaca ulang dari DICOM SEG") <small>@v.SegFrames @T("frames", "frame") · @(v.SegBytes / 1024) KB</small></h3>
+        <img class="ct" src="@DataUri(v.Overlay)" alt="SEG overlay" />
+        <p class="small">@v.Impression[Lang]</p>
+    </div>
+    <div class="panel">
+        <h3>@T("Findings", "Temuan") <small>@v.Method</small></h3>
+        @foreach (var f in v.Findings)
+        {
+            <div class="alert @(f.Category.Contains("4") ? "critical" : "warning")"><strong>@f.Label <span class="tag">@f.Category</span></strong><span class="mono small">@f.Detail</span></div>
+        }
+        <p class="label">TID 1500 Measurement Report · @(v.SrBytes / 1024) KB</p>
+        <pre class="json wrap"><code>@v.SrTree</code></pre>
+        <p class="small">@T("Validated with highdicom: segments map onto the source CT instances and the SR parses as TID 1500 with TID 1411 groups. With MEDNET_MONAI_LUNG_BUNDLE set, the imaging service runs the MONAI lung_nodule_ct_detection RetinaNet (LUNA16) instead of the classical detector.",
+                             "Divalidasi dengan highdicom: segmen terpetakan ke instance CT sumber dan SR terbaca sebagai TID 1500 dengan grup TID 1411. Dengan MEDNET_MONAI_LUNG_BUNDLE, layanan pencitraan menjalankan RetinaNet MONAI lung_nodule_ct_detection (LUNA16) sebagai pengganti detektor klasik.")</p>
+    </div>
+</div>
+@code { private bool _chest; }

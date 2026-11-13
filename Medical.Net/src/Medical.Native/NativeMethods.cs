@@ -52,6 +52,9 @@ internal static partial class NativeMethods
     [LibraryImport(Lib, EntryPoint = "mdn_window_level_u16")]
     internal static unsafe partial int WindowLevelU16(ushort* src, byte* dst, nuint len, double slope, double intercept, double center, double width, int invert);
 
+    [LibraryImport(Lib, EntryPoint = "mdn_slab_i16")]
+    internal static unsafe partial int SlabI16(short* vol, nuint nx, nuint ny, nuint nz, double* origin, double* u, double* v, double* n, uint steps, int mode, short fill, short* output, nuint outW, nuint outH);
+
     [LibraryImport(Lib, EntryPoint = "mdn_detect_r_peaks")]
     internal static unsafe partial int DetectRPeaks(float* signal, nuint len, double fs, double thresholdRatio, uint* output, nuint capacity, nuint* count);
 }

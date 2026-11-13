@@ -21,11 +21,12 @@ Made by Gravicode Studios, led by Kang Fadhil. Status details: [Progress.md](Pro
 - BPJS: INA-CBG grouping inputs, VClaim/PCare clients
 - Delivered in 1.1.0 — see [docs/en/interoperability.md](docs/en/interoperability.md). Carried forward: SATUSEHAT inpatient / ED workflows and ServiceRequest-Specimen-DiagnosticReport lab flow; HL7 v2.3 / 2.4 conformance profiles; E-Klaim iDRG (when published by Kemenkes)
 
-## v1.2 — Imaging and signals
+## v1.2 — Imaging and signals ✅
 - Transcoding of compressed transfer syntaxes (JPEG 2000 / JPEG-LS) in the pipeline
 - MPR and MIP rendering in Rust; 3D volume viewer with ThreeNet
 - MONAI: published weights for haemorrhage and lung-nodule detection, DICOM SEG / SR output
 - 12-lead ECG (SCP-ECG, DICOM waveform), QT/QTc, ST deviation
+- Delivered in 1.2.0 — see [docs/en/imaging-signals.md](docs/en/imaging-signals.md). The 3D viewer renders isosurfaces (direct volume ray-casting is carried forward). MONAI: the published lung_nodule_ct_detection bundle is integrated; no public haemorrhage weights exist, so that path takes user weights. Carried forward: SCP-ECG Sections 4/5 (reference-beat subtraction) and bimodal compression; DICOM SR for ECG measurements (TID 3700)
 
 ## v1.3 — Clinical intelligence
 - Full SOFA, APACHE II, PEWS, MEOWS (obstetric), Wells, PERC, Framingham / ASCVD, WHO growth charts

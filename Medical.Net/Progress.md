@@ -1,45 +1,48 @@
 # Medical.Net — Progress
 
-Made by Gravicode Studios, led by Kang Fadhil. Status as of 2026-11-13. Roadmap: [PLAN.md](PLAN.md).
+Made by Gravicode Studios, led by Kang Fadhil. Status as of 2026-11-14. Roadmap: [PLAN.md](PLAN.md).
 
 ## v1.0.0 — published ✅
-16 packages on nuget.org (tag `medical-net-v1.0.0`). `Medical.Cli` was installed from nuget.org and runs.
+16 packages on nuget.org (tag `medical-net-v1.0.0`).
 
-## v1.1.0 — Interoperability depth: complete, not yet published
+## v1.1.0 — published ✅
+17 packages on nuget.org (tag `medical-net-v1.1.0`, adds `Medical.Bpjs`). Interoperability depth: FHIR server, SMART on FHIR, SATUSEHAT workflow, HL7 orders and conformance, BPJS.
+
+## v1.2.0 — Imaging and signals: complete, not yet published
 
 | Area | Status | Verified by |
 |---|---|---|
-| FHIR repository: `FhirRepositoryBase` with search (token/reference/string/date, prefixes, `:not` `:missing` `:exact` `:contains` `:Type`), `_include`/`_revinclude`, `_sort`, paging, `_summary=count` | ✅ | `FhirServerTests` run on the in-memory **and** SQLite repositories |
-| Versioning: `_history`, vread, `If-Match` (412), 410 Gone, atomic transactions with `urn:uuid` rewrite and `ifNoneExist` | ✅ | same, plus HTTP tests via TestServer |
-| Durable `EfFhirRepository` (Medical.Emr; JSON versions + search index; DB transaction) | ✅ | restart test (new provider, same DB); template `--persist` restarted with no duplicate seeding and no failed-DDL log |
-| Profile validation (`FhirProfileValidator`, R4 core + IG packages, `$validate`, 422 on write) | ✅ | heart-rate profile errors; all mapped vital signs conform (SpO₂ now carries LOINC 2708-6); `specification.zip` reaches consuming apps (fixed `NuGetPackageRoot` without a trailing slash) |
-| SMART on FHIR (discovery, authorize + PKCE S256, token, client_credentials, v1/v2 scopes, patient compartment) | ✅ | `SmartTests` end-to-end; template `--smart` probed with curl (401 → token → 200/403) |
-| SATUSEHAT workflow (Encounter → Condition → Observation → Medication/KFA → MedicationRequest), `KfaClient`/`KfaCatalog`, `RetryHandler`, 401 refresh | ✅ | `SatuSehatTests` (bundle linkage, processable, every coding has a display, backoff/idempotency, token refresh, KFA parsing) |
-| HL7 v2 ORM^O01, OML^O21, SIU^S12, MDM^T02 + `Hl7WorkflowMapping` + FHIR | ✅ | round-trip tests |
-| HL7 conformance profiles (6 built-in), `/api/hl7/conformance`, MLLP `EnforceConformance` | ✅ | built messages conform; broken ones are flagged; MDM always emits PV1 |
-| `Medical.Bpjs`: VClaim, PCare, E-Klaim, INA-CBG claim builder + coding checks, LZ-String | ✅ | lz-string 1.5.0 vectors, HMAC signature reference, E-Klaim tamper detection, client mocks |
-| CLI: `fhir validate --profile`, `hl7 sample --type …`, `hl7 conform`, `satusehat bundle`, `bpjs claim` | ✅ | run end-to-end; also from the packed tool |
-| Template `medical-fhir-api --smart --persist` (+ version 1.1.0 for all templates) | ✅ | all 5 templates + the smart/persist variant built from the local feed |
-| Gallery: 4 new demos (FHIR server, HL7 orders & scheduling, SATUSEHAT visit, BPJS claim), 17 in total, web + desktop, EN/ID | ✅ | screenshots reviewed; all 44 images refreshed for v1.1.0 |
-| Docs: `interoperability.md` (EN/ID), README/README.id, modules, tools, deployment, CLAUDE.md | ✅ | |
-| Tests | ✅ 125/125 | `dotnet test -c Release` (in `build/pack.ps1`) |
-| Packages (17, incl. new `Medical.Bpjs`) | ✅ | `build/pack.ps1 -Version 1.1.0` |
+| Compressed transfer syntaxes (`fo-dicom.Codecs`: RLE, JPEG Lossless, JPEG-LS, JPEG 2000, HT-J2K; lossy JPEG-LS / J2K) with on-demand decoding | ✅ | lossless syntaxes bit-exact, including through a Part 10 file; lossy syntaxes within their bounds |
+| `DicomVolume` (IPP-sorted, LPS geometry), MPR / MIP / MinIP / AvgIP / oblique on the Rust `mdn_slab_i16` kernel | ✅ | Rust and managed outputs bit-identical (all planes and modes); MIP ≥ slice ≥ MinIP; axial MPR reproduces the slices; reformat proportions correct |
+| Isosurfaces (surface nets), STL / OBJ, Taubin smoothing | ✅ | meshes watertight and consistently wound; lesion mesh volume matches the analytic ellipsoid (3.45 mL) |
+| DICOM SEG + TID 1500 SR (haemorrhage, lung nodules), with readers | ✅ | **highdicom** parses both: frames map onto the source CT instances; measurement groups carry finding, finding site, segment and UCUM units |
+| Lung-nodule detection (classical, Lung-RADS v2022), Python twin, MONAI `lung_nodule_ct_detection` in the service | ✅ | C# and Python agree exactly; the MONAI RetinaNet (published LUNA16 weights) finds the phantom nodule (score 0.65, within 4 mm, 4B) |
+| 12-lead ECG: VCG simulator, analyzer (PR, QRS, QT, four QTc formulas, axis, ST at J / J+60, UDMI 2018 STEMI criteria, QTc categories) | ✅ | ground truth across rates, STEMI territories with reciprocal leads, sex/age V2–V3 thresholds, AF, long QT |
+| QT accuracy against cardiologists (PhysioNet QTDB, 101 records) | ✅ | held-out half: mean −4.9 ms, median \|error\| 18 ms, 70 % within 30 ms (SD 65 ms, a few failed delineations) |
+| DICOM 12-lead ECG Waveform; SCP-ECG (raw and default-Huffman) | ✅ | **pydicom** decodes the waveform; an **independent SCP-ECG reader** decodes both SCP files; CRC tamper detection |
+| Charts: 12-lead printout, median beats with fiducials | ✅ | rendered and reviewed |
+| CLI: `dicom transcode / mpr / mip / mesh / ai`, `ecg12 [analyze]` | ✅ | run end to end on phantom data |
+| Gallery: 5 new demos (MPR & MIP, 3D volume with ThreeNet / three.js, compression, imaging AI → SEG / SR, 12-lead ECG), 22 in total, EN / ID | ✅ | 59 screenshots reviewed (desktop EN / ID, web) |
+| Docs: `imaging-signals.md` (EN / ID), README / README.id, tools, deployment, modules, service README, CLAUDE.md; `tools/validation` scripts | ✅ | |
+| Tests | ✅ 157/157 | `dotnet test`; Release build with 0 warnings |
 
-Bugs found and fixed during v1.1:
-- `FhirMapper` codings had no `display`: Firely's 3-argument `CodeableConcept` constructor sets `text`. Fixed with `FhirMapper.Cc`.
-- Conditional-create `urn:uuid` remap.
-- The `clinical-status` search parameter was missing.
-- E-Klaim birth-date format.
-- The SEP number is alphanumeric.
+Bugs and pitfalls found and fixed during v1.2:
+- **CharLS probe:** a 2 × 2 image is too small for CharLS's output buffer, so the codec-availability check reported no codecs.
+- **MPR border:** round-off made the last row and column count as outside the volume; both kernels now use a tolerance.
+- **Slab sampling:** slab projections now sample voxel layers along acquisition axes, so interpolation can't hide a maximum.
+- **ECG on 2-lead data:** onset/offset collapsed because velocity is near zero at R; one artefact could hide every beat.
+- **T end on real data:** baseline wander, the next P wave and weak T waves misled T-end detection.
+- **Huffman decoding:** the SCP-ECG escape codes were decoded wrongly; found through the independent reader cross-check.
+- **Screenshots:** virtual time in headless Chrome drops the Blazor circuit, which is why the 3D page has a still mode.
 
 ## To publish
-1. Commit `Medical.Net/` and push to `main` (CI builds the kernels for 5 RIDs, tests and packs).
-2. Tag `medical-net-v1.1.0` and push the tag. The workflow publishes the 17 packages with the `NUGET_API_KEY` secret.
+1. Commit `Medical.Net/` and push to `main`.
+2. Tag `medical-net-v1.2.0` and push the tag. The workflow publishes the 17 packages with the `NUGET_API_KEY` secret.
 
 ## Known limitations
-- Embedded terminology is a curated subset; load licensed full releases (SNOMED CT RF2, LOINC, ICD-10-CM, RxNorm) with `ReleaseLoaders`.
-- `DrugKnowledge` and dosing tables are illustrative; integrate a licensed drug database for production.
-- Risk models are trained on synthetic cohorts; the MONAI path needs trained weights (`MEDNET_MONAI_WEIGHTS`).
-- The built-in SMART authorization server auto-approves (development); production needs an identity provider in front of `/auth/authorize`.
-- The BPJS and SATUSEHAT clients are verified against mocks and reference crypto vectors, not against live BPJS / Kemenkes sandboxes, which need facility credentials. KFA codes in the gallery are illustrative.
-- `EfFhirRepository` pre-filters token/reference criteria in SQL and evaluates the rest in memory. For very large stores, use a dedicated FHIR server.
+- No public trained weights exist for intracranial haemorrhage. The MONAI path takes user weights (`MEDNET_MONAI_WEIGHTS`); the classical screener is a triage aid.
+- The lung-nodule detector misses juxtapleural and ground-glass nodules. The MONAI bundle needs a GPU for practical speed.
+- 3D shows isosurfaces; direct volume ray-casting is not implemented.
+- SCP-ECG: reference-beat subtraction (Sections 4/5) and bimodal compression are rejected; only the default Huffman table is supported.
+- QT measurement has heavy-tailed errors on some recordings. Always over-read automated intervals.
+- Embedded terminology is a curated subset; `DrugKnowledge` is illustrative; risk models are trained on synthetic cohorts.

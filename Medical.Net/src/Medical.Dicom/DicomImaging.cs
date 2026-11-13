@@ -67,7 +67,7 @@ public sealed record RenderedImage(int Width, int Height, byte[] Gray8, WindowPr
     public byte[] ToPng() => PngEncoder.EncodeGray8(Gray8, Width, Height);
 }
 
-/// <summary>Reading, rendering and measuring DICOM images (uncompressed transfer syntaxes; compressed frames need fo-dicom codecs).</summary>
+/// <summary>Reading, rendering and measuring DICOM images. Compressed transfer syntaxes are decoded on demand (<see cref="DicomCodecs"/>).</summary>
 public static class DicomImaging
 {
     public static DicomFile Open(string path) => DicomFile.Open(path, FileReadOption.ReadAll);
@@ -125,8 +125,7 @@ public static class DicomImaging
 
     private static ReadOnlySpan<byte> FrameBytes(DicomDataset ds, int frame)
     {
-        if (ds.InternalTransferSyntax.IsEncapsulated)
-            throw new NotSupportedException($"Compressed transfer syntax '{ds.InternalTransferSyntax.UID.Name}' — transcode to Explicit VR Little Endian first (fo-dicom native codecs).");
+        ds = DicomCodecs.Decompress(ds);   // JPEG / JPEG-LS / JPEG 2000 / RLE via the native codecs
         var pd = DicomPixelData.Create(ds);
         if (pd.BitsAllocated != 16 && pd.BitsAllocated != 8) throw new NotSupportedException($"BitsAllocated {pd.BitsAllocated} not supported.");
         return pd.GetFrame(frame).Data;

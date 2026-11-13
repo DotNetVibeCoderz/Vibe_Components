@@ -75,6 +75,36 @@ public static class GalleryCatalog
             // or a MONAI / PyTorch model behind services/medical-ai-service
             var report = await new ImagingAiClient(http, "http://localhost:8000").HemorrhageAsync(series);
             """),
+        new("mpr", "imaging", new("MPR & MIP", "MPR & MIP"),
+            new("Axial, coronal and sagittal reformats with correct proportions, plus maximum / minimum / average intensity slabs — one Rust kernel, bit-identical managed fallback.",
+                "Rekonstruksi aksial, koronal dan sagital dengan proporsi benar, ditambah slab intensitas maksimum / minimum / rata-rata — satu kernel Rust, fallback managed identik."),
+            "Medical.Dicom · Medical.Native", """
+            DicomVolume v = DicomVolume.FromSeries(files);          // sorted by Image Position (Patient); JPEG/J2K decoded
+            VolumeImage coronal = VolumeRendering.Mpr(v, VolumePlane.Coronal, position: 0.5);
+            VolumeImage mip = VolumeRendering.Project(v, VolumePlane.Axial, SlabMode.Max, 0.5, thicknessMm: 30);
+            VolumeImage minip = VolumeRendering.Project(v, VolumePlane.Coronal, SlabMode.Min);   // airways
+            VolumeImage oblique = VolumeRendering.Oblique(v, u: new(1, 0.3, 0), v: new(0, 0, -1));
+            byte[] png = mip.ToPng(WindowPreset.Bone);               // mip.Backend == Rust
+            """),
+        new("volume3d", "imaging", new("3D volume", "Volume 3D"),
+            new("Surface-nets isosurfaces of the skull and the segmented haemorrhage, rendered with ThreeNet (desktop) and three.js (web); export to STL for 3D printing.",
+                "Isosurface surface-nets tengkorak dan perdarahan tersegmentasi, dirender dengan ThreeNet (desktop) dan three.js (web); ekspor STL untuk cetak 3D."),
+            "Medical.Dicom · ThreeNet", """
+            SurfaceMesh skull = IsoSurface.Extract(volume, isoValue: 300, downsample: 2);       // bone
+            SurfaceMesh bleed = IsoSurface.ExtractMask(volume, HemorrhageScreener.SegmentVolume(volume));
+            double ml = bleed.VolumeMl;                          // divergence theorem on the closed mesh
+            File.WriteAllBytes("skull.stl", skull.ToStl());
+            // ThreeNet: scene.CreateGeometry(vertices, skull.Indices) → ThreeNetView + OrbitController
+            """),
+        new("codecs", "imaging", new("Compression", "Kompresi"),
+            new("JPEG-LS, JPEG 2000, HT-JPEG 2000, JPEG Lossless and RLE through the fo-dicom native codecs — lossless syntaxes decode bit-exactly, lossy ones within bounds.",
+                "JPEG-LS, JPEG 2000, HT-JPEG 2000, JPEG Lossless dan RLE melalui codec native fo-dicom — sintaks lossless kembali identik, lossy dalam batas."),
+            "Medical.Dicom · fo-dicom.Codecs", """
+            DicomFile jls = DicomCodecs.Transcode(file, DicomCompression.JpegLsLossless);
+            DicomFile j2k = DicomCodecs.Transcode(file, DicomCompression.Jpeg2000, quality: 20);   // 20:1 target
+            short[] pixels = DicomImaging.FrameI16(jls.Dataset);    // compressed frames decode on demand
+            RenderedImage img = DicomImaging.Render(j2k.Dataset, WindowPreset.Brain);
+            """),
         new("ecg", "signals", new("ECG & rhythm", "EKG & irama"),
             new("Pan-Tompkins QRS detection in Rust, heart-rate variability and rhythm screening for atrial fibrillation and ectopy.",
                 "Deteksi QRS Pan-Tompkins di Rust, variabilitas denyut jantung, dan skrining fibrilasi atrium serta ektopi."),
@@ -83,6 +113,17 @@ public static class GalleryCatalog
             EcgAnalysis a = EcgAnalyzer.Analyze(ecg);
             // a.RPeaks, a.HeartRateBpm, a.SdnnMs, a.RmssdMs, a.Rhythm, a.Backend == Rust
             string strip = Charts.EcgStrip(ecg.Samples, ecg.SampleRate, a.RPeaks);
+            """),
+        new("ecg12", "signals", new("12-lead ECG", "EKG 12 sadapan"),
+            new("Median beats, PR / QRS / QT with four QTc formulas, axis, ST at J and the UDMI STEMI criteria by territory; DICOM waveform and SCP-ECG in and out.",
+                "Denyut median, PR / QRS / QT dengan empat rumus QTc, aksis, ST pada titik J dan kriteria STEMI UDMI per wilayah; masuk-keluar waveform DICOM dan SCP-ECG."),
+            "Medical.Signals · Medical.Dicom", """
+            var (ecg, _) = Ecg12Simulator.Generate(new Ecg12Options { StPattern = StPattern.InferiorStemi });
+            Ecg12Analysis a = Ecg12Analyzer.Analyze(ecg, new EcgPatient(Gender.Male, 58));
+            // a.QtMs, a.QtcFridericiaMs, a.QrsAxisDeg, a.StemiTerritories = ["Inferior"], a.StDepressionLeads = [I, aVL]
+            DicomFile dcm = DicomEcg.Create(ecg, patient, a);                // 12-lead ECG Waveform Storage
+            byte[] scp = ScpEcg.Write(ecg, patient.Mrn);                      // SCP-ECG, default Huffman
+            string svg = Charts.Ecg12Grid(ecg, highlight: a.Leads.Where(l => l.StJMv >= 0.1).Select(l => l.Lead));
             """),
         new("fhir", "interop", new("FHIR patient summary", "Ringkasan pasien FHIR"),
             new("Firely SDK builds an International Patient Summary document bundle that validates and round-trips as FHIR R4 JSON.",
@@ -175,6 +216,16 @@ public static class GalleryCatalog
             var assistant = new ClinicalAssistant(llm) { Patient = record };
             AssistantReply reply = await assistant.AskAsync("Bagaimana kondisi pasien ini?");
             // reply.ToolCalls: get_patient_summary, calculate_egfr, check_drug_safety…
+            """),
+        new("imaging-ai", "ai", new("Imaging AI → SEG / SR", "AI pencitraan → SEG / SR"),
+            new("Haemorrhage and lung-nodule results stored as DICOM Segmentation + TID 1500 Measurement Report (validated with highdicom); the MONAI lung_nodule_ct_detection bundle plugs into the imaging service.",
+                "Hasil perdarahan dan nodul paru disimpan sebagai DICOM Segmentation + Measurement Report TID 1500 (divalidasi dengan highdicom); bundle MONAI lung_nodule_ct_detection terpasang di layanan pencitraan."),
+            "Medical.AI · Medical.Dicom", """
+            LungNoduleReport r = LungNoduleDetector.Detect(volume);          // Lung-RADS v2022 category per nodule
+            ImagingAiOutput o = ImagingAiReports.LungNodules(volume, r)!;
+            await o.Segmentation!.SaveAsync("seg.dcm");                     // Segmentation IOD, BINARY
+            await o.Report.SaveAsync("sr.dcm");                              // TID 1500 → TID 1411 groups
+            SegmentationResult back = DicomSegmentation.Read(DicomFile.Open("seg.dcm"), volume);
             """),
         new("risk", "ai", new("Risk models", "Model risiko"),
             new("ML.NET logistic models for 48-hour deterioration and undiagnosed type 2 diabetes, with the drivers behind every prediction.",

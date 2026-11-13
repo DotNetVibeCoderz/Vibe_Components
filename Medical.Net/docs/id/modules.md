@@ -96,3 +96,5 @@ JsonNode cbg = await eklaim.GrouperAsync(klaim.NomorSep);
 ```
 
 Tambahan v1.1 untuk Medical.Fhir (repositori FHIR, pencarian, riwayat, validasi profil, SMART, alur SATUSEHAT, KFA) dan Medical.Hl7 (ORM/OML/SIU/MDM, kesesuaian) dijelaskan di [Interoperabilitas](interoperability.md).
+
+Tambahan v1.2 (codec, volume, MPR / MIP, isosurface, SEG / SR, nodul paru, EKG 12 sadapan, SCP-ECG) dijelaskan di [Pencitraan dan sinyal](imaging-signals.md).

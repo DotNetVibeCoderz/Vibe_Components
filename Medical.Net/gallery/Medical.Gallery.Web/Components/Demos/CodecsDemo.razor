@@ -1,0 +1,29 @@
+@inherits DemoBase
+@{ var rows = Scenarios.Codecs(14); }
+<div class="grid-2 wide-left">
+    <div class="panel">
+        <h3>@T("Transfer syntaxes", "Sintaks transfer") <small>@T("head CT slice 15, 256 × 256 × 16 bit", "CT kepala irisan 15, 256 × 256 × 16 bit")</small></h3>
+        <table class="data">
+            <thead><tr><th>@T("Syntax", "Sintaks")</th><th>@T("Bytes", "Byte")</th><th>@T("Ratio", "Rasio")</th><th>@T("Max error", "Galat maks")</th></tr></thead>
+            <tbody>
+                <tr><td>Explicit VR Little Endian <span class="tag">1.2.840.10008.1.2.1</span></td><td class="mono">131,072</td><td class="mono">1.0 : 1</td><td class="mono">—</td></tr>
+                @foreach (var r in rows)
+                {
+                    <tr>
+                        <td>@r.Name <span class="tag">@r.Uid</span></td>
+                        <td class="mono">@r.Bytes.ToString("N0")</td>
+                        <td class="mono">@r.Ratio : 1</td>
+                        <td class="mono @(r.Lossless ? "ok" : "")">@(r.Lossless ? T("0 (bit-exact)", "0 (identik)") : $"{r.MaxError} HU")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="panel">
+        <h3>@T("How it works", "Cara kerja")</h3>
+        <p>@T("fo-dicom.Codecs brings libijg, CharLS, OpenJPEG and OpenJPH as native libraries for Windows, Linux and macOS on x64 and Arm64. Medical.Net registers them on first use and decodes encapsulated pixel data on demand, so rendering, volumes, MPR and AI accept compressed studies straight from PACS.",
+               "fo-dicom.Codecs membawa libijg, CharLS, OpenJPEG dan OpenJPH sebagai pustaka native untuk Windows, Linux dan macOS di x64 dan Arm64. Medical.Net mendaftarkannya saat pertama dipakai dan mendekode piksel terenkapsulasi sesuai kebutuhan, sehingga render, volume, MPR dan AI menerima studi terkompresi langsung dari PACS.")</p>
+        <p class="small">@T("Lossless syntaxes are verified bit-exact in the test suite (also after a Part 10 write / read). JPEG-LS near-lossless guarantees |error| ≤ NEAR; JPEG 2000 lossy here targets 20:1 — keep lossy compression away from primary diagnosis unless your policy allows it.",
+                             "Sintaks lossless diverifikasi identik bit di suite pengujian (juga setelah tulis / baca Part 10). JPEG-LS near-lossless menjamin |galat| ≤ NEAR; JPEG 2000 lossy di sini menargetkan 20:1 — jangan pakai kompresi lossy untuk diagnosis primer kecuali kebijakan Anda mengizinkan.")</p>
+    </div>
+</div>

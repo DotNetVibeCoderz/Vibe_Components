@@ -15,20 +15,28 @@ Made by **Gravicode Studios**, led by **Kang Fadhil**. · [Bahasa Indonesia](REA
 | `Medical.Core` | Patient, encounter, vitals, observation, condition, medication and allergy model; codings; UCUM units; audit trail; event bus; `services.AddMedical(...)`; deterministic synthetic patients | — |
 | `Medical.Fhir` | Domain ↔ FHIR R4 mapping, transaction and **International Patient Summary** bundles, JSON round-trip, FHIRPath; FHIR repository with real search (`_include`/`_revinclude`, `_sort`, date prefixes, modifiers), `_history`, If-Match; **profile validation** against R4 core and IG packages; **SMART on FHIR** client; **SATUSEHAT** visit workflow, KFA, retry/backoff | Firely .NET SDK 6.8 |
 | `Medical.Hl7` | HL7 v2 parse/build (ADT^A01, ORU^R01, **ORM^O01, OML^O21, SIU^S12, MDM^T02**, ACK), segment-level **conformance profiles**, HL7 v2 → domain → FHIR, MLLP server and client | NHapi 3.2 |
-| `Medical.Dicom` | Metadata, VOI window/level rendering to PNG, HU statistics, PS3.15 de-identification with stable pseudonyms, synthetic CT phantoms, DICOMweb (QIDO/WADO/STOW), C-ECHO / C-STORE SCU + SCP | fo-dicom 5.2 |
+| `Medical.Dicom` | Metadata, VOI window/level rendering, HU statistics, **JPEG / JPEG-LS / JPEG 2000 / RLE codecs**, **volumes with MPR / MIP / MinIP** (Rust kernel), **isosurfaces → STL / OBJ**, **DICOM SEG + TID 1500 SR**, **12-lead ECG waveform**, PS3.15 de-identification, synthetic CT phantoms, DICOMweb, C-ECHO / C-STORE SCU + SCP | fo-dicom 5.2, fo-dicom.Codecs |
 | `Medical.Terminology` | ICD-10 (WHO 2010 / INA-CBG), SNOMED CT, LOINC, RxNorm — EN/ID search, subsumption, value-set expansion, SNOMED→ICD-10, check digits, RF2 / LOINC / ICD-10-CM / RxNorm loaders | — |
 | `Medical.Clinical` | NEWS2, qSOFA, SIRS, CURB-65, CHA₂DS₂-VASc, HAS-BLED, GCS, APGAR, MELD, CKD-EPI 2021 eGFR, Cockcroft-Gault, BMI (WHO / Asia-Pacific), BSA, dosing, lab interpretation | — |
 | `Medical.Rules` | Forward-chaining decision support: early warning, Sepsis-3, critical labs, hypoglycaemia, hyperkalaemia, drug interactions, allergy conflicts, renal dosing, duplicate therapy; editable JSON workflows (triage, dengue warning signs, referral) | NRules, Microsoft RulesEngine |
-| `Medical.AI` | ML.NET risk models (48-h deterioration, type 2 diabetes) with per-feature explanations; tool-grounded clinical assistant on **Claude** (Anthropic SDK), any OpenAI-compatible endpoint (Hugging Face, Azure OpenAI, DeepSeek, Ollama) or offline rules; CT haemorrhage screening; MONAI service client | ML.NET, Anthropic SDK |
-| `Medical.Signals` | Synthetic ECG/PPG, filters, Pan-Tompkins R peaks, HRV, rhythm screening (AF, ectopy) | `Medical.Native` |
+| `Medical.AI` | ML.NET risk models (48-h deterioration, type 2 diabetes) with per-feature explanations; tool-grounded clinical assistant on **Claude** (Anthropic SDK), any OpenAI-compatible endpoint (Hugging Face, Azure OpenAI, DeepSeek, Ollama) or offline rules; CT haemorrhage screening and **lung-nodule detection (Lung-RADS)** with results as **DICOM SEG + SR**; MONAI service client (incl. the `lung_nodule_ct_detection` model-zoo bundle) | ML.NET, Anthropic SDK |
+| `Medical.Signals` | Synthetic ECG/PPG, filters, Pan-Tompkins R peaks, HRV, rhythm screening (AF, ectopy); **12-lead ECG**: simulator, median beats, PR / QRS / QT, four QTc formulas, axis, ST and STEMI criteria (UDMI 2018), **SCP-ECG** read/write | `Medical.Native` |
 | `Medical.Privacy` | Clinical-note de-identification (HIPAA Safe Harbor + Indonesian NIK/phone/address), pseudonyms, date shifting, masking, consent registry (UU PDP) | — |
 | `Medical.Bpjs` | **BPJS Kesehatan**: VClaim and PCare clients (HMAC signature, AES + LZ-String responses), E-Klaim web service (encrypted), INA-CBG claim builder with pre-grouping coding checks | — |
 | `Medical.Emr` | EF Core EMR store on SQL Server / SQLite / in-memory, **durable versioned FHIR repository**, Redis cache, persistent audit | EF Core 10 |
 | `Medical.AspNetCore` | FHIR REST server (`MapMedicalFhir`: search, `_history`, vread, `$validate`, `$everything`, transactions, ETags), **SMART on FHIR authorization** (`MapSmartAuthorization`), clinical JSON API, hosted MLLP listener with conformance checks | ASP.NET Core |
 | `Medical.Visualization` | SVG ECG strips, NEWS2 observation charts, trends, gauges, risk-driver bars, histograms | — |
-| `Medical.Native` | Rust kernels (window/level, pixel statistics, QRS detection) with a bit-identical managed fallback | Rust |
+| `Medical.Native` | Rust kernels (window/level, pixel statistics, QRS detection, **MPR / slab projections**) with a bit-identical managed fallback | Rust |
 | `Medical.Cli` | `medical` .NET tool | — |
 | `Medical.Templates` | `dotnet new` templates | — |
+
+## What's new in 1.2
+
+- **Imaging**: JPEG / JPEG-LS / JPEG 2000 / HT-J2K / RLE codecs; `DicomVolume` with MPR, MIP, MinIP and oblique slabs on a Rust kernel; surface-nets isosurfaces → STL; a 3D viewer with ThreeNet (desktop) and three.js (web).
+- **Imaging AI**: lung-nodule detection with Lung-RADS v2022; haemorrhage and nodule results as **DICOM SEG + TID 1500 SR** (validated with highdicom); the MONAI `lung_nodule_ct_detection` bundle in the imaging service.
+- **12-lead ECG**: QT/QTc (Bazett, Fridericia, Framingham, Hodges), axis, ST at J, STEMI criteria (UDMI 2018); DICOM 12-lead waveform and SCP-ECG; QT validated against the PhysioNet QT Database.
+
+See [Imaging and signals](docs/en/imaging-signals.md).
 
 ## What's new in 1.1
 
@@ -77,6 +85,8 @@ medical code search "gagal jantung"
 medical dicom phantom --out head-ct && medical dicom hemorrhage head-ct
 medical ask "Bagaimana kondisi pasien ini?" --patient 7      # Claude when ANTHROPIC_API_KEY is set
 medical hl7 sample --type orm --out orm.hl7 && medical hl7 conform orm.hl7
+medical dicom mip ct/ --plane coronal --out mip.png && medical dicom ai ct/ --out-dir results
+medical ecg12 --pattern inferior --out ecg.svg
 medical satusehat bundle --index 3 && medical bpjs claim --index 7
 
 dotnet new install Medical.Templates
@@ -85,7 +95,7 @@ dotnet new medical-fhir-api -n MyHospital.Api --smart --persist   # also: medica
 
 ## Gallery
 
-Seventeen use cases run live in the **Medical.Net Gallery**, in Blazor (web) and Avalonia (desktop), in English and Bahasa Indonesia:
+Twenty-two use cases run live in the **Medical.Net Gallery**, in Blazor (web) and Avalonia (desktop), in English and Bahasa Indonesia:
 
 | Web (Blazor) | Desktop (Avalonia) |
 |---|---|
@@ -94,6 +104,8 @@ Seventeen use cases run live in the **Medical.Net Gallery**, in Blazor (web) and
 | ![](docs/images/web-hemorrhage.png) | ![](docs/images/desktop-assistant.png) |
 | ![](docs/images/web-fhir-server.png) | ![](docs/images/desktop-bpjs.png) |
 | ![](docs/images/web-satusehat.png) | ![](docs/images/desktop-hl7-orders.png) |
+| ![](docs/images/web-volume3d.png) | ![](docs/images/desktop-ecg12.png) |
+| ![](docs/images/web-mpr.png) | ![](docs/images/desktop-imaging-ai.png) |
 
 ```bash
 dotnet run --project gallery/Medical.Gallery.Web --urls http://localhost:5290

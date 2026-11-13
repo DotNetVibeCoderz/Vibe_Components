@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Medical.Net AI: ML.NET clinical risk models (deterioration, type 2 diabetes) with per-feature explanations, a tool-grounded clinical assistant on Claude (Anthropic SDK) or any OpenAI-compatible endpoint (Hugging Face, Azure OpenAI, DeepSeek, Ollama) with an offline fallback, CT haemorrhage screening and a client for the MONAI / PyTorch imaging service.</Description>
+    <Description>Medical.Net AI: ML.NET clinical risk models (deterioration, type 2 diabetes) with per-feature explanations, a tool-grounded clinical assistant on Claude (Anthropic SDK) or any OpenAI-compatible endpoint (Hugging Face, Azure OpenAI, DeepSeek, Ollama) with an offline fallback, CT haemorrhage screening and lung-nodule detection (ACR Lung-RADS v2022) with results as DICOM SEG + TID 1500 SR and a client for the MONAI / PyTorch imaging service.</Description>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Anthropic" Version="13.8.0" />

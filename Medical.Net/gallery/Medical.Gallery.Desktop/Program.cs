@@ -12,11 +12,15 @@ internal static class Program
     /// Normal run: desktop window. <c>--screenshot &lt;dir&gt; [en|id]</c> renders every demo off-screen with the headless
     /// Skia backend and saves PNGs (used for the documentation).
     /// </summary>
+    /// <summary>True in --screenshot mode: GPU views render offscreen to images instead of live controls.</summary>
+    public static bool Headless { get; private set; }
+
     [STAThread]
     public static int Main(string[] args)
     {
         if (args.Length >= 2 && args[0] == "--screenshot")
         {
+            Headless = true;
             BuildHeadless().SetupWithoutStarting();
             return Screenshots.Capture(args[1], args.Length > 2 ? args[2] : "en");
         }
@@ -50,7 +54,7 @@ internal static class Screenshots
         var window = new MainWindow { Width = 1440, Height = 960 };
         window.Show();
         window.SetLang(lang);
-        foreach (var slug in new[] { "news2", "cds", "dicom", "hemorrhage", "ecg", "terminology", "risk", "assistant", "fhir-server", "hl7-orders", "satusehat", "bpjs" })
+        foreach (var slug in new[] { "news2", "cds", "dicom", "hemorrhage", "ecg", "terminology", "risk", "assistant", "fhir-server", "hl7-orders", "satusehat", "bpjs", "mpr", "volume3d", "codecs", "imaging-ai", "ecg12" })
         {
             window.Navigate(slug);
             for (int i = 0; i < 5; i++) Avalonia.Threading.Dispatcher.UIThread.RunJobs();

@@ -66,3 +66,22 @@ Galeri kini berisi tujuh belas kasus, termasuk **Server FHIR**, **Order & jadwal
 | ![](../images/desktop-satusehat-id.png) | ![](../images/desktop-bpjs-id.png) |
 
 Tangkapan layar web dibuat dengan Chrome headless (`--screenshot`, `--blink-settings=preferredColorScheme=1` untuk mode terang, `--force-prefers-reduced-motion` agar animasi EKG sudah selesai).
+
+## Baru di 1.2
+
+| Perintah | Contoh |
+|---|---|
+| Kompresi DICOM | `medical dicom transcode in.dcm out.dcm --ts jpegls|j2k|j2k-lossy|htj2k|rle|none` |
+| MPR / MIP | `medical dicom mpr ct --plane coronal` · `medical dicom mip ct --slab 30 --mode max|min|mean` |
+| Mesh 3D | `medical dicom mesh ct --iso 300 --out tengkorak.stl` |
+| AI → SEG + SR | `medical dicom ai ct --out-dir hasil` |
+| EKG 12 sadapan | `medical ecg12 --pattern inferior --out ekg.svg|.dcm|.scp --lang id` · `medical ecg12 analyze ekg.scp --sex f --age 50` |
+
+Galeri kini berisi dua puluh dua kasus, termasuk **MPR & MIP**, **Volume 3D** (ThreeNet / three.js), **Kompresi**, **EKG 12 sadapan** dan **AI pencitraan → SEG / SR**. Templat memakai `--MedicalNetVersion` bawaan `1.2.0`.
+
+| | |
+|---|---|
+| ![](../images/desktop-mpr-id.png) | ![](../images/desktop-volume3d-id.png) |
+| ![](../images/desktop-ecg12-id.png) | ![](../images/desktop-imaging-ai-id.png) |
+
+**Validasi QT**: `tools/validation/qtdb_export.py` mengekspor segmen beranotasi PhysioNet QT Database, lalu `dotnet test --filter QtDatabaseAgreement` melaporkan kesesuaiannya.

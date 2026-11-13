@@ -37,6 +37,14 @@ To verify templates, install the packed `Medical.Templates` into a custom hive (
 - `FhirProfileValidator` needs the R4 core `specification.zip`, which `buildTransitive/Medical.Fhir.targets` copies into consuming apps. The first validation takes about 10 s.
 - HL7 v2: `Hl7V2.Build*` (ADT, ORU, ORM, OML, SIU, MDM via NHapi `Terser` paths; group names come from `<Message>.Names`) and `Hl7WorkflowMapping` back to the domain.
   Conformance profiles are in `Medical.Hl7/Conformance/profiles.json` (embedded).
+- v1.2 imaging: `DicomCodecs` (fo-dicom.Codecs; `DicomImaging.FrameBytes` decompresses on demand), `DicomVolume` (LPS geometry) → `VolumeRendering`
+  (MPR / slab on the Rust `mdn_slab_i16` kernel; its managed twin in `Medical.Native/VolumeKernels.cs` must stay bit-identical — parity test), `IsoSurface`
+  (surface nets; `SurfaceMesh.Smooth` is display-only), `DicomSegmentation` + `MeasurementReport` (SEG / TID 1500 SR — validate changes with highdicom,
+  `tools/validation`). `Medical.AI`: `LungNoduleDetector`, `ImagingAiReports`; the Python twin is `services/medical-ai-service/lung.py`.
+- v1.2 signals: `Ecg12Simulator` (VCG dipoles; truth uses the tangent 2σ convention), `Ecg12Analyzer` (`Measure` core shared by `Analyze` and
+  `MeasureIntervals`; area-curve T end with a 96 ms window chosen on half of QTDB — report held-out numbers only), `ScpEcg`, `DicomEcg` (Medical.Dicom).
+- Gallery 3D: desktop `Volume3D.cs` (ThreeNet; offscreen when `Program.Headless`), web `wwwroot/medVolume.js` (three.js r170 vendored in `wwwroot/three`,
+  meshes from `/mesh/{name}.bin`; screenshot at `/demo/volume3d?still=1` because virtual time drops the Blazor circuit).
 - `Medical.Bpjs`: VClaim/PCare (`BpjsCrypto`: HMAC signature, AES-256-CBC + `LzString` responses), E-Klaim (`EKlaimCrypto`), and `InaCbgClaimBuilder` plus coding checks. Test vectors come from reference implementations (lz-string 1.5.0 JS, Python).
 - Decision support: `FactBuilder` turns a record into facts. The NRules rules live in `Medical.Rules/ClinicalRules.cs` (namespace `Medical.Rules.Definitions`) and are compiled once.
   JSON workflows (Microsoft RulesEngine) are in `Medical.Rules/Workflows/*.json` and evaluate over `ClinicalSnapshot` (`input1.X`). Drug classes come from RxNorm tags in `Medical.Terminology/Data/rxnorm.tsv`.

@@ -38,7 +38,7 @@ public static partial class SvgTheme
 public sealed record Series(string Name, IReadOnlyList<(DateTimeOffset T, double V)> Points, string Color);
 
 /// <summary>Dependency-free SVG chart builders.</summary>
-public static class Charts
+public static partial class Charts
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
     private static string F(double v) => v.ToString("0.##", Inv);

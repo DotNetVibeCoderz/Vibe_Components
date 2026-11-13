@@ -10,6 +10,7 @@
 
 pub mod ecg;
 pub mod voi;
+pub mod volume;
 
 pub const OK: i32 = 0;
 pub const ERR_NULL: i32 = -1;
@@ -19,7 +20,7 @@ pub const ERR_CAPACITY: i32 = -3;
 /// Library version encoded as `major * 10000 + minor * 100 + patch`.
 #[no_mangle]
 pub extern "C" fn mdn_version() -> u32 {
-    1_00_00
+    1_02_00
 }
 
 /// Streaming summary statistics (Welford). Layout shared with C# `MdnStats`.

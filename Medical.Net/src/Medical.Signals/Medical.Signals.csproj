@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Medical.Net biosignals: synthetic ECG (normal sinus, tachycardia, bradycardia, atrial fibrillation, PVCs) and PPG, filters, Pan-Tompkins R-peak detection on the Rust kernel, heart rate, HRV (SDNN, RMSSD, pNN50) and rhythm screening.</Description>
+    <Description>Medical.Net biosignals: synthetic ECG and PPG, filters, Pan-Tompkins R peaks on the Rust kernel, HRV and rhythm screening; 12-lead ECG simulator and analyzer (median beats, PR / QRS / QT, Bazett / Fridericia / Framingham / Hodges QTc, axis, ST at J, STEMI criteria of the Fourth Universal Definition of MI) and SCP-ECG read / write.</Description>
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
   <ItemGroup>

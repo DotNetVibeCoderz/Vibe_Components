@@ -7,6 +7,7 @@ using Medical.Clinical;
 using Medical.Cli;
 using Medical.Core;
 using Medical.Dicom;
+using Medical.Visualization;
 using Medical.Emr;
 using Medical.Fhir;
 using Medical.Hl7;
@@ -42,6 +43,7 @@ try
         "hl7" => await Hl7Cmd(),
         "dicom" => await DicomCmd(),
         "ecg" => Ecg(),
+        "ecg12" => await Ecg12Cmd(),
         "deid" => Deid(),
         "cds" => Cds(),
         "risk" => Risk(),
@@ -94,8 +96,15 @@ int Help()
           dicom info|render <file.dcm> [--window brain|lung|bone...] [--out file.png]
           dicom anonymize <in.dcm> <out.dcm> --secret <key>    dicom hemorrhage <dir>
           dicom echo <host> <port> [--aet ANY-SCP]
+          dicom transcode <in.dcm> <out.dcm> --ts jpegls|jpegls-near|j2k|j2k-lossy|htj2k|jpeg-lossless|rle|none [--quality n]
+          dicom mpr <dir> [--plane axial|coronal|sagittal] [--pos 0.5] [--window brain] --out mpr.png
+          dicom mip <dir> [--plane coronal] [--slab 20] [--mode max|min|mean] [--window bone] --out mip.png
+          dicom mesh <dir> [--iso 300] [--downsample 2] --out skull.stl|skull.obj
+          dicom ai <dir> [--out-dir results]   (haemorrhage on head CT / lung nodules on chest CT → DICOM SEG + SR)
         Signals, privacy, decision support, AI
           ecg [--rhythm sinus|af|ectopy|tachy|brady] [--hr 72] [--seconds 30]
+          ecg12 [--pattern inferior|anterior|lateral|diffuse] [--hr 72] [--qtc 400] [--rhythm af] [--sex f --age 50] [--out ecg.svg|.dcm|.scp]
+          ecg12 analyze <file.dcm|file.scp> [--sex m --age 60]
           deid <text> | --file note.txt [--pseudonyms --secret <key>]
           cds [--index 3] [--deterioration 0.9]     risk [--index 7]
           ask "<question>" [--patient 7]   (MEDNET_LLM_PROVIDER / ANTHROPIC_API_KEY / HF_TOKEN; offline otherwise)
@@ -321,7 +330,67 @@ async Task<int> DicomCmd()
             var (ok, elapsed) = await DicomScu.EchoAsync(a.Positional(1, "host"), int.Parse(a.Positional(2, "port"), CultureInfo.InvariantCulture), calledAe: a.Opt("aet") ?? "ANY-SCP");
             Console.WriteLine(ok ? $"C-ECHO success in {elapsed.TotalMilliseconds:0} ms" : "C-ECHO failed");
             return ok ? 0 : 2;
-        default: return Fail("dicom phantom|info|render|anonymize|hemorrhage|echo");
+        case "transcode":
+            var input = DicomImaging.Open(a.Positional(1, "input"));
+            var target = (a.Opt("ts") ?? "jpegls") switch
+            {
+                "jpegls" => DicomCompression.JpegLsLossless, "jpegls-near" => DicomCompression.JpegLsNearLossless,
+                "j2k" => DicomCompression.Jpeg2000Lossless, "j2k-lossy" => DicomCompression.Jpeg2000, "htj2k" => DicomCompression.HtJpeg2000Lossless,
+                "jpeg-lossless" => DicomCompression.JpegLossless, "rle" => DicomCompression.Rle, "none" or "explicit" => DicomCompression.None,
+                var t => throw new ArgumentException($"Unknown transfer syntax '{t}'."),
+            };
+            var output = DicomCodecs.Transcode(input, target, a.OptNum("quality") is { } q ? (int)q : null);
+            await output.SaveAsync(a.Positional(2, "output"));
+            long before = DicomCodecs.PixelDataBytes(input.Dataset), after = DicomCodecs.PixelDataBytes(output.Dataset);
+            Console.WriteLine($"{input.Dataset.InternalTransferSyntax.UID.Name} → {output.Dataset.InternalTransferSyntax.UID.Name}: pixel data {before:N0} → {after:N0} bytes ({(after > 0 ? (double)before / after : 0):0.0}:1)");
+            return 0;
+        case "mpr" or "mip":
+            var vol = LoadVolume(a.Positional(1, "dir"));
+            var plane = Enum.Parse<VolumePlane>(a.Opt("plane") ?? (a.Positional(0, "") == "mip" ? "coronal" : "axial"), ignoreCase: true);
+            var mode = (a.Opt("mode") ?? "max") switch { "min" => Medical.Native.SlabMode.Min, "mean" or "avg" => Medical.Native.SlabMode.Mean, _ => Medical.Native.SlabMode.Max };
+            var image = a.Positional(0, "") == "mpr"
+                ? VolumeRendering.Mpr(vol, plane, a.OptNum("pos") ?? 0.5)
+                : VolumeRendering.Project(vol, plane, mode, a.OptNum("pos") ?? 0.5, a.OptNum("slab") ?? double.PositiveInfinity);
+            var win = a.Opt("window") is { } wn ? WindowPreset.Find(wn) ?? throw new ArgumentException($"Unknown window '{wn}'.") : mode == Medical.Native.SlabMode.Min ? WindowPreset.Lung : WindowPreset.Bone;
+            string outPng = a.Opt("out") ?? $"{a.Positional(0, "")}-{plane.ToString().ToLowerInvariant()}.png";
+            await File.WriteAllBytesAsync(outPng, image.ToPng(win));
+            Console.WriteLine($"{image.Description} · {win.Name} → {outPng}  [{image.Backend}]");
+            return 0;
+        case "mesh":
+            var mv = LoadVolume(a.Positional(1, "dir"));
+            var mesh = IsoSurface.Extract(mv, a.OptNum("iso") ?? 300, (int)(a.OptNum("downsample") ?? 2));
+            string meshOut = a.Opt("out") ?? "surface.stl";
+            if (meshOut.EndsWith(".obj", StringComparison.OrdinalIgnoreCase)) await File.WriteAllTextAsync(meshOut, mesh.ToObj());
+            else await File.WriteAllBytesAsync(meshOut, mesh.ToStl());
+            var (bmin, bmax) = mesh.Bounds;
+            Console.WriteLine($"{mesh.TriangleCount:N0} triangles, {mesh.VolumeMl:0.0} mL enclosed, {bmax.X - bmin.X:0} × {bmax.Y - bmin.Y:0} × {bmax.Z - bmin.Z:0} mm → {meshOut}");
+            return 0;
+        case "ai":
+            var aiFiles = Directory.GetFiles(a.Positional(1, "dir"), "*.dcm").Select(DicomImaging.Open).ToArray();
+            var av = DicomVolume.FromSeries(aiFiles);
+            string outDir = a.Opt("out-dir") ?? "ai-results";
+            Directory.CreateDirectory(outDir);
+            ImagingAiOutput? result;
+            if (HemorrhageScreener.IsHeadCt(DicomImaging.Describe(aiFiles[0].Dataset)))
+            {
+                result = ImagingAiReports.Hemorrhage(av, HemorrhageScreener.SegmentVolume(av));
+                Console.WriteLine(HemorrhageScreener.Analyze(aiFiles).Impression[lang]);
+            }
+            else
+            {
+                var nod = LungNoduleDetector.Detect(av);
+                foreach (var n in nod.Nodules)
+                    Console.WriteLine($"  nodule {n.Id}: {n.LongAxisMm} × {n.ShortAxisMm} mm (mean {n.MeanDiameterMm} mm), {n.VolumeMm3:0} mm³, {n.MeanHu} HU, Lung-RADS {n.LungRads}");
+                Console.WriteLine(nod.Impression[lang]);
+                result = ImagingAiReports.LungNodules(av, nod);
+            }
+            if (result is null) { Console.WriteLine(lang == "id" ? "Tidak ada temuan untuk disimpan." : "No findings to store."); return 0; }
+            if (result.Segmentation is { } segFile) await segFile.SaveAsync(Path.Combine(outDir, "seg.dcm"));
+            await result.Report.SaveAsync(Path.Combine(outDir, "sr.dcm"));
+            Console.WriteLine($"DICOM SEG + SR (TID 1500) → {outDir}");
+            Console.Write(MeasurementReport.Read(result.Report).Text);
+            return 2;
+        default: return Fail("dicom phantom|info|render|anonymize|hemorrhage|echo|transcode|mpr|mip|mesh|ai");
     }
 }
 
@@ -438,6 +507,49 @@ int Bpjs()
     foreach (var i in issues) Console.Error.WriteLine($"{i.Severity}: {i.Field} - {i.Message[lang]}");
     Write(claim.ClaimData().ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
     return InaCbgClaimBuilder.IsValid(issues) ? 0 : 2;
+}
+
+static DicomVolume LoadVolume(string dir) =>
+    DicomVolume.FromSeries(Directory.GetFiles(dir, "*.dcm").Select(DicomImaging.Open));
+
+async Task<int> Ecg12Cmd()
+{
+    var patient = new EcgPatient(a.Opt("sex") is "f" or "female" ? Gender.Female : a.Opt("sex") is "m" or "male" ? Gender.Male : Gender.Unknown,
+        a.OptNum("age") is { } age ? (int)age : null);
+    Ecg12 ecg;
+    if (a.Positionals.Count > 0 && a.Positional(0, "") == "analyze")
+    {
+        string path = a.Positional(1, "file");
+        ecg = path.EndsWith(".scp", StringComparison.OrdinalIgnoreCase)
+            ? ScpEcg.Read(await File.ReadAllBytesAsync(path)).Ecg
+            : DicomEcg.Read(DicomImaging.Open(path));
+    }
+    else
+    {
+        var pattern = (a.Opt("pattern") ?? "none") switch
+        {
+            "inferior" => StPattern.InferiorStemi, "anterior" => StPattern.AnteriorStemi, "lateral" => StPattern.LateralStemi,
+            "diffuse" => StPattern.DiffuseDepression, _ => StPattern.None,
+        };
+        ecg = Ecg12Simulator.Generate(new Ecg12Options
+        {
+            HeartRate = a.OptNum("hr") ?? 72, QtcMs = a.OptNum("qtc") ?? 400, StPattern = pattern,
+            Rhythm = a.Opt("rhythm") == "af" ? Rhythm.AtrialFibrillation : Rhythm.NormalSinus,
+        }).Ecg;
+    }
+    var r = Ecg12Analyzer.Analyze(ecg, patient);
+    Console.WriteLine($"HR {r.HeartRateBpm} bpm · PR {(r.PrMs is { } pr ? $"{pr} ms" : "—")} · QRS {r.QrsMs} ms · QT {r.QtMs} ms · QTc Bazett {r.QtcBazettMs} / Fridericia {r.QtcFridericiaMs} / Framingham {r.QtcFraminghamMs} / Hodges {r.QtcHodgesMs} ms · axis {r.QrsAxisDeg}°");
+    Console.WriteLine("ST at J (mm): " + string.Join("  ", r.Leads.Select(l => $"{l.Lead} {l.StJMv * 10:+0.0;-0.0;0.0}")));
+    Console.WriteLine(r.Interpretation[lang]);
+    if (a.Opt("out") is { } outPath)
+    {
+        var ext = Path.GetExtension(outPath).ToLowerInvariant();
+        if (ext == ".svg") await File.WriteAllTextAsync(outPath, Charts.Ecg12Grid(ecg, highlight: r.Leads.Where(l => l.StJMv >= 0.1).Select(l => l.Lead)));
+        else if (ext == ".scp") await File.WriteAllBytesAsync(outPath, ScpEcg.Write(ecg, "SYNTH-0001", "Synthetic", "Patient", patient.Sex));
+        else await DicomEcg.Create(ecg, SyntheticData.Patient(1), r).SaveAsync(outPath);
+        Console.WriteLine($"Wrote {outPath}");
+    }
+    return r.MeetsStemiCriteria || r.Qtc >= QtcCategory.Prolonged ? 3 : 0;
 }
 
 namespace Medical.Cli

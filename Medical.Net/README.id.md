@@ -15,7 +15,7 @@ Dibuat oleh **Gravicode Studios** dipimpin oleh **Kang Fadhil**. · [English](RE
 | `Medical.Core` | Model pasien, kunjungan, tanda vital, observasi, diagnosis, obat, alergi; kode klinis; satuan UCUM; jejak audit; event bus; `services.AddMedical(...)`; pasien sintetis deterministik | — |
 | `Medical.Fhir` | Pemetaan domain ↔ FHIR R4, bundle transaksi dan **International Patient Summary**, JSON, FHIRPath; repositori FHIR dengan pencarian lengkap (`_include`/`_revinclude`, `_sort`, prefiks tanggal, modifier), `_history`, If-Match; **validasi profil** terhadap inti R4 dan paket IG; klien **SMART on FHIR**; alur kunjungan **SATUSEHAT**, KFA, retry/backoff | Firely .NET SDK |
 | `Medical.Hl7` | Parse/buat HL7 v2 (ADT^A01, ORU^R01, **ORM^O01, OML^O21, SIU^S12, MDM^T02**, ACK), **profil kesesuaian** tingkat segmen, HL7 v2 → FHIR, server & klien MLLP | NHapi |
-| `Medical.Dicom` | Metadata, render window/level ke PNG, statistik HU, de-identifikasi PS3.15, phantom CT sintetis, DICOMweb, C-ECHO / C-STORE | fo-dicom |
+| `Medical.Dicom` | Metadata, render window/level, statistik HU, **codec JPEG / JPEG-LS / JPEG 2000 / RLE**, **volume dengan MPR / MIP / MinIP** (kernel Rust), **isosurface → STL / OBJ**, **DICOM SEG + SR TID 1500**, **waveform EKG 12 sadapan**, de-identifikasi PS3.15, phantom CT sintetis, DICOMweb, C-ECHO / C-STORE | fo-dicom, fo-dicom.Codecs |
 | `Medical.Terminology` | ICD-10 (WHO 2010 / INA-CBG), SNOMED CT, LOINC, RxNorm — pencarian EN/ID, hierarki, peta SNOMED→ICD-10, digit pemeriksa, pemuat rilis lengkap | — |
 | `Medical.Clinical` | NEWS2, qSOFA, SIRS, CURB-65, CHA₂DS₂-VASc, HAS-BLED, GCS, APGAR, MELD, eGFR CKD-EPI 2021, Cockcroft-Gault, IMT (WHO / Asia-Pasifik), dosis, interpretasi lab | — |
 | `Medical.Rules` | Dukungan keputusan: peringatan dini, Sepsis-3, nilai lab kritis, interaksi obat, konflik alergi, dosis ginjal, terapi ganda; alur JSON yang dapat diubah (triase, tanda bahaya DBD, rujukan) | NRules, Microsoft RulesEngine |
@@ -23,6 +23,14 @@ Dibuat oleh **Gravicode Studios** dipimpin oleh **Kang Fadhil**. · [English](RE
 | `Medical.Bpjs` | **BPJS Kesehatan**: klien VClaim dan PCare (tanda tangan HMAC, respons AES + LZ-String), web service E-Klaim (terenkripsi), penyusun klaim INA-CBG dengan pemeriksaan koding sebelum grouping | — |
 | `Medical.Signals` / `Privacy` / `Emr` / `AspNetCore` / `Visualization` / `Native` | EKG & HRV, de-identifikasi & persetujuan (UU PDP), penyimpanan EMR EF Core + Redis dan **repositori FHIR berversi**, server FHIR + **otorisasi SMART on FHIR** & MLLP, grafik SVG, kernel Rust | — |
 | `Medical.Cli` · `Medical.Templates` | Perintah `medical` dan templat `dotnet new` | — |
+
+## Yang baru di 1.2
+
+- **Pencitraan**: codec JPEG / JPEG-LS / JPEG 2000 / HT-J2K / RLE; `DicomVolume` dengan MPR, MIP, MinIP dan slab miring di kernel Rust; isosurface surface-nets → STL; penampil 3D dengan ThreeNet (desktop) dan three.js (web).
+- **AI pencitraan**: deteksi nodul paru dengan Lung-RADS v2022; hasil perdarahan dan nodul sebagai **DICOM SEG + SR TID 1500** (divalidasi dengan highdicom); bundle MONAI `lung_nodule_ct_detection` di layanan pencitraan.
+- **EKG 12 sadapan**: QT/QTc (Bazett, Fridericia, Framingham, Hodges), aksis, ST di J, kriteria STEMI (UDMI 2018); waveform DICOM 12 sadapan dan SCP-ECG; QT divalidasi terhadap PhysioNet QT Database.
+
+Lihat [Pencitraan dan sinyal](docs/id/imaging-signals.md).
 
 ## Yang baru di 1.1
 
@@ -47,13 +55,14 @@ dotnet tool install -g Medical.Cli
 medical news2 --rr 24 --spo2 93 --o2 --sbp 105 --hr 115 --temp 38.5 --lang id
 medical code search "demam berdarah"
 medical satusehat bundle --index 3 && medical bpjs claim --index 7 --lang id
+medical dicom ai ct/ --out-dir hasil && medical ecg12 --pattern inferior --out ekg.svg --lang id
 medical hl7 sample --type siu --out siu.hl7 && medical hl7 conform siu.hl7
 dotnet new install Medical.Templates && dotnet new medical-fhir-api -n RumahSakit.Api --smart --persist
 ```
 
 ## Galeri
 
-Tujuh belas kasus penggunaan di Galeri Medical.Net tersedia untuk web (Blazor) dan desktop (Avalonia) dalam bahasa Indonesia dan Inggris:
+Dua puluh dua kasus penggunaan di Galeri Medical.Net tersedia untuk web (Blazor) dan desktop (Avalonia) dalam bahasa Indonesia dan Inggris:
 
 | Web | Desktop |
 |---|---|
@@ -61,6 +70,7 @@ Tujuh belas kasus penggunaan di Galeri Medical.Net tersedia untuk web (Blazor) d
 | ![](docs/images/web-dicom.png) | ![](docs/images/desktop-ecg-id.png) |
 | ![](docs/images/web-satusehat.png) | ![](docs/images/desktop-bpjs-id.png) |
 | ![](docs/images/web-hl7-orders.png) | ![](docs/images/desktop-fhir-server-id.png) |
+| ![](docs/images/web-volume3d.png) | ![](docs/images/desktop-ecg12-id.png) |
 
 ```bash
 dotnet run --project gallery/Medical.Gallery.Web --urls http://localhost:5290   # buka /?lang=id

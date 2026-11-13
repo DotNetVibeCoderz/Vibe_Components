@@ -39,7 +39,8 @@ Set `BPJS_CONS_ID`, `BPJS_SECRET_KEY`, `BPJS_USER_KEY` (from the BPJS integratio
 ## Imaging
 
 - PACS: `StoreScp.StartServer(port, inbox)` receives C-STORE; `DicomScu.StoreAsync` sends. DICOMweb via `DicomWebClient`.
-- AI: run `services/medical-ai-service` (Docker image provided) and register `AddAI(imagingServiceUrl: "http://imaging-ai:8000")`.
+- AI: run `services/medical-ai-service` (Docker image provided) and register `AddAI(imagingServiceUrl: "http://imaging-ai:8000")`. `POST /v1/ct/lung-nodules` runs the MONAI `lung_nodule_ct_detection` bundle when `MEDNET_MONAI_LUNG_BUNDLE` points to it (needs `torch` + `torchvision`; use a GPU — CPU takes minutes per study), otherwise the classical detector. Store results next to the study as DICOM SEG + SR (`ImagingAiReports`).
+- Codecs: `fo-dicom.Codecs` ships native libraries for win/linux/osx on x64 and arm64; Windows hosts need the Visual C++ 14 runtime.
 
 ## Security & compliance checklist
 

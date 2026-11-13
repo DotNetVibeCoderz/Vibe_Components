@@ -1,0 +1,55 @@
+@inherits DemoBase
+@implements IAsyncDisposable
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+@{ var v = Scenarios.Volume3D(); }
+<div class="grid-2 wide-left">
+    <div class="panel">
+        <h3>@T("Skull and haemorrhage", "Tengkorak dan perdarahan") <small>three.js · @T("drag to orbit, scroll to zoom", "seret untuk memutar, gulir untuk zoom")</small></h3>
+        <div class="viewport3d" @ref="_host" data-radius="@v.Radius.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-background="#eef3f4"
+             data-layers='[{"url":"mesh/lesion.bin","color":"@v.Lesion.Color","opacity":1},{"url":"mesh/skull.bin","color":"@v.Skull.Color","opacity":0.42}]'></div>
+    </div>
+    <div class="panel">
+        <h3>@T("Meshes", "Mesh")</h3>
+        <table class="data">
+            <thead><tr><th>@T("Surface", "Permukaan")</th><th>@T("Triangles", "Segitiga")</th><th>@T("Volume", "Volume")</th></tr></thead>
+            <tbody>
+                <tr><td>@T("Bone (300 HU, ½ resolution)", "Tulang (300 HU, ½ resolusi)")</td><td class="mono">@v.Skull.Triangles.ToString("N0")</td><td class="mono">@v.Skull.VolumeMl mL</td></tr>
+                <tr><td>@T("Haemorrhage (AI mask)", "Perdarahan (mask AI)")</td><td class="mono">@v.Lesion.Triangles.ToString("N0")</td><td class="mono">@v.LesionMl mL</td></tr>
+            </tbody>
+        </table>
+        <dl class="kv">
+            <dt>@T("Source", "Sumber")</dt><dd class="mono">@v.Volume</dd>
+            <dt>@T("Extraction", "Ekstraksi")</dt><dd class="mono">@v.ExtractMs ms · surface nets</dd>
+            <dt>STL</dt><dd><a href="download/skull.stl" download>medical-net-skull.stl</a> <span class="small mono">(@(v.StlBytes / 1024) KB)</span></dd>
+        </dl>
+        <p class="small">@T("Surface nets place one vertex per boundary cell at the mean of its edge crossings: no case tables, a closed mesh, and smooth surfaces even from 5 mm slices. The enclosed volume comes from the divergence theorem.",
+                             "Surface nets menempatkan satu verteks per sel batas pada rerata titik potong rusuknya: tanpa tabel kasus, mesh tertutup, dan permukaan halus bahkan dari irisan 5 mm. Volume tertutup dihitung dengan teorema divergensi.")</p>
+        <p class="small">@T("The desktop gallery renders the same meshes with ThreeNet (Rust / wgpu).", "Galeri desktop merender mesh yang sama dengan ThreeNet (Rust / wgpu).")</p>
+    </div>
+</div>
+@code {
+    private ElementReference _host;
+    private IJSObjectReference? _module;
+    private int _id;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        var v = Scenarios.Volume3D();
+        _module = await JS.InvokeAsync<IJSObjectReference>("import", "./medVolume.js");
+        _id = await _module.InvokeAsync<int>("create", _host, new object[]
+        {
+            new { url = "mesh/lesion.bin", color = v.Lesion.Color, opacity = 1.0 },
+            new { url = "mesh/skull.bin", color = v.Skull.Color, opacity = 0.42 },
+        }, v.Radius, "#eef3f4");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Dispose();                                   // Blazor calls only DisposeAsync when both are implemented
+        if (_module is null) return;
+        try { await _module.InvokeVoidAsync("dispose", _id); await _module.DisposeAsync(); }
+        catch (JSDisconnectedException) { }
+    }
+}

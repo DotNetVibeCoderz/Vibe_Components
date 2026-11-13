@@ -1,12 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Medical.Net DICOM on fo-dicom: metadata extraction, VOI window/level rendering to PNG through the Rust kernels, Hounsfield statistics, PS3.15 de-identification with stable pseudonyms, synthetic CT phantoms, DICOMweb (QIDO-RS / WADO-RS / STOW-RS) and DIMSE C-ECHO / C-STORE SCU + SCP.</Description>
+    <Description>Medical.Net DICOM on fo-dicom: metadata, VOI window/level rendering on the Rust kernels, Hounsfield statistics, JPEG / JPEG-LS / JPEG 2000 / HT-J2K / RLE codecs (fo-dicom.Codecs), volumes with MPR / MIP / MinIP / oblique slabs, surface-nets isosurfaces to STL / OBJ, DICOM Segmentation and TID 1500 Measurement Report (SR), 12-lead ECG waveform, PS3.15 de-identification, synthetic CT phantoms, DICOMweb and DIMSE C-ECHO / C-STORE.</Description>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="fo-dicom" Version="5.2.6" />
+    <PackageReference Include="fo-dicom.Codecs" Version="6.0.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Medical.Core/Medical.Core.csproj" />
     <ProjectReference Include="../Medical.Native/Medical.Native.csproj" />
+    <ProjectReference Include="../Medical.Signals/Medical.Signals.csproj" />
   </ItemGroup>
 </Project>

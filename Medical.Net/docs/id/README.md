@@ -8,6 +8,7 @@ Medical.Net — Platform Medis Komprehensif untuk .NET 10. Dibuat oleh Gravicode
 | [Arsitektur](architecture.md) | Lapisan paket, model domain, DI, event, audit, aturan desain |
 | [Modul](modules.md) | Semua paket beserta contoh: FHIR, HL7, DICOM, terminologi, klinis, aturan, sinyal, privasi, EMR, visualisasi |
 | [Interoperabilitas (v1.1)](interoperability.md) | Server FHIR (pencarian, `_include`, `_history`, persistensi), validasi profil, SMART on FHIR, alur SATUSEHAT + KFA, order / jadwal / dokumen / kesesuaian HL7, BPJS VClaim · PCare · E-Klaim / INA-CBG |
+| [Pencitraan dan sinyal (v1.2)](imaging-signals.md) | Codec JPEG / JPEG-LS / JPEG 2000, volume, MPR / MIP (Rust), isosurface + 3D (ThreeNet, three.js), DICOM SEG + SR TID 1500, nodul paru + bundle MONAI, EKG 12 sadapan (QT/QTc, kriteria STEMI), waveform DICOM dan SCP-ECG |
 | [AI klinis](ai.md) | Model risiko, asisten klinis (Claude / kompatibel OpenAI / offline), AI pencitraan dan layanan MONAI |
 | [Deployment](deployment.md) | Server FHIR, listener MLLP, SATUSEHAT, database & cache EMR, layanan pencitraan, keamanan & kepatuhan |
 | [Perkakas](tools.md) | CLI `medical`, templat `dotnet new`, aplikasi Galeri dan tangkapan layar |

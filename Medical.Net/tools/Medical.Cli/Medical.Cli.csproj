@@ -22,5 +22,6 @@
     <ProjectReference Include="../../src/Medical.Hl7/Medical.Hl7.csproj" />
     <ProjectReference Include="../../src/Medical.Privacy/Medical.Privacy.csproj" />
     <ProjectReference Include="../../src/Medical.Signals/Medical.Signals.csproj" />
+    <ProjectReference Include="../../src/Medical.Visualization/Medical.Visualization.csproj" />
   </ItemGroup>
 </Project>

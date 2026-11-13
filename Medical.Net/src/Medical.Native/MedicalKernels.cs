@@ -12,7 +12,7 @@ public enum KernelBackend { Managed, Rust }
 /// High-performance medical kernels. Uses the Rust <c>medical_native</c> library when it can be loaded,
 /// otherwise a managed implementation with identical semantics (same formulas, same f64 arithmetic).
 /// </summary>
-public static class MedicalKernels
+public static partial class MedicalKernels
 {
     private static readonly Lazy<bool> _nativeAvailable = new(() =>
     {
