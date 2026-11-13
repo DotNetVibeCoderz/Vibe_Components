@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Medical.Net on Hugging Face via HF.Net (GraviTransformers): local transformer models for clinical named-entity recognition, sentence embeddings for guideline retrieval, and ICD-10 coding suggestions, running in-process with no Python.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Gravicode.HFNet.GraviTransformers" Version="0.12.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Medical.AI/Medical.AI.csproj" />
+  </ItemGroup>
+</Project>

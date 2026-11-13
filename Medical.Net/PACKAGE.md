@@ -12,9 +12,10 @@ Building blocks for hospital information systems, EMR/EHR, health-data exchange,
 - **Medical.Hl7**: NHapi HL7 v2 parse/build (ADT, ORU, ACK), HL7 v2 → FHIR, MLLP server and client
 - **Medical.Dicom**: fo-dicom metadata, window/level rendering, HU statistics, PS3.15 de-identification, DICOMweb, C-ECHO / C-STORE SCU + SCP
 - **Medical.Terminology**: ICD-10, SNOMED CT, LOINC, RxNorm — bilingual search, subsumption, maps, check digits, release loaders
-- **Medical.Clinical**: NEWS2, qSOFA, CURB-65, CHA₂DS₂-VASc, HAS-BLED, GCS, MELD, CKD-EPI 2021, dosing, lab interpretation
-- **Medical.Rules**: NRules decision support (sepsis, early warning, drug interactions, allergies, renal dosing) + JSON workflows on Microsoft RulesEngine
-- **Medical.AI**: ML.NET risk models with explanations, Claude / OpenAI-compatible / offline clinical assistant, CT haemorrhage screening, MONAI service client
+- **Medical.Clinical**: NEWS2, qSOFA, SOFA, APACHE II, PEWS, MEOWS, Wells, PERC, Child-Pugh, ASCVD / Framingham, WHO growth standards, CKD-EPI 2021, renal / hepatic dosing, lab interpretation
+- **Medical.Rules**: NRules decision support (sepsis, early warning, drug interactions, allergies, renal dosing) + JSON workflows on Microsoft RulesEngine; pluggable drug-interaction sources (FDA-label contraindications, CSV, DrugBank XML)
+- **Medical.AI**: ML.NET risk models with explanations, Claude / OpenAI-compatible / offline clinical assistant, CT haemorrhage and lung-nodule AI, clinical NLP with ICD-10 suggestions, guideline answers with citations, federated learning, model cards, drift monitoring
+- **Medical.HuggingFace**: Hugging Face NER and sentence embeddings in-process via HF.Net
 - **Medical.Signals / Privacy / Emr / AspNetCore / Visualization / Native** (Rust kernels) · **Medical.Cli** · **Medical.Templates**
 
 ```csharp

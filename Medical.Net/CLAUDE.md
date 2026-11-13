@@ -17,7 +17,7 @@ pwsh build/build-native.ps1        # cargo build + copy into src/Medical.Native/
 pwsh build/pack.ps1 [-SkipNative] [-SkipTests]   # all NuGet packages → artifacts/packages
 dotnet run --project gallery/Medical.Gallery.Web --urls http://localhost:5290   # /?lang=id
 dotnet run --project gallery/Medical.Gallery.Desktop -- --screenshot docs/images [en|id]
-# web shots: chrome --headless=new --force-prefers-reduced-motion --window-size=1440,1000 --screenshot=<file> http://localhost:5290/demo/<slug>
+# web shots: chrome --headless=new --force-prefers-reduced-motion --blink-settings=preferredColorScheme=1 --window-size=1440,1000 --screenshot=<file> http://localhost:5290/demo/<slug>
 dotnet run --project tools/Medical.Cli -- help
 cd services/medical-ai-service && uvicorn app:app --port 8000                # optional imaging AI
 ```
@@ -45,6 +45,14 @@ To verify templates, install the packed `Medical.Templates` into a custom hive (
   `MeasureIntervals`; area-curve T end with a 96 ms window chosen on half of QTDB — report held-out numbers only), `ScpEcg`, `DicomEcg` (Medical.Dicom).
 - Gallery 3D: desktop `Volume3D.cs` (ThreeNet; offscreen when `Program.Headless`), web `wwwroot/medVolume.js` (three.js r170 vendored in `wwwroot/three`,
   meshes from `/mesh/{name}.bin`; screenshot at `/demo/volume3d?still=1` because virtual time drops the Blazor circuit).
+- v1.3 clinical intelligence: scores in `Medical.Clinical/CriticalCareScores.cs` (Wells PE uses half-point units in `Score`; `ExactScore` holds the published value)
+  and `CardiovascularRisk.cs` (coefficients checked against CVrisk). `WhoGrowthStandards` follows WHO anthro / anthroplus exactly (restricted z beyond ±3 SD,
+  0.7 cm at 731 days, interpolation); the WHO tables are downloaded at runtime from pinned commits — never embed them (licence). `OrganDosing` holds label dosing
+  bands. `Medical.Rules/InteractionSources.cs`: `IDrugInteractionSource` + label / CSV / DrugBank / composite sources.
+  `Medical.AI`: `Nlp/ClinicalNlp.cs` (terminology recognizer, NegEx-style `Context`, `Icd10Coder`), `Guidelines/GuidelineRag.cs` (BM25 + optional
+  `ITextEmbedder`, RRF, citation validation, extractive fallback; the sample corpus is our own summaries), `Learning/*` (FedAvg + pairwise masks + DP, `ModelEvaluation`,
+  `ModelCard`, `DriftMonitor`). `Medical.HuggingFace` adapts HF.Net (`TransformerModel.FindEntities` / `Embed` → `NdArray.ToArray()`); entity spans are widened to words.
+  Opt-in tests: `MEDNET_HF_TESTS=1` (downloads models), `MEDNET_LLM_TESTS=1` + `ANTHROPIC_API_KEY` (real Claude); the WHO tests download the tables and skip offline.
 - `Medical.Bpjs`: VClaim/PCare (`BpjsCrypto`: HMAC signature, AES-256-CBC + `LzString` responses), E-Klaim (`EKlaimCrypto`), and `InaCbgClaimBuilder` plus coding checks. Test vectors come from reference implementations (lz-string 1.5.0 JS, Python).
 - Decision support: `FactBuilder` turns a record into facts. The NRules rules live in `Medical.Rules/ClinicalRules.cs` (namespace `Medical.Rules.Definitions`) and are compiled once.
   JSON workflows (Microsoft RulesEngine) are in `Medical.Rules/Workflows/*.json` and evaluate over `ClinicalSnapshot` (`input1.X`). Drug classes come from RxNorm tags in `Medical.Terminology/Data/rxnorm.tsv`.

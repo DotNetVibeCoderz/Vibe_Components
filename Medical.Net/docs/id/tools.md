@@ -77,7 +77,7 @@ Tangkapan layar web dibuat dengan Chrome headless (`--screenshot`, `--blink-sett
 | AI → SEG + SR | `medical dicom ai ct --out-dir hasil` |
 | EKG 12 sadapan | `medical ecg12 --pattern inferior --out ekg.svg|.dcm|.scp --lang id` · `medical ecg12 analyze ekg.scp --sex f --age 50` |
 
-Galeri kini berisi dua puluh dua kasus, termasuk **MPR & MIP**, **Volume 3D** (ThreeNet / three.js), **Kompresi**, **EKG 12 sadapan** dan **AI pencitraan → SEG / SR**. Templat memakai `--MedicalNetVersion` bawaan `1.2.0`.
+Galeri v1.2 menambahkan **MPR & MIP**, **Volume 3D** (ThreeNet / three.js), **Kompresi**, **EKG 12 sadapan** dan **AI pencitraan → SEG / SR**.
 
 | | |
 |---|---|
@@ -85,3 +85,20 @@ Galeri kini berisi dua puluh dua kasus, termasuk **MPR & MIP**, **Volume 3D** (T
 | ![](../images/desktop-ecg12-id.png) | ![](../images/desktop-imaging-ai-id.png) |
 
 **Validasi QT**: `tools/validation/qtdb_export.py` mengekspor segmen beranotasi PhysioNet QT Database, lalu `dotnet test --filter QtDatabaseAgreement` melaporkan kesesuaiannya.
+
+## Baru di 1.3
+
+| Perintah | Contoh |
+|---|---|
+| Skor | `medical score sofa|apache2|pews|meows|wells-pe|wells-dvt|perc|child-pugh … --lang id` · `medical cvrisk --age 55 --sex m --tc 213 --hdl 50 --sbp 140` |
+| Pertumbuhan WHO | `medical growth --sex f --age-months 24 --weight 9.0 --height 77.5 --lang id` (tabel WHO diunduh sekali) |
+| Dosis & sumber obat | `medical renal rivaroxaban --crcl 28 --child-pugh B --lang id` · `medical interactions … --sources [--csv formularium.csv]` |
+| NLP & pedoman | `medical nlp "<catatan>" --lang id [--hf]` · `medical guideline ask "<pertanyaan>" --lang id [--corpus pedoman/]` |
+| Pembelajaran | `medical federated --noise 1.0 --clip 0.5 --card card.md` · `medical drift --shift 0.8` |
+
+Galeri kini berisi dua puluh sembilan kasus, termasuk **Skor ICU & obstetri**, **Risiko kardiovaskular**, **Pertumbuhan WHO**, **Keamanan obat & dosis**, **NLP klinis & pengodean**, **Jawaban pedoman** dan **Federated learning**. Templat memakai `--MedicalNetVersion` bawaan `1.3.0`.
+
+| | |
+|---|---|
+| ![](../images/desktop-icu-scores-id.png) | ![](../images/desktop-growth-id.png) |
+| ![](../images/desktop-guidelines-id.png) | ![](../images/desktop-federated-id.png) |

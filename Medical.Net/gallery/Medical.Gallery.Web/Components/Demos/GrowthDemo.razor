@@ -1,0 +1,60 @@
+@inherits DemoBase
+@if (_v is null)
+{
+    <p class="empty">@T("Downloading the WHO growth tables…", "Mengunduh tabel pertumbuhan WHO…")</p>
+}
+else if (_v.Error is { } err)
+{
+    <div class="alert warning"><strong>@T("WHO tables unavailable", "Tabel WHO tidak tersedia")</strong><span>@err</span></div>
+}
+else
+{
+    var v = _v;
+    <div class="controls">
+        <div class="seg">
+            <button class="@(_ind == GrowthIndicator.LengthHeightForAge ? "on" : "")" @onclick="() => Pick(GrowthIndicator.LengthHeightForAge)">@T("Length-for-age", "PB/U")</button>
+            <button class="@(_ind == GrowthIndicator.WeightForAge ? "on" : "")" @onclick="() => Pick(GrowthIndicator.WeightForAge)">@T("Weight-for-age", "BB/U")</button>
+        </div>
+    </div>
+    <div class="grid-2 wide-left">
+        <div class="panel">
+            <h3>Siti · @T("girl, 0–24 months", "perempuan, 0–24 bulan") <small>WHO Child Growth Standards 2006</small></h3>
+            @Svg(v.Chart!)
+        </div>
+        <div class="panel">
+            <h3>@T("Visits", "Kunjungan")</h3>
+            <table class="data">
+                <tr><th>@T("Mo", "Bln")</th><th>@T("Length", "PB")</th><th>z</th><th>@T("Weight", "BB")</th><th>z</th><th>BB/PB z</th></tr>
+                @foreach (var x in v.Visits)
+                {
+                    <tr class="@(x.LengthForAge.ZScore < -2 ? "hl" : "")">
+                        <td class="mono">@x.Months</td><td class="mono">@Scenarios.Fmt(x.LengthCm, "0.0")</td><td class="mono">@Scenarios.Fmt(x.LengthForAge.ZScore, "+0.00;-0.00")</td>
+                        <td class="mono">@Scenarios.Fmt(x.WeightKg, "0.0")</td><td class="mono">@Scenarios.Fmt(x.WeightForAge.ZScore, "+0.00;-0.00")</td><td class="mono">@Scenarios.Fmt(x.WeightForLength.ZScore, "+0.00;-0.00")</td>
+                    </tr>
+                }
+            </table>
+            @{ var last = v.Visits[^1]; }
+            <p class="risk risk-@(last.LengthForAge.ZScore < -2 ? "high" : "low")">@last.LengthForAge.Classification[Lang]</p>
+            <p>@T($"At 24 months: weight-for-length {last.WeightForLength.Classification.En.ToLowerInvariant()} — the deficit is in linear growth, the signature of chronic undernutrition.",
+                  $"Pada 24 bulan: BB/PB {last.WeightForLength.Classification.Id.ToLowerInvariant()} — defisitnya pada pertumbuhan linear, tanda kekurangan gizi kronik.")</p>
+        </div>
+    </div>
+    <p class="note">@T("Tables are downloaded from WHO's anthro / anthroplus repositories (pinned commits) at first use and cached; they are not redistributed in the package.",
+                       "Tabel diunduh dari repositori anthro / anthroplus WHO (commit terkunci) saat pertama dipakai lalu di-cache; tidak didistribusikan ulang dalam paket.")</p>
+}
+@code {
+    private GrowthView? _v;
+    private GrowthIndicator _ind = GrowthIndicator.LengthHeightForAge;
+
+    protected override async Task OnInitializedAsync()
+    {
+        base.OnInitialized();
+        _v = await Scenarios.Growth(_ind, Lang);
+    }
+
+    private async Task Pick(GrowthIndicator i)
+    {
+        _ind = i;
+        _v = await Scenarios.Growth(_ind, Lang);
+    }
+}

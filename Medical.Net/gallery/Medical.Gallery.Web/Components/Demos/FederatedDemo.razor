@@ -1,0 +1,49 @@
+@inherits DemoBase
+@{ var v = Scenarios.Federated(_noise, _shift, _secure); }
+<div class="controls">
+    <label>@T("DP noise σ", "Derau DP σ") <input type="range" min="0" max="3" step="0.25" @bind="_noise" @bind:event="onchange" /> <span class="mono">@Scenarios.Fmt(_noise, "0.00")</span></label>
+    <label>@T("Population shift", "Pergeseran populasi") <input type="range" min="0" max="1.5" step="0.1" @bind="_shift" @bind:event="onchange" /> <span class="mono">@Scenarios.Fmt(_shift, "0.0")</span></label>
+    <label class="check"><input type="checkbox" @bind="_secure" /> @T("Secure aggregation", "Agregasi aman")</label>
+</div>
+<div class="readouts">
+    <div class="readout"><span class="k">@T("Federated AUC", "AUC federated")</span><span class="v">@Scenarios.Fmt(v.Federated.Auc, "0.000")</span><span class="n">@T("pooled (centralised)", "gabungan (terpusat)") @Scenarios.Fmt(v.Pooled.Auc, "0.000")</span></div>
+    <div class="readout"><span class="k">@T("Privacy budget", "Anggaran privasi")</span><span class="v">@(double.IsInfinity(v.Result.Epsilon()) ? "ε = ∞" : "ε = " + Scenarios.Fmt(v.Result.Epsilon(), "0.0"))</span><span class="n">@T("site-level, δ = 10⁻⁵, 30 rounds", "tingkat situs, δ = 10⁻⁵, 30 putaran")</span></div>
+    <div class="readout"><span class="k">@T("Calibration", "Kalibrasi")</span><span class="v">ECE @Scenarios.Fmt(v.Federated.Ece, "0.000")</span><span class="n">Brier @Scenarios.Fmt(v.Federated.Brier, "0.000")</span></div>
+</div>
+<div class="grid-2">
+    <div class="panel">
+        <h3>@T("Sites", "Situs") <small>@T(v.Result.SecureAggregation ? "server sees only masked updates" : "server sees each update", v.Result.SecureAggregation ? "server hanya melihat pembaruan bertopeng" : "server melihat setiap pembaruan")</small></h3>
+        <table class="data">
+            <tr><th>@T("Site", "Situs")</th><th>@T("Rows (stay local)", "Baris (tetap lokal)")</th><th>@T("Event rate", "Laju kejadian")</th></tr>
+            @foreach (var s in v.Sites) { <tr><td>@s.Site</td><td class="mono">@s.Rows</td><td class="mono">@Scenarios.Fmt(s.Prevalence * 100, "0.0") %</td></tr> }
+        </table>
+        <p class="label">@T("Training loss by round", "Loss pelatihan per putaran")</p>
+        @Svg(v.LossChart)
+        <p class="label">@T("Privacy–utility trade-off (clip 0.5)", "Kompromi privasi–utilitas (clip 0,5)")</p>
+        @Svg(v.PrivacyChart)
+    </div>
+    <div class="panel">
+        <h3>@T("Model card", "Model card") <small>@v.Card.Name</small></h3>
+        <table class="data">
+            <tr><th>@T("Group", "Grup")</th><th>n</th><th>AUC</th><th>ECE</th></tr>
+            <tr><td><strong>@T("Overall", "Keseluruhan")</strong></td><td class="mono">@v.Card.Overall.N</td><td class="mono">@Scenarios.Fmt(v.Card.Overall.Auc, "0.000")</td><td class="mono">@Scenarios.Fmt(v.Card.Overall.Ece, "0.000")</td></tr>
+            @foreach (var s in v.Card.Subgroups) { <tr><td>@s.Attribute = @s.Group</td><td class="mono">@s.Metrics.N</td><td class="mono">@Scenarios.Fmt(s.Metrics.Auc, "0.000")</td><td class="mono">@Scenarios.Fmt(s.Metrics.Ece, "0.000")</td></tr> }
+        </table>
+        <p class="label">@T("Drift since deployment", "Drift sejak penerapan")</p>
+        <table class="data">
+            <tr><th>@T("Feature", "Fitur")</th><th>PSI</th><th>KS</th><th>@T("Mean", "Rerata")</th><th></th></tr>
+            @foreach (var f in v.Drift.Features.Append(v.Drift.Prediction!))
+            {
+                <tr class="@(f.Level == Medical.AI.Learning.DriftLevel.Major ? "hl" : f.Level == Medical.AI.Learning.DriftLevel.Moderate ? "flag" : "")">
+                    <td>@f.Feature</td><td class="mono">@Scenarios.Fmt(f.Psi, "0.000")</td><td class="mono">@Scenarios.Fmt(f.KsStatistic, "0.000")</td>
+                    <td class="mono">@Scenarios.Fmt(f.ReferenceMean, "0.##") → @Scenarios.Fmt(f.CurrentMean, "0.##")</td><td>@f.Level</td>
+                </tr>
+            }
+        </table>
+        @foreach (var a in v.Drift.Alerts) { <div class="alert warning"><span>@a</span></div> }
+    </div>
+</div>
+@code {
+    private double _noise, _shift = 0.8;
+    private bool _secure = true;
+}

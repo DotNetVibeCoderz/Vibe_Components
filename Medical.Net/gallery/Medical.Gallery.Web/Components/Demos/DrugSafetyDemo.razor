@@ -1,0 +1,71 @@
+@inherits DemoBase
+@if (_v is { } v)
+{
+    <div class="controls">
+        <label>@T("Creatinine", "Kreatinin") <input type="range" min="0.6" max="4" step="0.1" value="@_cr" @oninput="Cr" /> <span class="mono">@Scenarios.Fmt(_cr, "0.0") mg/dL</span></label>
+        <label>Child-Pugh
+            <span class="seg">@foreach (var c in new[] { "A", "B", "C" }) { <button class="@(_cp == c ? "on" : "")" @onclick="() => Cp(c)">@c</button> }</span>
+        </label>
+    </div>
+    <div class="readouts">
+        <div class="readout"><span class="k">CrCl · Cockcroft-Gault</span><span class="v">@Scenarios.Fmt(v.CrCl)<small>mL/min</small></span><span class="n">@T("80 y, 55 kg, female", "80 th, 55 kg, perempuan")</span></div>
+        <div class="readout"><span class="k">eGFR · CKD-EPI 2021</span><span class="v">@Scenarios.Fmt(v.Egfr)<small>mL/min/1.73 m²</small></span><span class="n">@T("metformin uses eGFR", "metformin memakai eGFR")</span></div>
+        <div class="readout"><span class="k">apixaban (AF)</span><span class="v">@(v.Apixaban.Action == Clinical.DoseAction.Reduce ? "2.5" : "5")<small>mg × 2</small></span><span class="n">@v.Apixaban.Basis</span></div>
+    </div>
+    <div class="grid-2">
+        <div class="panel">
+            <h3>@T($"{v.Interactions.Count} interaction findings", $"{v.Interactions.Count} temuan interaksi") <small>@string.Join(" · ", v.Medications)</small></h3>
+            @foreach (var f in v.Interactions)
+            {
+                <div class="alert @(f.Severity == Rules.InteractionSeverity.Moderate ? "warning" : "critical")">
+                    <span class="tag">@f.Severity · @f.Source</span>
+                    <strong>@f.DrugA + @f.DrugB</strong>
+                    <span>@f.Effect[Lang]</span>
+                    @if (f.Reference is { } r) { <code>@r</code> }
+                </div>
+            }
+        </div>
+        <div class="panel">
+            <h3>@T("Renal dosing", "Dosis ginjal") <small>@T("US prescribing information", "Label obat AS")</small></h3>
+            <table class="data">
+                <tr><th>@T("Drug", "Obat")</th><th>@T("Action", "Tindakan")</th><th>@T("Advice", "Anjuran")</th></tr>
+                @foreach (var r in v.Renal)
+                {
+                    <tr class="@(r.Action is Clinical.DoseAction.Avoid or Clinical.DoseAction.Contraindicated ? "hl" : r.Action == Clinical.DoseAction.NoChange ? "" : "flag")">
+                        <td>@r.Generic<br /><small class="muted">@r.Basis</small></td><td class="mono">@r.Action</td><td class="wrap">@r.Advice[Lang]</td>
+                    </tr>
+                }
+            </table>
+            <p class="label">@T($"Hepatic (Child-Pugh {v.ChildPugh})", $"Hati (Child-Pugh {v.ChildPugh})")</p>
+            <table class="data">
+                @foreach (var h in v.Hepatic)
+                {
+                    <tr class="@(h.Action is Clinical.DoseAction.Avoid or Clinical.DoseAction.Contraindicated ? "hl" : "")"><td>@h.Generic</td><td class="mono">@h.Action</td><td class="wrap">@h.Advice[Lang]</td></tr>
+                }
+            </table>
+        </div>
+    </div>
+}
+@code {
+    private double _cr = 1.6;
+    private string _cp = "A";
+    private DrugSafetyView? _v;
+
+    protected override async Task OnInitializedAsync()
+    {
+        base.OnInitialized();
+        _v = await Scenarios.DrugSafety(_cr, _cp);
+    }
+
+    private async Task Cr(ChangeEventArgs e)
+    {
+        _cr = double.Parse(e.Value?.ToString() ?? "1.6", System.Globalization.CultureInfo.InvariantCulture);
+        _v = await Scenarios.DrugSafety(_cr, _cp);
+    }
+
+    private async Task Cp(string c)
+    {
+        _cp = c;
+        _v = await Scenarios.DrugSafety(_cr, _cp);
+    }
+}

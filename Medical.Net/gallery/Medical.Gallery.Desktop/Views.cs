@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Medical.AI.Assistant;
+using Medical.Clinical;
 using Medical.Core;
 using Medical.Dicom;
 using Medical.Gallery.Shared;
@@ -35,6 +36,19 @@ internal static class Views
     private sealed class MprState { public bool Chest; public double Pos = 0.5; public Medical.Native.SlabMode Mode = Medical.Native.SlabMode.Max; public double Slab = 30; }
     private sealed class AiState { public bool Chest; }
     private sealed class Ecg12State { public Medical.Signals.StPattern Pattern = Medical.Signals.StPattern.InferiorStemi; public double Hr = 72, Qtc = 400; public bool Af, Female; }
+    private sealed class IcuState { public double Sev = 0.6; }
+    private sealed class CvState { public int Age = 58; public double Sbp = 142, Tc = 220, Hdl = 42; public bool Female, Smoker = true, Diabetes; }
+    private sealed class GrowthState { public GrowthIndicator Indicator = GrowthIndicator.LengthHeightForAge; }
+    private sealed class SafetyState { public double Cr = 1.6; public string ChildPugh = "A"; }
+    private sealed class NlpState { public string? Lang; }
+    private sealed class GuideState
+    {
+        public string Question = Scenarios.GuidelineQuestions[0];
+        public GuidelineView? View;
+        public bool Busy;
+        public IClinicalLlm Llm = LlmOptions.FromEnvironment().Create();
+    }
+    private sealed class FedState { public double Noise, Shift = 0.8; public bool Secure = true; }
     private sealed class ChatState
     {
         public ClinicalAssistant Assistant = Scenarios.Assistant();
@@ -385,6 +399,145 @@ internal static class Views
                             Alert(a.MeetsStemiCriteria || a.Qtc >= Medical.Signals.QtcCategory.MarkedlyProlonged ? "critical" : a.StDepressionLeads.Count > 0 ? "warning" : "info",
                                 a.MeetsStemiCriteria ? "STEMI · " + string.Join(", ", a.StemiTerritories) : Scenarios.RhythmName(a.Rhythm)[lang], T("Interpretation", "Interpretasi"), a.Interpretation[lang])), "median beat"),
                         Panel(T("Median beats and fiducials", "Denyut median dan titik acuan"), SvgView(v.Medians))));
+            }
+            case "icu-scores":
+            {
+                var st = S<IcuState>();
+                var v = Scenarios.Icu(st.Sev);
+                Control Small(ScoreResult s) => Panel(s.Name, Stack(6, Mono($"{(s.ExactScore is { } e ? e.ToString("0.#") : s.Score.ToString())} / {(s.ExactScore is null ? s.MaxScore : s.MaxScore / 2.0)}", 22),
+                    Pill(Scenarios.RiskName(s.Risk)[lang], s.Risk.ToString().ToLowerInvariant()), Text(s.Interpretation[lang], 13.5)));
+                return Stack(16,
+                    Controls(Slider(T("Severity of sepsis", "Keparahan sepsis"), 0, 1, st.Sev, 0.05, x => { st.Sev = x; rerender(); }, x => $"{x * 100:0} %")),
+                    Columns([2, 3],
+                        Panel($"SOFA · {v.Sofa.Score}/24", Stack(8, SvgView(v.SofaBars), Pill(Scenarios.RiskName(v.Sofa.Risk)[lang], v.Sofa.Risk.ToString().ToLowerInvariant()), Text(v.Sofa.Interpretation[lang]))),
+                        Panel($"APACHE II · {v.Apache.Score}/71", Stack(8, Text(v.Apache.Interpretation[lang]),
+                            Table([T("Variable", "Variabel"), T("Worst value", "Nilai terburuk"), T("Points", "Poin")], v.Apache.Components.Where(c => c.Points > 0).Select(c => new[] { c.Parameter, c.Value, $"+{c.Points}" }), 1, 2)))),
+                    Columns([1, 1, 1, 1], Small(v.Pews), Small(v.Meows), Small(v.WellsPe), Small(v.Perc)));
+            }
+            case "cvrisk":
+            {
+                var st = S<CvState>();
+                var v = Scenarios.CvRisk(st.Age, st.Female, st.Sbp, st.Tc, st.Hdl, false, st.Smoker, st.Diabetes);
+                return Stack(16,
+                    Controls(Slider(T("Age", "Usia"), 40, 79, st.Age, 1, x => { st.Age = (int)x; rerender(); }, x => $"{x:0}"),
+                        Slider(T("Systolic BP", "TD sistolik"), 100, 190, st.Sbp, 2, x => { st.Sbp = x; rerender(); }, x => $"{x:0}"),
+                        Slider(T("Total chol.", "Kolesterol"), 140, 300, st.Tc, 5, x => { st.Tc = x; rerender(); }, x => $"{x:0}"),
+                        Segmented([(false, T("Male", "Laki-laki")), (true, T("Female", "Perempuan"))], st.Female, x => { st.Female = x; rerender(); }),
+                        Segmented([(false, T("Non-smoker", "Bukan perokok")), (true, T("Smoker", "Perokok"))], st.Smoker, x => { st.Smoker = x; rerender(); }),
+                        Segmented([(false, T("No diabetes", "Tanpa diabetes")), (true, T("Diabetes", "Diabetes"))], st.Diabetes, x => { st.Diabetes = x; rerender(); })),
+                    Columns([1, 1],
+                        Readout("ASCVD · Pooled Cohort Equations", $"{v.Pce.TenYearRiskPercent:0.0}", "%", v.Pce.Category[lang]),
+                        Readout("CVD · Framingham 2008", $"{v.Framingham.TenYearRiskPercent:0.0}", "%", v.Framingham.Category[lang])),
+                    Panel(T("Risk across age for this profile", "Risiko menurut usia untuk profil ini"), SvgView(v.ByAge), string.Join(" ", v.Pce.Warnings.Take(1))));
+            }
+            case "growth":
+            {
+                var st = S<GrowthState>();
+                var v = Scenarios.Growth(st.Indicator, lang).GetAwaiter().GetResult();
+                if (v.Error is { } err) return Alert("warning", "WHO", T("WHO tables unavailable", "Tabel WHO tidak tersedia"), err);
+                var last = v.Visits[^1];
+                return Stack(16,
+                    Controls(Segmented([(GrowthIndicator.LengthHeightForAge, T("Length-for-age", "PB/U")), (GrowthIndicator.WeightForAge, T("Weight-for-age", "BB/U"))], st.Indicator, x => { st.Indicator = x; rerender(); })),
+                    Columns([3, 2],
+                        Panel($"Siti · {T("girl, 0–24 months", "perempuan, 0–24 bulan")}", SvgView(v.Chart!), "WHO Child Growth Standards 2006"),
+                        Panel(T("Visits", "Kunjungan"), Stack(8,
+                            Table([T("Mo", "Bln"), T("Length", "PB"), "z", T("Weight", "BB"), "z", "BB/PB z"], v.Visits.Select(x => new[] { $"{x.Months}", $"{x.LengthCm:0.0}", $"{x.LengthForAge.ZScore:+0.00;-0.00}", $"{x.WeightKg:0.0}", $"{x.WeightForAge.ZScore:+0.00;-0.00}", $"{x.WeightForLength.ZScore:+0.00;-0.00}" }), 0, 1, 2, 3, 4, 5),
+                            Pill(last.LengthForAge.Classification[lang], last.LengthForAge.ZScore < -2 ? "high" : "low"),
+                            Text(T("Tables are downloaded from WHO at first use and cached, not redistributed.", "Tabel diunduh dari WHO saat pertama dipakai dan di-cache, tidak didistribusikan ulang."), 13, "muted")))));
+            }
+            case "drug-safety":
+            {
+                var st = S<SafetyState>();
+                var v = Scenarios.DrugSafety(st.Cr, st.ChildPugh).GetAwaiter().GetResult();
+                var alerts = Stack(0, v.Interactions.Select(f => Alert(f.Severity == Medical.Rules.InteractionSeverity.Moderate ? "warning" : "critical", $"{f.Severity} · {f.Source}", $"{f.DrugA} + {f.DrugB}", f.Effect[lang])).ToArray());
+                return Stack(16,
+                    Controls(Slider(T("Creatinine", "Kreatinin"), 0.6, 4, st.Cr, 0.1, x => { st.Cr = x; rerender(); }, x => $"{x:0.0} mg/dL"),
+                        Segmented([("A", "Child-Pugh A"), ("B", "B"), ("C", "C")], st.ChildPugh, x => { st.ChildPugh = x; rerender(); })),
+                    Columns([1, 1, 1],
+                        Readout("CrCl · Cockcroft-Gault", $"{v.CrCl:0}", "mL/min", T("80 y, 55 kg, female", "80 th, 55 kg, perempuan")),
+                        Readout("eGFR · CKD-EPI 2021", $"{v.Egfr:0}", "mL/min/1.73 m²", T("metformin uses eGFR", "metformin memakai eGFR")),
+                        Readout("apixaban (AF)", v.Apixaban.Action == Medical.Clinical.DoseAction.Reduce ? "2.5" : "5", "mg × 2", v.Apixaban.Basis)),
+                    Columns([1, 1],
+                        Panel(T($"{v.Interactions.Count} interaction findings", $"{v.Interactions.Count} temuan interaksi"), alerts, string.Join(" · ", v.Medications)),
+                        Panel(T("Renal & hepatic dosing", "Dosis ginjal & hati"), Stack(10,
+                            Table([T("Drug", "Obat"), T("Action", "Tindakan"), T("Advice", "Anjuran")], v.Renal.Select(r => new[] { $"{r.Generic}\n{r.Basis}", r.Action.ToString(), r.Advice[lang] }), 1),
+                            Eyebrow($"Child-Pugh {v.ChildPugh}"),
+                            Table([T("Drug", "Obat"), T("Action", "Tindakan"), T("Advice", "Anjuran")], v.Hepatic.Select(h => new[] { h.Generic, h.Action.ToString(), h.Advice[lang] }), 1)))));
+            }
+            case "clinical-nlp":
+            {
+                var st = S<NlpState>();
+                var v = Scenarios.Nlp(Scenarios.SampleNotes[st.Lang ?? lang]);
+                var text = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 15.5, LineHeight = 28 };
+                foreach (var s in v.Segments)
+                {
+                    var run = new Avalonia.Controls.Documents.Run(s.Text);
+                    if (s.Entity is { } e)
+                    {
+                        run.Background = e.Negated || e.FamilyHistory ? null : new SolidColorBrush(Color.Parse(e.Type switch
+                        {
+                            Medical.AI.Nlp.ClinicalEntityType.Problem => "#F2C2BD", Medical.AI.Nlp.ClinicalEntityType.Symptom => "#FBE8B4", _ => "#CFE5E3",
+                        }));
+                        if (e.Negated) { run.TextDecorations = TextDecorations.Strikethrough; run.Foreground = Brush("Muted"); }
+                        if (e.FamilyHistory) { run.TextDecorations = TextDecorations.Underline; run.Foreground = Brush("Amber"); }
+                    }
+                    text.Inlines!.Add(run);
+                }
+                var codes = Stack(0, v.Codes.Select(c => Alert(c.Code.StartsWith('R') ? "warning" : "info", $"{c.Code} · {c.Score:0.00}", c.DisplayFor(lang), $"{c.Note[lang]}  ← {string.Join("; ", c.Evidence)}")).ToArray());
+                return Stack(16,
+                    Controls(Segmented([("id", T("Indonesian note", "Catatan Indonesia")), ("en", T("English note", "Catatan Inggris"))], st.Lang ?? lang, x => { st.Lang = x; rerender(); }),
+                        Text(T("highlight: problem · symptom · drug — struck through = negated, underlined = family history", "sorotan: masalah · gejala · obat — dicoret = negasi, garis bawah = riwayat keluarga"), 13, "muted")),
+                    Columns([3, 2],
+                        Panel(T("Clinical note", "Catatan klinis"), Stack(10, text,
+                            Table([T("Entity", "Entitas"), T("Type", "Jenis"), T("Code", "Kode"), T("Context", "Konteks")], v.Entities.Select(e => new[] { e.Text, e.Type.ToString(), e.Codes.Count > 0 ? e.Codes[0].Code : "—", e.Negated ? T("negated", "negasi") : e.FamilyHistory ? T("family", "keluarga") : T("affirmed", "positif") }), 2))),
+                        Panel(T("ICD-10 suggestions", "Saran ICD-10"), codes, T("for a coder to confirm", "untuk dikonfirmasi koder"))));
+            }
+            case "guidelines":
+            {
+                var st = S<GuideState>();
+                if (st.View is null && !st.Busy) st.View = Scenarios.Guidelines(st.Question, lang, st.Llm).GetAwaiter().GetResult();
+                async void Ask(string q)
+                {
+                    st.Question = q; st.Busy = true; rerender();
+                    try { st.View = await Scenarios.Guidelines(q, lang, st.Llm); }
+                    finally { st.Busy = false; rerender(); }
+                }
+                var chips = new StackPanel();
+                foreach (var q in Scenarios.GuidelineQuestions) { var b = new Button { Content = q, Classes = { "chip" } }; b.Click += (_, _) => Ask(q); chips.Children.Add(b); }
+                Control right = st.Busy || st.View is null ? Text(T("Retrieving…", "Mencari…"), 14, "muted") : Stack(10,
+                    Text(st.View.Answer.Text, 15.5),
+                    Eyebrow(T("Citations", "Sitasi")),
+                    Text(string.Join("\n", st.View.Answer.Citations.Select(c => $"[{c.Number}] {c.Chunk.Citation} ({c.Chunk.Source})")), 13.5),
+                    Eyebrow(T("Retrieved passages (reciprocal rank fusion)", "Pasase yang ditemukan (reciprocal rank fusion)")),
+                    Table(["#", T("Passage", "Pasase"), "BM25", T("Score", "Skor")], st.View.Passages.Select((p, i) => new[] { $"{i + 1}", $"{(p.Chunk.Citation.Length > 70 ? p.Chunk.Citation[..70] + "…" : p.Chunk.Citation)} [{p.Chunk.Language}]", p.LexicalRank?.ToString() ?? "—", $"{p.Score:0.0000}" }), 0, 2, 3));
+                return Columns([2, 3],
+                    Panel(T("Ask the guidelines", "Tanya pedoman"), Stack(8, chips,
+                        Text(T("Set ANTHROPIC_API_KEY or MEDNET_LLM_* for generated answers; offline, the best sentences are quoted.", "Atur ANTHROPIC_API_KEY atau MEDNET_LLM_* untuk jawaban generatif; saat offline, kalimat terbaik dikutip."), 13, "muted"))),
+                    Panel(st.Question, right, st.View?.Answer.Mode));
+            }
+            case "federated":
+            {
+                var st = S<FedState>();
+                var v = Scenarios.Federated(st.Noise, st.Shift, st.Secure);
+                return Stack(16,
+                    Controls(Slider(T("DP noise σ", "Derau DP σ"), 0, 3, st.Noise, 0.25, x => { st.Noise = x; rerender(); }, x => $"{x:0.00}"),
+                        Slider(T("Population shift", "Pergeseran populasi"), 0, 1.5, st.Shift, 0.1, x => { st.Shift = x; rerender(); }, x => $"{x:0.0}"),
+                        Segmented([(true, T("Secure aggregation", "Agregasi aman")), (false, T("Plain", "Biasa"))], st.Secure, x => { st.Secure = x; rerender(); })),
+                    Columns([1, 1, 1],
+                        Readout(T("Federated AUC", "AUC federated"), $"{v.Federated.Auc:0.000}", null, $"{T("pooled", "gabungan")} {v.Pooled.Auc:0.000}"),
+                        Readout(T("Privacy budget", "Anggaran privasi"), double.IsInfinity(v.Result.Epsilon()) ? "ε = ∞" : $"ε = {v.Result.Epsilon():0.0}", null, T("site-level, δ = 10⁻⁵", "tingkat situs, δ = 10⁻⁵")),
+                        Readout(T("Calibration", "Kalibrasi"), $"{v.Federated.Ece:0.000}", "ECE", $"Brier {v.Federated.Brier:0.000}")),
+                    Columns([1, 1],
+                        Panel(T("Sites", "Situs"), Stack(8,
+                            Table([T("Site", "Situs"), T("Rows (local)", "Baris (lokal)"), T("Event rate", "Laju kejadian")], v.Sites.Select(s => new[] { s.Site, $"{s.Rows}", $"{s.Prevalence * 100:0.0} %" }), 1, 2),
+                            Eyebrow(T("Training loss by round", "Loss per putaran")), SvgView(v.LossChart),
+                            Eyebrow(T("Privacy–utility trade-off", "Kompromi privasi–utilitas")), SvgView(v.PrivacyChart))),
+                        Panel(T("Model card & drift", "Model card & drift"), Stack(8,
+                            Table([T("Group", "Grup"), "n", "AUC", "ECE"], new[] { new[] { T("Overall", "Keseluruhan"), $"{v.Card.Overall.N}", $"{v.Card.Overall.Auc:0.000}", $"{v.Card.Overall.Ece:0.000}" } }
+                                .Concat(v.Card.Subgroups.Select(s => new[] { $"{s.Attribute} = {s.Group}", $"{s.Metrics.N}", $"{s.Metrics.Auc:0.000}", $"{s.Metrics.Ece:0.000}" })), 1, 2, 3),
+                            Eyebrow(T("Drift since deployment", "Drift sejak penerapan")),
+                            Table([T("Feature", "Fitur"), "PSI", "KS", T("Level", "Tingkat")], v.Drift.Features.Append(v.Drift.Prediction!).Select(f => new[] { f.Feature, $"{f.Psi:0.000}", $"{f.KsStatistic:0.000}", f.Level.ToString() }), 1, 2),
+                            Stack(0, v.Drift.Alerts.Select(a => Alert("warning", "drift", a, "")).ToArray())))));
             }
             default:
                 return Text(T("Pick a use case from the list.", "Pilih kasus dari daftar."));

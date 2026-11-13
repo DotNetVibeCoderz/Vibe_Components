@@ -1,0 +1,55 @@
+@inherits DemoBase
+<div class="grid-2 wide-right">
+    <div class="panel">
+        <h3>@T("Ask the guidelines", "Tanya pedoman") <small>@(_v?.Chunks ?? 0) @T("passages · sample corpus", "pasase · korpus contoh")</small></h3>
+        @foreach (var q in Scenarios.GuidelineQuestions)
+        {
+            <button class="chip @(q == _q ? "on" : "")" @onclick="() => Ask(q)">@q</button>
+        }
+        <p class="note">@T("Set ANTHROPIC_API_KEY or MEDNET_LLM_* for generated answers; offline, the best sentences are quoted. Load the official PNPK / WHO documents with GuidelineCorpus.LoadDirectory.",
+                           "Atur ANTHROPIC_API_KEY atau MEDNET_LLM_* untuk jawaban generatif; saat offline, kalimat terbaik dikutip. Muat dokumen resmi PNPK / WHO dengan GuidelineCorpus.LoadDirectory.")</p>
+    </div>
+    <div class="panel">
+        @if (_busy) { <p class="empty">@T("Retrieving…", "Mencari…")</p> }
+        else if (_v is { } v)
+        {
+            <h3>@v.Question <small>@v.Answer.Mode</small></h3>
+            <p class="big-text">@v.Answer.Text</p>
+            @foreach (var w in v.Answer.Warnings) { <p class="note">⚠ @w</p> }
+            <p class="label">@T("Citations", "Sitasi")</p>
+            <ol class="plain">
+                @foreach (var c in v.Answer.Citations) { <li><strong>[@c.Number]</strong> @c.Chunk.Citation <span class="muted">(@c.Chunk.Source@(c.Chunk.Url is null ? "" : ", " + c.Chunk.Url))</span></li> }
+            </ol>
+            <p class="label">@T("Retrieved passages (reciprocal rank fusion)", "Pasase yang ditemukan (reciprocal rank fusion)")</p>
+            <table class="data">
+                <tr><th>#</th><th>@T("Passage", "Pasase")</th><th>BM25</th><th>@T("Score", "Skor")</th></tr>
+                @foreach (var (p, i) in v.Passages.Select((p, i) => (p, i + 1)))
+                {
+                    <tr><td class="mono">@i</td><td class="wrap"><strong>@p.Chunk.Citation</strong> <span class="tag">@p.Chunk.Language</span><br /><small>@(p.Chunk.Text.Length > 160 ? p.Chunk.Text[..160] + "…" : p.Chunk.Text)</small></td>
+                        <td class="mono">@(p.LexicalRank?.ToString() ?? "—")</td><td class="mono">@Scenarios.Fmt(p.Score, "0.0000")</td></tr>
+                }
+            </table>
+        }
+    </div>
+</div>
+@code {
+    private string _q = Scenarios.GuidelineQuestions[0];
+    private GuidelineView? _v;
+    private bool _busy;
+    private static readonly Medical.AI.Assistant.IClinicalLlm Llm = Medical.AI.Assistant.LlmOptions.FromEnvironment().Create();
+
+    protected override async Task OnInitializedAsync()
+    {
+        base.OnInitialized();
+        await Ask(_q);
+    }
+
+    private async Task Ask(string q)
+    {
+        _q = q;
+        _busy = true;
+        StateHasChanged();
+        try { _v = await Scenarios.Guidelines(q, Lang, Llm); }
+        finally { _busy = false; }
+    }
+}

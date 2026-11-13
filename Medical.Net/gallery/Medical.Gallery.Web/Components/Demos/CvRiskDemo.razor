@@ -1,0 +1,26 @@
+@inherits DemoBase
+@{ var v = Scenarios.CvRisk(_age, _female, _sbp, _tc, _hdl, _treated, _smoker, _diabetes); }
+<div class="controls">
+    <label>@T("Age", "Usia") <input type="number" min="40" max="79" @bind="_age" /></label>
+    <label>@T("Systolic BP", "TD sistolik") <input type="number" min="90" max="200" @bind="_sbp" /> mmHg</label>
+    <label>@T("Total cholesterol", "Kolesterol total") <input type="number" min="130" max="320" @bind="_tc" /> mg/dL</label>
+    <label>HDL <input type="number" min="20" max="100" @bind="_hdl" /> mg/dL</label>
+    <label class="check"><input type="checkbox" @bind="_female" /> @T("Female", "Perempuan")</label>
+    <label class="check"><input type="checkbox" @bind="_smoker" /> @T("Smoker", "Perokok")</label>
+    <label class="check"><input type="checkbox" @bind="_diabetes" /> @T("Diabetes", "Diabetes")</label>
+    <label class="check"><input type="checkbox" @bind="_treated" /> @T("On BP treatment", "Minum obat hipertensi")</label>
+</div>
+<div class="readouts">
+    <div class="readout"><span class="k">ASCVD · Pooled Cohort Equations</span><span class="v">@Scenarios.Fmt(v.Pce.TenYearRiskPercent, "0.0")<small>% / 10 @T("y", "th")</small></span><span class="n">@v.Pce.Category[Lang]</span></div>
+    <div class="readout"><span class="k">CVD · Framingham 2008</span><span class="v">@Scenarios.Fmt(v.Framingham.TenYearRiskPercent, "0.0")<small>% / 10 @T("y", "th")</small></span><span class="n">@v.Framingham.Category[Lang]</span></div>
+</div>
+<div class="panel">
+    <h3>@T("Risk across age for this profile", "Risiko menurut usia untuk profil ini") <small>@T("7.5 % and 20 % treatment thresholds", "ambang terapi 7,5 % dan 20 %")</small></h3>
+    @Svg(v.ByAge)
+    @foreach (var w in v.Pce.Warnings.Concat(v.Framingham.Warnings).Distinct()) { <p class="note">⚠ @w</p> }
+</div>
+@code {
+    private int _age = 58;
+    private double _sbp = 142, _tc = 220, _hdl = 42;
+    private bool _female, _smoker = true, _diabetes, _treated;
+}

@@ -22,6 +22,11 @@ medical help
 | Signals | `medical ecg --rhythm af --hr 90` · `medical ecg12 [--pattern inferior|anterior|lateral|diffuse] [--qtc 480] [--rhythm af] [--sex f --age 50] --out ecg.svg|.dcm|.scp` · `medical ecg12 analyze ecg.scp` |
 | Privacy | `medical deid "Ny. Siti, HP 0812…"` · `--file note.txt --pseudonyms --secret …` |
 | Decision support / AI | `medical cds --index 3` · `medical risk --index 7` · `medical ask "…" --patient 7` |
+| Scores (v1.3) | `medical score sofa|apache2|pews|meows|wells-pe|wells-dvt|perc|child-pugh …` · `medical cvrisk --age 55 --sex m --tc 213 --hdl 50 --sbp 140 [--race aa]` |
+| Growth (v1.3) | `medical growth --sex f --age-months 24 --weight 9.0 --height 77.5 [--standing] [--hc 46]` (WHO tables downloaded once) |
+| Dosing & sources (v1.3) | `medical renal rivaroxaban --crcl 28 [--child-pugh B]` · `medical interactions … --sources [--csv f.csv] [--drugbank db.xml]` |
+| NLP & guidelines (v1.3) | `medical nlp "<note>" [--hf]` · `medical guideline ask "<question>" [--corpus dir] [--hf-embed] [--offline]` |
+| Learning (v1.3) | `medical federated [--noise 1.0 --clip 0.5] [--card card.md]` · `medical drift --shift 0.8` |
 | EMR | `medical emr seed --db medical.db --count 50` · `medical emr show pat-00007` |
 
 Add `--lang id` for Bahasa Indonesia output.
@@ -40,11 +45,11 @@ dotnet new install Medical.Templates
 | `medical-blazor` | Blazor ward board ranked by NEWS2 with observation charts and alerts |
 | `medical-avalonia` | Avalonia DICOM viewer with window presets, HU statistics and haemorrhage screening |
 
-All templates accept `--MedicalNetVersion` (default `1.2.0`).
+All templates accept `--MedicalNetVersion` (default `1.3.0`).
 
 ## Gallery
 
-Twenty-two use cases — early warning, decision support, calculators, DICOM viewer, haemorrhage screen, **MPR & MIP**, **3D volume**, **compression**, ECG, **12-lead ECG**, **imaging AI → SEG / SR**, FHIR patient summary, HL7 feed, **FHIR server**, **HL7 orders & scheduling**, terminology, **SATUSEHAT visit**, **BPJS claim (INA-CBG)**, clinical assistant, risk models, de-identification, EMR — in two apps that share `gallery/Medical.Gallery.Shared`:
+Twenty-nine use cases — early warning, decision support, calculators, DICOM viewer, haemorrhage screen, **MPR & MIP**, **3D volume**, **compression**, ECG, **12-lead ECG**, **imaging AI → SEG / SR**, FHIR patient summary, HL7 feed, **FHIR server**, **HL7 orders & scheduling**, terminology, **SATUSEHAT visit**, **BPJS claim (INA-CBG)**, clinical assistant, risk models, de-identification, EMR, and (v1.3) **ICU & obstetric scores**, **cardiovascular risk**, **WHO growth**, **drug safety & dosing**, **clinical NLP & coding**, **guideline answers**, **federated learning** — in two apps that share `gallery/Medical.Gallery.Shared`:
 
 ```bash
 dotnet run --project gallery/Medical.Gallery.Web --urls http://localhost:5290      # /?lang=id for Indonesian

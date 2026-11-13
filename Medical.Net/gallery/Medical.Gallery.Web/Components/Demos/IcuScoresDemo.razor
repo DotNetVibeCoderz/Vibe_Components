@@ -1,0 +1,40 @@
+@inherits DemoBase
+@{ var v = Scenarios.Icu(_sev); }
+<div class="controls">
+    <label>@T("Severity of sepsis", "Keparahan sepsis") <input type="range" min="0" max="1" step="0.05" @bind="_sev" @bind:event="oninput" /> <span class="mono">@Scenarios.Fmt(_sev * 100, "0") %</span></label>
+</div>
+<div class="grid-2 wide-right">
+    <div class="panel">
+        <h3>SOFA <small>@v.Sofa.Score / 24</small></h3>
+        @Svg(v.SofaBars)
+        <p class="risk risk-@v.Sofa.Risk.ToString().ToLowerInvariant()">@Scenarios.RiskName(v.Sofa.Risk)[Lang]</p>
+        <p>@v.Sofa.Interpretation[Lang]</p>
+    </div>
+    <div class="panel">
+        <h3>APACHE II <small>@v.Apache.Score / 71</small></h3>
+        <p class="big mono">@v.Apache.Score</p>
+        <p>@v.Apache.Interpretation[Lang]</p>
+        <table class="data">
+            <tr><th>@T("Variable", "Variabel")</th><th>@T("Worst value", "Nilai terburuk")</th><th>@T("Points", "Poin")</th></tr>
+            @foreach (var c in v.Apache.Components.Where(c => c.Points > 0))
+            {
+                <tr><td>@c.Parameter</td><td class="mono">@c.Value</td><td class="mono">+@c.Points</td></tr>
+            }
+        </table>
+    </div>
+</div>
+<div class="grid-3">
+    @foreach (var s in new[] { v.Pews, v.Meows, v.WellsPe, v.Perc })
+    {
+        <div class="panel">
+            <h3>@s.Name <small>@(s.ExactScore is { } e ? Scenarios.Fmt(e, "0.#") : s.Score.ToString()) / @(s.ExactScore is null ? s.MaxScore : s.MaxScore / 2.0)</small></h3>
+            <p class="risk risk-@s.Risk.ToString().ToLowerInvariant()">@Scenarios.RiskName(s.Risk)[Lang]</p>
+            <p>@s.Interpretation[Lang]</p>
+        </div>
+    }
+</div>
+<p class="note">@T("PEWS shown for a child and MEOWS for a pregnant woman with the same trajectory, to compare the trigger tools. APACHE II mortality uses the sepsis diagnostic weight (Knaus 1985).",
+                   "PEWS untuk anak dan MEOWS untuk ibu hamil dengan perjalanan yang sama, untuk membandingkan alat pemicu. Mortalitas APACHE II memakai bobot diagnosis sepsis (Knaus 1985).")</p>
+@code {
+    private double _sev = 0.6;
+}

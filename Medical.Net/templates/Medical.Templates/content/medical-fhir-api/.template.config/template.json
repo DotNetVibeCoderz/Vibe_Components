@@ -21,7 +21,7 @@
     "MedicalNetVersion": {
       "type": "parameter",
       "datatype": "string",
-      "defaultValue": "1.2.0",
+      "defaultValue": "1.3.0",
       "replaces": "MEDICALNET_VERSION",
       "description": "Medical.Net package version"
     },

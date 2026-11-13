@@ -28,11 +28,12 @@ Made by Gravicode Studios, led by Kang Fadhil. Status details: [Progress.md](Pro
 - 12-lead ECG (SCP-ECG, DICOM waveform), QT/QTc, ST deviation
 - Delivered in 1.2.0 — see [docs/en/imaging-signals.md](docs/en/imaging-signals.md). The 3D viewer renders isosurfaces (direct volume ray-casting is carried forward). MONAI: the published lung_nodule_ct_detection bundle is integrated; no public haemorrhage weights exist, so that path takes user weights. Carried forward: SCP-ECG Sections 4/5 (reference-beat subtraction) and bimodal compression; DICOM SR for ECG measurements (TID 3700)
 
-## v1.3 — Clinical intelligence
+## v1.3 — Clinical intelligence ✅
 - Full SOFA, APACHE II, PEWS, MEOWS (obstetric), Wells, PERC, Framingham / ASCVD, WHO growth charts
 - Licensed drug-interaction database adapters; renal/hepatic dosing tables
 - Retrieval-augmented guideline answers (Kemenkes PNPK, WHO) with citations; Hugging Face clinical NLP (NER, ICD coding suggestions) via HF.Net
 - Federated / privacy-preserving model training; model cards and drift monitoring
+- Delivered in 1.3.0 — see [docs/en/clinical-intelligence.md](docs/en/clinical-intelligence.md). Licensed databases plug in through `IDrugInteractionSource` (CSV and DrugBank XML adapters included; FDB / Medi-Span need vendor SDKs). Guideline answers ship with a sample corpus of summaries — the official PNPK / WHO texts are loaded by the user. Federated training covers logistic models (FedAvg + secure aggregation + DP); deep-model federation is carried forward.
 
 ## v2.0 — Platform
 - Multi-tenant hospital information system reference app (registration, outpatient, inpatient, pharmacy, lab, radiology, billing)

@@ -20,6 +20,7 @@ public static class GalleryCatalog
         new("interop", new("Interoperability", "Interoperabilitas")),
         new("national", new("Indonesia: SATUSEHAT & BPJS", "Indonesia: SATUSEHAT & BPJS")),
         new("ai", new("Clinical AI", "AI klinis")),
+        new("intelligence", new("Clinical intelligence", "Kecerdasan klinis")),
         new("data", new("Data & privacy", "Data & privasi")),
     ];
 
@@ -255,6 +256,74 @@ public static class GalleryCatalog
                 o.Redis = "localhost:6379";                      // distributed cache
             }));
             var record = await repository.GetRecordAsync("pat-00007", purpose: "treatment");
+            """),
+        new("icu-scores", "intelligence", new("ICU & obstetric scores", "Skor ICU & obstetri"),
+            new("SOFA by organ system, APACHE II with predicted mortality, PEWS, MEOWS triggers, Wells and PERC — one septic patient, a severity slider.",
+                "SOFA per sistem organ, APACHE II dengan prediksi mortalitas, PEWS, pemicu MEOWS, Wells dan PERC — satu pasien sepsis, satu slider keparahan."),
+            "Medical.Clinical", """
+            ScoreResult sofa = ClinicalScores.Sofa(new SofaInputs { PaO2FiO2 = 150, RespiratorySupport = true, Platelets = 80,
+                BilirubinMgDl = 2.5, Vasopressors = new(Norepinephrine: 0.05), Gcs = 13, CreatinineMgDl = 2.5 });   // 13
+            ScoreResult apache = ClinicalScores.ApacheII(inputs, diagnosticWeight: 0.113);   // + predicted mortality
+            ScoreResult meows = ClinicalScores.Meows(25, 97, 37.0, 155, 95, 105, Avpu.Alert);   // red / yellow triggers
+            ScoreResult wells = ClinicalScores.WellsPe(true, false, 110, false, false, false, false);   // ExactScore 4.5
+            """),
+        new("cvrisk", "intelligence", new("Cardiovascular risk", "Risiko kardiovaskular"),
+            new("ACC/AHA Pooled Cohort Equations and Framingham general CVD — coefficients cross-checked against an independent implementation and the guideline examples.",
+                "Pooled Cohort Equations ACC/AHA dan Framingham CVD umum — koefisien diverifikasi terhadap implementasi independen dan contoh pedoman."),
+            "Medical.Clinical", """
+            var x = new CvRiskInputs(Age: 58, Gender.Male, TotalCholesterol: 220, Hdl: 42, SystolicBp: 142,
+                                     TreatedForHypertension: false, Smoker: true, Diabetes: false);
+            CvRiskResult pce = CardiovascularRisk.Ascvd(x);          // 10-year ASCVD %, category, warnings
+            CvRiskResult frs = CardiovascularRisk.Framingham(x);     // general CVD (D'Agostino 2008)
+            """),
+        new("growth", "intelligence", new("WHO growth", "Pertumbuhan WHO"),
+            new("WHO Child Growth Standards and 2007 Reference with WHO's own algorithms — matches all 2,101 z-scores of WHO's validation survey; tables fetched from WHO at runtime.",
+                "Standar Pertumbuhan Anak WHO dan Referensi 2007 dengan algoritma WHO — cocok dengan seluruh 2.101 z-score survei validasi WHO; tabel diunduh dari WHO saat runtime."),
+            "Medical.Clinical · Medical.Visualization", """
+            var who = await WhoGrowthStandards.DownloadAsync(cacheDir);   // pinned WHO anthro / anthroplus tables
+            GrowthResult lfa = who.Assess(GrowthIndicator.LengthHeightForAge, Gender.Female, ageDays: 730, value: 77.5, lengthCm: 77.5);
+            // lfa.ZScore -2.55, lfa.Classification["id"] "Pendek / stunting (< −2 SD)"
+            string svg = Charts.GrowthChart(who, GrowthIndicator.LengthHeightForAge, Gender.Female, 0, 730, visits);
+            """),
+        new("drug-safety", "intelligence", new("Drug safety & dosing", "Keamanan obat & dosis"),
+            new("Interaction sources combined — built-in rules, FDA-label contraindications, your licensed CSV / DrugBank exports — plus renal and hepatic dosing from the labels.",
+                "Gabungan sumber interaksi — aturan bawaan, kontraindikasi label FDA, ekspor CSV / DrugBank berlisensi — ditambah dosis ginjal dan hati dari label."),
+            "Medical.Rules · Medical.Clinical", """
+            var source = new CompositeInteractionSource(new BuiltInInteractionSource(), LabelContraindications.Source,
+                CsvInteractionSource.Load("formulary.csv"), DrugBankInteractionSource.Load("full_database.xml", formulary));
+            var found = await source.CheckAsync(["simvastatin", "clarithromycin", "rivaroxaban", "clopidogrel"]);
+            var renal = OrganDosing.Default.Renal("rivaroxaban", crClMlMin: 28);          // 15 mg once daily
+            var apixaban = OrganDosing.ApixabanAf(age: 80, weightKg: 55, creatinineMgDl: 1.6); // 2.5 mg twice daily
+            """),
+        new("clinical-nlp", "intelligence", new("Clinical NLP & coding", "NLP klinis & pengodean"),
+            new("Entities in English and Indonesian notes with negation and family history, then ICD-10 suggestions for a coder; add a Hugging Face NER model through HF.Net.",
+                "Entitas dalam catatan berbahasa Inggris dan Indonesia dengan negasi dan riwayat keluarga, lalu saran ICD-10 untuk koder; tambah model NER Hugging Face melalui HF.Net."),
+            "Medical.AI · Medical.HuggingFace", """
+            var rec = new CompositeEntityRecognizer(new TerminologyEntityRecognizer(),
+                                                    HuggingFaceEntityRecognizer.Load("d4data/biomedical-ner-all"));
+            var coder = new Icd10Coder(rec);
+            IReadOnlyList<CodingSuggestion> codes = coder.Suggest("Demam berdarah, tidak ada sesak napas. Riwayat keluarga diabetes.");
+            // A91 · negated R06.0 and family-history E11.9 are excluded
+            """),
+        new("guidelines", "intelligence", new("Guideline answers", "Jawaban pedoman"),
+            new("Hybrid BM25 + embedding retrieval over Kemenkes PNPK and WHO guidance, answers with validated numbered citations, extractive fallback offline.",
+                "Pencarian hibrida BM25 + embedding atas PNPK Kemenkes dan pedoman WHO, jawaban dengan sitasi bernomor tervalidasi, cadangan ekstraktif saat offline."),
+            "Medical.AI · Medical.HuggingFace", """
+            var corpus = GuidelineCorpus.LoadDirectory("pedoman/");         // your PNPK / WHO texts
+            var retriever = new GuidelineRetriever(corpus, HuggingFaceEmbedder.Load());   // optional dense half
+            var answerer = new GuidelineAnswerer(retriever, LlmOptions.FromEnvironment().Create());
+            GuidelineAnswer a = await answerer.AskAsync("Berapa lama pengobatan TB paru?", "id");
+            // a.Text "... 6 bulan ... [1]", a.Citations[0].Chunk.Citation
+            """),
+        new("federated", "intelligence", new("Federated learning", "Federated learning"),
+            new("Three hospitals train one risk model without sharing rows — secure aggregation, differential privacy with an ε budget, a model card by subgroup and drift monitoring.",
+                "Tiga rumah sakit melatih satu model risiko tanpa berbagi baris data — agregasi aman, privasi diferensial dengan anggaran ε, model card per subgrup dan pemantauan drift."),
+            "Medical.AI", """
+            FederatedResult fed = FederatedLogisticRegression.Train(features, sites,
+                new FederatedOptions { SecureAggregation = true, ClipNorm = 0.5, NoiseMultiplier = 1.0 });
+            double epsilon = fed.Epsilon(delta: 1e-5);
+            ModelCard card = ModelCard.Create("Deterioration", intendedUse, predictions, labels, subgroups);
+            DriftReport drift = new DriftMonitor(features, reference, refPred, refLabels).Check(current, pred, labels);
             """),
     ];
 

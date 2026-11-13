@@ -17,18 +17,30 @@ Made by **Gravicode Studios**, led by **Kang Fadhil**. · [Bahasa Indonesia](REA
 | `Medical.Hl7` | HL7 v2 parse/build (ADT^A01, ORU^R01, **ORM^O01, OML^O21, SIU^S12, MDM^T02**, ACK), segment-level **conformance profiles**, HL7 v2 → domain → FHIR, MLLP server and client | NHapi 3.2 |
 | `Medical.Dicom` | Metadata, VOI window/level rendering, HU statistics, **JPEG / JPEG-LS / JPEG 2000 / RLE codecs**, **volumes with MPR / MIP / MinIP** (Rust kernel), **isosurfaces → STL / OBJ**, **DICOM SEG + TID 1500 SR**, **12-lead ECG waveform**, PS3.15 de-identification, synthetic CT phantoms, DICOMweb, C-ECHO / C-STORE SCU + SCP | fo-dicom 5.2, fo-dicom.Codecs |
 | `Medical.Terminology` | ICD-10 (WHO 2010 / INA-CBG), SNOMED CT, LOINC, RxNorm — EN/ID search, subsumption, value-set expansion, SNOMED→ICD-10, check digits, RF2 / LOINC / ICD-10-CM / RxNorm loaders | — |
-| `Medical.Clinical` | NEWS2, qSOFA, SIRS, CURB-65, CHA₂DS₂-VASc, HAS-BLED, GCS, APGAR, MELD, CKD-EPI 2021 eGFR, Cockcroft-Gault, BMI (WHO / Asia-Pacific), BSA, dosing, lab interpretation | — |
-| `Medical.Rules` | Forward-chaining decision support: early warning, Sepsis-3, critical labs, hypoglycaemia, hyperkalaemia, drug interactions, allergy conflicts, renal dosing, duplicate therapy; editable JSON workflows (triage, dengue warning signs, referral) | NRules, Microsoft RulesEngine |
-| `Medical.AI` | ML.NET risk models (48-h deterioration, type 2 diabetes) with per-feature explanations; tool-grounded clinical assistant on **Claude** (Anthropic SDK), any OpenAI-compatible endpoint (Hugging Face, Azure OpenAI, DeepSeek, Ollama) or offline rules; CT haemorrhage screening and **lung-nodule detection (Lung-RADS)** with results as **DICOM SEG + SR**; MONAI service client (incl. the `lung_nodule_ct_detection` model-zoo bundle) | ML.NET, Anthropic SDK |
+| `Medical.Clinical` | NEWS2, qSOFA, SIRS, CURB-65, CHA₂DS₂-VASc, HAS-BLED, GCS, APGAR, MELD, **SOFA, APACHE II, PEWS, MEOWS, Wells, PERC, Child-Pugh**, **Pooled Cohort Equations / Framingham**, **WHO growth standards (0–19 y)**, CKD-EPI 2021 eGFR, Cockcroft-Gault, BMI (WHO / Asia-Pacific), BSA, dosing, **renal / hepatic dosing from FDA labels**, lab interpretation | — |
+| `Medical.Rules` | Forward-chaining decision support: early warning, Sepsis-3, critical labs, hypoglycaemia, hyperkalaemia, drug interactions, allergy conflicts, renal dosing, duplicate therapy; editable JSON workflows (triage, dengue warning signs, referral); **pluggable drug-interaction sources** (FDA-label contraindications, CSV, DrugBank XML, composite) | NRules, Microsoft RulesEngine |
+| `Medical.AI` | ML.NET risk models (48-h deterioration, type 2 diabetes) with per-feature explanations; tool-grounded clinical assistant on **Claude** (Anthropic SDK), any OpenAI-compatible endpoint (Hugging Face, Azure OpenAI, DeepSeek, Ollama) or offline rules; CT haemorrhage screening and **lung-nodule detection (Lung-RADS)** with results as **DICOM SEG + SR**; MONAI service client (incl. the `lung_nodule_ct_detection` model-zoo bundle); **clinical NLP** (EN / ID entities, negation, ICD-10 suggestions); **guideline answers with citations** (BM25 + embeddings); **federated learning** with secure aggregation and differential privacy; **model cards** and **drift monitoring** | ML.NET, Anthropic SDK |
+| `Medical.HuggingFace` | Hugging Face models in-process: biomedical NER (`d4data/biomedical-ner-all`) and multilingual sentence embeddings for guideline retrieval | HF.Net (GraviTransformers) |
 | `Medical.Signals` | Synthetic ECG/PPG, filters, Pan-Tompkins R peaks, HRV, rhythm screening (AF, ectopy); **12-lead ECG**: simulator, median beats, PR / QRS / QT, four QTc formulas, axis, ST and STEMI criteria (UDMI 2018), **SCP-ECG** read/write | `Medical.Native` |
 | `Medical.Privacy` | Clinical-note de-identification (HIPAA Safe Harbor + Indonesian NIK/phone/address), pseudonyms, date shifting, masking, consent registry (UU PDP) | — |
 | `Medical.Bpjs` | **BPJS Kesehatan**: VClaim and PCare clients (HMAC signature, AES + LZ-String responses), E-Klaim web service (encrypted), INA-CBG claim builder with pre-grouping coding checks | — |
 | `Medical.Emr` | EF Core EMR store on SQL Server / SQLite / in-memory, **durable versioned FHIR repository**, Redis cache, persistent audit | EF Core 10 |
 | `Medical.AspNetCore` | FHIR REST server (`MapMedicalFhir`: search, `_history`, vread, `$validate`, `$everything`, transactions, ETags), **SMART on FHIR authorization** (`MapSmartAuthorization`), clinical JSON API, hosted MLLP listener with conformance checks | ASP.NET Core |
-| `Medical.Visualization` | SVG ECG strips, NEWS2 observation charts, trends, gauges, risk-driver bars, histograms | — |
+| `Medical.Visualization` | SVG ECG strips, NEWS2 observation charts, trends, gauges, risk-driver bars, histograms, **WHO growth charts**, score bars, XY charts | — |
 | `Medical.Native` | Rust kernels (window/level, pixel statistics, QRS detection, **MPR / slab projections**) with a bit-identical managed fallback | Rust |
 | `Medical.Cli` | `medical` .NET tool | — |
 | `Medical.Templates` | `dotnet new` templates | — |
+
+## What's new in 1.3
+
+- **Scores**: SOFA, APACHE II (with predicted mortality), PEWS, MEOWS, Wells PE / DVT, PERC, Child-Pugh; ASCVD Pooled Cohort Equations and Framingham, cross-checked against an independent implementation.
+- **WHO growth**: the Child Growth Standards and 2007 Reference with WHO's own algorithms. The engine matches all 2,101 z-scores of WHO's validation survey; the tables are fetched from WHO at runtime.
+- **Drug safety**: pluggable interaction sources (FDA-label contraindications, CSV exports, licensed DrugBank XML) and renal / hepatic dosing from the labels.
+- **Clinical NLP**: English / Indonesian entities with negation and family history, ICD-10 suggestions, and Hugging Face NER through HF.Net (`Medical.HuggingFace`).
+- **Guidelines**: hybrid retrieval over Kemenkes PNPK / WHO texts and LLM answers with validated citations, with an extractive answer offline.
+- **Federated learning**: secure aggregation, differential privacy with an ε budget, model cards by subgroup and drift monitoring.
+
+See [Clinical intelligence](docs/en/clinical-intelligence.md).
 
 ## What's new in 1.2
 
@@ -88,6 +100,8 @@ medical hl7 sample --type orm --out orm.hl7 && medical hl7 conform orm.hl7
 medical dicom mip ct/ --plane coronal --out mip.png && medical dicom ai ct/ --out-dir results
 medical ecg12 --pattern inferior --out ecg.svg
 medical satusehat bundle --index 3 && medical bpjs claim --index 7
+medical score sofa --pf 150 --ventilated --plt 80 --gcs 13 && medical growth --sex f --age-months 24 --weight 9 --height 77.5
+medical nlp "demam berdarah, tidak ada sesak napas" && medical guideline ask "Berapa lama pengobatan TB paru?"
 
 dotnet new install Medical.Templates
 dotnet new medical-fhir-api -n MyHospital.Api --smart --persist   # also: medical-console, medical-hl7-gateway, medical-blazor, medical-avalonia
@@ -95,7 +109,7 @@ dotnet new medical-fhir-api -n MyHospital.Api --smart --persist   # also: medica
 
 ## Gallery
 
-Twenty-two use cases run live in the **Medical.Net Gallery**, in Blazor (web) and Avalonia (desktop), in English and Bahasa Indonesia:
+Twenty-nine use cases run live in the **Medical.Net Gallery**, in Blazor (web) and Avalonia (desktop), in English and Bahasa Indonesia:
 
 | Web (Blazor) | Desktop (Avalonia) |
 |---|---|
@@ -106,6 +120,8 @@ Twenty-two use cases run live in the **Medical.Net Gallery**, in Blazor (web) an
 | ![](docs/images/web-satusehat.png) | ![](docs/images/desktop-hl7-orders.png) |
 | ![](docs/images/web-volume3d.png) | ![](docs/images/desktop-ecg12.png) |
 | ![](docs/images/web-mpr.png) | ![](docs/images/desktop-imaging-ai.png) |
+| ![](docs/images/web-icu-scores.png) | ![](docs/images/desktop-growth.png) |
+| ![](docs/images/web-clinical-nlp.png) | ![](docs/images/desktop-federated.png) |
 
 ```bash
 dotnet run --project gallery/Medical.Gallery.Web --urls http://localhost:5290

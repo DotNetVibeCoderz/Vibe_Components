@@ -1,0 +1,53 @@
+@inherits DemoBase
+@{ var v = Scenarios.Nlp(_note ?? Scenarios.SampleNotes[Lang]); }
+<div class="controls">
+    <div class="seg">
+        <button class="@(_note == Scenarios.SampleNotes["id"] || (_note is null && Lang == "id") ? "on" : "")" @onclick='() => _note = Scenarios.SampleNotes["id"]'>@T("Indonesian note", "Catatan Indonesia")</button>
+        <button class="@(_note == Scenarios.SampleNotes["en"] || (_note is null && Lang == "en") ? "on" : "")" @onclick='() => _note = Scenarios.SampleNotes["en"]'>@T("English note", "Catatan Inggris")</button>
+    </div>
+    <span class="legend">
+        <mark class="ner problem">@T("problem", "masalah")</mark> <mark class="ner symptom">@T("symptom", "gejala")</mark> <mark class="ner drug">@T("drug", "obat")</mark>
+        <mark class="ner negated">@T("negated", "dinegasikan")</mark> <mark class="ner family">@T("family history", "riwayat keluarga")</mark>
+    </span>
+</div>
+<div class="grid-2 wide-left">
+    <div class="panel">
+        <h3>@T("Clinical note", "Catatan klinis") <small>@v.Entities.Count @T("entities", "entitas")</small></h3>
+        <p class="ner-text">
+            @foreach (var s in v.Segments)
+            {
+                if (s.Entity is { } e)
+                {
+                    <mark class="ner @e.Type.ToString().ToLowerInvariant() @(e.Negated ? "negated" : "") @(e.FamilyHistory ? "family" : "")"
+                          title="@string.Join(", ", e.Codes.Select(c => $"{Medical.Core.CodeSystems.ShortName(c.System)} {c.Code} {c.Display}"))">@s.Text</mark>
+                }
+                else { @s.Text }
+            }
+        </p>
+        <table class="data">
+            <tr><th>@T("Entity", "Entitas")</th><th>@T("Type", "Jenis")</th><th>@T("Code", "Kode")</th><th>@T("Context", "Konteks")</th></tr>
+            @foreach (var e in v.Entities)
+            {
+                <tr><td>@e.Text</td><td>@e.Type</td><td class="mono">@(e.Codes.Count > 0 ? e.Codes[0].Code : "—")</td>
+                    <td>@(e.Negated ? T("negated", "negasi") : e.FamilyHistory ? T("family", "keluarga") : T("affirmed", "positif"))</td></tr>
+            }
+        </table>
+    </div>
+    <div class="panel">
+        <h3>@T("ICD-10 suggestions", "Saran ICD-10") <small>@T("for a coder to confirm", "untuk dikonfirmasi koder")</small></h3>
+        @foreach (var c in v.Codes)
+        {
+            <div class="alert @(c.Code.StartsWith('R') ? "warning" : "info")">
+                <span class="tag">@c.Code · @Scenarios.Fmt(c.Score, "0.00")</span>
+                <strong>@c.DisplayFor(Lang)</strong>
+                <span>@c.Note[Lang]</span>
+                <code>← @string.Join("; ", c.Evidence)</code>
+            </div>
+        }
+        <p class="note">@T("Negated and family-history mentions are excluded. Add HuggingFaceEntityRecognizer (HF.Net, d4data/biomedical-ner-all) for recall on free text.",
+                           "Penyebutan yang dinegasikan dan riwayat keluarga dikecualikan. Tambahkan HuggingFaceEntityRecognizer (HF.Net, d4data/biomedical-ner-all) untuk teks bebas.")</p>
+    </div>
+</div>
+@code {
+    private string? _note;
+}

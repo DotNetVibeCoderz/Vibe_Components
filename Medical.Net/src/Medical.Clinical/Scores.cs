@@ -5,16 +5,23 @@ namespace Medical.Clinical;
 public enum RiskLevel { Low, LowMedium, Medium, High, Critical }
 
 /// <summary>One scored item of a clinical score (e.g. "Respiratory rate 26 /min → 3").</summary>
-public sealed record ScoreComponent(string Parameter, string Value, int Points);
+public sealed record ScoreComponent(string Parameter, string Value, int Points)
+{
+    /// <summary>The published (possibly fractional) points when <see cref="Points"/> uses scaled units, e.g. Wells PE.</summary>
+    public double? ExactPoints { get; init; }
+}
 
 /// <summary>Result of a clinical score with its bilingual interpretation.</summary>
 public sealed record ScoreResult(string Name, int Score, int MaxScore, RiskLevel Risk, Localized Interpretation, IReadOnlyList<ScoreComponent> Components)
 {
-    public override string ToString() => $"{Name} {Score}/{MaxScore} ({Risk}) — {Interpretation.En}";
+    /// <summary>The published (possibly fractional) score when <see cref="Score"/> uses scaled units, e.g. Wells PE (half points).</summary>
+    public double? ExactScore { get; init; }
+
+    public override string ToString() => $"{Name} {(ExactScore is { } e ? e.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) : Score.ToString(System.Globalization.CultureInfo.InvariantCulture))}/{MaxScore} ({Risk}) — {Interpretation.En}";
 }
 
 /// <summary>Validated bedside scores. All thresholds follow the original publications cited on each method.</summary>
-public static class ClinicalScores
+public static partial class ClinicalScores
 {
     /// <summary>
     /// National Early Warning Score 2 (Royal College of Physicians, 2017).

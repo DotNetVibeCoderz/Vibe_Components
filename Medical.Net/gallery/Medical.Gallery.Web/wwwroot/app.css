@@ -213,3 +213,18 @@ pre.wrap, pre.wrap code { white-space: pre-wrap; word-break: break-all; }
 .viewport3d { width: 100%; height: 440px; border-radius: 8px; overflow: hidden; background: var(--sunk); }
 @media (max-width: 1100px) { .grid-3 { grid-template-columns: 1fr; } }
 .ecg12 svg { width: 100%; height: auto; display: block; }
+
+/* v1.3 clinical intelligence */
+.ner-text { font-size: 15.5px; line-height: 1.9; margin: 0 0 12px; }
+mark.ner { padding: 1px 4px; border-radius: 4px; color: var(--ink); background: var(--teal-soft); }
+mark.ner.problem { background: color-mix(in srgb, var(--score3) 35%, transparent); }
+mark.ner.symptom { background: var(--score1); }
+mark.ner.drug { background: var(--teal-soft); }
+mark.ner.test, mark.ner.procedure { background: color-mix(in srgb, var(--rule) 70%, transparent); }
+mark.ner.negated { text-decoration: line-through; text-decoration-thickness: 2px; background: transparent; outline: 1px dashed var(--muted); color: var(--muted); }
+mark.ner.family { background: transparent; border-bottom: 2px dashed var(--amber); border-radius: 0; }
+.legend mark.ner { font-size: 12.5px; }
+ol.plain { margin: 0 0 8px; padding-left: 4px; list-style: none; } ol.plain li { margin: 3px 0; }
+.big-text { font-size: 16px; line-height: 1.6; }
+.chip.on { border-color: var(--teal); background: var(--teal-soft); }
+.alert.info { border-left-color: var(--teal); }

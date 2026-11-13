@@ -38,7 +38,16 @@ try
         "bmi" => Bmi(),
         "dose" => Dose(),
         "code" => await Code(),
+        "interactions" when a.Opt("csv") is not null || a.Opt("drugbank") is not null || a.Flag("sources") => await ClinicalIntelligenceCommands.InteractionSources(a, lang),
         "interactions" => Interactions(),
+        "score" => ClinicalIntelligenceCommands.Score(a, lang),
+        "cvrisk" => ClinicalIntelligenceCommands.CvRisk(a, lang),
+        "growth" => await ClinicalIntelligenceCommands.Growth(a, lang),
+        "renal" or "organ-dose" => ClinicalIntelligenceCommands.Renal(a, lang),
+        "nlp" => ClinicalIntelligenceCommands.Nlp(a, lang),
+        "guideline" => await ClinicalIntelligenceCommands.Guideline(a, lang),
+        "federated" => ClinicalIntelligenceCommands.Federated(a, lang),
+        "drift" => ClinicalIntelligenceCommands.Drift(a, lang),
         "fhir" => Fhir(),
         "hl7" => await Hl7Cmd(),
         "dicom" => await DicomCmd(),
@@ -81,10 +90,17 @@ int Help()
           qsofa --rr 22 --sbp 98 [--altered]
           egfr  --cr 1.2 --age 60 --sex f|m          bmi --weight 70 --height 172
           dose  <drug> --weight 18 [--crcl 40]
+          score sofa --pf 150 --ventilated --plt 80 --bili 2.5 --norepinephrine 0.05 --gcs 13 --cr 2.5
+          score apache2 --temp 39.5 --map 65 --hr 125 --rr 30 --pao2 65 --ph 7.3 --na 132 --k 3.2 --cr 1.8 --hct 35 --wbc 18 --gcs 13 --age 70
+          score pews|meows|wells-pe|wells-dvt|perc|child-pugh ...   (see docs/en/clinical-intelligence.md)
+          cvrisk --age 55 --sex m --tc 213 --hdl 50 --sbp 140 [--treated] [--smoker] [--diabetes] [--race aa]
+          growth --sex f --age-months 18 --weight 8.9 --length 76 [--standing] [--hc 45]   (WHO tables downloaded once)
+          renal <drug> [--crcl 40 | --egfr 40 | --cr 1.6 --age 80 --weight 55 --sex f] [--dialysis] [--child-pugh B]
         Terminology & drugs
           code search <text> [--system icd10|snomed|loinc|rxnorm]
           code validate <icd10|snomed|loinc|rxnorm> <code>       code map <sctid>
           interactions <drug> <drug> ... [--allergy penicillin]
+          interactions <drug> ... --sources [--csv formulary.csv] [--drugbank full_database.xml]   (label table + licensed sources)
         Interoperability
           fhir patient|record|ips [--index 3] [--out file.json]   fhir validate <file.json> [--profile <url>]
           hl7 sample [--type oru|adt|orm|oml|siu|mdm] [--out file.hl7]   hl7 parse|to-fhir|conform <file.hl7>
@@ -109,6 +125,10 @@ int Help()
           cds [--index 3] [--deterioration 0.9]     risk [--index 7]
           ask "<question>" [--patient 7]   (MEDNET_LLM_PROVIDER / ANTHROPIC_API_KEY / HF_TOKEN; offline otherwise)
           emr seed [--db medical.db] [--count 50]   emr show <patient-id> [--db medical.db]
+        Clinical intelligence
+          nlp "<note>" | --file note.txt [--hf [model]]   (entities, negation, ICD-10 suggestions; --hf = d4data/biomedical-ner-all)
+          guideline ask "<question>" [--corpus dir] [--hf-embed] [--offline]   (cited answers)
+          federated [--noise 1.0 --clip 0.5] [--no-secure] [--card card.md]     drift [--shift 0.8]
         """);
     return 0;
 }
