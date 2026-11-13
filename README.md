@@ -15,6 +15,7 @@ Each component is a self-contained folder with its own solution, docs (English a
 | [**Cesium.Net**](Cesium.Net) | CesiumJS for .NET: 3D globes, maps, terrain, 3D Tiles, time-dynamic data and geospatial analysis from C#, for Blazor and Avalonia. | [`Cesium.Net*`](https://www.nuget.org/packages?q=Cesium.Net) · 1.0.0 | [![Cesium.Net](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/cesium-net.yml/badge.svg)](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/cesium-net.yml) |
 | [**GDAL.Net**](GDAL.Net) | GDAL for modern .NET: read, write, convert, reproject and analyse 200+ raster and vector formats, with Rust kernels and Blazor/Avalonia components. | [`Gravicode.GDAL.Net*`](https://www.nuget.org/packages?q=Gravicode.GDAL.Net) · 1.0.0 | [![GDAL.Net](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/gdal-net.yml/badge.svg)](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/gdal-net.yml) |
 | [**GnuRadio.Net**](GnuRadio.Net) | Software-defined radio and DSP for .NET modelled on GNU Radio: flowgraphs, filters, FFT, modulation, FEC, SDR hardware and live instruments. | [`GnuRadio.Net*`](https://www.nuget.org/packages?q=GnuRadio.Net) · 0.1.0 | [![GnuRadio.Net](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/gnuradio-net.yml/badge.svg)](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/gnuradio-net.yml) |
+| [**Medical.Net**](Medical.Net) | Comprehensive medical platform for .NET: FHIR R4 (Firely) with IPS and SATUSEHAT, HL7 v2 (NHapi) with MLLP, DICOM (fo-dicom) with DICOMweb and C-STORE, SNOMED CT / ICD-10 / LOINC / RxNorm, clinical scores, NRules decision support, EF Core EMR, de-identification, ECG/HRV, ML.NET risk models, a Claude-powered clinical assistant and CT haemorrhage screening (MONAI service). Rust kernels, Blazor and Avalonia gallery, CLI and templates. | [`Medical.*`](https://www.nuget.org/packages?q=Medical.Core) · 1.0.0 | [![Medical.Net](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/medical-net.yml/badge.svg)](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/medical-net.yml) |
 | [**OpenSceneGraph.Net**](OpenSceneGraph.Net) | .NET scene graph for OpenSceneGraph: managed core, native OSG 3.6.5 runtime, OpenGL/WebGL renderers, Avalonia and Blazor components. | [`OpenSceneGraph.Net*`](https://www.nuget.org/packages?q=OpenSceneGraph.Net) · 0.1.0 | [![OpenSceneGraph.Net](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/openscenegraph-net.yml/badge.svg)](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/openscenegraph-net.yml) |
 
 ## Agritech.Net
@@ -44,6 +45,20 @@ dotnet tool install -g AquaCulture.Cli         # aqua ask "Berapa pakan udang ha
 ```
 
 See the [AquaCulture.Net README](AquaCulture.Net/README.md) ([Bahasa Indonesia](AquaCulture.Net/README.id.md)) and its [documentation](AquaCulture.Net/docs/en/README.md).
+
+## Medical.Net
+
+<p align="center"><img src="Medical.Net/assets/icon-512.png" width="96" alt="Medical.Net logo" /></p>
+
+![Medical.Net Gallery](Medical.Net/docs/images/web-home.png)
+
+```bash
+dotnet add package Medical.Rules               # clinical scores, terminology and decision support
+dotnet new install Medical.Templates           # medical-console / -fhir-api / -hl7-gateway / -blazor / -avalonia
+dotnet tool install -g Medical.Cli             # medical news2 --rr 24 --spo2 93 --o2 --sbp 105 --hr 115 --temp 38.5 --lang id
+```
+
+See the [Medical.Net README](Medical.Net/README.md) ([Bahasa Indonesia](Medical.Net/README.id.md)) and its [documentation](Medical.Net/docs/en/README.md).
 
 ## Repository conventions
 

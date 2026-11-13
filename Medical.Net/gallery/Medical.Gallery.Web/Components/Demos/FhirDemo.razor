@@ -1,0 +1,25 @@
+@inherits DemoBase
+@{ var v = Scenarios.Fhir(_patient); }
+<div class="controls">
+    <label>@T("Synthetic patient", "Pasien sintetis") <input type="number" min="1" max="200" @bind="_patient" /></label>
+</div>
+<div class="grid-2 wide-right">
+    <div class="panel">
+        <h3>@T("International Patient Summary", "Ringkasan Pasien Internasional")</h3>
+        <dl class="kv">
+            <dt>Bundle</dt><dd>document · @v.Entries @T("entries", "entri")</dd>
+            <dt>@T("Validation", "Validasi")</dt><dd class="@(v.Issues == 0 ? "ok" : "bad")">@(v.Issues == 0 ? T("0 issues", "0 masalah") : $"{v.Issues} issues")</dd>
+        </dl>
+        <table class="data">
+            <thead><tr><th>@T("Section", "Bagian")</th><th>@T("Entries", "Entri")</th></tr></thead>
+            <tbody>@foreach (var (s, n) in v.Sections) { <tr><td>@s</td><td>@n</td></tr> }</tbody>
+        </table>
+        <p class="label">FHIRPath</p>
+        <ul class="plain mono small">@foreach (var f in v.FhirPath) { <li>@f</li> }</ul>
+    </div>
+    <div class="panel">
+        <h3>FHIR R4 JSON <small>@Scenarios.Fmt(v.Json.Length / 1024.0, "0.0") KB</small></h3>
+        <pre class="json"><code>@v.Json[..Math.Min(v.Json.Length, 4200)]@(v.Json.Length > 4200 ? "\n…" : "")</code></pre>
+    </div>
+</div>
+@code { private int _patient = 4; }

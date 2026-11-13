@@ -1,0 +1,44 @@
+@inherits DemoBase
+@{ var v = Scenarios.Terminology(_q, _system); }
+<div class="controls">
+    <label class="grow">@T("Search", "Cari") <input type="search" @bind="_q" @bind:event="oninput" placeholder="hipertensi, E11, 2345-7, warfarin…" /></label>
+    <div class="seg">
+        @foreach (var (label, uri) in Systems)
+        {
+            <button class="@(_system == uri ? "on" : "")" @onclick="() => _system = uri">@label</button>
+        }
+    </div>
+</div>
+<div class="grid-2 wide-left">
+    <div class="panel">
+        <table class="data">
+            <thead><tr><th>@T("System", "Sistem")</th><th>@T("Code", "Kode")</th><th>@T("Display", "Tampilan")</th></tr></thead>
+            <tbody>
+                @foreach (var h in v.Hits)
+                {
+                    <tr><td>@CodeSystems.ShortName(h.Concept.System)</td><td class="mono">@h.Concept.Code</td><td>@h.Concept.DisplayFor(Lang)@if (Lang == "id" && h.Concept.DisplayId is not null) { <small class="muted"> · @h.Concept.Display</small> }</td></tr>
+                }
+            </tbody>
+        </table>
+        @if (v.Hits.Count == 0) { <p class="empty">@T("No concept matches. Try a shorter word or a code prefix.", "Tidak ada konsep yang cocok. Coba kata yang lebih pendek atau awalan kode.")</p> }
+    </div>
+    <div class="panel">
+        @if (v.Selected is { } c)
+        {
+            <h3>@c.Display <small>@CodeSystems.ShortName(c.System) @c.Code</small></h3>
+            @if (v.Ancestors.Count > 0)
+            {
+                <p class="label">@T("Is-a hierarchy", "Hierarki is-a")</p>
+                <ol class="tree">@foreach (var a in v.Ancestors.Reverse()) { <li>@a.Display <code>@a.Code</code></li> }<li class="here">@c.Display <code>@c.Code</code></li></ol>
+            }
+            @if (v.Map is { } m) { <p class="label">@T("Map to ICD-10", "Peta ke ICD-10")</p><p><code>@m.Target.Code</code> @m.Target.DisplayFor(Lang) <span class="tag">@m.Equivalence</span></p> }
+        }
+        <p class="label">@T("Check digits", "Digit pemeriksa")</p>
+        <ul class="plain mono small"><li>LOINC 2345-7 → @v.Loinc.Message</li><li>SCTID 44054006 → @v.Sctid.Message</li></ul>
+    </div>
+</div>
+@code {
+    private static readonly (string, string?)[] Systems = [("All", null), ("ICD-10", CodeSystems.Icd10), ("SNOMED", CodeSystems.Snomed), ("LOINC", CodeSystems.Loinc), ("RxNorm", CodeSystems.RxNorm)];
+    private string _q = "gagal jantung";
+    private string? _system;
+}

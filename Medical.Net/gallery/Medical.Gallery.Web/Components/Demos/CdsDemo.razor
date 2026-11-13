@@ -1,0 +1,48 @@
+@inherits DemoBase
+@if (_v is { } v)
+{
+    <div class="controls">
+        <label class="check"><input type="checkbox" checked="@_risky" @onchange="Toggle" /> @T("Add warfarin, ibuprofen, amoxicillin, metronidazole and a penicillin allergy", "Tambah warfarin, ibuprofen, amoksisilin, metronidazol dan alergi penisilin")</label>
+    </div>
+    <div class="grid-2 wide-right">
+        <div class="panel">
+            <h3>@v.Patient.Name <small>@v.Patient.Age @T("y", "th") · @v.Patient.Sex · @v.Patient.Location</small></h3>
+            <p class="label">@T("Problems", "Masalah")</p>
+            <ul class="plain">@foreach (var p in v.Patient.Problems) { <li>@p</li> }</ul>
+            <p class="label">@T("Medications", "Obat")</p>
+            <ul class="plain mono">@foreach (var m in v.Medications) { <li>@m</li> }</ul>
+            <p class="label">@T("Allergies", "Alergi")</p>
+            <ul class="plain">@foreach (var a in v.Allergies.DefaultIfEmpty(T("None recorded", "Tidak ada"))) { <li>@a</li> }</ul>
+            <p class="label">@T("Triage workflow (JSON rules)", "Alur triase (aturan JSON)")</p>
+            <ul class="plain">@foreach (var t in v.Triage.Where(t => t.Matched).Take(1)) { <li><strong>@t.Event</strong></li> }</ul>
+        </div>
+        <div class="panel">
+            <h3>@T($"{v.Alerts.Count} alerts", $"{v.Alerts.Count} peringatan") <small>@T($"{v.Rules.Count} NRules rules loaded", $"{v.Rules.Count} aturan NRules dimuat")</small></h3>
+            @foreach (var a in v.Alerts)
+            {
+                <div class="alert @Sev(a.Severity)">
+                    <span class="tag">@a.Severity · @a.Category</span>
+                    <strong>@a.Title[Lang]</strong>
+                    <span>@a.Detail[Lang]</span>
+                    <code>@a.Rule · @a.Evidence</code>
+                </div>
+            }
+        </div>
+    </div>
+}
+@code {
+    private bool _risky = true;
+    private CdsView? _v;
+
+    protected override async Task OnInitializedAsync()
+    {
+        base.OnInitialized();
+        _v = await Scenarios.Cds(_risky);
+    }
+
+    private async Task Toggle(ChangeEventArgs e)
+    {
+        _risky = e.Value is true;
+        _v = await Scenarios.Cds(_risky);
+    }
+}

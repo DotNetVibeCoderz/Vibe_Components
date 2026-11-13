@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Medical.Net clinical calculators: NEWS2, qSOFA, SIRS, CURB-65, CHA2DS2-VASc, HAS-BLED, GCS, APGAR, MELD, CKD-EPI 2021 eGFR, Cockcroft-Gault, BMI (WHO and Asia-Pacific), BSA, weight-based dosing and lab-result interpretation.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Medical.Core/Medical.Core.csproj" />
+  </ItemGroup>
+</Project>

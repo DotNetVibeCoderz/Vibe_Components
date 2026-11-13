@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Medical.Net visualization: dependency-free SVG charts for clinical data — ECG strips on millimetre paper, NEWS2 observation charts, vital-sign trends with reference bands, risk-driver bars, HU histograms and score gauges. Theme via CSS variables (Blazor) or literal colours (desktop).</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Medical.Clinical/Medical.Clinical.csproj" />
+  </ItemGroup>
+</Project>

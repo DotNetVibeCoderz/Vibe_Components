@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Shared use-case scenarios for the Medical.Net Gallery (Blazor + Avalonia).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Medical.AI/Medical.AI.csproj" />
+    <ProjectReference Include="../../src/Medical.Hl7/Medical.Hl7.csproj" />
+    <ProjectReference Include="../../src/Medical.Privacy/Medical.Privacy.csproj" />
+    <ProjectReference Include="../../src/Medical.Signals/Medical.Signals.csproj" />
+    <ProjectReference Include="../../src/Medical.Visualization/Medical.Visualization.csproj" />
+    <ProjectReference Include="../../src/Medical.Emr/Medical.Emr.csproj" />
+  </ItemGroup>
+</Project>

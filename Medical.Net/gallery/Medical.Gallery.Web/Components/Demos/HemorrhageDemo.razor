@@ -1,0 +1,27 @@
+@inherits DemoBase
+@{ var v = Scenarios.Hemorrhage(_slice); var r = v.Report; }
+<div class="controls">
+    <label>@T("Slice", "Irisan") <input type="range" min="0" max="@(v.Slices - 1)" @bind="_slice" @bind:event="oninput" /> <output>@(v.Slice + 1)/@v.Slices</output></label>
+</div>
+<div class="grid-2 wide-left">
+    <figure class="film">
+        <img src="@DataUri(v.Overlay)" alt="@T("Brain window with detected voxels", "Jendela otak dengan voksel terdeteksi")" width="512" height="512" />
+        <span class="overlay-l">@T("Brain window · detected voxels in red", "Jendela otak · voksel terdeteksi merah")</span>
+    </figure>
+    <div class="panel">
+        <p class="risk @(r.Suspected ? "risk-high" : "risk-low")">@(r.Suspected ? T("Prioritise for review", "Prioritaskan untuk dibaca") : T("No collection found", "Tidak ditemukan"))</p>
+        <p class="big mono">@Scenarios.Fmt(r.VolumeMl, "0.0") mL</p>
+        <p>@r.Impression[Lang]</p>
+        <table class="data">
+            <thead><tr><th>@T("Slice", "Irisan")</th><th>mm²</th><th>@T("mean HU", "rerata HU")</th><th>@T("centre", "pusat")</th></tr></thead>
+            <tbody>
+                @foreach (var f in r.Findings)
+                {
+                    <tr class="@(f.Slice == v.Slice + 1 ? "hl" : "")"><td>@f.Slice</td><td>@f.AreaMm2</td><td>@f.MeanHu</td><td>@Scenarios.Fmt(f.CentroidX, "0"), @Scenarios.Fmt(f.CentroidY, "0")</td></tr>
+                }
+            </tbody>
+        </table>
+        <p class="note">@r.Method. @T("A triage aid that orders the reading list — not a diagnosis.", "Alat bantu triase untuk mengurutkan daftar baca — bukan diagnosis.")</p>
+    </div>
+</div>
+@code { private int _slice = 14; }

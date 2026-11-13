@@ -1,0 +1,78 @@
+# SNOMED CT International — tiny illustrative subset (use requires a SNOMED affiliate licence; load the full RF2 release with Rf2Loader).
+# concept_id	preferred_term	semantic_tag	bahasa_indonesia	parents(is-a)	icd10_map
+138875005	SNOMED CT Concept	root	Konsep SNOMED CT
+404684003	Clinical finding	finding	Temuan klinis	138875005
+64572001	Disease	disorder	Penyakit	404684003
+71388002	Procedure	procedure	Prosedur	138875005
+123037004	Body structure	body structure	Struktur tubuh	138875005
+105590001	Substance	substance	Substansi	138875005
+49601007	Disorder of cardiovascular system	disorder	Gangguan sistem kardiovaskular	64572001
+50043002	Disorder of respiratory system	disorder	Gangguan sistem pernapasan	64572001
+362969004	Disorder of endocrine system	disorder	Gangguan sistem endokrin	64572001
+40733004	Infectious disease	disorder	Penyakit infeksi	64572001
+118940003	Disorder of nervous system	disorder	Gangguan sistem saraf	64572001
+90708001	Kidney disease	disorder	Penyakit ginjal	64572001
+74732009	Mental disorder	disorder	Gangguan mental	64572001
+38341003	Hypertensive disorder, systemic arterial	disorder	Hipertensi	49601007	I10
+22298006	Myocardial infarction	disorder	Infark miokard	49601007	I21.9
+49436004	Atrial fibrillation	disorder	Fibrilasi atrium	49601007	I48
+84114007	Heart failure	disorder	Gagal jantung	49601007	I50.9
+230690007	Cerebrovascular accident	disorder	Stroke	49601007,118940003	I64
+73211009	Diabetes mellitus	disorder	Diabetes melitus	362969004
+44054006	Diabetes mellitus type 2	disorder	Diabetes melitus tipe 2	73211009	E11.9
+46635009	Diabetes mellitus type 1	disorder	Diabetes melitus tipe 1	73211009	E10.9
+40930008	Hypothyroidism	disorder	Hipotiroidisme	362969004	E03.9
+34486009	Hyperthyroidism	disorder	Hipertiroidisme	362969004	E05.9
+414916001	Obesity	disorder	Obesitas	362969004	E66.9
+55822004	Hyperlipidemia	disorder	Hiperlipidemia	64572001	E78.5
+195967001	Asthma	disorder	Asma	50043002	J45.9
+13645005	Chronic obstructive lung disease	disorder	PPOK	50043002	J44.9
+233604007	Pneumonia	disorder	Pneumonia	50043002	J18.9
+54150009	Upper respiratory infection	disorder	ISPA	50043002,40733004	J06.9
+91302008	Sepsis	disorder	Sepsis	40733004	A41.9
+56717001	Tuberculosis	disorder	Tuberkulosis	40733004	A16.9
+38362002	Dengue	disorder	Dengue	40733004	A90
+61462000	Malaria	disorder	Malaria	40733004	B54
+840539006	Disease caused by severe acute respiratory syndrome coronavirus 2	disorder	COVID-19	40733004,50043002	U07.1
+86406008	Human immunodeficiency virus infection	disorder	Infeksi HIV	40733004	B24
+68566005	Urinary tract infectious disease	disorder	Infeksi saluran kemih	40733004	N39.0
+709044004	Chronic kidney disease	disorder	Penyakit ginjal kronis	90708001	N18.9
+84757009	Epilepsy	disorder	Epilepsi	118940003	G40.9
+26929004	Alzheimer's disease	disorder	Penyakit Alzheimer	118940003	G30.9
+49049000	Parkinson's disease	disorder	Penyakit Parkinson	118940003	G20
+35489007	Depressive disorder	disorder	Gangguan depresi	74732009	F32.9
+197480006	Anxiety disorder	disorder	Gangguan cemas	74732009	F41.9
+271737000	Anemia	disorder	Anemia	64572001	D64.9
+90560007	Gout	disorder	Gout	64572001	M10.9
+69896004	Rheumatoid arthritis	disorder	Artritis reumatoid	64572001	M06.9
+396275006	Osteoarthritis	disorder	Osteoartritis	64572001	M19.9
+64859006	Osteoporosis	disorder	Osteoporosis	64572001	M81.9
+235595009	Gastroesophageal reflux disease	disorder	GERD	64572001	K21.9
+74400008	Appendicitis	disorder	Apendisitis	64572001	K37
+19943007	Cirrhosis of liver	disorder	Sirosis hati	64572001	K74.6
+398254007	Pre-eclampsia	disorder	Preeklamsia	64572001	O14.9
+363346000	Malignant neoplastic disease	disorder	Keganasan	64572001
+386661006	Fever	finding	Demam	404684003	R50.9
+49727002	Cough	finding	Batuk	404684003	R05
+267036007	Dyspnea	finding	Sesak napas	404684003	R06.0
+29857009	Chest pain	finding	Nyeri dada	404684003	R07.4
+21522001	Abdominal pain	finding	Nyeri perut	404684003	R10.4
+25064002	Headache	finding	Sakit kepala	404684003	R51
+422587007	Nausea	finding	Mual	404684003
+62315008	Diarrhea	finding	Diare	404684003
+364075005	Heart rate	observable entity	Denyut jantung	138875005
+86290005	Respiratory rate	observable entity	Frekuensi napas	138875005
+271649006	Systolic blood pressure	observable entity	Tekanan darah sistolik	138875005
+386725007	Body temperature	observable entity	Suhu tubuh	138875005
+431314004	Peripheral oxygen saturation	observable entity	Saturasi oksigen perifer	138875005
+80891009	Heart structure	body structure	Struktur jantung	123037004
+39607008	Lung structure	body structure	Struktur paru	123037004
+64033007	Kidney structure	body structure	Struktur ginjal	123037004
+10200004	Liver structure	body structure	Struktur hati	123037004
+12738006	Brain structure	body structure	Struktur otak	123037004
+387713003	Surgical procedure	procedure	Prosedur bedah	71388002
+80146002	Appendectomy	procedure	Apendektomi	387713003
+764146007	Penicillin	substance	Penisilin	105590001
+91936005	Allergy to penicillin	finding	Alergi penisilin	404684003	Z88.0
+300916003	Latex allergy	finding	Alergi lateks	404684003
+91935009	Allergy to peanut	finding	Alergi kacang	404684003

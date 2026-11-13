@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <Description>Medical.Net Gallery (Blazor web).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Medical.Gallery.Shared/Medical.Gallery.Shared.csproj" />
+  </ItemGroup>
+</Project>

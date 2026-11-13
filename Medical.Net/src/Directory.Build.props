@@ -1,0 +1,20 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageTags>medical;healthcare;fhir;hl7;dicom;emr;ehr;clinical;dotnet</PackageTags>
+    <Description>Medical.Net — Comprehensive Medical Platform for .NET. Made by Gravicode Studios, led by Kang Fadhil.</Description>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(MedicalRoot)assets/icon.png" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="$(MedicalRoot)PACKAGE.md" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,54 @@
+@page "/demo/{Slug}"
+@implements IDisposable
+@inject UiState Ui
+@using DemoInfo = Medical.Gallery.Shared.Demo
+
+<PageTitle>@_demo.Title[Ui.Lang] · Medical.Net Gallery</PageTitle>
+
+<header class="demo-head">
+    <p class="eyebrow">@GalleryCatalog.Groups.First(g => g.Key == _demo.Group).Name[Ui.Lang] · <code>@_demo.Module</code></p>
+    <h1>@_demo.Title[Ui.Lang]</h1>
+    <p class="lede">@_demo.Summary[Ui.Lang]</p>
+</header>
+
+<div class="demo-body">
+    <DynamicComponent Type="ViewType" />
+</div>
+
+<section class="code">
+    <p class="eyebrow">C# · @_demo.Module</p>
+    <pre><code>@_demo.Code.Trim()</code></pre>
+</section>
+
+<footer class="foot">
+    <span>Medical.Net — @GalleryCatalog.Credit[Ui.Lang]</span>
+    <span>@GalleryCatalog.Disclaimer[Ui.Lang]</span>
+</footer>
+
+@code {
+    [Parameter] public string Slug { get; set; } = "news2";
+    private DemoInfo _demo = GalleryCatalog.Demos[0];
+
+    private Type ViewType => Slug switch
+    {
+        "news2" => typeof(NewsDemo),
+        "cds" => typeof(CdsDemo),
+        "calculators" => typeof(CalculatorsDemo),
+        "dicom" => typeof(DicomDemo),
+        "hemorrhage" => typeof(HemorrhageDemo),
+        "ecg" => typeof(EcgDemo),
+        "fhir" => typeof(FhirDemo),
+        "hl7" => typeof(Hl7Demo),
+        "terminology" => typeof(TerminologyDemo),
+        "assistant" => typeof(AssistantDemo),
+        "risk" => typeof(RiskDemo),
+        "privacy" => typeof(PrivacyDemo),
+        "emr" => typeof(EmrDemo),
+        _ => typeof(NewsDemo),
+    };
+
+    protected override void OnParametersSet() => _demo = GalleryCatalog.Get(Slug);
+    protected override void OnInitialized() => Ui.Changed += Changed;
+    private void Changed() => InvokeAsync(StateHasChanged);
+    public void Dispose() => Ui.Changed -= Changed;
+}

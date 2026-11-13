@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Medical.Net clinical decision support: NRules forward-chaining rules (NEWS2 escalation, Sepsis-3 screening, critical labs, AKI risk, hypoglycaemia, drug-drug interactions, allergy conflicts, renal dosing, duplicate therapy) and configurable JSON workflows on Microsoft RulesEngine.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NRules" Version="1.0.4" />
+    <PackageReference Include="RulesEngine" Version="6.0.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Workflows/*.json" LogicalName="Medical.Rules.Workflows.%(Filename).json" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Medical.Clinical/Medical.Clinical.csproj" />
+    <ProjectReference Include="../Medical.Terminology/Medical.Terminology.csproj" />
+  </ItemGroup>
+</Project>

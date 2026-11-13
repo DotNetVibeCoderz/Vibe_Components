@@ -1,0 +1,44 @@
+@inherits DemoBase
+@{ var v = Scenarios.Dicom(_slice, _window, _chest); }
+<div class="controls">
+    <label class="check"><input type="checkbox" checked="@_chest" @onchange="ToggleChest" /> @T("Chest CT", "CT toraks")</label>
+    <label>@T("Slice", "Irisan") <input type="range" min="0" max="@(v.Slices - 1)" @bind="_slice" @bind:event="oninput" /> <output>@(v.Slice + 1)/@v.Slices</output></label>
+    <div class="seg">
+        @foreach (var p in Medical.Dicom.WindowPreset.Ct)
+        {
+            <button class="@(p.Name == v.Window.Name ? "on" : "")" @onclick="() => _window = p.Name">@p.Name</button>
+        }
+    </div>
+</div>
+<div class="grid-2 wide-left">
+    <figure class="film">
+        <img src="@DataUri(v.Png)" alt="CT slice @(v.Slice + 1)" width="512" height="512" />
+        <span class="overlay-l">@v.Info.PatientName<br />@v.Info.StudyDescription</span>
+        <span class="overlay-r">C @v.Window.Center · W @v.Window.Width<br />@v.Info.SliceLocation mm</span>
+    </figure>
+    <div class="panel">
+        <h3>@v.Info.Modality · @v.Info.SeriesDescription</h3>
+        <dl class="kv">
+            <dt>@T("Matrix", "Matriks")</dt><dd>@v.Info.Columns × @v.Info.Rows · @v.Info.BitsStored-bit @(v.Info.Signed ? "signed" : "unsigned")</dd>
+            <dt>@T("Spacing", "Jarak")</dt><dd>@v.Info.PixelSpacingRow mm · @T("slice", "irisan") @v.Info.SliceThickness mm</dd>
+            <dt>@T("Rescale", "Rescale")</dt><dd>HU = raw × @v.Info.RescaleSlope + (@v.Info.RescaleIntercept)</dd>
+            <dt>HU</dt><dd>@T("mean", "rerata") @Scenarios.Fmt(v.Stats.Mean, "0") · SD @Scenarios.Fmt(v.Stats.StdDev, "0") · min @v.Stats.Min · max @v.Stats.Max</dd>
+            <dt>@T("Render", "Render")</dt><dd>@v.Backend · @v.RenderMs ms</dd>
+            <dt>SOP UID</dt><dd class="mono small">@v.Info.SopInstanceUid</dd>
+        </dl>
+        <p class="label">@T("Hounsfield histogram (log)", "Histogram Hounsfield (log)")</p>
+        @Svg(v.Histogram)
+    </div>
+</div>
+@code {
+    private int _slice = 14;
+    private string _window = "Brain";
+    private bool _chest;
+
+    private void ToggleChest(ChangeEventArgs e)
+    {
+        _chest = e.Value is true;
+        _window = _chest ? "Lung" : "Brain";
+        _slice = _chest ? 8 : 14;
+    }
+}

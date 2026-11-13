@@ -1,0 +1,32 @@
+@inherits DemoBase
+@{ var v = Scenarios.Hl7(_patient); }
+<div class="controls">
+    <label>@T("Synthetic patient", "Pasien sintetis") <input type="number" min="1" max="200" @bind="_patient" /></label>
+</div>
+<div class="grid-2">
+    <div class="panel">
+        <h3>ORU^R01 · HL7 v2.5.1 <small>LIS → EMR</small></h3>
+        <pre class="er7"><code>@v.Er7</code></pre>
+        <h3>ACK</h3>
+        <pre class="er7"><code>@v.Ack</code></pre>
+    </div>
+    <div class="panel">
+        <h3>@T("Mapped results", "Hasil terpetakan") <small>@v.Patient</small></h3>
+        <table class="data">
+            <thead><tr><th>LOINC</th><th>@T("Test", "Pemeriksaan")</th><th>@T("Value", "Nilai")</th><th>@T("Range", "Rujukan")</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var o in v.Observations)
+                {
+                    <tr class="@(o.Flag == ResultFlag.Normal ? "" : "flag")">
+                        <td class="mono">@o.Code.Code</td><td>@o.Code.Display</td>
+                        <td class="mono">@o.Value @Ucum.Display(o.Unit ?? "")</td>
+                        <td class="mono">@o.ReferenceLow–@o.ReferenceHigh</td><td>@(o.Flag == ResultFlag.Normal ? "" : o.Flag.ToString())</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <p class="label">@T("FHIR transaction bundle", "Bundle transaksi FHIR")</p>
+        <pre class="json"><code>@v.FhirJson[..Math.Min(v.FhirJson.Length, 1800)]…</code></pre>
+    </div>
+</div>
+@code { private int _patient = 5; }

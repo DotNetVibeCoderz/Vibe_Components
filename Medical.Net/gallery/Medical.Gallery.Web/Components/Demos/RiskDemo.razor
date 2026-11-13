@@ -1,0 +1,34 @@
+@inherits DemoBase
+@{ var v = Scenarios.Risk(_det, _bmi, _age, _family); }
+<div class="grid-2">
+    <div class="panel">
+        <h3>@T("48-hour deterioration", "Perburukan 48 jam") <small>AUC @v.Metrics.Auc · @v.Metrics.TestRows @T("held-out rows", "baris uji")</small></h3>
+        <div class="controls inline">
+            <label>@T("Clinical picture", "Gambaran klinis") <input type="range" min="0" max="1" step="0.05" @bind="_det" @bind:event="oninput" /></label>
+        </div>
+        <p class="big mono">@Scenarios.Fmt(v.Deterioration.Probability * 100, "0.0") %</p>
+        <p class="risk risk-@v.Deterioration.Band.ToLowerInvariant()">@v.Deterioration.Band</p>
+        <p>@v.Deterioration.Interpretation[Lang]</p>
+        <p class="label">@T("What drives this prediction (log-odds)", "Faktor penentu prediksi (log-odds)")</p>
+        @Svg(v.Drivers)
+    </div>
+    <div class="panel">
+        <h3>@T("Undiagnosed type 2 diabetes", "DM tipe 2 belum terdiagnosis") <small>AUC @v.DiabetesMetrics.Auc</small></h3>
+        <div class="controls inline">
+            <label>@T("Age", "Usia") <input type="number" min="20" max="90" @bind="_age" /></label>
+            <label>BMI <input type="number" min="15" max="50" step="0.5" @bind="_bmi" /></label>
+            <label class="check"><input type="checkbox" @bind="_family" /> @T("Family history", "Riwayat keluarga")</label>
+        </div>
+        <p class="big mono">@Scenarios.Fmt(v.Diabetes.Probability * 100, "0.0") %</p>
+        <p class="risk risk-@(v.Diabetes.Band == "Moderate" ? "medium" : v.Diabetes.Band.ToLowerInvariant())">@v.Diabetes.Band</p>
+        <p>@v.Diabetes.Interpretation[Lang]</p>
+        @Svg(v.DiabetesDrivers)
+    </div>
+</div>
+<p class="note">@T("Trained on deterministic synthetic cohorts with ML.NET L-BFGS logistic regression. Retrain and validate on local data before any clinical use.",
+                   "Dilatih pada kohort sintetis deterministik dengan regresi logistik L-BFGS ML.NET. Latih ulang dan validasi dengan data lokal sebelum dipakai klinis.")</p>
+@code {
+    private double _det = 0.7, _bmi = 29;
+    private int _age = 52;
+    private bool _family = true;
+}

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Medical.Net FHIR R4 on the Firely .NET SDK: domain ↔ FHIR mapping (Patient, Encounter, Observation, Condition, MedicationRequest, AllergyIntolerance), transaction and International Patient Summary bundles, JSON round-trip, validation, FHIRPath, an in-memory FHIR store and an Indonesian SATUSEHAT client.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Hl7.Fhir.R4" Version="6.8.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="$(MsExtVersion)" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Medical.Core/Medical.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,27 @@
+@inherits DemoBase
+@{ var v = Scenarios.Privacy(_text, _pseudo); }
+<div class="controls">
+    <div class="seg">
+        <button class="@(!_pseudo ? "on" : "")" @onclick="() => _pseudo = false">@T("Redact", "Sensor")</button>
+        <button class="@(_pseudo ? "on" : "")" @onclick="() => _pseudo = true">@T("Pseudonymise", "Pseudonim")</button>
+    </div>
+    <span class="counts">@foreach (var (k, n) in v.Counts) { <span class="tag">@k @n</span> }</span>
+</div>
+<div class="grid-2">
+    <div class="panel">
+        <h3>@T("Clinical note", "Catatan klinis")</h3>
+        <textarea rows="9" @bind="_text" @bind:event="oninput"></textarea>
+    </div>
+    <div class="panel">
+        <h3>@T("Safe to share", "Aman dibagikan")</h3>
+        <p class="deid">@v.Redacted</p>
+    </div>
+</div>
+<div class="panel">
+    <h3>@T("Display masking", "Penyamaran tampilan")</h3>
+    <dl class="kv cols">@foreach (var (k, m) in v.Masks) { <dt>@k</dt><dd class="mono">@m</dd> }</dl>
+</div>
+@code {
+    private string _text = Scenarios.SampleNote;
+    private bool _pseudo;
+}

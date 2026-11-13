@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [
+    "Medical",
+    "Healthcare",
+    "Worker",
+    "Service"
+  ],
+  "identity": "Medical.Templates.MedicalHl7Gateway",
+  "name": "Medical.Net HL7 Gateway",
+  "description": "Worker service: receives HL7 v2 over MLLP, ACKs, converts ADT/ORU to FHIR R4, runs decision support and (optionally) forwards to a FHIR server. Made by Gravicode Studios, led by Kang Fadhil.",
+  "shortName": "medical-hl7-gateway",
+  "sourceName": "MedicalHl7Gateway",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "symbols": {
+    "MedicalNetVersion": {
+      "type": "parameter",
+      "datatype": "string",
+      "defaultValue": "1.0.0",
+      "replaces": "MEDICALNET_VERSION",
+      "description": "Medical.Net package version"
+    }
+  }
+}

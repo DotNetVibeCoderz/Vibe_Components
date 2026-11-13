@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Medical.Net biosignals: synthetic ECG (normal sinus, tachycardia, bradycardia, atrial fibrillation, PVCs) and PPG, filters, Pan-Tompkins R-peak detection on the Rust kernel, heart rate, HRV (SDNN, RMSSD, pNN50) and rhythm screening.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Medical.Core/Medical.Core.csproj" />
+    <ProjectReference Include="../Medical.Native/Medical.Native.csproj" />
+  </ItemGroup>
+</Project>

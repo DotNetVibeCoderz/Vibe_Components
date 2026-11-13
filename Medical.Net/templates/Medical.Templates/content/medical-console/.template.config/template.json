@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [
+    "Medical",
+    "Healthcare",
+    "Console"
+  ],
+  "identity": "Medical.Templates.MedicalConsoleApp",
+  "name": "Medical.Net Clinical Console",
+  "description": "Console app: synthetic patient, NEWS2 and decision-support alerts, terminology lookup and a FHIR International Patient Summary export. Made by Gravicode Studios, led by Kang Fadhil.",
+  "shortName": "medical-console",
+  "sourceName": "MedicalConsoleApp",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "symbols": {
+    "MedicalNetVersion": {
+      "type": "parameter",
+      "datatype": "string",
+      "defaultValue": "1.0.0",
+      "replaces": "MEDICALNET_VERSION",
+      "description": "Medical.Net package version"
+    }
+  }
+}

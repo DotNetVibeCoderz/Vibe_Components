@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [
+    "Medical",
+    "Healthcare",
+    "Web",
+    "API"
+  ],
+  "identity": "Medical.Templates.MedicalFhirApi",
+  "name": "Medical.Net FHIR API Server",
+  "description": "ASP.NET Core FHIR R4 server (CRUD, search, transactions, $everything) with clinical JSON API and HL7 MLLP listener, seeded with synthetic patients. Made by Gravicode Studios, led by Kang Fadhil.",
+  "shortName": "medical-fhir-api",
+  "sourceName": "MedicalFhirApi",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "symbols": {
+    "MedicalNetVersion": {
+      "type": "parameter",
+      "datatype": "string",
+      "defaultValue": "1.0.0",
+      "replaces": "MEDICALNET_VERSION",
+      "description": "Medical.Net package version"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [
+    "Medical",
+    "Healthcare",
+    "Web",
+    "Blazor"
+  ],
+  "identity": "Medical.Templates.MedicalWardBoard",
+  "name": "Medical.Net Ward Board (Blazor)",
+  "description": "Blazor Web App ward board: patients ranked by NEWS2 with observation charts and decision-support alerts. Made by Gravicode Studios, led by Kang Fadhil.",
+  "shortName": "medical-blazor",
+  "sourceName": "MedicalWardBoard",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "symbols": {
+    "MedicalNetVersion": {
+      "type": "parameter",
+      "datatype": "string",
+      "defaultValue": "1.0.0",
+      "replaces": "MEDICALNET_VERSION",
+      "description": "Medical.Net package version"
+    }
+  }
+}

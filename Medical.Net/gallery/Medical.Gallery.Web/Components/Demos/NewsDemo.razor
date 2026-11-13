@@ -1,0 +1,24 @@
+@inherits DemoBase
+@{ var v = Scenarios.News(_det, Lang); }
+<div class="controls">
+    <label>@T("Deterioration over 12 hours", "Perburukan selama 12 jam")
+        <input type="range" min="0" max="1" step="0.05" @bind="_det" @bind:event="oninput" />
+        <output>@Scenarios.Fmt(_det * 100, "0") %</output>
+    </label>
+</div>
+<div class="panel">
+    <h3>@T("Observation chart", "Lembar observasi") <small>@v.Patient.Name · @v.Patient.Mrn · @v.Patient.Location</small></h3>
+    <div class="scroll">@Svg(v.ObservationChart)</div>
+    <p class="legend"><span class="sw s1"></span>1 <span class="sw s2"></span>2 <span class="sw s3"></span>3 @T("points per parameter (RCP NEWS2)", "poin per parameter (RCP NEWS2)")</p>
+</div>
+<div class="grid-2 wide-right">
+    <div class="panel center">
+        <h3>NEWS2</h3>
+        @Svg(v.Gauge)
+        <p class="risk risk-@v.News2.Risk.ToString().ToLowerInvariant()">@Scenarios.RiskName(v.News2.Risk)[Lang]</p>
+        <p>@v.News2.Interpretation[Lang]</p>
+        <p class="mono small">qSOFA @v.QSofa.Score/3 — @v.QSofa.Interpretation[Lang]</p>
+    </div>
+    <div class="panel"><h3>@T("Trend", "Tren")</h3><div class="scroll">@Svg(v.Trend)</div></div>
+</div>
+@code { private double _det = 0.85; }

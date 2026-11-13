@@ -1,0 +1,10 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydicom==3.0.1
+numpy>=1.26
+httpx>=0.27  # TestClient (CI smoke test)
+scipy>=1.11
+# Optional learned model (set MEDNET_MONAI_WEIGHTS):
+# torch>=2.3
+# monai>=1.4

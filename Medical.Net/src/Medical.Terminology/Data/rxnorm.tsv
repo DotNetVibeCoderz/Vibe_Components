@@ -1,0 +1,74 @@
+# RxNorm (U.S. NLM) ingredient-level subset with WHO ATC codes and interaction classes. rxcui	ingredient	atc	classes	bahasa_indonesia
+161	acetaminophen	N02BE01	analgesic	parasetamol
+5640	ibuprofen	M01AE01	nsaid	ibuprofen
+3355	diclofenac	M01AB05	nsaid	diklofenak
+1191	aspirin	B01AC06	antiplatelet,nsaid	asam asetilsalisilat (aspirin)
+32968	clopidogrel	B01AC04	antiplatelet	klopidogrel
+11289	warfarin	B01AA03	anticoagulant,vka	warfarin
+5224	heparin	B01AB01	anticoagulant	heparin
+67108	enoxaparin	B01AB05	anticoagulant	enoksaparin
+1114195	rivaroxaban	B01AF01	anticoagulant,doac	rivaroksaban
+1364430	apixaban	B01AF02	anticoagulant,doac	apiksaban
+1037042	dabigatran etexilate	B01AE07	anticoagulant,doac	dabigatran
+6809	metformin	A10BA02	antidiabetic,biguanide	metformin
+4815	glyburide	A10BB01	antidiabetic,sulfonylurea	glibenklamid
+25789	glimepiride	A10BB12	antidiabetic,sulfonylurea	glimepirid
+593411	sitagliptin	A10BH01	antidiabetic,dpp4	sitagliptin
+1545653	empagliflozin	A10BK03	antidiabetic,sglt2	empagliflozin
+274783	insulin glargine	A10AE04	antidiabetic,insulin	insulin glargin
+29046	lisinopril	C09AA03	acei,antihypertensive	lisinopril
+1998	captopril	C09AA01	acei,antihypertensive	kaptopril
+52175	losartan	C09CA01	arb,antihypertensive	losartan
+17767	amlodipine	C08CA01	ccb,antihypertensive	amlodipin
+7417	nifedipine	C08CA05	ccb,antihypertensive	nifedipin
+19484	bisoprolol	C07AB07	betablocker,antihypertensive	bisoprolol
+20352	carvedilol	C07AG02	betablocker,antihypertensive	karvedilol
+8787	propranolol	C07AA05	betablocker	propranolol
+4603	furosemide	C03CA01	loop-diuretic	furosemid
+5487	hydrochlorothiazide	C03AA03	thiazide	hidroklorotiazid
+9997	spironolactone	C03DA01	k-sparing	spironolakton
+3407	digoxin	C01AA05	digitalis	digoksin
+4917	nitroglycerin	C01DA02	nitrate	nitrogliserin
+83367	atorvastatin	C10AA05	statin	atorvastatin
+36567	simvastatin	C10AA01	statin,cyp3a4-substrate	simvastatin
+723	amoxicillin	J01CA04	antibiotic,betalactam,penicillin	amoksisilin
+2193	ceftriaxone	J01DD04	antibiotic,betalactam,cephalosporin	seftriakson
+25033	cefixime	J01DD08	antibiotic,betalactam,cephalosporin	sefiksim
+29561	meropenem	J01DH02	antibiotic,betalactam,carbapenem	meropenem
+2551	ciprofloxacin	J01MA02	antibiotic,fluoroquinolone,qt	siprofloksasin
+18631	azithromycin	J01FA10	antibiotic,macrolide,qt	azitromisin
+21212	clarithromycin	J01FA09	antibiotic,macrolide,qt,cyp3a4-inhibitor	klaritromisin
+4053	erythromycin	J01FA01	antibiotic,macrolide,qt,cyp3a4-inhibitor	eritromisin
+3640	doxycycline	J01AA02	antibiotic,tetracycline	doksisiklin
+6922	metronidazole	J01XD01	antibiotic,nitroimidazole	metronidazol
+4413	gentamicin	J01GB03	antibiotic,aminoglycoside	gentamisin
+11124	vancomycin	J01XA01	antibiotic,glycopeptide	vankomisin
+10180	sulfamethoxazole	J01EC01	antibiotic,sulfonamide	sulfametoksazol
+10829	trimethoprim	J01EA01	antibiotic	trimetoprim
+9384	rifampin	J04AB02	antitubercular,cyp-inducer	rifampisin
+6038	isoniazid	J04AC01	antitubercular	isoniazid
+8987	pyrazinamide	J04AK01	antitubercular	pirazinamid
+4110	ethambutol	J04AK02	antitubercular	etambutol
+4450	fluconazole	J02AC01	antifungal,cyp-inhibitor,qt	flukonazol
+2393	chloroquine	P01BA01	antimalarial,qt	klorokuin
+260101	oseltamivir	J05AH02	antiviral	oseltamivir
+7646	omeprazole	A02BC01	ppi	omeprazol
+9143	ranitidine	A02BA02	h2-blocker	ranitidin
+26225	ondansetron	A04AA01	antiemetic,qt,serotonergic	ondansetron
+8640	prednisone	H02AB07	corticosteroid	prednison
+3264	dexamethasone	H02AB02	corticosteroid	deksametason
+10582	levothyroxine	H03AA01	thyroid	levotiroksin
+435	albuterol	R03AC02	bronchodilator	salbutamol
+20610	cetirizine	R06AE07	antihistamine	setirizin
+519	allopurinol	M04AA01	antigout	alopurinol
+2683	colchicine	M04AC01	antigout,cyp3a4-substrate	kolkisin
+7052	morphine	N02AA01	opioid	morfin
+10689	tramadol	N02AX02	opioid,serotonergic	tramadol
+8183	phenytoin	N03AB02	anticonvulsant,cyp-inducer	fenitoin
+11118	valproic acid	N03AG01	anticonvulsant	asam valproat
+2002	carbamazepine	N03AF01	anticonvulsant,cyp-inducer	karbamazepin
+36437	sertraline	N06AB06	ssri,serotonergic	sertralin
+4493	fluoxetine	N06AB03	ssri,serotonergic	fluoksetin
+5093	haloperidol	N05AD01	antipsychotic,qt	haloperidol
+3322	diazepam	N05BA01	benzodiazepine	diazepam
+8591	potassium chloride	A12BA01	potassium	kalium klorida

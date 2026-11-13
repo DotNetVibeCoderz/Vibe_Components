@@ -1,0 +1,42 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject UiState Ui
+@inject NavigationManager Nav
+
+<div class="shell">
+    <nav class="rail" aria-label="@Ui.T("Use cases", "Kasus penggunaan")">
+        <a class="brand" href="@Link("")">
+            <svg viewBox="0 0 32 32" width="34" height="34" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--ink)" /><path d="M4 18h6l2.5-7 4 13 3-9 1.5 3H28" fill="none" stroke="var(--ecg-major)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <span><strong>Medical.Net</strong><small>Gallery · v@(MedicalInfo.Version)</small></span>
+        </a>
+        <div class="lang" role="group" aria-label="Language">
+            <button class="@(Ui.Lang == "en" ? "on" : "")" @onclick='() => Ui.SetLang("en")' aria-pressed="@(Ui.Lang == "en")">EN</button>
+            <button class="@(Ui.Lang == "id" ? "on" : "")" @onclick='() => Ui.SetLang("id")' aria-pressed="@(Ui.Lang == "id")">ID</button>
+        </div>
+        @foreach (var g in GalleryCatalog.Groups)
+        {
+            <p class="group">@g.Name[Ui.Lang]</p>
+            @foreach (var d in GalleryCatalog.Demos.Where(x => x.Group == g.Key))
+            {
+                <NavLink class="item" href="@Link($"demo/{d.Slug}")" Match="NavLinkMatch.Prefix">@d.Title[Ui.Lang]</NavLink>
+            }
+        }
+        <p class="credit">@GalleryCatalog.Credit[Ui.Lang]</p>
+    </nav>
+    <main class="page">@Body</main>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        var q = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
+        if (q.TryGetValue("lang", out var l)) Ui.SetLang(l.ToString());
+        Ui.Changed += Changed;
+    }
+
+    private string Link(string path) => Ui.Lang == "id" ? $"{path}?lang=id" : (path.Length == 0 ? "./" : path);
+
+    private void Changed() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Ui.Changed -= Changed;
+}

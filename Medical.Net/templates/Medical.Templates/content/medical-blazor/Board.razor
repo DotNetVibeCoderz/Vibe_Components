@@ -1,0 +1,40 @@
+@page "/"
+@code {
+    [SupplyParameterFromQuery(Name = "p")] public int? Selected { get; set; }
+
+    // Replace with your EMR / FHIR source.
+    private static readonly PatientRecord[] Ward = Enumerable.Range(1, 12)
+        .Select(i => SyntheticData.Record(i, i % 4 == 0 ? 0.9 : i % 3 == 0 ? 0.5 : 0.1)).ToArray();
+
+    private static int News(PatientRecord r) => r.LatestVitals is { } v ? ClinicalScores.News2(v).Score : 0;
+}
+@{
+    var ranked = Ward.OrderByDescending(News).ToArray();
+    var current = ranked.FirstOrDefault(r => r.Patient.Id == $"pat-{Selected:00000}") ?? ranked[0];
+    var alerts = new ClinicalDecisionSupport().Evaluate(current);
+}
+<main class="board">
+    <aside>
+        <h1>Ward 3B</h1>
+        <p class="sub">Ranked by NEWS2</p>
+        @foreach (var r in ranked)
+        {
+            var n = News(r);
+            <a class="row @(r == current ? "on" : "")" href="?p=@int.Parse(r.Patient.Id[4..])">
+                <span class="score s@(n >= 7 ? 3 : n >= 5 ? 2 : n >= 1 ? 1 : 0)">@n</span>
+                <span>@r.Patient.Name<small>@r.Patient.Mrn</small></span>
+            </a>
+        }
+    </aside>
+    <section>
+        <h2>@current.Patient.Name <small>@current.Patient.Gender · @current.Patient.Mrn</small></h2>
+        <div class="chart">@((MarkupString)Charts.ObservationChart(current.Vitals))</div>
+        <h3>Alerts</h3>
+        @if (alerts.Count == 0) { <p class="sub">No alerts for this patient.</p> }
+        @foreach (var a in alerts)
+        {
+            <div class="alert @a.Severity.ToString().ToLowerInvariant()"><strong>@a.Title.En</strong><span>@a.Detail.En</span></div>
+        }
+        <footer>@MedicalInfo.Credit · @MedicalInfo.Disclaimer</footer>
+    </section>
+</main>

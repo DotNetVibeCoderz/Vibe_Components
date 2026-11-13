@@ -1,0 +1,106 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Medical.Gallery.Desktop.App"
+             RequestedThemeVariant="Light">
+    <!-- Medical.Net Gallery "chart paper" palette (shared with the Blazor gallery). -->
+    <Application.Resources>
+        <Color x:Key="SystemAccentColor">#0F6E6E</Color>
+        <Color x:Key="SystemAccentColorDark1">#0B5858</Color>
+        <Color x:Key="SystemAccentColorLight1">#2B8A87</Color>
+        <SolidColorBrush x:Key="Paper" Color="#F3F6F7" />
+        <SolidColorBrush x:Key="Raised" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="Sunk" Color="#E7EDF0" />
+        <SolidColorBrush x:Key="Ink" Color="#14233A" />
+        <SolidColorBrush x:Key="Muted" Color="#5B6B7E" />
+        <SolidColorBrush x:Key="Rule" Color="#D5DDE3" />
+        <SolidColorBrush x:Key="EcgMajor" Color="#E39C97" />
+        <SolidColorBrush x:Key="Teal" Color="#0F6E6E" />
+        <SolidColorBrush x:Key="TealSoft" Color="#CFE5E3" />
+        <SolidColorBrush x:Key="Amber" Color="#E8A33D" />
+        <SolidColorBrush x:Key="Red" Color="#C8372D" />
+        <SolidColorBrush x:Key="Score1" Color="#FBE8B4" />
+        <SolidColorBrush x:Key="Film" Color="#000000" />
+        <FontFamily x:Key="Display">avares://Medical.Gallery.Desktop/Assets/Fonts#IBM Plex Sans Condensed</FontFamily>
+        <FontFamily x:Key="Body">avares://Medical.Gallery.Desktop/Assets/Fonts#Atkinson Hyperlegible</FontFamily>
+        <FontFamily x:Key="Mono">avares://Medical.Gallery.Desktop/Assets/Fonts#IBM Plex Mono</FontFamily>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+        <Style Selector="Window">
+            <Setter Property="Background" Value="{StaticResource Paper}" />
+            <Setter Property="FontFamily" Value="{StaticResource Body}" />
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+        </Style>
+        <Style Selector="TextBlock.display">
+            <Setter Property="FontFamily" Value="{StaticResource Display}" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="TextBlock.eyebrow">
+            <Setter Property="FontFamily" Value="{StaticResource Display}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LetterSpacing" Value="1.4" />
+            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+        </Style>
+        <Style Selector="TextBlock.mono">
+            <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+        </Style>
+        <Style Selector="TextBlock.muted">
+            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+        </Style>
+        <Style Selector="Border.panel">
+            <Setter Property="Background" Value="{StaticResource Raised}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Rule}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="16,14" />
+        </Style>
+        <Style Selector="Button.nav">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="BorderThickness" Value="3,0,0,0" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="FontSize" Value="14.5" />
+        </Style>
+        <Style Selector="Button.nav:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource Sunk}" />
+        </Style>
+        <Style Selector="Button.nav.active">
+            <Setter Property="Background" Value="{StaticResource Sunk}" />
+            <Setter Property="BorderBrush" Value="{StaticResource EcgMajor}" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="ToggleButton.seg">
+            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="FontSize" Value="13.5" />
+        </Style>
+        <Style Selector="ToggleButton.seg:checked /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource Ink}" />
+            <Setter Property="Foreground" Value="{StaticResource Paper}" />
+        </Style>
+        <Style Selector="Button.primary">
+            <Setter Property="Background" Value="{StaticResource Ink}" />
+            <Setter Property="Foreground" Value="{StaticResource Paper}" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="Button.chip">
+            <Setter Property="Background" Value="{StaticResource Paper}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Rule}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+        </Style>
+        <Style Selector="Slider">
+            <Setter Property="Foreground" Value="{StaticResource Teal}" />
+        </Style>
+    </Application.Styles>
+</Application>

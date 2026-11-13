@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Medical.Net HL7 v2 on NHapi: parse any version, build ADT^A01 / ORU^R01 (2.5.1), generate ACKs, map PID/PV1/OBX to the domain model and FHIR R4, and exchange messages over MLLP (TCP server and client).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="nhapi.base" Version="3.2.3" />
+    <PackageReference Include="nhapi.model.v23" Version="3.2.4" />
+    <PackageReference Include="nhapi.model.v251" Version="3.2.4" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Medical.Fhir/Medical.Fhir.csproj" />
+  </ItemGroup>
+</Project>

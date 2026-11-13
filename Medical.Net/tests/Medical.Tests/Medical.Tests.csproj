@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CS8602;CS8604</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="$(MsExtVersion)" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="$(MsExtVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Medical.AI/Medical.AI.csproj" />
+    <ProjectReference Include="../../src/Medical.AspNetCore/Medical.AspNetCore.csproj" />
+    <ProjectReference Include="../../src/Medical.Emr/Medical.Emr.csproj" />
+    <ProjectReference Include="../../src/Medical.Signals/Medical.Signals.csproj" />
+    <ProjectReference Include="../../src/Medical.Visualization/Medical.Visualization.csproj" />
+  </ItemGroup>
+
+</Project>

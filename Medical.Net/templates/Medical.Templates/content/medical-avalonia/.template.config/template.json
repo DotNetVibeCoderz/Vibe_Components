@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [
+    "Medical",
+    "Healthcare",
+    "Desktop",
+    "Avalonia"
+  ],
+  "identity": "Medical.Templates.MedicalDicomViewer",
+  "name": "Medical.Net DICOM Viewer (Avalonia)",
+  "description": "Avalonia desktop DICOM viewer: open a folder or synthetic CT, window presets, HU statistics and haemorrhage screening. Made by Gravicode Studios, led by Kang Fadhil.",
+  "shortName": "medical-avalonia",
+  "sourceName": "MedicalDicomViewer",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "symbols": {
+    "MedicalNetVersion": {
+      "type": "parameter",
+      "datatype": "string",
+      "defaultValue": "1.0.0",
+      "replaces": "MEDICALNET_VERSION",
+      "description": "Medical.Net package version"
+    }
+  }
+}

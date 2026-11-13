@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>medical</ToolCommandName>
+    <IsPackable>true</IsPackable>
+    <PackageId>Medical.Cli</PackageId>
+    <Description>Medical.Net command-line tool: clinical scores and calculators, terminology search, drug safety, FHIR (patient, IPS, validate), HL7 v2 (parse, to-FHIR, MLLP send/listen), DICOM (phantom, info, render, anonymize, echo), ECG analysis, de-identification, decision support, risk models and the AI clinical assistant. Made by Gravicode Studios, led by Kang Fadhil.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
+    <PackageTags>medical;healthcare;fhir;hl7;dicom;cli;dotnet-tool</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(MedicalRoot)assets/icon.png" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="$(MedicalRoot)PACKAGE.md" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Medical.AI/Medical.AI.csproj" />
+    <ProjectReference Include="../../src/Medical.Emr/Medical.Emr.csproj" />
+    <ProjectReference Include="../../src/Medical.Hl7/Medical.Hl7.csproj" />
+    <ProjectReference Include="../../src/Medical.Privacy/Medical.Privacy.csproj" />
+    <ProjectReference Include="../../src/Medical.Signals/Medical.Signals.csproj" />
+  </ItemGroup>
+</Project>

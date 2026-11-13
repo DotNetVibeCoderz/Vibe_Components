@@ -1,0 +1,29 @@
+[
+  {
+    "WorkflowName": "Triage",
+    "Rules": [
+      { "RuleName": "Resuscitation", "SuccessEvent": "RESUSCITATION — immediate (P1 red) / Resusitasi segera", "Expression": "input1.News2 >= 7 || input1.SpO2 < 88 || input1.SystolicBp < 80 || input1.Alert == false" },
+      { "RuleName": "Emergent", "SuccessEvent": "EMERGENT — within 10 min (P2 orange) / Gawat darurat ≤ 10 menit", "Expression": "input1.News2 >= 5 || input1.QSofa >= 2 || input1.Lactate >= 4" },
+      { "RuleName": "Urgent", "SuccessEvent": "URGENT — within 30 min (P3 yellow) / Mendesak ≤ 30 menit", "Expression": "input1.News2 >= 3 || input1.TemperatureC >= 39 || input1.HeartRate > 110" },
+      { "RuleName": "Standard", "SuccessEvent": "STANDARD — routine queue (P4 green) / Antrian rutin", "Expression": "input1.News2 < 3" }
+    ]
+  },
+  {
+    "WorkflowName": "DengueWarningSigns",
+    "Rules": [
+      { "RuleName": "Thrombocytopenia", "SuccessEvent": "Platelets < 100 ×10³/µL — warning sign / Trombosit < 100 ribu", "Expression": "input1.Dengue && input1.Platelets > 0 && input1.Platelets < 100" },
+      { "RuleName": "Severe thrombocytopenia", "SuccessEvent": "Platelets < 20 ×10³/µL — bleeding risk, admit / Trombosit < 20 ribu, rawat inap", "Expression": "input1.Dengue && input1.Platelets > 0 && input1.Platelets < 20" },
+      { "RuleName": "Shock signs", "SuccessEvent": "Hypotension or tachycardia — suspect dengue shock syndrome / Curiga sindrom syok dengue", "Expression": "input1.Dengue && (input1.SystolicBp < 90 || input1.HeartRate > 120)" },
+      { "RuleName": "Lethargy", "SuccessEvent": "Lethargy / restlessness — warning sign / Letargi atau gelisah", "Expression": "input1.Dengue && input1.Alert == false" }
+    ]
+  },
+  {
+    "WorkflowName": "SpecialistReferral",
+    "Rules": [
+      { "RuleName": "Nephrology", "SuccessEvent": "Refer to nephrology: eGFR < 30 / Rujuk ke nefrologi", "Expression": "input1.Egfr > 0 && input1.Egfr < 30" },
+      { "RuleName": "Endocrinology", "SuccessEvent": "Refer to endocrinology: uncontrolled diabetes (glucose > 300) / Rujuk ke endokrinologi", "Expression": "input1.Diabetes && input1.Glucose > 300" },
+      { "RuleName": "Polypharmacy review", "SuccessEvent": "Pharmacist medication review: ≥ 5 drugs in a patient ≥ 65 / Telaah obat oleh apoteker", "Expression": "input1.Age >= 65 && input1.Medications >= 5" },
+      { "RuleName": "Hypertensive urgency", "SuccessEvent": "SBP ≥ 180 — same-day physician review / Evaluasi dokter hari ini", "Expression": "input1.SystolicBp >= 180" }
+    ]
+  }
+]

@@ -1,0 +1,75 @@
+# LOINC (Regenstrief Institute) — curated subset. code	long_common_name	bahasa_indonesia	class	ucum
+85353-1	Vital signs, weight, height, head circumference, oxygen saturation and BMI panel	Panel tanda vital	VITAL
+8867-4	Heart rate	Denyut jantung	VITAL	/min
+9279-1	Respiratory rate	Frekuensi napas	VITAL	/min
+85354-9	Blood pressure panel with all children optional	Panel tekanan darah	VITAL
+8480-6	Systolic blood pressure	Tekanan darah sistolik	VITAL	mm[Hg]
+8462-4	Diastolic blood pressure	Tekanan darah diastolik	VITAL	mm[Hg]
+8310-5	Body temperature	Suhu tubuh	VITAL	Cel
+59408-5	Oxygen saturation in Arterial blood by Pulse oximetry	Saturasi oksigen (oksimetri nadi)	VITAL	%
+29463-7	Body weight	Berat badan	VITAL	kg
+8302-2	Body height	Tinggi badan	VITAL	cm
+39156-5	Body mass index (BMI) [Ratio]	Indeks massa tubuh (IMT)	VITAL	kg/m2
+9843-4	Head Occipital-frontal circumference	Lingkar kepala	VITAL	cm
+8280-0	Waist Circumference at umbilicus by Tape measure	Lingkar pinggang	VITAL	cm
+2345-7	Glucose [Mass/volume] in Serum or Plasma	Glukosa serum/plasma	CHEM	mg/dL
+2339-0	Glucose [Mass/volume] in Blood	Glukosa darah	CHEM	mg/dL
+1558-6	Fasting glucose [Mass/volume] in Serum or Plasma	Glukosa puasa	CHEM	mg/dL
+4548-4	Hemoglobin A1c/Hemoglobin.total in Blood	HbA1c	CHEM	%
+2160-0	Creatinine [Mass/volume] in Serum or Plasma	Kreatinin	CHEM	mg/dL
+3094-0	Urea nitrogen [Mass/volume] in Serum or Plasma	Ureum nitrogen (BUN)	CHEM	mg/dL
+2823-3	Potassium [Moles/volume] in Serum or Plasma	Kalium	CHEM	mmol/L
+2951-2	Sodium [Moles/volume] in Serum or Plasma	Natrium	CHEM	mmol/L
+2075-0	Chloride [Moles/volume] in Serum or Plasma	Klorida	CHEM	mmol/L
+1963-8	Bicarbonate [Moles/volume] in Serum or Plasma	Bikarbonat	CHEM	mmol/L
+17861-6	Calcium [Mass/volume] in Serum or Plasma	Kalsium	CHEM	mg/dL
+2524-7	Lactate [Moles/volume] in Serum or Plasma	Laktat	CHEM	mmol/L
+1975-2	Bilirubin.total [Mass/volume] in Serum or Plasma	Bilirubin total	CHEM	mg/dL
+1751-7	Albumin [Mass/volume] in Serum or Plasma	Albumin	CHEM	g/dL
+2885-2	Protein [Mass/volume] in Serum or Plasma	Protein total	CHEM	g/dL
+1742-6	Alanine aminotransferase [Enzymatic activity/volume] in Serum or Plasma	ALT (SGPT)	CHEM	U/L
+1920-8	Aspartate aminotransferase [Enzymatic activity/volume] in Serum or Plasma	AST (SGOT)	CHEM	U/L
+6768-6	Alkaline phosphatase [Enzymatic activity/volume] in Serum or Plasma	Alkali fosfatase	CHEM	U/L
+2093-3	Cholesterol [Mass/volume] in Serum or Plasma	Kolesterol total	CHEM	mg/dL
+13457-7	Cholesterol in LDL [Mass/volume] in Serum or Plasma by calculation	Kolesterol LDL	CHEM	mg/dL
+2085-9	Cholesterol in HDL [Mass/volume] in Serum or Plasma	Kolesterol HDL	CHEM	mg/dL
+2571-8	Triglyceride [Mass/volume] in Serum or Plasma	Trigliserida	CHEM	mg/dL
+3016-3	Thyrotropin [Units/volume] in Serum or Plasma	TSH	CHEM	m[IU]/L
+3024-7	Thyroxine (T4) free [Mass/volume] in Serum or Plasma	T4 bebas	CHEM	ng/dL
+2157-6	Creatine kinase [Enzymatic activity/volume] in Serum or Plasma	Kreatin kinase (CK)	CHEM	U/L
+10839-9	Troponin I.cardiac [Mass/volume] in Serum or Plasma	Troponin I jantung	CHEM	ng/mL
+6598-7	Troponin T.cardiac [Mass/volume] in Serum or Plasma	Troponin T jantung	CHEM	ug/L
+30934-4	Natriuretic peptide B [Mass/volume] in Serum or Plasma	BNP	CHEM	pg/mL
+33762-6	Natriuretic peptide.B prohormone N-Terminal [Mass/volume] in Serum or Plasma	NT-proBNP	CHEM	pg/mL
+1988-5	C reactive protein [Mass/volume] in Serum or Plasma	C-reactive protein (CRP)	CHEM	mg/L
+33959-8	Procalcitonin [Mass/volume] in Serum or Plasma	Prokalsitonin	CHEM	ng/mL
+2532-0	Lactate dehydrogenase [Enzymatic activity/volume] in Serum or Plasma	Laktat dehidrogenase (LDH)	CHEM	U/L
+718-7	Hemoglobin [Mass/volume] in Blood	Hemoglobin	HEM	g/dL
+4544-3	Hematocrit [Volume Fraction] of Blood by Automated count	Hematokrit	HEM	%
+789-8	Erythrocytes [#/volume] in Blood by Automated count	Eritrosit	HEM	10*6/uL
+787-2	MCV [Entitic volume] by Automated count	MCV	HEM	fL
+6690-2	Leukocytes [#/volume] in Blood by Automated count	Leukosit	HEM	10*3/uL
+777-3	Platelets [#/volume] in Blood by Automated count	Trombosit	HEM	10*3/uL
+4537-7	Erythrocyte sedimentation rate by Westergren method	Laju endap darah (LED)	HEM	mm/h
+5902-2	Prothrombin time (PT)	Waktu protrombin (PT)	COAG	s
+6301-6	INR in Platelet poor plasma by Coagulation assay	INR	COAG	1
+3173-2	aPTT in Blood by Coagulation assay	APTT	COAG	s
+48065-7	Fibrin D-dimer FEU [Mass/volume] in Platelet poor plasma	D-dimer	COAG	ug/mL
+2744-1	pH of Arterial blood	pH darah arteri	ABG	[pH]
+2019-8	Carbon dioxide [Partial pressure] in Arterial blood	PaCO2	ABG	mm[Hg]
+2703-7	Oxygen [Partial pressure] in Arterial blood	PaO2	ABG	mm[Hg]
+5811-5	Specific gravity of Urine by Test strip	Berat jenis urin	UA	1
+5803-2	pH of Urine by Test strip	pH urin	UA	[pH]
+20454-5	Protein [Presence] in Urine by Test strip	Protein urin	UA
+5196-1	Hepatitis B virus surface Ag [Presence] in Serum by Immunoassay	HBsAg	SERO
+94500-6	SARS-CoV-2 (COVID-19) RNA [Presence] in Respiratory system specimen by NAA with probe detection	RT-PCR SARS-CoV-2	MICRO
+72166-2	Tobacco smoking status	Status merokok	SURVEY
+11450-4	Problem list - Reported	Daftar masalah	DOC
+11488-4	Consult note	Catatan konsultasi	DOC
+18842-5	Discharge summary	Resume medis pulang	DOC
+34117-2	History and physical note	Catatan anamnesis dan pemeriksaan fisik	DOC
+11506-3	Progress note	Catatan perkembangan pasien	DOC
+11524-6	EKG study	Pemeriksaan EKG	CARD
+36643-5	XR Chest 2 Views	Foto toraks 2 proyeksi	RAD
+24627-2	Chest CT	CT toraks	RAD
+24725-4	CT Head	CT kepala	RAD

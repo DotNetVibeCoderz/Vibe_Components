@@ -1,0 +1,30 @@
+@inherits DemoBase
+@if (_v is { } v)
+{
+    <div class="controls">
+        <label>@T("Search family name, MRN or NIK", "Cari nama keluarga, nomor RM atau NIK") <input @bind="_q" @bind:after="Load" /></label>
+        <span class="tag">@v.Provider</span>
+    </div>
+    <div class="grid-2">
+        <div class="panel">
+            <h3>@T($"{v.Search.Count} of {v.Patients} patients", $"{v.Search.Count} dari {v.Patients} pasien")</h3>
+            <table class="data">
+                <thead><tr><th>MRN</th><th>@T("Name", "Nama")</th><th>@T("Born", "Lahir")</th><th>@T("City", "Kota")</th></tr></thead>
+                <tbody>@foreach (var p in v.Search) { <tr><td class="mono">@p.Mrn</td><td>@p.Name.Full</td><td class="mono">@p.BirthDate.ToString("yyyy-MM-dd")</td><td>@p.City</td></tr> }</tbody>
+            </table>
+        </div>
+        <div class="panel">
+            <h3>@T("Audit trail", "Jejak audit")</h3>
+            <table class="data">
+                <thead><tr><th>@T("Time", "Waktu")</th><th>@T("User", "Pengguna")</th><th>@T("Action", "Aksi")</th><th>@T("Resource", "Sumber")</th><th>@T("Purpose", "Tujuan")</th></tr></thead>
+                <tbody>@foreach (var a in v.Audit) { <tr><td class="mono">@a.Timestamp.ToString("HH:mm:ss")</td><td>@a.User</td><td>@a.Action</td><td>@a.Resource @a.PatientId</td><td>@a.Purpose</td></tr> }</tbody>
+            </table>
+        </div>
+    </div>
+}
+@code {
+    private string _q = "S";
+    private EmrView? _v;
+    protected override async Task OnInitializedAsync() { base.OnInitialized(); await Load(); }
+    private async Task Load() => _v = await Scenarios.Emr(string.IsNullOrWhiteSpace(_q) ? "S" : _q);
+}

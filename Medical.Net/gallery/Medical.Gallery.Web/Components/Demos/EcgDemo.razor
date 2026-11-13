@@ -1,0 +1,25 @@
+@inherits DemoBase
+@using Medical.Signals
+@{ var v = Scenarios.Ecg(_rhythm, _hr); var a = v.Analysis; }
+<div class="controls">
+    <div class="seg">
+        @foreach (var (r, en, id) in Options)
+        {
+            <button class="@(_rhythm == r ? "on" : "")" @onclick="() => _rhythm = r">@T(en, id)</button>
+        }
+    </div>
+    <label>@T("Rate", "Frekuensi") <input type="range" min="40" max="150" step="2" @bind="_hr" @bind:event="oninput" /> <output>@_hr bpm</output></label>
+</div>
+<div class="panel ecg"><div class="scroll">@Svg(v.Strip)</div></div>
+<div class="readouts">
+    <div class="readout"><span class="k">@T("Heart rate", "Denyut jantung")</span><span class="v">@Scenarios.Fmt(a.HeartRateBpm, "0")<small>bpm</small></span><span class="n">@a.RPeaks.Length @T("beats in 30 s", "denyut dalam 30 dtk")</span></div>
+    <div class="readout"><span class="k">SDNN</span><span class="v">@a.SdnnMs<small>ms</small></span><span class="n">RMSSD @a.RmssdMs ms · pNN50 @Scenarios.Fmt(a.Pnn50 * 100, "0") %</span></div>
+    <div class="readout"><span class="k">RR CV</span><span class="v">@Scenarios.Fmt(a.RrCv * 100)<small>%</small></span><span class="n">@T("detector", "detektor"): @a.Backend</span></div>
+    <div class="readout"><span class="k">@T("Rhythm", "Irama")</span><span class="v txt">@Scenarios.RhythmName(a.Rhythm)[Lang]</span><span class="n">@a.Interpretation[Lang]</span></div>
+</div>
+@code {
+    private static readonly (Rhythm, string, string)[] Options =
+        [(Rhythm.NormalSinus, "Sinus", "Sinus"), (Rhythm.AtrialFibrillation, "Atrial fibrillation", "Fibrilasi atrium"), (Rhythm.Ectopy, "Ectopic beats", "Denyut ektopik")];
+    private Rhythm _rhythm = Rhythm.AtrialFibrillation;
+    private double _hr = 88;
+}

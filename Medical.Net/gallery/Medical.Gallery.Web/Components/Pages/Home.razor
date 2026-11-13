@@ -1,0 +1,56 @@
+@page "/"
+@implements IDisposable
+@inject UiState Ui
+
+<PageTitle>Medical.Net Gallery</PageTitle>
+
+<section class="hero">
+    <p class="eyebrow">@Ui.T("Comprehensive medical platform for .NET 10", "Platform medis komprehensif untuk .NET 10")</p>
+    <h1>@Ui.T("Clinical software, built on the standards hospitals already speak.", "Perangkat lunak klinis, dibangun di atas standar yang sudah dipakai rumah sakit.")</h1>
+    <p class="lede">
+        @Ui.T("FHIR R4, HL7 v2, DICOM, SNOMED CT, ICD-10, LOINC and RxNorm in one toolkit — with decision support, imaging AI and Rust kernels for the hot paths. Every screen in this gallery runs on synthetic patients.",
+              "FHIR R4, HL7 v2, DICOM, SNOMED CT, ICD-10, LOINC dan RxNorm dalam satu toolkit — dengan dukungan keputusan, AI pencitraan dan kernel Rust untuk jalur kritis. Semua layar di galeri ini memakai pasien sintetis.")
+    </p>
+    <div class="trace" aria-label="ECG">@((MarkupString)_hero.Svg)</div>
+    <p class="caption">
+        @Ui.T($"Lead II, 25 mm/s · {_hero.Analysis.RPeaks.Length} R peaks found by the Pan-Tompkins detector ({_hero.Analysis.Backend}) · {Scenarios.Fmt(_hero.Analysis.HeartRateBpm, "0")} bpm · {_hero.Analysis.Interpretation.En}",
+              $"Sadapan II, 25 mm/s · {_hero.Analysis.RPeaks.Length} puncak R ditemukan detektor Pan-Tompkins ({_hero.Analysis.Backend}) · {Scenarios.Fmt(_hero.Analysis.HeartRateBpm, "0")} bpm · {_hero.Analysis.Interpretation.Id}")
+    </p>
+</section>
+
+<section class="index">
+    @foreach (var g in GalleryCatalog.Groups)
+    {
+        <div class="index-group">
+            <h2>@g.Name[Ui.Lang]</h2>
+            <ul>
+                @foreach (var d in GalleryCatalog.Demos.Where(x => x.Group == g.Key))
+                {
+                    <li>
+                        <a href="@($"demo/{d.Slug}{(Ui.Lang == "id" ? "?lang=id" : "")}")">
+                            <span class="t">@d.Title[Ui.Lang]</span>
+                            <span class="s">@d.Summary[Ui.Lang]</span>
+                            <code>@d.Module</code>
+                        </a>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+</section>
+
+<section class="install">
+    <h2>@Ui.T("Start a project", "Mulai proyek")</h2>
+    <pre><code>dotnet new install Medical.Templates
+dotnet new medical-fhir-api -n MyHospital.Api
+dotnet tool install -g Medical.Cli &amp;&amp; medical news2 --rr 24 --spo2 93 --o2 --sbp 105 --hr 115 --temp 38.5</code></pre>
+    <p class="note">@GalleryCatalog.Disclaimer[Ui.Lang]</p>
+</section>
+
+@code {
+    private readonly (string Svg, Medical.Signals.EcgAnalysis Analysis) _hero = Scenarios.HeroEcg();
+
+    protected override void OnInitialized() => Ui.Changed += Changed;
+    private void Changed() => InvokeAsync(StateHasChanged);
+    public void Dispose() => Ui.Changed -= Changed;
+}

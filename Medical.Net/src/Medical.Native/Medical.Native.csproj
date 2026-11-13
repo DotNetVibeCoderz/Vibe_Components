@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Native (Rust) high-performance kernels for Medical.Net — DICOM VOI window/level, pixel statistics and Pan-Tompkins ECG QRS detection — with an automatic managed fallback.</Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Prebuilt native binaries produced by build/build-native.ps1 (cargo build -release). -->
+    <None Include="runtimes/**/native/*" Pack="true" PackagePath="runtimes/" CopyToOutputDirectory="PreserveNewest" Link="runtimes/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Medical.Net terminology services: SNOMED CT, ICD-10, LOINC and RxNorm lookup, bilingual (EN/ID) search, subsumption, SNOMED→ICD-10 maps, check-digit validation and loaders for full RF2 / LOINC CSV / ICD-10-CM / RxNorm RRF releases.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Data/*.tsv" LogicalName="Medical.Terminology.%(Filename).tsv" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Medical.Core/Medical.Core.csproj" />
+  </ItemGroup>
+</Project>

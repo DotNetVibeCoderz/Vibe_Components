@@ -1,0 +1,75 @@
+@inherits DemoBase
+@using Medical.AI.Assistant
+<div class="grid-2 wide-right">
+    <div class="panel">
+        <h3>@_assistant.Patient!.Patient.Name.Full <small>@_assistant.Llm.Provider · @_assistant.Llm.Model</small></h3>
+        <p class="note">@T("Set ANTHROPIC_API_KEY (Claude), HF_TOKEN (Hugging Face) or MEDNET_LLM_* before starting the gallery to use a live model. Without a key the offline engine answers through the same tools.",
+                          "Atur ANTHROPIC_API_KEY (Claude), HF_TOKEN (Hugging Face) atau MEDNET_LLM_* sebelum menjalankan galeri untuk memakai model langsung. Tanpa kunci, mesin offline menjawab melalui alat yang sama.")</p>
+        <p class="label">@T("Try", "Coba")</p>
+        @foreach (var q in Scenarios.SampleQuestions)
+        {
+            <button class="chip" disabled="@_busy" @onclick="() => Ask(q)">@q</button>
+        }
+    </div>
+    <div class="panel chat">
+        @foreach (var (q, r) in _turns)
+        {
+            <div class="msg user">@q</div>
+            <div class="msg bot">
+                <div class="md">@((MarkupString)Markdown(r.Text))</div>
+                @if (r.ToolCalls.Count > 0) { <p class="tools">@T("Tools", "Alat"): @foreach (var t in r.ToolCalls) { <code class="@(t.IsError ? "bad" : "")">@t.Name</code> }</p> }
+            </div>
+        }
+        @if (_busy) { <div class="msg bot thinking">@T("Working through the tools…", "Sedang memakai alat…")</div> }
+        @if (_error is not null) { <div class="msg bot bad">@_error</div> }
+        <form class="ask" @onsubmit="() => Ask(_input)">
+            <input @bind="_input" placeholder="@T("Ask about this patient…", "Tanyakan tentang pasien ini…")" disabled="@_busy" />
+            <button type="submit" disabled="@_busy">@T("Ask", "Tanya")</button>
+        </form>
+    </div>
+</div>
+@code {
+    private readonly ClinicalAssistant _assistant = Scenarios.Assistant();
+    private readonly List<(string Q, AssistantReply R)> _turns = [];
+    private string _input = "";
+    private bool _busy;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        base.OnInitialized();
+        if (_assistant.Llm.Provider == "offline") await Ask(Scenarios.SampleQuestions[0]);
+    }
+
+    private async Task Ask(string q)
+    {
+        if (string.IsNullOrWhiteSpace(q) || _busy) return;
+        _busy = true; _error = null; _input = "";
+        StateHasChanged();
+        try { _turns.Add((q, await _assistant.AskAsync(q))); }
+        catch (Exception e) { _error = $"{_assistant.Llm.Provider}: {e.Message}"; }
+        finally { _busy = false; }
+    }
+
+    /// <summary>Very small Markdown subset (bold, italics, bullets, headings) with HTML escaping.</summary>
+    private static string Markdown(string text)
+    {
+        var sb = new System.Text.StringBuilder();
+        bool list = false;
+        foreach (var raw in text.Split('\n'))
+        {
+            var line = System.Net.WebUtility.HtmlEncode(raw.TrimEnd());
+            line = System.Text.RegularExpressions.Regex.Replace(line, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
+            line = System.Text.RegularExpressions.Regex.Replace(line, @"(?<!\w)_(.+?)_(?!\w)", "<em>$1</em>");
+            line = System.Text.RegularExpressions.Regex.Replace(line, @"`(.+?)`", "<code>$1</code>");
+            bool item = line.TrimStart().StartsWith("- ") || System.Text.RegularExpressions.Regex.IsMatch(line, @"^\s*\d+\.\s");
+            if (item && !list) { sb.Append("<ul>"); list = true; }
+            if (!item && list) { sb.Append("</ul>"); list = false; }
+            if (item) sb.Append("<li>").Append(System.Text.RegularExpressions.Regex.Replace(line.TrimStart(), @"^(-|\d+\.)\s", "")).Append("</li>");
+            else if (line.StartsWith("#")) sb.Append("<p class=\"h\">").Append(line.TrimStart('#', ' ')).Append("</p>");
+            else if (line.Length > 0) sb.Append("<p>").Append(line).Append("</p>");
+        }
+        if (list) sb.Append("</ul>");
+        return sb.ToString();
+    }
+}

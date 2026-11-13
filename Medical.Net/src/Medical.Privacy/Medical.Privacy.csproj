@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Medical.Net privacy: de-identification of free-text clinical notes (HIPAA Safe Harbor identifiers, Indonesian NIK/phone/address/honorifics), consistent pseudonyms and date shifting, display masking and a purpose-based consent registry (UU PDP 27/2022).</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Medical.Core/Medical.Core.csproj" />
+  </ItemGroup>
+</Project>

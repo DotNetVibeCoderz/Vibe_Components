@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageType>Template</PackageType>
+    <PackageId>Medical.Templates</PackageId>
+    <Title>Medical.Net project templates</Title>
+    <Description>dotnet new templates for Medical.Net: clinical console, FHIR R4 API server, HL7 MLLP gateway, Blazor ward board and Avalonia DICOM viewer. Made by Gravicode Studios, led by Kang Fadhil.</Description>
+    <PackageTags>medical;healthcare;fhir;hl7;dicom;dotnet-new;templates;blazor;avalonia</PackageTags>
+    <IsPackable>true</IsPackable>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <ContentTargetFolders>content</ContentTargetFolders>
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <NoWarn>$(NoWarn);NU5128;NU5110;NU5111</NoWarn>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
+    <IncludeSymbols>false</IncludeSymbols>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="content/**/*" Exclude="content/**/bin/**;content/**/obj/**" />
+    <Compile Remove="**/*" />
+    <None Include="$(MedicalRoot)assets/icon.png" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="$(MedicalRoot)PACKAGE.md" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,17 @@
+bin/
+obj/
+target/
+*.user
+.vs/
+artifacts/
+*.nupkg
+*.snupkg
+scratch*/
+TestResults/
+.idea/
+*.suo
+__pycache__/
+.venv/
+*.db
+*.db-shm
+*.db-wal
