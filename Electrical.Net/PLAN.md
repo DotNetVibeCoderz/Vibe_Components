@@ -6,16 +6,21 @@
 DERMS, VPP, SCADA, digital twins and smart grids on .NET.
 *Menjadi ML.NET untuk dunia teknik elektro dan ASP.NET Core untuk sistem tenaga & smart grid.*
 
-## v1.0: Foundation (current) ✅
+## v1.0: Foundation ✅
 - Core: sparse/dense complex linear algebra, per-unit, phasors and symmetrical components, bus-branch network model, MATPOWER I/O, IEEE test cases
 - 22 modules from `solution-design.md`: Circuit, PowerFlow, ShortCircuit, Stability, Harmonic, Protection, Renewable, SmartGrid, Optimization,
   StateEstimation, SCADA, IEC61850, CIM, DigitalTwin, Forecasting, AI, GIS, Visualization, Simulation, Cloud, HPC, plus Native (Rust)
 - Gallery (Blazor + Avalonia), CLI tool `eln`, project templates, bilingual docs, NuGet packages and CI
 
-## v1.1: Distribution depth
-- Unbalanced three-phase power flow (phase-frame, OpenDSS-style) with single-phase laterals, Kron reduction and line geometry (Carson's equations)
-- Regulators, OLTC control loops and capacitor controllers in QSTS
-- OpenDSS `.dss` and PSS/E `.raw` (v33/v35) readers
+## v1.1: Distribution depth (current) ✅
+- Electrical.Distribution: unbalanced three-phase power flow (ladder sweep + current injection) with single/two-phase laterals, line geometry
+  (modified Carson's equations, Kron reduction, concentric-neutral and tape-shielded cables), three-phase transformers, step-voltage regulators
+  with line-drop compensation, OLTC and capacitor controllers, daily time series, IEEE 4-node and 13-node feeders, OpenDSS `.dss` reader
+- Regulators, OLTC control loops and capacitor controllers in balanced QSTS (Electrical.Simulation)
+- Electrical.Interop: PSS/E `.raw` (v33/v35) reader/writer, IEEE CDF reader, format auto-detection
+- Newton–Raphson flat start initialised from a DC power flow (robust with large phase shifters)
+- Still open from this theme: three-winding / centre-tap / open-delta transformers, PSS/E `.raw` writer for three-winding units, OpenDSS
+  `XfmrCode`/energy meters, PSS/E `.dyr` dynamics
 
 ## v1.2: Optimization and markets
 - AC optimal power flow (primal-dual interior point with exact Hessians)

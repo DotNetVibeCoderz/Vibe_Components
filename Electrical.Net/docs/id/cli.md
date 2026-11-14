@@ -9,8 +9,10 @@ eln help
 
 Dari sumber: `dotnet run --project tools/Electrical.Cli -- <perintah> [opsi]`.
 
-**Input jaringan** (sebagian besar perintah): `--case case9 | case14 | case33bw | synthetic<N>` atau `--file grid.m | grid.json | grid.xml`
-(MATPOWER, JSON Electrical.Net, CIM RDF/XML). Kasus default adalah `case14` kecuali disebutkan lain oleh perintahnya.
+**Input jaringan** (sebagian besar perintah): `--case case9 | case14 | case33bw | synthetic<N>` atau `--file grid.m | grid.raw | grid.cdf |
+grid.json | grid.xml` (MATPOWER, PSS/E RAW v33–35, IEEE CDF, JSON Electrical.Net, CIM RDF/XML). Berkas RAW dan CDF dideteksi dari isinya oleh
+[`Electrical.Interop`](pertukaran-model.md) dan peringatan konversi ditulis ke stderr. Kasus default adalah `case14` kecuali disebutkan lain
+oleh perintahnya.
 
 ## Perintah
 
@@ -24,7 +26,7 @@ Dari sumber: `dotnet run --project tools/Electrical.Cli -- <perintah> [opsi]`.
 | `bench` | `--sizes 100,1000,3000` | Benchmark skalabilitas aliran daya pada jaringan sintetis |
 | `sld` | `--out sld.svg`, `--literal`, `--dark` | Diagram segaris dengan overlay aliran daya |
 | `geojson` | `--out grid.geojson`, `--svg map.svg`, `--lat -6.2 --lon 106.8` | Ekspor GIS |
-| `convert` | `--out grid.m\|grid.json\|grid.xml` | Konversi MATPOWER / JSON / CIM |
+| `convert` | `--out grid.m\|grid.json\|grid.xml\|grid.raw`, `--version 33\|35` | Konversi MATPOWER / JSON / CIM / PSS/E RAW |
 | `rtu` | `--port 1502`, `--seconds 0` | Simulator RTU Modbus TCP yang menyajikan pengukuran aliran daya |
 | `serve` | `--urls http://localhost:5300` | REST API (Electrical.Cloud) |
 | `sc` | `--bus 4 --type 3ph\|slg\|ll\|llg` | Hubung singkat IEC 60909 (pemindaian semua bus tanpa `--bus`) |
@@ -43,21 +45,69 @@ Dari sumber: `dotnet run --project tools/Electrical.Cli -- <perintah> [opsi]`.
 | `vvo` | | Optimasi Volt/VAR, 33-bus |
 | `caps` | | Penempatan kapasitor optimal, 33-bus |
 | `hosting` | `--bus 18`, `--max 5` | Hosting capacity PV di sebuah bus (33-bus) |
-| `qsts` | `--days 1`, `--pv 1.5` | Deret waktu kuasi-statis (beban + PV 15 menit) |
+| `qsts` | `--days 1`, `--pv 1.5`, `--control` | Deret waktu kuasi-statis (beban + PV 15 menit); `--control` menambah OLTC dan kapasitor terswitch |
 | `ask` | `"<pertanyaan>"`, `--case case14` | Agen AI jaringan (LLM lewat `ELECTRICAL_LLM_*`, selain itu offline) |
 | `twin` | `--steps 24`, `--lang en\|id` | Digital twin: SCADA → estimasi keadaan → alarm yang dijelaskan → kesehatan aset |
+| `dist` | `--feeder ieee13\|ieee4`, `--auto`, `--delta`, `--unbalanced` | Aliran daya tiga fasa tak seimbang pada penyulang uji IEEE |
+| `dss` | `--file feeder.dss`, `--auto` | Membaca skrip OpenDSS dan menjalankan aliran daya tak seimbang |
+| `linecode` | `--config 601` | Matriks impedansi fasa Carson + Kron untuk konfigurasi saluran IEEE 13 node (601–607) |
 
 ## Contoh keluaran
 
-Semua keluaran di bawah ini diambil langsung dari tool (teks CLI dalam bahasa Inggris, kecuali `ask` dan `twin --lang id`).
+Semua keluaran di bawah ini diambil langsung dari tool versi 1.1.0 (teks CLI dalam bahasa Inggris, kecuali `ask` dan `twin --lang id`).
+
+```
+$ eln help
+Electrical.Net CLI 1.1.0 — Comprehensive Electrical Engineering & Power System Framework for .NET
+Made by Gravicode Studios, led by Kang Fadhil · Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil
+
+Usage: eln <command> [options]
+Network input (most commands): --case case9|case14|case33bw|synthetic<N>  or  --file grid.m|.raw|.cdf|.json|.xml
+
+  info                                    Framework, modules and native kernel status
+  cases                                   Built-in test networks
+  pf [--method nr|fd|gs|dc|bfs] [--scale 1.2] [--qlim] [--json] [--out sld.svg]   Power flow
+  n1 [--top 15]                           N-1 branch contingency ranking
+  plf [--samples 500] [--std 0.1] [--seed 2026]                                   Probabilistic (Monte-Carlo) load flow
+  bench [--sizes 100,1000,3000]           Power-flow scaling benchmark on synthetic grids
+  sld --out sld.svg [--literal --dark]    Single-line diagram with power-flow overlay
+  geojson --out grid.geojson [--svg map.svg] [--lat -6.2 --lon 106.8]            GIS export
+  convert --out grid.m|.json|.xml|.raw [--version 33|35]   MATPOWER / JSON / CIM / PSS/E RAW conversion
+  rtu [--port 1502] [--seconds 0]         Modbus TCP RTU simulator serving power-flow measurements
+  serve [--urls http://localhost:5300]    REST API (Electrical.Cloud)
+
+  sc [--bus 4 --type 3ph|slg|ll|llg]     IEC 60909 short circuit (all-bus scan without --bus)
+  stability --bus 8 [--clear 0.083] [--trip 8-9]   Transient stability (classical model) + critical clearing time
+  pv [--step 0.05]                        Voltage stability PV curve (loadability margin) and L-index
+  modes                                   Small-signal eigenvalues (frequency, damping)
+  harmonic --bus 9 [--source 6pulse|vfd|led] [--pu 0.1]   Harmonic load flow, THD and IEEE 519 check
+  arcflash --kv 0.48 --ika 30 --time 0.2 [--dist 455] [--equipment switchgear]     IEEE 1584 arc flash
+  relay --pickup 400 --tms 0.1 [--curve iec-si] --current 4000                     Relay operating time
+  ed [--losses]                           Economic dispatch (λ, unit outputs; B-coefficient losses with --losses)
+  opf [--limit 5-6:60]                    DC optimal power flow with LMPs (optional line limit override in MW)
+  uc                                      24 h unit commitment (Wood & Wollenberg 3-unit example)
+  se [--bad 2-3]                          WLS state estimation with bad-data detection (gross error injected on a flow)
+  forecast [--method hw|reg|knn|ens] [--days 14]   Day-ahead load forecast on a synthetic profile (MAPE)
+  reconfig                                Feeder reconfiguration on the 33-bus feeder with 5 tie switches
+  vvo                                     Volt/VAR optimization on the 33-bus feeder
+  caps                                    Optimal capacitor placement on the 33-bus feeder
+  hosting [--bus 18] [--max 5]            PV hosting capacity at a bus (33-bus feeder)
+  qsts [--days 1] [--pv 1.5] [--control]  Quasi-static time-series simulation (15-min load + PV; OLTC + switched capacitor with --control)
+  ask "Run a power flow on case14 at 120% load" | "Berapa arus hubung singkat di bus 4?"   AI grid agent
+                                          (LLM via ELECTRICAL_LLM_PROVIDER/_ENDPOINT/_API_KEY/_MODEL, offline otherwise)
+  twin [--steps 24] [--lang en|id]        Digital twin: SCADA → state estimation → explained alarms → asset health
+  dist [--feeder ieee13|ieee4] [--auto] [--delta] [--unbalanced]   Unbalanced three-phase power flow on an IEEE test feeder
+  dss --file feeder.dss [--auto]          Read an OpenDSS script and run the unbalanced power flow
+  linecode --config 601                   Carson + Kron phase impedance matrix of an IEEE 13-node line configuration (601–607)
+```
 
 ```
 $ eln info
-Electrical.Net 1.0.0 — Comprehensive Electrical Engineering & Power System Framework for .NET
+Electrical.Net 1.1.0 — Comprehensive Electrical Engineering & Power System Framework for .NET
 Framework Teknik Elektro & Sistem Tenaga Listrik Terlengkap untuk .NET
 Made by Gravicode Studios, led by Kang Fadhil · Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil
 
-Modules (23): Core, Circuit, PowerFlow, ShortCircuit, Stability, Harmonic, Protection, Renewable, SmartGrid, Optimization, StateEstimation, SCADA, IEC61850, CIM, DigitalTwin, Forecasting, AI, GIS, Visualization, Simulation, Cloud, HPC, Native
+Modules (25): Core, Circuit, PowerFlow, Distribution, ShortCircuit, Stability, Harmonic, Protection, Renewable, SmartGrid, Optimization, StateEstimation, SCADA, IEC61850, CIM, DigitalTwin, Forecasting, AI, GIS, Visualization, Simulation, Cloud, HPC, Interop, Native
 Native kernels: Rust library loaded (native (Rust))
 Test cases: case9, case14, case33bw, synthetic
 
@@ -68,7 +118,7 @@ $ eln cases
   synthetic100: 100 buses, 180 branches, 20 generators, 80 loads (base 100 MVA)
 
 $ eln pf --case case9
-NewtonRaphson: converged in 4 it, mismatch 1.85E-014, gen 319.641 MW, load 315 MW, losses 4.641 MW, Vmin 0.9956 pu @ bus 9
+NewtonRaphson: converged in 3 it, mismatch 9.80E-011, gen 319.641 MW, load 315 MW, losses 4.641 MW, Vmin 0.9956 pu @ bus 9
 
 $ eln pf --case case33bw --method bfs
 BackwardForwardSweep: converged in 8 it, mismatch 1.23E-009, gen 3.918 MW, load 3.715 MW, losses 0.203 MW, Vmin 0.9131 pu @ bus 18
@@ -125,6 +175,45 @@ $ eln hosting
 PV hosting capacity at bus 18 of case33bw: 2.09 MW (limited by Overvoltage)
 ```
 
+### Baru di 1.1
+
+```
+$ eln pf --file ieee14_v35.raw
+warning: Three-winding transformer 4-9-8 converted to a star equivalent with internal bus 15.
+warning: Switched shunt at bus 9 modelled as a fixed shunt at its current value 19 Mvar.
+IEEE 14 BUS TEST CASE (RAW V35): 14 buses, 20 branches, 5 generators, 11 loads (base 100 MVA)
+NewtonRaphson: converged in 3 it, mismatch 3.44E-009, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
+
+$ eln convert --case case9 --out case9.raw --version 35
+Saved case9.raw
+
+$ eln qsts --control
+QSTS (33-bus, 96 steps of 15 min): converged 96/96
+  Energy: load 55.97 MWh, PV 11.24 MWh, losses 1.406 MWh, import 46.13 MWh, export 0.00 MWh
+  Voltage band: min 0.9617 pu, max 1.0501 pu, steps outside 0.95–1.05 pu: 1
+  Controllers: OLTC T1 (4 operations), Cap bus 30 (2 operations)
+  00:00  load  1.464 MW  PV  0.000 MW  Vmin 0.9617  losses   29.6 kW
+  ...
+
+$ eln dist
+Unbalanced power flow: converged in 8 it (LadderSweep), source 3576.5 kW / 1719.9 kvar, losses 110.1 kW
+  Regulator Reg taps: 10/8/11
+  Max voltage unbalance (IEC): 2.05 %
+  Bus          A [pu]          B [pu]          C [pu]        max |Δ| vs IEEE
+  650      1.0000∠   0.00 1.0000∠-120.00 1.0000∠ 120.00    0.000 %
+  ...
+  675      0.9831∠  -5.55 1.0559∠-122.53 0.9772∠ 116.10    0.144 %
+  634      0.9940∠  -3.23 1.0217∠-122.23 0.9962∠ 117.34    0.023 %
+
+$ eln linecode --config 603
+IEEE 13-node configuration 603 (2 phases): phase impedance matrix [Ω/mile]
+   1.3238+j1.3569    0.2066+j0.4591
+   0.2066+j0.4591    1.3294+j1.3471
+```
+
+Keluaran lengkap `dist`, `dss`, dan `linecode` ada di [Distribusi tak seimbang](distribusi.md#cli), penanganan RAW/CDF di
+[Pertukaran model](pertukaran-model.md#cli), dan pengendali QSTS di [Simulasi, HPC & native](simulasi-hpc-native.md#kendali-tegangan-dalam-qsts-v11).
+
 Keluaran lain (`pf`, `n1`, pemindaian `sc`, `modes`, `harmonic`, `ed`, `forecast`, `plf`, `qsts`, `ask`, `twin`) ada di panduan topik:
 [aliran daya](aliran-daya.md), [hubung singkat](hubung-singkat-proteksi.md), [stabilitas](stabilitas.md), [harmonik](harmonik.md),
 [optimasi](optimasi.md), [energi terbarukan & smart grid](energi-terbarukan-smartgrid.md), [simulasi & HPC](simulasi-hpc-native.md),
@@ -135,7 +224,8 @@ Keluaran lain (`pf`, `n1`, pemindaian `sc`, `modes`, `harmonic`, `ed`, `forecast
 - `eln pf --json` mencetak JSON aliran daya yang sama dengan REST API (`NetworkJson`).
 - `eln sld --literal` menulis warna literal (untuk penampil yang mengabaikan variabel CSS); `--dark` memilih palet gelap.
 - `eln convert --case case14 --out case14.xml` mengekspor CIM; `--out grid.m` menulis MATPOWER; `--out grid.json` menulis JSON Electrical.Net.
-  Gabungkan dengan `--file` untuk mengonversi antar format.
+  `--out grid.raw --version 33|35` menulis PSS/E RAW. Gabungkan dengan `--file` (termasuk `.raw`/`.cdf`) untuk mengonversi antar format,
+  misalnya `eln convert --file ieee14.cdf --out ieee14.raw`.
 - `eln rtu --port 1502` menyajikan pengukuran case14 lewat Modbus TCP sampai dihentikan (`--seconds N` untuk berhenti otomatis); arahkan templat
   `eln-scada` ke sana dengan `--rtu 127.0.0.1 --port 1502`.
 - `eln ask` memakai LLM bila `ELECTRICAL_LLM_PROVIDER` (atau `OPENAI_API_KEY` / `HF_TOKEN`) diset; lihat [AI & digital twin](ai-digital-twin.md).

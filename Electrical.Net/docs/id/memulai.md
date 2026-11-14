@@ -39,7 +39,7 @@ using Electrical.PowerFlow;
 var net = TestCases.Case14();                 // IEEE 14-bus (data MATPOWER)
 var pf = PowerFlowSolver.Solve(net);          // Newton–Raphson sparse
 Console.WriteLine(pf);
-// NewtonRaphson: converged in 4 it, mismatch 1.00E-014, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
+// NewtonRaphson: converged in 3 it, mismatch 3.44E-009, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
 
 foreach (var b in pf.Buses)
     Console.WriteLine($"Bus {b.BusId,2}: {b.Vm:0.0000} pu ∠ {b.VaDeg,8:0.000}°");

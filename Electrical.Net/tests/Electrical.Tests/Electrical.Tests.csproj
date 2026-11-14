@@ -19,6 +19,8 @@
     <ProjectReference Include="../../src/Electrical.Cloud/Electrical.Cloud.csproj" />
     <ProjectReference Include="../../src/Electrical.Core/Electrical.Core.csproj" />
     <ProjectReference Include="../../src/Electrical.DigitalTwin/Electrical.DigitalTwin.csproj" />
+    <ProjectReference Include="../../src/Electrical.Distribution/Electrical.Distribution.csproj" />
+    <ProjectReference Include="../../src/Electrical.Interop/Electrical.Interop.csproj" />
     <ProjectReference Include="../../src/Electrical.Forecasting/Electrical.Forecasting.csproj" />
     <ProjectReference Include="../../src/Electrical.GIS/Electrical.GIS.csproj" />
     <ProjectReference Include="../../src/Electrical.HPC/Electrical.HPC.csproj" />

@@ -30,6 +30,8 @@
     <ProjectReference Include="../../src/Electrical.Simulation/Electrical.Simulation.csproj" />
     <ProjectReference Include="../../src/Electrical.AI/Electrical.AI.csproj" />
     <ProjectReference Include="../../src/Electrical.DigitalTwin/Electrical.DigitalTwin.csproj" />
+    <ProjectReference Include="../../src/Electrical.Interop/Electrical.Interop.csproj" />
+    <ProjectReference Include="../../src/Electrical.Distribution/Electrical.Distribution.csproj" />
     <ProjectReference Include="../../src/Electrical.HPC/Electrical.HPC.csproj" />
     <ProjectReference Include="../../src/Electrical.Cloud/Electrical.Cloud.csproj" />
     <ProjectReference Include="../../src/Electrical.SCADA/Electrical.SCADA.csproj" />

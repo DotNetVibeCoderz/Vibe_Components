@@ -78,10 +78,18 @@ namespace Electrical.Cli
                     ".m" => Matpower.Load(f),
                     ".json" or ".geojson" when !f.EndsWith(".geojson", StringComparison.OrdinalIgnoreCase) => NetworkJson.Parse(File.ReadAllText(f)),
                     ".xml" or ".rdf" => Electrical.CIM.CimImporter.Import(File.ReadAllText(f)),
-                    var e => throw new ArgumentException($"Unsupported network file type '{e}' (use .m, .json or .xml)."),
+                    _ => LoadOther(f),
                 };
             }
             return TestCases.ByName(Get("case") ?? defaultCase ?? "case14");
+        }
+
+        /// <summary>PSS/E RAW, IEEE CDF and other formats through Electrical.Interop auto-detection (warnings go to stderr).</summary>
+        private static PowerNetwork LoadOther(string path)
+        {
+            var r = Electrical.Interop.NetworkFormats.Load(path);
+            foreach (var w in r.Warnings) Console.Error.WriteLine($"warning: {w}");
+            return r.Network;
         }
     }
 
@@ -228,7 +236,8 @@ namespace Electrical.Cli
                 ".m" => Matpower.Write(net),
                 ".json" => NetworkJson.Serialize(net, indented: true),
                 ".xml" or ".rdf" => Electrical.CIM.CimExporter.ExportString(net),
-                var e => throw new ArgumentException($"Unsupported output type '{e}'."),
+                ".raw" => Electrical.Interop.PsseRaw.Write(net, cli.Int("version", 33)),
+                var e => throw new ArgumentException($"Unsupported output type '{e}' (use .m, .json, .xml or .raw)."),
             };
             Save(o, content);
             return Ok();

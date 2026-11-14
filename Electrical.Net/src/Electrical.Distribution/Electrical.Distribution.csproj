@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Distribution systems for Electrical.Net: unbalanced three-phase (phase-frame) power flow with single- and two-phase laterals, line geometry with Carson's equations and Kron reduction, wye/delta loads, voltage regulators, OLTC and capacitor controllers, OpenDSS .dss reader and IEEE test feeders.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+  </ItemGroup>
+</Project>

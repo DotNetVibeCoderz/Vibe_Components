@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [ "Electrical", "Power System", "Distribution", "Console" ],
+  "identity": "Electrical.Templates.Distribution",
+  "name": "Electrical.Net Distribution Feeder Study (console)",
+  "description": "Unbalanced three-phase feeder study: IEEE 13-node or an OpenDSS script, per-phase voltages, regulator control, Carson line impedances and a daily time series with controllers.",
+  "shortName": "eln-distribution",
+  "sourceName": "FeederStudy",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" }
+}

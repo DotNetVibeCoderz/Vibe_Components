@@ -54,6 +54,17 @@ foreach (var br in r.Overloads(90))
 r.ApplyTo(net);   // warm start: write V, θ and generator P/Q back into the model
 ```
 
+### Flat start (DC-initialised angles)
+
+With `FlatStart = true` (the default) Newton–Raphson starts from |V| = 1 pu at PQ buses and the set-points at PV/slack buses, and
+**since v1.1 the angles come from a DC power flow** (θ = B⁻¹P including phase-shifter angles) instead of zero. This keeps the iteration in
+the basin of the operational solution when a network has large phase shifts or heavy transfers: an ideal 30° phase shifter used to
+diverge from θ = 0 and a 45° one converged to a spurious solution, while the DC start reaches the correct one in a few iterations
+(regression test `LargePhaseShift_FlatStartConvergesToOperationalSolution`). Ordinary cases also save an iteration (case9 and case14
+now converge in 3). The DC start is skipped automatically, falling back to θ = 0, for networks with zero-reactance branches, several
+islands or an implausible DC solution. `FlatStart = false` still starts from the voltages stored in the network (warm start, e.g. after
+`ApplyTo`).
+
 ## Results
 
 `PowerFlowResult` holds powers in MW/Mvar and voltages in pu/degrees:
@@ -70,7 +81,7 @@ CLI output for the same study:
 ```
 $ eln pf --case case14
 case14: 14 buses, 20 branches, 5 generators, 11 loads (base 100 MVA)
-NewtonRaphson: converged in 4 it, mismatch 1.00E-014, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
+NewtonRaphson: converged in 3 it, mismatch 3.44E-009, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
 
   Bus     Vm[pu]   Va[deg]    Pg[MW]   Qg[Mvar]    Pd[MW]   Qd[Mvar]
   1       1.0600     0.000    232.39     -16.55      0.00       0.00
@@ -143,11 +154,15 @@ angle/flow calculations (`Angles`, `BranchFlowsMw`). The tests check that PTDF p
 | case33bw (NR and sweep) | Baran & Wu: 202.7 kW, V<sub>min</sub> 0.9131 pu at bus 18 | identical |
 | DC case9 | Slack = load − fixed generation, zero losses | exact |
 | MATPOWER round trip | `Matpower.Parse(Matpower.Write(net))` | same losses to 1e-6 |
+| PSS/E RAW v33/v35 and IEEE CDF IEEE 14-bus ([interop](interop.md)) | MATPOWER case14, 13.393 MW losses | identical |
+| Ideal 30° / 45° phase shifter, flat start | V<sub>3</sub> = V<sub>2</sub>∠−shift | converged in ≤ 6 it to the operational solution |
 
 ## Limitations
 
-- Balanced positive-sequence model. Unbalanced three-phase power flow (phase frame, Carson line geometry) is planned for v1.1.
-- No in-loop transformer tap/OLTC or switched-shunt control; use `Electrical.SmartGrid.VoltVarOptimization` or QSTS events.
+- Balanced positive-sequence model. For unbalanced three-phase feeders (phase frame, Carson line geometry, regulators) use
+  [`Electrical.Distribution`](distribution.md).
+- No in-loop transformer tap/OLTC or switched-shunt control in a single solve; time-series control loops (OLTC, LDC regulator, switched
+  capacitors) run in [QSTS](simulation-hpc-native.md#voltage-control-in-qsts-v11), and `Electrical.SmartGrid.VoltVarOptimization` optimises set-points.
 - The backward/forward sweep needs a radial network with a single source.
 
 See also: [Stability](stability.md) (PV curves), [Optimization](optimization.md) (DC-OPF), [Simulation, HPC & native](simulation-hpc-native.md)

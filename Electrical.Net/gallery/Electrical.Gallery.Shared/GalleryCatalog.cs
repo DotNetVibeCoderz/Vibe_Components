@@ -27,8 +27,9 @@ public sealed record ModuleInfo(string Name, L Summary);
 
 /// <summary>
 /// The gallery's table of contents, shared by the Blazor and Avalonia apps.
-/// To add a demo: append a <see cref="DemoInfo"/> to <see cref="Demos"/>, add a scenario class under <c>Scenarios/</c>,
-/// then add one view per app (web: <c>Components/Demos/{Name}View.razor</c> + a case in <c>DemoHost.razor</c>;
+/// To add a demo: append a <see cref="DemoInfo"/> to <see cref="Demos"/> and add a scenario class under <c>Scenarios/</c>. A declarative
+/// <see cref="IInteractiveScenario"/> registered in <see cref="InteractiveScenarios.All"/> is rendered by both apps without UI code;
+/// custom views need one per app (web: <c>Components/Demos/{Name}View.razor</c> + a case in <c>DemoHost.razor</c>;
 /// desktop: a case in <c>Views.Build</c>).
 /// </summary>
 public static class GalleryCatalog
@@ -93,6 +94,24 @@ public static class GalleryCatalog
             foreach (var c in ranking.Take(5))
                 Console.WriteLine($"{c.Outage,-8} max {c.MaxLoadingPercent:0.0} % on {c.MostLoadedBranch}, " +
                                   $"Vmin {c.MinVoltage:0.000} pu, severity {c.Severity:0.0}");
+            """),
+        new("distribution", "analysis",
+            new("Unbalanced distribution (IEEE 13-node)", "Distribusi tak seimbang (IEEE 13 node)"),
+            new("Solve the IEEE 13-node feeder phase by phase, built in code or read from its OpenDSS script, and compare with the published voltages; check regulator taps and voltage unbalance, and compute line impedance matrices from conductor geometry with Carson's equations.",
+                "Selesaikan penyulang IEEE 13 node per fasa, dibangun di kode atau dibaca dari skrip OpenDSS-nya, dan bandingkan dengan tegangan terbitan; periksa tap regulator dan ketidakseimbangan tegangan, serta hitung matriks impedansi saluran dari geometri konduktor dengan persamaan Carson."),
+            ["Distribution", "Core", "Visualization"], """
+            using Electrical.Distribution;
+
+            var net = DistributionTestCases.Ieee13Node(automaticRegulator: true);     // or OpenDssReader.Parse(script)
+            var r = UnbalancedPowerFlow.Solve(net);                                   // phase-frame ladder sweep + regulator control
+            var b = r.Bus("675");
+            Console.WriteLine($"675: {b.VmPu[0]:0.0000} / {b.VmPu[1]:0.0000} / {b.VmPu[2]:0.0000} pu, VUF {b.VoltageUnbalanceFactor:P2}");
+            Console.WriteLine($"taps {string.Join("/", r.RegulatorTaps["Reg"])}, losses {r.LossesKw:0.0} kW");
+
+            var z = LineConstants.Overhead(OverheadConfiguration.Spacing500(
+                ConductorLibrary.Acsr556_5_26_7, ConductorLibrary.Acsr4_0_6_1,
+                ConductorRole.PhaseB, ConductorRole.PhaseA, ConductorRole.PhaseC));   // IEEE config 601
+            Console.WriteLine(z);                                                     // 3×3 z_abc in Ω/mile
             """),
         new("stateestimation", "analysis",
             new("State estimation & bad data", "Estimasi keadaan & data buruk"),
@@ -242,6 +261,28 @@ public static class GalleryCatalog
 
             var lole = AdequacyAssessment.SequentialMonteCarlo(units, AdequacyAssessment.SyntheticAnnualLoad(160));
             """),
+        new("voltagecontrol", "planning",
+            new("Voltage control in time series", "Kendali tegangan dalam deret waktu"),
+            new("Simulate the 33-bus feeder behind a substation transformer for a day, with and without an on-load tap changer and a switched capacitor bank, and compare the voltage band, tap moves and switching operations.",
+                "Simulasikan penyulang 33 bus di belakang trafo gardu selama sehari, dengan dan tanpa pengubah tap berbeban serta bank kapasitor terkendali, lalu bandingkan pita tegangan, gerakan tap, dan operasi pensaklaran."),
+            ["Simulation", "PowerFlow", "Visualization"], """
+            using Electrical.Simulation;
+
+            var sim = QstsSimulation.Case33ControlDemo(days: 1, withControl: false);   // tap fixed, no capacitor
+            sim.Controllers.Add(new OltcController(branchIndex: 32, controlledBusId: 1)
+            {
+                Name = "OLTC T1", TargetPu = 1.02, BandwidthPu = 0.0125, TapStepPu = 0.00625, DelaySteps = 1,
+            });
+            sim.Controllers.Add(new CapacitorController(busId: 30, stageMvar: 0.45, stages: 2)
+            {
+                Name = "Cap bus 30", OnThreshold = 0.97, OffThreshold = 1.03, DelaySteps = 1,
+            });
+
+            var r = sim.Run();
+            Console.WriteLine($"violations {r.VoltageViolationSteps()}, Vmin {r.VminPu.Min():0.0000}");
+            Console.WriteLine($"tap steps {r.TotalOperations("OLTC T1")}, capacitor ops {r.TotalOperations("Cap bus 30")}");
+            double[] tap = r.ControllerState("OLTC T1");                               // position per 15-min step
+            """),
         new("digitaltwin", "twin",
             new("Live digital twin", "Kembaran digital langsung"),
             new("Feed a grid twin with simulated RTU scans for a day: it estimates the state every 15 minutes, rejects bad telemetry, explains alarms in English and Indonesian, tracks transformer ageing, and answers what-if questions.",
@@ -330,6 +371,23 @@ public static class GalleryCatalog
             var scl = SclParser.Parse(File.ReadAllText("bay.icd"));
             foreach (var ld in scl.Ieds[0].LDevices) Console.WriteLine(ld.Inst);
             """),
+        new("interop", "data",
+            new("Model exchange (PSS/E RAW, IEEE CDF, MATPOWER, CIM)", "Pertukaran model (PSS/E RAW, IEEE CDF, MATPOWER, CIM)"),
+            new("Read the IEEE 14-bus system from PSS/E RAW v33/v35, IEEE CDF, MATPOWER and CIM, let the format be detected from the content, review the conversion warnings, and check that every route gives the same power flow; then write a case back to RAW.",
+                "Baca sistem IEEE 14 bus dari PSS/E RAW v33/v35, IEEE CDF, MATPOWER, dan CIM, biarkan format dideteksi dari isinya, tinjau peringatan konversi, dan periksa bahwa setiap jalur memberi aliran daya yang sama; lalu tulis kembali sebuah kasus ke RAW."),
+            ["Interop", "CIM", "PowerFlow"], """
+            using Electrical.Core.Network;
+            using Electrical.Interop;
+            using Electrical.PowerFlow;
+
+            var import = NetworkFormats.Load("ieee14.raw");             // .raw / .cdf / .m / .json, detected from the content
+            Console.WriteLine($"{import.Format}: {import.Network.BusCount} buses");
+            foreach (var w in import.Warnings) Console.WriteLine($"warning: {w}");
+
+            var pf = PowerFlowSolver.Solve(import.Network);             // 13.393 MW losses, same as case14
+            string raw35 = PsseRaw.Write(TestCases.Case9(), version: 35);
+            var cdf = IeeeCdf.Read(InteropSamples.Ieee14Cdf);
+            """),
         new("cim", "data",
             new("CIM / CGMES export", "Ekspor CIM / CGMES"),
             new("Export a network to CIM RDF/XML (equipment, topology, steady-state hypothesis, state variables), import it back and prove the round trip with a power flow.",
@@ -365,7 +423,8 @@ public static class GalleryCatalog
     ];
 
     /// <summary>All framework modules with a one-line description (order of <see cref="ElectricalInfo.Modules"/>).</summary>
-    public static readonly ModuleInfo[] Modules = ElectricalInfo.Modules.Select(m => new ModuleInfo(m, ModuleSummary(m))).ToArray();
+    // v1.1 packages not yet listed in ElectricalInfo.Modules are appended (Union keeps this idempotent once they are).
+    public static readonly ModuleInfo[] Modules = ElectricalInfo.Modules.Union(["Distribution", "Interop"]).Select(m => new ModuleInfo(m, ModuleSummary(m))).ToArray();
 
     public static DemoInfo? Find(string id) => Demos.FirstOrDefault(d => d.Id == id);
     public static DemoInfo Get(string id) => Find(id) ?? throw new KeyNotFoundException($"No demo '{id}'.");
@@ -399,6 +458,8 @@ public static class GalleryCatalog
         "Cloud" => new("Study runner and ASP.NET Core API", "Penjalan studi dan API ASP.NET Core"),
         "HPC" => new("Parallel batch and probabilistic load flow", "Aliran daya batch paralel dan probabilistik"),
         "Native" => new("Rust kernels with managed fallback", "Kernel Rust dengan cadangan managed"),
+        "Distribution" => new("Unbalanced three-phase feeders, Carson line constants, OpenDSS", "Penyulang tiga fasa tak seimbang, konstanta saluran Carson, OpenDSS"),
+        "Interop" => new("PSS/E RAW, IEEE CDF and format auto-detection", "PSS/E RAW, IEEE CDF, dan deteksi format otomatis"),
         _ => new(m, m),
     };
 }

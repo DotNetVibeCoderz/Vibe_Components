@@ -66,11 +66,88 @@ var custom = new QstsSimulation(TestCases.Case33BW())
 $ eln qsts
 QSTS (33-bus, 96 steps of 15 min): converged 96/96
   Energy: load 55.97 MWh, PV 11.24 MWh, losses 1.821 MWh, import 46.55 MWh, export 0.00 MWh
-  Voltage band: min 0.9370 pu, max 1.0311 pu
+  Voltage band: min 0.9370 pu, max 1.0311 pu, steps outside 0.95–1.05 pu: 36
+  00:00  load  1.464 MW  PV  0.000 MW  Vmin 0.9681  losses   27.7 kW
+  ...
+  12:00  load  2.828 MW  PV  1.476 MW  Vmin 0.9546  losses  131.7 kW
+  15:00  load  2.812 MW  PV  0.984 MW  Vmin 0.9489  losses   95.3 kW
+  18:00  load  2.861 MW  PV  0.000 MW  Vmin 0.9370  losses  108.5 kW
+  21:00  load  2.367 MW  PV  0.000 MW  Vmin 0.9492  losses   71.0 kW
 ```
 
 `ScenarioManager` runs named what-if variants of a base case (`ScaleLoads`, `AddPv`, `OpenBranch`, `AddCapacitor` helpers) and returns
 `ScenarioSummary` rows.
+
+## Voltage control in QSTS (v1.1)
+
+`QstsSimulation.Controllers` takes discrete controllers that act after every converged power flow. When any controller moves (a tap step or
+a capacitor stage) the step is re-solved with a warm start and all controllers are evaluated again, up to `MaxControlIterations` (10)
+times. Delay timers count consecutive out-of-band steps, so a short excursion does not wear the tap changer. Controllers keep run-time state
+that is reset at the start of every `Run`, so the same simulation can be run repeatedly (one instance must not be shared by concurrent runs).
+
+| Controller | Acts on | Settings |
+|---|---|---|
+| `OltcController(branchIndex, controlledBusId)` | Transformer ratio `Tap = NominalRatio / (1 + n·TapStepPu)` | `TargetPu`, `BandwidthPu` (total dead band), `TapStepPu` (0.00625 = 5/8 %), `MinTap`/`MaxTap` (±16), `InitialTap`, `DelaySteps`, `MaxTapsPerOperation` |
+| `VoltageRegulatorController` | Same, regulating the line-drop-compensated voltage \|V<sub>to</sub> − (R + jX)·I\| | `LdcR`, `LdcX` [pu on the system base]; `Create(net, branch, ldcR, ldcX, targetPu)` uses the 2 V / 120 V band |
+| `CapacitorController(busId, stageMvar, stages)` | Bus shunt `Bs` (stages × Mvar at 1 pu) | `Mode` `Voltage` (on below `OnThreshold` pu, off above `OffThreshold`) or `ReactivePower` (on above / off below a Mvar flow on `MonitoredBranchIndex`), `MonitoredBusId`, `DelaySteps`, `InitialStages` |
+
+```csharp
+// Baran–Wu 33-bus feeder behind a 10 MVA substation transformer (new slack bus 0, transformer = branch 32)
+var sim = QstsSimulation.Case33ControlDemo(days: 1, withControl: false);
+sim.Controllers.Add(new OltcController(branchIndex: 32, controlledBusId: 1)
+{
+    Name = "OLTC T1", TargetPu = 1.02, BandwidthPu = 0.0125, TapStepPu = 0.00625, MinTap = -16, MaxTap = 16, DelaySteps = 1,
+});
+sim.Controllers.Add(new CapacitorController(busId: 30, stageMvar: 0.45, stages: 2)
+{
+    Name = "Cap bus 30", Mode = CapacitorControlMode.Voltage, OnThreshold = 0.97, OffThreshold = 1.03, DelaySteps = 1,
+});
+var r = sim.Run();
+Console.WriteLine($"violations {r.VoltageViolationSteps()}/{r.Steps}, Vmin {r.VminPu.Min():0.0000}");      // 1/96, 0.9617
+Console.WriteLine($"tap steps {r.TotalOperations("OLTC T1")}, capacitor ops {r.TotalOperations("Cap bus 30")}"); // 4, 2
+double[] tap = r.ControllerState("OLTC T1");      // tap position per step
+int[,] cumulative = r.ControllerOperations;       // [step, controller] running operation count
+
+// LDC regulator and a var-controlled bank on the same feeder
+var ldc = QstsSimulation.Case33ControlDemo(withControl: false, pvMw: 0);
+ldc.Controllers.Add(VoltageRegulatorController.Create(ldc.BaseNetwork, branchIndex: 32, ldcR: 0.01, ldcX: 0.02, targetPu: 1.0));
+ldc.Controllers.Add(new CapacitorController(30, 0.9)
+    { Mode = CapacitorControlMode.ReactivePower, MonitoredBranchIndex = 32, OnThreshold = 2.0, OffThreshold = 1.0 });
+```
+
+`QstsSimulation.Case33ControlDemo(days, withControl, pvMw)` builds exactly that study (with `withControl: true` the two controllers above are
+added). Results for one day with 1.5 MW PV:
+
+| | Without control | With OLTC + capacitor |
+|---|---|---|
+| Steps outside 0.95–1.05 pu | 64 of 96 | 1 of 96 |
+| Lowest voltage | 0.9237 pu | 0.9617 pu |
+| Operations | — | 4 tap steps, 2 capacitor switchings |
+| Energy losses | 1.947 MWh | 1.406 MWh |
+
+`QstsResult` gains `ControllerNames`, `ControllerKinds`, `ControllerStates[step, k]`, `ControllerOperations[step, k]` (cumulative),
+`ControlIterations[step]` (re-solves), `ControllerState(name|index)` and `TotalOperations(name|index)`. The capacitor adds to the bus shunt
+present at the start of the run, so it overrides `ShuntSet` events on the same bus. The gallery demo **Voltage control in time series**
+(`voltagecontrol`) plots both runs; for three-phase feeders use the per-phase controllers of
+[`Electrical.Distribution`](distribution.md#controllers-and-time-series).
+
+```
+$ eln qsts --control
+QSTS (33-bus, 96 steps of 15 min): converged 96/96
+  Energy: load 55.97 MWh, PV 11.24 MWh, losses 1.406 MWh, import 46.13 MWh, export 0.00 MWh
+  Voltage band: min 0.9617 pu, max 1.0501 pu, steps outside 0.95–1.05 pu: 1
+  Controllers: OLTC T1 (4 operations), Cap bus 30 (2 operations)
+  00:00  load  1.464 MW  PV  0.000 MW  Vmin 0.9617  losses   29.6 kW
+  03:00  load  1.296 MW  PV  0.000 MW  Vmin 0.9985  losses   16.4 kW
+  06:00  load  1.974 MW  PV  0.079 MW  Vmin 0.9862  losses   35.4 kW
+  09:00  load  2.896 MW  PV  1.093 MW  Vmin 0.9749  losses   78.9 kW
+  12:00  load  2.828 MW  PV  1.476 MW  Vmin 0.9810  losses  104.6 kW
+  15:00  load  2.812 MW  PV  0.984 MW  Vmin 0.9754  losses   70.6 kW
+  18:00  load  2.861 MW  PV  0.000 MW  Vmin 0.9647  losses   83.0 kW
+  21:00  load  2.367 MW  PV  0.000 MW  Vmin 0.9792  losses   56.7 kW
+```
+
+![Voltage control in time series](../images/web-voltagecontrol.png)
 
 ## Generation adequacy
 

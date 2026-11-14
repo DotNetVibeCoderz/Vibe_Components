@@ -14,6 +14,7 @@ dotnet new list eln
 | `eln-avalonia` | Penampil diagram segaris desktop Avalonia dengan overlay aliran daya | Electrical.Visualization, Avalonia 12, Svg.Controls.Skia.Avalonia | `--case` |
 | `eln-scada` | Gateway edge SCADA: membaca RTU Modbus TCP, menskalakan tag, mengevaluasi alarm ISA-18.2, dan menyimpan histori (simulator RTU bawaan bila RTU tidak diberikan) | Electrical.SCADA | – |
 | `eln-webapi` | Minimal API ASP.NET Core untuk aliran daya, kontingensi, hubung singkat, dan job studi | Electrical.Cloud | – |
+| `eln-distribution` | Studi penyulang tiga fasa tak seimbang (konsol): IEEE 13 node atau skrip OpenDSS, tegangan per fasa, kendali regulator, impedansi saluran Carson, dan deret waktu 24 jam dengan pengendali | Electrical.Distribution | – (berikan path `.dss` ke `dotnet run`) |
 
 ```bash
 dotnet new eln-console -n StudiJaringan --case case33bw
@@ -24,6 +25,8 @@ dotnet new eln-avalonia -n PenampilJaringan --case case9
 dotnet new eln-scada -n GatewayScada
 dotnet run --project GatewayScada -- --rtu 127.0.0.1 --port 1502   # baca RTU sungguhan (atau `eln rtu --port 1502`)
 dotnet new eln-webapi -n ApiJaringan
+dotnet new eln-distribution -n StudiPenyulang
+cd StudiPenyulang && dotnet run -- feeder.dss   # atau cukup `dotnet run` untuk penyulang IEEE 13 node
 ```
 
 ## Isi setiap templat
@@ -46,14 +49,20 @@ mencetak alarm dan tren.
 coba `curl -X POST http://localhost:5000/api/electrical/studies/powerflow -H "Content-Type: application/json" -d '{"case":"case14"}'`
 (gunakan URL yang dicetak oleh `dotnet run`). Lihat [API cloud](api-cloud.md).
 
+**eln-distribution** (`Program.cs`): memuat `DistributionTestCases.Ieee13Node(automaticRegulator: true)` atau `OpenDssReader.ParseFile(args[0])`,
+mencetak peringatan pembaca, menyelesaikan `UnbalancedPowerFlow.Solve` (tap regulator, tegangan bus per fasa, ketidakseimbangan tegangan
+maksimum), menghitung impedansi konfigurasi 601 dari data konduktor dengan `LineConstants.Overhead`, dan menjalankan
+`DistributionTimeSeries.Run` atas `DailyLoadShape()` (energi, rugi, pita tegangan, operasi tap, dan pensaklaran kapasitor). Lihat
+[Distribusi tak seimbang](distribusi.md).
+
 Setiap proyek yang dihasilkan membawa kredit "built with Electrical.Net (Gravicode Studios, led by Kang Fadhil)".
 
 ## Membangun paket templat
 
 Templat berada di `templates/Electrical.Templates/content/<nama-pendek>` dengan `.template.config/template.json` (`sourceName` GridViewer,
-GridDashboard, ElectricalStudyApp, ScadaGateway, GridApi). `pwsh build/pack.ps1` mengemasnya sebagai `Electrical.Templates`; pasang build lokal
-dengan `dotnet new install artifacts/packages/Electrical.Templates.1.0.0.nupkg`. Proyek yang dihasilkan mereferensikan paket NuGet
-`Electrical.*` versi 1.0.0.
+GridDashboard, ElectricalStudyApp, ScadaGateway, GridApi, FeederStudy). `pwsh build/pack.ps1` mengemasnya sebagai `Electrical.Templates`; pasang build lokal
+dengan `dotnet new install artifacts/packages/Electrical.Templates.1.1.0.nupkg`. Proyek yang dihasilkan mereferensikan paket NuGet
+`Electrical.*` versi 1.1.0.
 
 ---
 *Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil · [English](../en/templates.md)*

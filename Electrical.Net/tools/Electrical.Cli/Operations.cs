@@ -48,7 +48,7 @@ public static partial class Commands
               vvo                                     Volt/VAR optimization on the 33-bus feeder
               caps                                    Optimal capacitor placement on the 33-bus feeder
               hosting [--bus 18] [--max 5]            PV hosting capacity at a bus (33-bus feeder)
-              qsts [--days 1] [--pv 1.5]              Quasi-static time-series simulation (15-min load + PV)
+              qsts [--days 1] [--pv 1.5] [--control]  Quasi-static time-series simulation (15-min load + PV; OLTC + switched capacitor with --control)
             """;
         MoreHelpIntelligence(ref text);
     }
@@ -180,10 +180,15 @@ internal static class Operations
 
     public static Task<int> Qsts(Args cli)
     {
-        var r = QstsSimulation.Case33Demo(cli.Int("days", 1), cli.Num("pv", 1.5)).Run();
+        var sim = cli.Flag("control")
+            ? QstsSimulation.Case33ControlDemo(cli.Int("days", 1), withControl: true, pvMw: cli.Num("pv", 1.5))
+            : QstsSimulation.Case33Demo(cli.Int("days", 1), cli.Num("pv", 1.5));
+        var r = sim.Run();
         Console.WriteLine($"QSTS (33-bus, {r.Times.Length} steps of {r.StepHours * 60:0} min): converged {r.Converged.Count(c => c)}/{r.Converged.Length}");
         Console.WriteLine($"  Energy: load {r.EnergyLoadMwh:0.00} MWh, PV {r.EnergyPvMwh:0.00} MWh, losses {r.EnergyLossesMwh:0.000} MWh, import {r.EnergyImportMwh:0.00} MWh, export {Math.Abs(r.EnergyExportMwh):0.00} MWh");
-        Console.WriteLine($"  Voltage band: min {r.VminPu.Min():0.0000} pu, max {r.VmaxPu.Max():0.0000} pu");
+        Console.WriteLine($"  Voltage band: min {r.VminPu.Min():0.0000} pu, max {r.VmaxPu.Max():0.0000} pu, steps outside 0.95–1.05 pu: {Enumerable.Range(0, r.Times.Length).Count(k => r.VminPu[k] < 0.95 || r.VmaxPu[k] > 1.05)}");
+        if (r.ControllerNames is { Count: > 0 } names)
+            Console.WriteLine("  Controllers: " + string.Join(", ", names.Select(n => $"{n} ({r.TotalOperations(n)} operations)")));
         for (int k = 0; k < r.Times.Length; k += Math.Max(1, r.Times.Length / 8))
             Console.WriteLine($"  {r.Times[k]:HH:mm}  load {r.LoadMw[k],6:0.000} MW  PV {r.PvMw[k],6:0.000} MW  Vmin {r.VminPu[k]:0.0000}  losses {r.LossesMw[k] * 1000,6:0.0} kW");
         return Commands.Ok();

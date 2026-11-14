@@ -4,7 +4,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <VersionPrefix>1.0.0</VersionPrefix>
+    <VersionPrefix>1.1.0</VersionPrefix>
     <Authors>Gravicode Studios (Kang Fadhil)</Authors>
     <Company>Gravicode Studios</Company>
     <Product>Electrical.Net</Product>

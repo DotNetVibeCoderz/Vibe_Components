@@ -42,6 +42,14 @@ A running gallery server locks DLLs and makes `dotnet build` fail with MSB3027, 
   `ContingencyAnalysis.RunN1` (parallel).
 - Module dependencies are declared in each `src/Electrical.*/*.csproj`; keep them acyclic (Core → PowerFlow → analysis modules → SmartGrid/Simulation →
   DigitalTwin/AI/Cloud).
+- `Electrical.Distribution` (v1.1) has its own phase-frame model `DistributionNetwork` (buses with phase sets, line codes in Ω/km with 3×3/2×2/1×1
+  matrices, three-phase transformers, regulators, wye/delta loads) solved by `UnbalancedPowerFlow` (Kersting ladder sweep for radial feeders,
+  current injection for meshed). `LineConstants` implements modified Carson + Kron. `OpenDssReader` maps a .dss subset; `ToBalanced()` reduces
+  to a Core `PowerNetwork`. Validation references: IEEE 4/13-node published tables and Kersting examples (cited in `tests/.../Distribution`).
+- `Electrical.Interop` (v1.1) reads/writes PSS/E RAW v33/v35 and reads IEEE CDF; `NetworkFormats.Load/Detect` auto-detects MATPOWER, RAW, CDF and
+  Cloud JSON. Balanced QSTS controllers (`OltcController`, `VoltageRegulatorController`, `CapacitorController`) live in `Electrical.Simulation`.
+- Newton–Raphson flat start takes its initial angles from a DC power flow (`PowerFlowCase.DcStartAngles`) — keep it; pure flat starts diverge
+  or find spurious solutions with large phase shifters.
 - `Electrical.DigitalTwin.GridTwin` ingests SCADA tags (`RtuSimulator` naming `BUSn.VM`, `BRk.PF`, …), runs WLS state estimation with bad-data removal
   each cycle and produces explained alarms (EN `Message` / ID `MessageId`). `TwinSimulator` is a deterministic closed loop used by tests, CLI and gallery.
 - `Electrical.AI.GridAgent` answers through tool calling (`GridTools`, 10 tools). `LlmOptions.FromEnvironment()` reads `ELECTRICAL_LLM_PROVIDER`

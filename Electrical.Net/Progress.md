@@ -19,7 +19,8 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | Electrical.Optimization | ✅ | ED (case9 λ 24.04), interior-point DC-OPF with LMPs, SCOPF, UC (Wood & Wollenberg), capacitor placement |
 | Electrical.StateEstimation | ✅ | WLS, observability, χ² + largest normalized residual bad-data removal |
 | Electrical.Forecasting | ✅ | Holt-Winters (double seasonal), regression, similar-day, ensemble, solar/wind forecasts |
-| Electrical.Simulation | ✅ | QSTS, events, scenarios, sequential Monte-Carlo adequacy (LOLE/EENS) |
+| Electrical.Simulation | ✅ | QSTS, events, scenarios, sequential Monte-Carlo adequacy (LOLE/EENS); v1.1: OLTC, LDC regulator and switched-capacitor controllers in QSTS (Case33 demo: 64 → 1 violation steps) |
+| Electrical.Interop (v1.1) | ✅ | PSS/E RAW v33/v35 read/write (3-winding → star, switched shunt → fixed), IEEE CDF reader, format auto-detection; IEEE 14 RAW/CDF reproduce case14 (13.393 MW) |
 | Electrical.SCADA | ✅ | Modbus TCP client/server, tags, ISA-18.2 alarms, historian (swinging door), RTU simulator, IEC 104 codec |
 | Electrical.IEC61850 | ✅ | SCL parser, BER, GOOSE, Sampled Values 9-2LE, LN catalog |
 | Electrical.CIM | ✅ | CGMES-style RDF/XML export/import; lossless round trip |
@@ -30,10 +31,11 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | Electrical.Native (Rust) | ✅ | FFT, Goertzel harmonics, sparse complex injections, SplitMix64/Box–Muller; identical managed fallback |
 | Electrical.DigitalTwin | ✅ | Live twin (SCADA → WLS SE → explained EN/ID alarms), what-if, IEEE C57.91 asset ageing, deterministic TwinSimulator |
 | Electrical.AI | ✅ | GridAgent with 10 tools (live-tested on Azure OpenAI gpt-5-mini; offline EN/ID rule-based), anomaly detection, fault classification/location, clustering, Volt/VAR RL environment + Q-learning |
-| Tests | ✅ | 210 xUnit tests passing, 1 live-LLM test skipped by default (+ 5 Rust tests) |
-| CLI (`eln`) | ✅ | 31 commands (power flow, faults, stability, dispatch, SE, forecasting, QSTS, SCADA RTU, REST server, AI agent, twin) |
-| Templates | ✅ | 5 templates (console, Blazor, Avalonia, SCADA gateway, Web API) built and run from the packed local feed |
-| NuGet icon & packages | ✅ | 25 packages (+ symbols) pack without warnings; icon in `assets/` |
+| Electrical.Distribution (v1.1) | ✅ | Unbalanced 3φ power flow, Carson/Kron (Kersting Ex. 4.1–4.3, 5.1), regulators/OLTC/capacitor controllers, OpenDSS reader; IEEE 13-node worst error 0.148 %, IEEE 4-node 0.026 % |
+| Tests | ✅ | 258 xUnit tests passing, 1 live-LLM test skipped by default (+ 5 Rust tests) |
+| CLI (`eln`) | ✅ | 34 commands: power flow, faults, stability, dispatch, SE, forecasting, QSTS, SCADA RTU, REST server, AI agent, twin; v1.1 adds `dist`, `dss`, `linecode`, `.raw`/`.cdf` input and `qsts --control` |
+| Templates | ✅ | 6 templates (console, distribution feeder, Blazor, Avalonia, SCADA gateway, Web API) |
+| NuGet icon & packages | ✅ | 28 packages (+ symbols) pack without warnings; icon in `assets/` |
 | Gallery: Blazor / Avalonia | ✅ | 20+ demos, EN/ID, light/dark, screenshots in docs/images (web + desktop) |
 | Docs EN / ID | ✅ | README / README.id + 19 guides each; all code samples compile-checked |
 | Monorepo move + CI workflow | ✅ | `Vibe_Components/Electrical.Net` + `.github/workflows/electrical-net.yml` (tag `electrical-net-v*` publishes with `NUGET_API_KEY`) |
@@ -45,3 +47,11 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 - **2026-11-14**: DigitalTwin, AI, gallery and docs finished; whole solution builds with 0 warnings. Fixed during verification: the gallery
   microgrid demo compared the DP optimum (forced to end at the initial SoC) with a rule-based run allowed to drain the battery — both now
   have the same end-of-day freedom (DP $447 vs rule-based $470).
+- **2026-11-14**: v1.1 Interop module (PSS/E RAW, IEEE CDF, `NetworkFormats`) and QSTS control loops (`OltcController`, `VoltageRegulatorController`, `CapacitorController`).
+- **2026-11-14**: v1.1 Electrical.Distribution (unbalanced three-phase feeders, Carson/Kron, regulators, OpenDSS) validated against IEEE 4/13-node
+  and Kersting. Fixed: Newton–Raphson from a flat start diverged (30°) or converged to a spurious solution (45°) with large phase shifters;
+  the flat start now takes its angles from a DC power flow (regression test). CI actions bumped to checkout@v7 / upload-artifact@v7 /
+  download-artifact@v8 / setup-dotnet@v6. New template `eln-distribution`. Version 1.1.0.
+  Also fixed: the reference shunt that keeps delta windings non-singular was a real conductance scaled by the winding admittance, so stiff
+  substation transformers absorbed spurious power (IEEE 13-node script: 131.8 → 111.2 kW losses, matching the code-built feeder); it is now a
+  tiny pure susceptance (regression test).

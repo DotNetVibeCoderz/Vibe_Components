@@ -51,6 +51,16 @@ public sealed class QstsResult
     public required int[] BusIds { get; init; }
     /// <summary>Applied events with their actual step time.</summary>
     public required IReadOnlyList<(DateTimeOffset Time, string Description)> Timeline { get; init; }
+    /// <summary>Names of the <see cref="QstsSimulation.Controllers"/> (column order of the controller arrays; empty without controllers).</summary>
+    public IReadOnlyList<string> ControllerNames { get; init; } = [];
+    /// <summary>Controller kinds ("OLTC", "Regulator", "Capacitor"), same order as <see cref="ControllerNames"/>.</summary>
+    public IReadOnlyList<string> ControllerKinds { get; init; } = [];
+    /// <summary>Controller state at the end of each step [step, controller]: tap position or capacitor stages in service.</summary>
+    public double[,] ControllerStates { get; init; } = new double[0, 0];
+    /// <summary>Cumulative controller operations at the end of each step [step, controller]: tap steps moved or capacitor switchings.</summary>
+    public int[,] ControllerOperations { get; init; } = new int[0, 0];
+    /// <summary>Control re-solves performed in each step (0 when no controller acted; empty without controllers).</summary>
+    public int[] ControlIterations { get; init; } = [];
 
     public int Steps => Times.Length;
     public double EnergyLoadMwh => LoadMw.Sum() * StepHours;
@@ -60,6 +70,29 @@ public sealed class QstsResult
     public double EnergyExportMwh => -GridMw.Where(g => g < 0).Sum() * StepHours;
     /// <summary>Number of steps with any voltage outside [vmin, vmax].</summary>
     public int VoltageViolationSteps(double vmin = 0.95, double vmax = 1.05) => VminPu.Zip(VmaxPu).Count(p => p.First < vmin || p.Second > vmax);
+
+    /// <summary>State trajectory of controller <paramref name="index"/> (tap position or stages in service per step).</summary>
+    public double[] ControllerState(int index)
+    {
+        var v = new double[Steps];
+        for (int t = 0; t < Steps; t++) v[t] = ControllerStates[t, index];
+        return v;
+    }
+
+    /// <summary>State trajectory of the controller named <paramref name="name"/>.</summary>
+    public double[] ControllerState(string name) => ControllerState(ControllerIndex(name));
+
+    /// <summary>Total operations of controller <paramref name="index"/> over the run (tap steps or switching operations).</summary>
+    public int TotalOperations(int index) => Steps == 0 ? 0 : ControllerOperations[Steps - 1, index];
+
+    /// <summary>Total operations of the controller named <paramref name="name"/>.</summary>
+    public int TotalOperations(string name) => TotalOperations(ControllerIndex(name));
+
+    private int ControllerIndex(string name)
+    {
+        for (int k = 0; k < ControllerNames.Count; k++) if (ControllerNames[k] == name) return k;
+        throw new KeyNotFoundException($"No controller named '{name}'.");
+    }
 
     /// <summary>Voltage profile of one bus over time [pu].</summary>
     public double[] VoltageOf(int busId)
@@ -94,6 +127,13 @@ public sealed class QstsSimulation(PowerNetwork baseNetwork)
     public List<PvSystem> PvSystems { get; } = [];
     public List<SimulationEvent> Events { get; } = [];
     public PowerFlowOptions Options { get; set; } = new() { Tolerance = 1e-8 };
+    /// <summary>
+    /// Discrete controllers (OLTCs, regulators, capacitor banks) evaluated after each converged power flow, in list order.
+    /// Their targets refer to the base network's branch indices / bus ids (PV systems are appended as generators only).
+    /// </summary>
+    public List<QstsController> Controllers { get; } = [];
+    /// <summary>Maximum control re-solves per step (bounds hunting between controllers).</summary>
+    public int MaxControlIterations { get; set; } = 10;
 
     private IEnumerable<TimeSeries> AllProfiles()
     {
@@ -133,6 +173,11 @@ public sealed class QstsSimulation(PowerNetwork baseNetwork)
         var timeline = new List<(DateTimeOffset, string)>();
         var opts = Options with { FlatStart = true };
         int slack = work.SlackBus is { } sb ? sb.Id : work.Buses[0].Id;
+        int nc = Controllers.Count;
+        foreach (var c in Controllers) c.Initialize(work);
+        var cState = new double[n, nc];
+        var cOps = new int[n, nc];
+        var cIter = new int[nc > 0 ? n : 0];
         for (int t = 0; t < n; t++)
         {
             var time = start + step * t;
@@ -163,6 +208,16 @@ public sealed class QstsSimulation(PowerNetwork baseNetwork)
             r.Load[t] = work.Loads.Where(l => l.InService).Sum(l => l.P);
             PowerFlowResult? res = null;
             try { res = PowerFlowSolver.Solve(work, opts); } catch (InvalidOperationException) { }
+            for (int it = 0; nc > 0 && it < MaxControlIterations && res is { Converged: true }; it++)
+            {
+                bool acted = false;
+                foreach (var c in Controllers) acted |= c.Update(work, res, t);
+                if (!acted) break;
+                cIter[t]++;
+                res.ApplyTo(work);
+                try { res = PowerFlowSolver.Solve(work, opts with { FlatStart = false }); } catch (InvalidOperationException) { res = null; }
+            }
+            for (int k = 0; k < nc; k++) { cState[t, k] = Controllers[k].State; cOps[t, k] = Controllers[k].Operations; }
             if (res is null || !res.Converged)
             {
                 r.Converged[t] = false;
@@ -189,6 +244,8 @@ public sealed class QstsSimulation(PowerNetwork baseNetwork)
             Times = r.Times, StepHours = step.TotalHours, Converged = r.Converged, Iterations = r.Iterations, VminPu = r.Vmin, VmaxPu = r.Vmax,
             VminBus = r.VminBus, LossesMw = r.Losses, MaxLoadingPercent = r.Loading, LoadMw = r.Load, PvMw = r.Pv, GridMw = r.Grid, BusVoltages = r.V,
             BusIds = work.Buses.Select(b => b.Id).ToArray(), Timeline = timeline,
+            ControllerNames = Controllers.Select(c => c.DisplayName).ToArray(), ControllerKinds = Controllers.Select(c => c.Kind).ToArray(),
+            ControllerStates = cState, ControllerOperations = cOps, ControlIterations = cIter,
         };
     }
 
@@ -222,6 +279,37 @@ public sealed class QstsSimulation(PowerNetwork baseNetwork)
         sim.CategoryProfiles["commercial"] = SyntheticProfiles.Load(LoadProfileKind.Commercial, start, days, step, 1.0, noise: 0.02, seed: 2);
         var ghi = SyntheticProfiles.Irradiance(start, days, step, -6.2, 106.8, 0.35);
         sim.PvSystems.Add(new PvSystem(pvBus, pvMw, ghi.Scale(1 / 1000.0), Name: "PV plant"));
+        return sim;
+    }
+
+    /// <summary>
+    /// Volt/var control demonstration on the Baran-Wu 33-bus feeder (same profiles and PV as <see cref="Case33Demo"/>) fed through a
+    /// 10 MVA substation transformer: a new slack bus 0 (grid, 1.0 pu) connects to bus 1 over branch 0-1 (R = 0.005, X = 0.06 pu on
+    /// 10 MVA, branch index 32). With <paramref name="withControl"/> the transformer gets an OLTC regulating bus 1 to 1.02 pu
+    /// (band 0.0125 pu, 16 x 0.625 % each way, 1-step delay) and bus 30 a 2 x 0.45 Mvar capacitor bank in voltage mode (on below 0.97 pu,
+    /// off above 1.03 pu at bus 30, 1-step delay). Without control the tap stays at 1 and the bank is absent.
+    /// </summary>
+    public static QstsSimulation Case33ControlDemo(int days = 1, bool withControl = true, double pvMw = 1.5)
+    {
+        var sim = Case33Demo(days, pvMw);
+        var net = sim.BaseNetwork;
+        net.Buses.Insert(0, new Bus { Id = 0, Name = "Grid 150 kV", BaseKv = 150, Type = BusType.Slack });
+        net.InvalidateIndex();
+        net.GetBus(1).Type = BusType.PQ;
+        net.GetBus(1).Name = "Substation 12.66 kV";
+        foreach (var g in net.Generators.Where(g => g.Bus == 1)) g.Bus = 0;
+        net.Branches.Add(new Branch { From = 0, To = 1, Kind = BranchKind.Transformer, R = 0.005, X = 0.06, Tap = 1, RateA = 10, Name = "Substation transformer" });
+        if (withControl)
+        {
+            sim.Controllers.Add(new OltcController(net.Branches.Count - 1, 1)
+            {
+                Name = "OLTC T1", TargetPu = 1.02, BandwidthPu = 0.0125, TapStepPu = 0.00625, MinTap = -16, MaxTap = 16, DelaySteps = 1,
+            });
+            sim.Controllers.Add(new CapacitorController(30, 0.45, 2)
+            {
+                Name = "Cap bus 30", Mode = CapacitorControlMode.Voltage, OnThreshold = 0.97, OffThreshold = 1.03, DelaySteps = 1,
+            });
+        }
         return sim;
     }
 

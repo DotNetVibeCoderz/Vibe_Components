@@ -9,11 +9,12 @@
 
 ![Electrical.Net Gallery](docs/images/web-home.png)
 
-Electrical.Net gives .NET developers the building blocks of power-system software: power flow, short circuit, protection, stability,
-harmonics, renewables, smart-grid control, optimization, state estimation, SCADA and substation protocols, CIM model exchange, GIS,
-simulation, cloud APIs and a digital twin. It is meant as a base for EMS, DMS, ADMS, DERMS, VPP, SCADA and digital-twin applications.
-The algorithms are checked against published reference values (MATPOWER, IEC 60909, IEEE 1584, Anderson & Fouad, Baran & Wu, Billinton &
-Allan, Wood & Wollenberg and others); see [Validation](#validation).
+Electrical.Net gives .NET developers the building blocks of power-system software: power flow (balanced and unbalanced three-phase),
+short circuit, protection, stability, harmonics, renewables, smart-grid control, optimization, state estimation, SCADA and substation
+protocols, model exchange (CIM, PSS/E RAW, IEEE CDF, MATPOWER, OpenDSS), GIS, simulation, cloud APIs and a digital twin. It is meant as a
+base for EMS, DMS, ADMS, DERMS, VPP, SCADA and digital-twin applications. The algorithms are checked against published reference values
+(MATPOWER, IEEE PES test feeders, Kersting, IEC 60909, IEEE 1584, Anderson & Fouad, Baran & Wu, Billinton & Allan, Wood & Wollenberg and
+others); see [Validation](#validation).
 
 ```csharp
 using Electrical.Core.Network;
@@ -21,8 +22,28 @@ using Electrical.PowerFlow;
 
 var pf = PowerFlowSolver.Solve(TestCases.Case14());   // sparse Newton–Raphson
 Console.WriteLine(pf);
-// NewtonRaphson: converged in 4 it, mismatch 1.00E-014, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
+// NewtonRaphson: converged in 3 it, mismatch 3.44E-009, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
 ```
+
+## What's new in 1.1
+
+- **Unbalanced distribution** (`Electrical.Distribution`, new): phase-frame power flow (Kersting ladder sweep, current injection for weakly
+  meshed feeders), 3×3 line matrices from conductor geometry (modified Carson + Kron, concentric-neutral and tape-shielded cables), wye/delta
+  ZIP loads, three-phase transformer connections, step regulators with LDC, switched capacitors, per-phase controllers and time series, an
+  OpenDSS script reader and the IEEE 4- and 13-node feeders. IEEE 13-node voltages within 0.148 % of the published results.
+  [Guide](docs/en/distribution.md)
+- **Model exchange** (`Electrical.Interop`, new): PSS/E RAW v33/v35 reader and writer (three-winding transformers, switched shunts, v35
+  `@!` headers), IEEE CDF reader, content-based format detection with conversion warnings. [Guide](docs/en/interop.md)
+- **Voltage control in QSTS** (`Electrical.Simulation`): `OltcController`, `VoltageRegulatorController` (line-drop compensation) and
+  `CapacitorController` act after every time step. On the 33-bus feeder they cut voltage-violation steps from 64 to 1 of 96.
+  [Guide](docs/en/simulation-hpc-native.md#voltage-control-in-qsts-v11)
+- **Power flow**: the Newton–Raphson flat start now takes its angles from a DC power flow, so networks with large phase shifters converge
+  to the operational solution. Case9 and case14 also converge one iteration sooner. [Guide](docs/en/power-flow.md#flat-start-dc-initialised-angles)
+- **CLI**: `--file` reads `.raw`/`.cdf`, `convert --out x.raw [--version 33|35]`, `qsts --control`, and the new `dist`, `dss` and
+  `linecode` commands. [Reference](docs/en/cli.md)
+- **Gallery**: three new demos: Unbalanced distribution (IEEE 13-node), Model exchange, and Voltage control in time series.
+- **Templates**: new `eln-distribution` console template (IEEE 13-node or an OpenDSS script); all templates reference the 1.1.0 packages.
+- CI actions updated to `actions/checkout@v7`, `upload-artifact@v7`, `download-artifact@v8` and `setup-dotnet@v6`.
 
 ## Modules
 
@@ -30,7 +51,8 @@ Console.WriteLine(pf);
 |---|---|
 | **Electrical.Core** | Generic dense/sparse linear algebra (`SparseLU<Complex>` with minimum-degree ordering), per-unit system, phasors, symmetrical components, bus-branch `PowerNetwork`, `NetworkBuilder` in physical units, line library, Y-bus (positive/negative/zero sequence), topology, MATPOWER I/O, test cases (case9, case14, Baran–Wu 33-bus, synthetic grids), `TimeSeries`, DI builder and event bus |
 | **Electrical.Circuit** | Modified nodal analysis: DC operating point, AC sweep / Bode, transient (trapezoidal, backward Euler); R, L, C, coupled inductors, sources, diodes, switches, controlled sources, ideal transformers; SPICE-like netlists; three-phase star/delta circuits |
-| **Electrical.PowerFlow** | Newton–Raphson (sparse, Q limits, ZIP loads), Gauss–Seidel, fast-decoupled XB, DC, backward/forward sweep; N-1 contingency screening (parallel); PTDF / LODF |
+| **Electrical.PowerFlow** | Newton–Raphson (sparse, Q limits, ZIP loads, DC-initialised flat start), Gauss–Seidel, fast-decoupled XB, DC, backward/forward sweep; N-1 contingency screening (parallel); PTDF / LODF |
+| **Electrical.Distribution** (1.1) | Unbalanced three-phase power flow in the phase frame (ladder sweep, current injection), Carson/Kron line constants for overhead lines and cables, wye/delta ZIP loads, three-phase transformers, step regulators with LDC, switched capacitors, per-phase controllers and time series, OpenDSS reader, IEEE 4- and 13-node feeders, balanced reduction |
 | **Electrical.ShortCircuit** | IEC 60909: 3φ, SLG, LL, LLG faults via sequence networks; c factor, κ (methods A/B/C), I″k, ip, Ib, Ith, DC component; branch and source contributions; all-bus scan |
 | **Electrical.Protection** | IEC 60255 / IEEE C37.112 inverse-time relays, fuses, TCC curves, CTI grading, mho distance zones, percentage-differential relay, breaker duty, IEEE 1584-2002 arc flash |
 | **Electrical.Stability** | Classical multi-machine transient stability (RK4) with event lists, critical clearing time, SMIB equal-area criterion, small-signal eigen-analysis with participation factors, PV / QV curves, L-index, frequency response (ROCOF, nadir) |
@@ -42,17 +64,18 @@ Console.WriteLine(pf);
 | **Electrical.SCADA** | Modbus TCP client/server and PDU codec, tag database with scaling and quality, ISA-18.2 alarms, swinging-door historian, RTU simulator, IEC 60870-5-104 APDU codec |
 | **Electrical.IEC61850** | SCL (ICD/CID/SCD) parser, object references and logical-node catalog, MMS data, ASN.1 BER, GOOSE and Sampled Values (9-2LE) frames, GOOSE retransmission |
 | **Electrical.CIM** | IEC 61970 CIM / CGMES-style RDF/XML export (EQ, TP, SSH, SV) and import with topology processing |
+| **Electrical.Interop** (1.1) | PSS/E RAW v33/v35 read and write, IEEE Common Data Format reader, content-based format detection (RAW, CDF, MATPOWER, Cloud JSON) with conversion warnings, embedded IEEE 14-bus samples |
 | **Electrical.DigitalTwin** | Live grid twin: SCADA tags → WLS state estimation with bad-data removal → KPIs, explained alarms, forecast deviation; what-if simulation; IEEE C57.91 asset ageing; closed-loop twin simulator |
 | **Electrical.Forecasting** | Holt–Winters (single/double season), regression with weather features, similar-day k-NN, ensembles, solar and wind power forecasts, error metrics, synthetic profiles |
 | **Electrical.AI** | Bilingual LLM grid-operator agent with 10 grounded tools (OpenAI, Azure OpenAI, Hugging Face, Ollama or offline rules), anomaly detection (robust z, EWMA, CUSUM), fault classification and location, load-profile clustering, Volt/VAR RL environment with Q-learning |
 | **Electrical.GIS** | GeoJSON export/import, Web Mercator, haversine line lengths, force-directed geographic layout, spatial index, SVG maps, outage areas |
 | **Electrical.Visualization** (+ **.Blazor**) | Automatic single-line diagram layout and SVG rendering with power-flow overlay, SVG charts (line, bar, heatmap, gauge, phasor, TCC), PNG encoder, light/dark theme variables; Blazor components |
-| **Electrical.Simulation** | Quasi-static time series (QSTS) with load/PV profiles and events, scenario manager, generation adequacy (analytical and sequential Monte-Carlo) |
+| **Electrical.Simulation** | Quasi-static time series (QSTS) with load/PV profiles, events and control loops (OLTC, LDC voltage regulator, switched capacitor), scenario manager, generation adequacy (analytical and sequential Monte-Carlo) |
 | **Electrical.Cloud** | Study job runner, JSON network contract, ASP.NET Core minimal API (`MapElectricalApi`), multi-tenant scenario stores |
 | **Electrical.HPC** | Parallel batch power flow, load sweeps, Monte-Carlo probabilistic load flow, scaling benchmark |
 | **Electrical.Native** | Rust kernels (FFT, Goertzel harmonics, THD/RMS, sparse complex power injections, deterministic normal sampling) with identical managed fallbacks |
-| **Electrical.Cli** | `eln` dotnet tool with 30 commands (incl. `eln ask` and `eln twin`) |
-| **Electrical.Templates** | `dotnet new eln-console / eln-blazor / eln-avalonia / eln-scada / eln-webapi` |
+| **Electrical.Cli** | `eln` dotnet tool with 33 commands (incl. `eln ask`, `eln twin`, `eln dist` and `eln dss`); reads MATPOWER, PSS/E RAW, IEEE CDF, JSON and CIM files |
+| **Electrical.Templates** | `dotnet new eln-console / eln-blazor / eln-avalonia / eln-scada / eln-webapi / eln-distribution` |
 
 ## Quick start
 
@@ -140,13 +163,19 @@ Every row below is asserted by the xUnit suite in `tests/Electrical.Tests` (the 
 | Capacity outage probability table | Billinton & Allan §2.2 | 0.9604 / 0.0392 / 0.0004 | identical |
 | WLS state estimation, noise-free | Power-flow solution | exact state | recovered exactly; bad flow removed by LNR test |
 | CIM round trip | Original network | identical power flow | identical (case14 13.393 MW, case33 202.7 kW) |
+| Unbalanced power flow, IEEE 13-node | IEEE PES test feeder results (node 675: 0.9835 / 1.0553 / 0.9758 pu) | worst error vs published voltages | 0.9831 / 1.0559 / 0.9772 pu; worst 0.148 % |
+| Unbalanced power flow, IEEE 4-node (GrY–GrY, Δ–GrY) | IEEE PES test feeder results | worst error | 0.026 % |
+| Overhead line constants | Kersting Example 4.1 | z<sub>aa</sub> = 0.4576 + j1.0780 Ω/mile | 0.4576 + j1.0781 Ω/mile |
+| IEEE 13-node configurations 601–607 from geometry | IEEE data sheet | phase impedance matrices | within 0.0001 Ω/mile |
+| PSS/E RAW v33/v35 and IEEE CDF, IEEE 14-bus | MATPOWER case14 | losses 13.393 MW | 13.393 MW |
+| QSTS volt/var control, 33-bus behind 10 MVA transformer | Same day without control | 64 violation steps, V<sub>min</sub> 0.9237 pu | 1 step, V<sub>min</sub> 0.9617 pu (4 tap steps, 2 switchings) |
 | Transformer ageing | IEEE C57.91 | θ<sub>H</sub> = 110 °C at rated load (30 °C ambient), F<sub>AA</sub>(110 °C) = 1, ≈ 2 at 116.8 °C | 110 °C, 1.0, 2.0 |
 | Digital twin, 24 h case14 with RTU noise | True power-flow state | voltage error < 0.005 pu, load within 3 % | mean 0.00017 pu, max 0.00077 pu |
 | LLM agent, live | Azure OpenAI `gpt-5-mini`, case14 losses (MATPOWER 13.393 MW) | 13.39 MW quoted from the tool | passed |
 
 ## Gallery
 
-Twenty live demos covering all modules with a professional UI, as a **Blazor** web app and an **Avalonia** desktop app that share their scenario code
+Twenty-three live demos covering all modules with a professional UI, as a **Blazor** web app and an **Avalonia** desktop app that share their scenario code
 (`gallery/Electrical.Gallery.Shared`). Every figure is computed by the library at run time, next to the C# that produced it.
 
 ```bash
@@ -161,6 +190,8 @@ dotnet run --project gallery/Electrical.Gallery.Desktop
 | ![Short circuit](docs/images/web-shortcircuit.png) | ![Stability](docs/images/desktop-stability.png) |
 | ![SCADA](docs/images/web-scada.png) | ![IEC 61850](docs/images/desktop-iec61850.png) |
 | ![GIS map](docs/images/web-gis.png) | ![Smart grid](docs/images/desktop-smartgrid.png) |
+| ![Unbalanced distribution](docs/images/web-distribution.png) | ![Model exchange](docs/images/desktop-interop.png) |
+| ![Voltage control](docs/images/web-voltagecontrol.png) | ![Unbalanced distribution](docs/images/desktop-distribution.png) |
 
 Dark theme: ![Dark theme](docs/images/web-home-dark.png)
 
@@ -175,9 +206,9 @@ graph TD
     Native[Electrical.Native<br/>Rust kernels]
     PF[PowerFlow]
     Core --> PF
-    Core --> Circuit & ShortCircuit & IEC61850 & CIM & Forecasting
+    Core --> Circuit & ShortCircuit & IEC61850 & CIM & Forecasting & Interop
     ShortCircuit --> Protection
-    PF --> Stability & Harmonic & Renewable & Optimization & StateEstimation & SCADA & GIS & Visualization
+    PF --> Stability & Harmonic & Renewable & Optimization & StateEstimation & SCADA & GIS & Visualization & Distribution
     Renewable --> SmartGrid
     Renewable --> Simulation
     Forecasting --> Simulation
@@ -205,7 +236,7 @@ AOT-compatible, use SI/engineering units at the API surface (MW, Mvar, kV, kA, �
 ## Repository layout
 
 ```
-src/              23 library packages (+ Electrical.Visualization.Blazor)
+src/              25 library packages (+ Electrical.Visualization.Blazor)
 native/           Rust crate electrical-native (C ABI, eln_* functions)
 tools/            Electrical.Cli (dotnet tool "eln")
 templates/        Electrical.Templates (dotnet new pack)
@@ -231,9 +262,9 @@ publishes the packages to NuGet.
 
 ## Documentation
 
-- English: [docs/en](docs/en/README.md): getting started, architecture, module guide, power flow, short circuit & protection, stability,
-  harmonics, renewables & smart grid, optimization, state estimation, SCADA / IEC 61850 / CIM, GIS & visualization, simulation / HPC / native,
-  cloud API, AI & digital twin, CLI, templates, gallery.
+- English: [docs/en](docs/en/README.md): getting started, architecture, module guide, power flow, unbalanced distribution, short circuit &
+  protection, stability, harmonics, renewables & smart grid, optimization, state estimation, SCADA / IEC 61850 / CIM, model exchange,
+  GIS & visualization, simulation / HPC / native, cloud API, AI & digital twin, CLI, templates, gallery.
 - Bahasa Indonesia: [docs/id](docs/id/README.md).
 - Roadmap: [PLAN.md](PLAN.md).
 

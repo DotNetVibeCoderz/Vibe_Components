@@ -54,6 +54,16 @@ foreach (var br in r.Overloads(90))
 r.ApplyTo(net);   // warm start: tulis kembali V, θ, dan P/Q generator ke model
 ```
 
+### Flat start (sudut dari aliran daya DC)
+
+Dengan `FlatStart = true` (bawaan), Newton–Raphson mulai dari |V| = 1 pu di bus PQ dan nilai setelan di bus PV/slack, dan **sejak v1.1
+sudutnya diambil dari aliran daya DC** (θ = B⁻¹P termasuk sudut phase shifter), bukan nol. Ini menjaga iterasi tetap di daerah tarik
+solusi operasional bila jaringan memiliki pergeseran fasa besar atau transfer berat: phase shifter ideal 30° dahulu divergen dari θ = 0
+dan yang 45° konvergen ke solusi palsu, sedangkan awal DC mencapai solusi yang benar dalam beberapa iterasi (uji regresi
+`LargePhaseShift_FlatStartConvergesToOperationalSolution`). Kasus biasa juga hemat satu iterasi (case9 dan case14 kini konvergen dalam 3).
+Awal DC dilewati secara otomatis, kembali ke θ = 0, untuk jaringan dengan cabang berreaktansi nol, beberapa pulau, atau solusi DC yang
+tidak wajar. `FlatStart = false` tetap mulai dari tegangan yang tersimpan di jaringan (warm start, misalnya setelah `ApplyTo`).
+
 ## Hasil
 
 `PowerFlowResult` berisi daya dalam MW/Mvar dan tegangan dalam pu/derajat:
@@ -70,7 +80,7 @@ Keluaran CLI untuk studi yang sama:
 ```
 $ eln pf --case case14
 case14: 14 buses, 20 branches, 5 generators, 11 loads (base 100 MVA)
-NewtonRaphson: converged in 4 it, mismatch 1.00E-014, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
+NewtonRaphson: converged in 3 it, mismatch 3.44E-009, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
 
   Bus     Vm[pu]   Va[deg]    Pg[MW]   Qg[Mvar]    Pd[MW]   Qd[Mvar]
   1       1.0600     0.000    232.39     -16.55      0.00       0.00
@@ -144,11 +154,15 @@ untuk perhitungan sudut/aliran sendiri (`Angles`, `BranchFlowsMw`). Tes memeriks
 | case33bw (NR dan sweep) | Baran & Wu: 202,7 kW, V<sub>min</sub> 0,9131 pu di bus 18 | identik |
 | DC case9 | Slack = beban − pembangkitan tetap, rugi nol | eksak |
 | Round trip MATPOWER | `Matpower.Parse(Matpower.Write(net))` | rugi sama hingga 1e-6 |
+| PSS/E RAW v33/v35 dan IEEE CDF IEEE 14 bus ([pertukaran model](pertukaran-model.md)) | MATPOWER case14, rugi 13,393 MW | identik |
+| Phase shifter ideal 30° / 45°, flat start | V<sub>3</sub> = V<sub>2</sub>∠−geser | konvergen dalam ≤ 6 it ke solusi operasional |
 
 ## Batasan
 
-- Model urutan positif seimbang. Aliran daya tiga fasa tak seimbang (phase frame, geometri saluran Carson) direncanakan untuk v1.1.
-- Tidak ada kendali tap trafo/OLTC atau shunt terswitch di dalam loop; gunakan `Electrical.SmartGrid.VoltVarOptimization` atau event QSTS.
+- Model urutan positif seimbang. Untuk penyulang tiga fasa tak seimbang (phase frame, geometri saluran Carson, regulator) gunakan
+  [`Electrical.Distribution`](distribusi.md).
+- Tidak ada kendali tap trafo/OLTC atau shunt terswitch dalam satu kali penyelesaian; loop kendali deret waktu (OLTC, regulator LDC,
+  kapasitor terswitch) berjalan di [QSTS](simulasi-hpc-native.md#kendali-tegangan-dalam-qsts-v11), dan `Electrical.SmartGrid.VoltVarOptimization` mengoptimalkan nilai setelan.
 - Backward/forward sweep membutuhkan jaringan radial dengan satu sumber.
 
 Lihat juga: [Stabilitas](stabilitas.md) (kurva PV), [Optimasi](optimasi.md) (DC-OPF), [Simulasi, HPC & native](simulasi-hpc-native.md)

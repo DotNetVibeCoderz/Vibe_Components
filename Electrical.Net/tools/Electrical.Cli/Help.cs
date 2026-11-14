@@ -11,7 +11,7 @@ public static partial class Commands
             {ElectricalInfo.CreditEn} · {ElectricalInfo.CreditId}
 
             Usage: eln <command> [options]
-            Network input (most commands): --case case9|case14|case33bw|synthetic<N>  or  --file grid.m|grid.json|grid.xml
+            Network input (most commands): --case case9|case14|case33bw|synthetic<N>  or  --file grid.m|.raw|.cdf|.json|.xml
 
               info                                    Framework, modules and native kernel status
               cases                                   Built-in test networks
@@ -21,7 +21,7 @@ public static partial class Commands
               bench [--sizes 100,1000,3000]           Power-flow scaling benchmark on synthetic grids
               sld --out sld.svg [--literal --dark]    Single-line diagram with power-flow overlay
               geojson --out grid.geojson [--svg map.svg] [--lat -6.2 --lon 106.8]            GIS export
-              convert --out grid.m|grid.json|grid.xml  MATPOWER / JSON / CIM (CGMES RDF/XML) conversion
+              convert --out grid.m|.json|.xml|.raw [--version 33|35]   MATPOWER / JSON / CIM / PSS/E RAW conversion
               rtu [--port 1502] [--seconds 0]         Modbus TCP RTU simulator serving power-flow measurements
               serve [--urls http://localhost:5300]    REST API (Electrical.Cloud)
             {ExtraHelp()}

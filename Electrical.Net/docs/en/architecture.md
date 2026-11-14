@@ -12,6 +12,8 @@ graph LR
     Core --> IEC61850
     Core --> CIM
     Core --> Forecasting
+    PowerFlow --> Distribution
+    Core --> Interop
     ShortCircuit --> Protection
     PowerFlow --> Stability
     PowerFlow --> Harmonic

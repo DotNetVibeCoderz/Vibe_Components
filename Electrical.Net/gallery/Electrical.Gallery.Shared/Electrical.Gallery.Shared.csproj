@@ -11,6 +11,8 @@
     <ProjectReference Include="../../src/Electrical.SCADA/Electrical.SCADA.csproj" />
     <ProjectReference Include="../../src/Electrical.IEC61850/Electrical.IEC61850.csproj" />
     <ProjectReference Include="../../src/Electrical.CIM/Electrical.CIM.csproj" />
+    <ProjectReference Include="../../src/Electrical.Interop/Electrical.Interop.csproj" />
+    <ProjectReference Include="../../src/Electrical.Distribution/Electrical.Distribution.csproj" />
     <ProjectReference Include="../../src/Electrical.GIS/Electrical.GIS.csproj" />
     <ProjectReference Include="../../src/Electrical.Visualization/Electrical.Visualization.csproj" />
     <ProjectReference Include="../../src/Electrical.ShortCircuit/Electrical.ShortCircuit.csproj" />

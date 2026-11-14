@@ -3,7 +3,7 @@
     <PackageType>Template</PackageType>
     <PackageId>Electrical.Templates</PackageId>
     <Title>Electrical.Net project templates</Title>
-    <Description>dotnet new templates for Electrical.Net: power-system study console, Blazor grid dashboard, Avalonia single-line viewer, SCADA edge gateway (Modbus TCP + alarms) and power-system REST API. Made by Gravicode Studios, led by Kang Fadhil.</Description>
+    <Description>dotnet new templates for Electrical.Net: power-system study console, unbalanced distribution feeder study, Blazor grid dashboard, Avalonia single-line viewer, SCADA edge gateway (Modbus TCP + alarms) and power-system REST API. Made by Gravicode Studios, led by Kang Fadhil.</Description>
     <PackageTags>electrical;power-system;smart-grid;dotnet-new;templates;blazor;avalonia;scada</PackageTags>
     <IsPackable>true</IsPackable>
     <IncludeContentInPack>true</IncludeContentInPack>

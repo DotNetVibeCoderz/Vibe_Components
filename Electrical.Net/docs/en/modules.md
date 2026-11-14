@@ -29,7 +29,8 @@ var islands = Topology.Islands(net);
 ```
 
 **References / limitations.** MATPOWER case format and data for case9/case14; Baran & Wu (1989) for case33bw. The model is balanced
-positive-sequence bus-branch; three-phase unbalanced (phase-frame) modelling is on the roadmap (v1.1).
+positive-sequence bus-branch; for three-phase unbalanced (phase-frame) feeders see [Electrical.Distribution](#electricaldistribution), and
+for PSS/E RAW and IEEE CDF files [Electrical.Interop](#electricalinterop).
 
 ## Electrical.Circuit
 
@@ -66,8 +67,28 @@ var feeder = PowerFlowSolver.Solve(TestCases.Case33BW(),
 // 202.7 kW losses, Vmin 0.9131 pu @ bus 18
 ```
 
-**References / limitations.** MATPOWER case9 and case14 results; Baran & Wu 33-bus. Balanced positive-sequence only; no automatic
-transformer tap or shunt control loops inside the power flow (QSTS events can switch shunts).
+**References / limitations.** MATPOWER case9 and case14 results; Baran & Wu 33-bus; DC-initialised flat start validated on large phase
+shifts. Balanced positive-sequence only (three-phase: [Electrical.Distribution](#electricaldistribution)); no tap or shunt control loops
+inside a single solve (time-series control loops run in [Electrical.Simulation](#electricalsimulation)).
+
+## Electrical.Distribution
+
+**Purpose.** Unbalanced three-phase distribution feeders in the phase frame (v1.1). Guide: [Unbalanced distribution](distribution.md).
+
+**Key types.** `DistributionNetwork`, `UnbalancedPowerFlow` (`Solve`, ladder sweep or current injection), `DistributionPowerFlowOptions`,
+`DistributionPowerFlowResult` (`Bus(name).VmPu/VaDeg/VoltageUnbalanceFactor/NemaUnbalance`, `Branch(name)`, `RegulatorTaps`, `LossesKw`),
+`LineConstants` (`Overhead`, `ConcentricNeutral`, `TapeShielded`), `OverheadConfiguration`, `ConductorLibrary`, `LineImpedance`, `LineCode`,
+`VoltageRegulator`, `VoltageRegulatorController`, `OltcController`, `CapacitorController`, `DistributionTimeSeries`, `OpenDssReader`,
+`DistributionTestCases` (IEEE 4- and 13-node), `ToBalanced`, `AddDistribution`.
+
+```csharp
+var r = UnbalancedPowerFlow.Solve(DistributionTestCases.Ieee13Node());
+var b = r.Bus("675");   // 0.9831 / 1.0559 / 0.9772 pu (IEEE: 0.9835 / 1.0553 / 0.9758)
+```
+
+**References / limitations.** IEEE PES 4- and 13-node test feeders (worst voltage error 0.026 % and 0.148 %), Kersting Examples 4.1–4.3 and
+5.1–5.2; configurations 601–607 recomputed from geometry within 0.0001 Ω/mile. Ideal sources; OpenDSS subset (two-winding transformers,
+loads, capacitors, regulators, line codes and geometries); no fault or harmonic analysis on the phase model yet (use `ToBalanced`).
 
 ## Electrical.ShortCircuit
 
@@ -239,6 +260,23 @@ decoding only: there is no raw-socket publisher/subscriber or MMS client/server.
 classes are ACLineSegment, PowerTransformer, SynchronousMachine, ExternalNetworkInjection, EnergyConsumer, LinearShuntCompensator, switches
 (for topology processing) and SvVoltage. Full CGMES 3.0 coverage and validation are on the roadmap (v1.4).
 
+## Electrical.Interop
+
+**Purpose.** Model exchange with planning tools (v1.1). Guide: [Model exchange](interop.md).
+
+**Key types.** `NetworkFormats` (`Detect`, `Load`, `Parse`, `FromExtension`), `ImportResult` (`Network`, `Format`, `Warnings`),
+`NetworkFormat`, `PsseRaw` (`Read`, `Parse`, `Load`, `Write`, `Save`; revisions 33 and 35), `IeeeCdf` (`Read`, `Parse`), `InteropSamples`
+(IEEE 14-bus as RAW v33, RAW v35 and CDF), `INetworkImporter`, `AddInterop`.
+
+```csharp
+var import = NetworkFormats.Load("grid.raw");           // PSS/E RAW, IEEE CDF, MATPOWER or Cloud JSON, detected from the content
+string raw35 = PsseRaw.Write(import.Network, version: 35);
+```
+
+**References / limitations.** IEEE 14-bus RAW v33/v35 and CDF reproduce MATPOWER case14 (13.393 MW). Three-winding transformers become a
+star equivalent, switched shunts and regulating transformers are frozen, HVDC/FACTS sections are skipped with a warning; the writer emits
+two-winding transformers only; CDF is read-only.
+
 ## Electrical.DigitalTwin
 
 **Purpose.** Live grid twin synchronised from SCADA measurements via state estimation, what-if simulation, asset health and explained alarms.
@@ -320,10 +358,14 @@ File.WriteAllText("sld.svg", SvgTheme.Resolve(svg, dark: false));
 **Purpose.** Time-domain operational studies and adequacy. Guide: [Simulation, HPC & native](simulation-hpc-native.md).
 
 **Key types.** `QstsSimulation`, `QstsResult`, `PvSystem`, `SimulationEvent`, `SimulationEventKind`, `ScenarioManager`, `ScenarioSummary`,
-`AdequacyAssessment` (`Analytical`, `SequentialMonteCarlo`, `CapacityOutageTable`), `GeneratingUnit`, `AdequacyIndices`.
+`AdequacyAssessment` (`Analytical`, `SequentialMonteCarlo`, `CapacityOutageTable`), `GeneratingUnit`, `AdequacyIndices`; v1.1 control loops:
+`QstsController`, `OltcController`, `VoltageRegulatorController` (LDC), `CapacitorController` (`CapacitorControlMode` Voltage / ReactivePower),
+`QstsSimulation.Controllers`, `QstsSimulation.Case33ControlDemo`.
 
 **References / limitations.** Billinton & Allan capacity outage tables; Monte-Carlo agrees with the analytical LOLE within 10 % in tests.
-QSTS has no controller dynamics (regulators/OLTC loops are on the roadmap, v1.1).
+Case33ControlDemo: OLTC + switched capacitor cut voltage-violation steps from 64 to 1 of 96 (V<sub>min</sub> 0.9237 → 0.9617 pu) with 4 tap
+steps and 2 switchings. Controllers are discrete and quasi-static (no mechanical dynamics); per-phase controllers for unbalanced feeders are
+in [Electrical.Distribution](#electricaldistribution).
 
 ## Electrical.Cloud
 

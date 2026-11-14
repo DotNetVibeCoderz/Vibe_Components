@@ -2,7 +2,7 @@
 
 > Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil · [English](../en/gallery.md)
 
-Galeri Electrical.Net memperlihatkan pustaka bekerja dalam 20 demo langsung, masing-masing di samping kode C# yang menghasilkannya. Galeri
+Galeri Electrical.Net memperlihatkan pustaka bekerja dalam 23 demo langsung, masing-masing di samping kode C# yang menghasilkannya. Galeri
 tersedia sebagai aplikasi web **Blazor** dan aplikasi desktop **Avalonia** yang berbagi kode skenario (`gallery/Electrical.Gallery.Shared`).
 Keduanya dwibahasa (EN/ID) serta punya tema terang dan gelap. Setiap angka dihitung oleh pustaka saat berjalan; tidak ada yang dirender lebih dulu.
 
@@ -19,6 +19,7 @@ dotnet run --project gallery/Electrical.Gallery.Desktop
 |---|---|---|
 | Analisis jaringan | Aliran daya & perbandingan metode (`powerflow`) | PowerFlow, Visualization |
 | | Peringkat kontingensi N-1 (`contingency`) | PowerFlow |
+| | Distribusi tak seimbang (IEEE 13 node) (`distribution`) | Distribution |
 | | Estimasi keadaan & data buruk (`stateestimation`) | StateEstimation |
 | Gangguan & proteksi | Hubung singkat IEC 60909 (`shortcircuit`) | ShortCircuit |
 | | Koordinasi relai & arc flash (`protection`) | Protection |
@@ -30,12 +31,14 @@ dotnet run --project gallery/Electrical.Gallery.Desktop
 | Pasar, peramalan & perencanaan | OPF, LMP & unit commitment (`optimization`) | Optimization |
 | | Peramalan beban (`forecasting`) | Forecasting |
 | | Simulasi deret waktu & kecukupan (`simulation`) | Simulation |
+| | Kendali tegangan dalam deret waktu (`voltagecontrol`) | Simulation |
 | Kembaran digital & AI | Kembaran digital langsung (`digitaltwin`) | DigitalTwin |
 | | Agen AI operator jaringan (`agent`) | AI |
 | Komputasi kinerja tinggi | Aliran daya probabilistik (`plf`) | HPC, Native |
 | Operasi & protokol | SCADA: RTU, alarm & historian (`scada`) | SCADA |
 | | IEC 61850: GOOSE, SV & SCL (`iec61850`) | IEC61850 |
-| Pertukaran data & geografi | Ekspor CIM / CGMES (`cim`) | CIM |
+| Pertukaran data & geografi | Pertukaran model (PSS/E RAW, IEEE CDF, MATPOWER, CIM) (`interop`) | Interop, CIM |
+| | Ekspor CIM / CGMES (`cim`) | CIM |
 | | Peta jaringan GIS (`gis`) | GIS |
 
 ## Tangkapan layar
@@ -50,6 +53,8 @@ Semua tangkapan layar ada di [docs/images](../images). Penamaan: `web-home.png`,
 | ![Digital twin](../images/web-digitaltwin.png) | ![Agen AI](../images/desktop-agent.png) |
 | ![SCADA](../images/web-scada.png) | ![IEC 61850](../images/desktop-iec61850.png) |
 | ![GIS](../images/web-gis.png) | ![Smart grid](../images/desktop-smartgrid.png) |
+| ![Distribusi tak seimbang](../images/web-distribution.png) | ![Pertukaran model](../images/desktop-interop.png) |
+| ![Kendali tegangan](../images/web-voltagecontrol.png) | ![Distribusi tak seimbang](../images/desktop-distribution.png) |
 
 Tema gelap: ![Gelap](../images/web-home-dark.png)
 
@@ -66,9 +71,12 @@ Hentikan server galeri yang sedang berjalan sebelum `dotnet build`, karena DLL y
 
 1. Tambahkan `DemoInfo(id, category, judul EN/ID, ringkasan EN/ID, modules, code)` ke `GalleryCatalog.Demos` di
    `gallery/Electrical.Gallery.Shared/GalleryCatalog.cs`. `id` menjadi slug URL dan nama tangkapan layar.
-2. Tambahkan kelas skenario di `gallery/Electrical.Gallery.Shared/Scenarios/` yang menjalankan pustaka dan mengembalikan data tampilan.
-3. Web: tambahkan `Components/Demos/<Nama>View.razor` dan sebuah case di `DemoHost.razor`.
-4. Desktop: tambahkan sebuah case di `Views.Build`.
+2. Tambahkan kelas skenario di `gallery/Electrical.Gallery.Shared/Scenarios/`. Jalur yang biasa adalah deklaratif: implementasikan
+   `IInteractiveScenario` (kontrol berupa `ChoiceParam`/`RangeParam`, hasil berupa `Kpi` serta `ChartBlock`, `TableBlock`, `ListingBlock`, dan
+   `NoteBlock`) lalu daftarkan di `InteractiveScenarios.All`. Kedua aplikasi menampilkannya dengan tampilan generik (`InteractiveView.razor`,
+   `Views.Interactive`) sehingga langkah 3–4 tidak diperlukan; `distribution`, `interop`, dan `voltagecontrol` dibuat dengan cara ini.
+3. Hanya untuk UI khusus: web `Components/Demos/<Nama>View.razor` dan sebuah case di `DemoHost.razor`.
+4. Hanya untuk UI khusus: case desktop di `Views.Build`.
 5. Jaga agar teks dwibahasa dan data deterministik (ber-seed).
 
 ---

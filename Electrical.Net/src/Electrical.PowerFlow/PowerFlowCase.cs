@@ -54,14 +54,33 @@ internal sealed class PowerFlowCase
             Types[best] = BusType.Slack;
         }
 
+        // Flat start: angles from a DC power flow (includes phase shifters), which keeps Newton–Raphson in the basin of the
+        // operational solution when large phase shifts or heavy transfers are present.
+        double[]? dcAngles = flatStart ? DcStartAngles(net) : null;
         v0 = new Complex[N];
         for (int i = 0; i < N; i++)
         {
             double vm = Types[i] is BusType.PV or BusType.Slack ? VSet[i] : (flatStart ? 1.0 : net.Buses[i].Vm);
-            double va = flatStart && Types[i] != BusType.Slack ? 0 : net.Buses[i].VaDeg * Scalar.Deg2Rad;
+            double va = flatStart && Types[i] != BusType.Slack ? dcAngles?[i] ?? 0 : net.Buses[i].VaDeg * Scalar.Deg2Rad;
             if (Types[i] == BusType.Isolated) vm = 0;
             v0[i] = Complex.FromPolarCoordinates(vm, va);
         }
+    }
+
+    private double[]? DcStartAngles(PowerNetwork net)
+    {
+        try
+        {
+            if (net.Branches.Any(b => b.InService && Math.Abs(b.X) < 1e-9)) return null;
+            if (Topology.Islands(net).Count > 1) return null;
+            var model = DcModel.Build(net);
+            var p = new double[N];
+            for (int i = 0; i < N; i++) p[i] = (SGen[i] - LoadZ[i] - LoadI[i] - LoadP[i]).Real;
+            var theta = model.Angles(p);
+            // reject implausible starts (e.g. ill-conditioned B matrix)
+            return theta.All(t => double.IsFinite(t) && Math.Abs(t) < Math.PI) ? theta : null;
+        }
+        catch (InvalidOperationException) { return null; }
     }
 
     /// <summary>Total load at bus i for voltage magnitude vm [pu].</summary>

@@ -9,11 +9,12 @@
 
 ![Galeri Electrical.Net](docs/images/web-home.png)
 
-Electrical.Net menyediakan blok bangunan perangkat lunak sistem tenaga untuk pengembang .NET: aliran daya, hubung singkat, proteksi,
-stabilitas, harmonik, energi terbarukan, kendali smart grid, optimasi, estimasi keadaan, SCADA dan protokol gardu induk, pertukaran model CIM,
-GIS, simulasi, API cloud, dan digital twin. Framework ini dirancang sebagai fondasi aplikasi EMS, DMS, ADMS, DERMS, VPP, SCADA, dan digital twin.
-Algoritmanya diuji terhadap nilai acuan yang telah dipublikasikan (MATPOWER, IEC 60909, IEEE 1584, Anderson & Fouad, Baran & Wu, Billinton &
-Allan, Wood & Wollenberg, dan lainnya); lihat [Validasi](#validasi).
+Electrical.Net menyediakan blok bangunan perangkat lunak sistem tenaga untuk pengembang .NET: aliran daya (seimbang dan tiga fasa tak
+seimbang), hubung singkat, proteksi, stabilitas, harmonik, energi terbarukan, kendali smart grid, optimasi, estimasi keadaan, SCADA dan
+protokol gardu induk, pertukaran model (CIM, PSS/E RAW, IEEE CDF, MATPOWER, OpenDSS), GIS, simulasi, API cloud, dan digital twin. Framework ini
+dirancang sebagai fondasi aplikasi EMS, DMS, ADMS, DERMS, VPP, SCADA, dan digital twin. Algoritmanya diuji terhadap nilai acuan yang telah
+dipublikasikan (MATPOWER, penyulang uji IEEE PES, Kersting, IEC 60909, IEEE 1584, Anderson & Fouad, Baran & Wu, Billinton & Allan, Wood &
+Wollenberg, dan lainnya); lihat [Validasi](#validasi).
 
 ```csharp
 using Electrical.Core.Network;
@@ -21,8 +22,29 @@ using Electrical.PowerFlow;
 
 var pf = PowerFlowSolver.Solve(TestCases.Case14());   // Newton–Raphson sparse
 Console.WriteLine(pf);
-// NewtonRaphson: converged in 4 it, mismatch 1.00E-014, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
+// NewtonRaphson: converged in 3 it, mismatch 3.44E-009, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
 ```
+
+## Yang baru di 1.1
+
+- **Distribusi tak seimbang** (`Electrical.Distribution`, baru): aliran daya kerangka fasa (ladder sweep Kersting, injeksi arus untuk
+  penyulang sedikit mesh), matriks saluran 3×3 dari geometri konduktor (Carson termodifikasi + Kron, kabel netral konsentris dan berpelindung
+  pita), beban ZIP bintang/delta, hubungan trafo tiga fasa, regulator bertingkat dengan LDC, kapasitor terswitch, pengendali per fasa dan
+  deret waktu, pembaca skrip OpenDSS, serta penyulang IEEE 4 dan 13 node. Tegangan IEEE 13 node berada dalam 0,148 % dari hasil terbitan.
+  [Panduan](docs/id/distribusi.md)
+- **Pertukaran model** (`Electrical.Interop`, baru): pembaca dan penulis PSS/E RAW v33/v35 (trafo tiga belitan, shunt terswitch, header
+  `@!` v35), pembaca IEEE CDF, deteksi format berbasis isi dengan peringatan konversi. [Panduan](docs/id/pertukaran-model.md)
+- **Kendali tegangan dalam QSTS** (`Electrical.Simulation`): `OltcController`, `VoltageRegulatorController` (kompensasi jatuh tegangan
+  saluran), dan `CapacitorController` bertindak setelah setiap langkah waktu. Pada penyulang 33 bus, langkah pelanggaran tegangan turun dari
+  64 menjadi 1 dari 96. [Panduan](docs/id/simulasi-hpc-native.md#kendali-tegangan-dalam-qsts-v11)
+- **Aliran daya**: flat start Newton–Raphson kini mengambil sudut dari aliran daya DC, sehingga jaringan dengan phase shifter besar konvergen
+  ke solusi operasional. Case9 dan case14 juga konvergen satu iterasi lebih cepat.
+  [Panduan](docs/id/aliran-daya.md#flat-start-sudut-dari-aliran-daya-dc)
+- **CLI**: `--file` membaca `.raw`/`.cdf`, `convert --out x.raw [--version 33|35]`, `qsts --control`, serta perintah baru `dist`, `dss`,
+  dan `linecode`. [Referensi](docs/id/cli.md)
+- **Galeri**: tiga demo baru: Distribusi tak seimbang (IEEE 13 node), Pertukaran model, dan Kendali tegangan dalam deret waktu.
+- **Templat**: templat konsol baru `eln-distribution` (IEEE 13 node atau skrip OpenDSS); semua templat mereferensikan paket 1.1.0.
+- Action CI diperbarui ke `actions/checkout@v7`, `upload-artifact@v7`, `download-artifact@v8`, dan `setup-dotnet@v6`.
 
 ## Modul
 
@@ -30,7 +52,8 @@ Console.WriteLine(pf);
 |---|---|
 | **Electrical.Core** | Aljabar linear dense/sparse generik (`SparseLU<Complex>` dengan pengurutan minimum-degree), sistem per-unit, fasor, komponen simetris, model `PowerNetwork` bus-cabang, `NetworkBuilder` dalam satuan fisik, pustaka penghantar, Y-bus (urutan positif/negatif/nol), topologi, I/O MATPOWER, kasus uji (case9, case14, Baran–Wu 33-bus, jaringan sintetis), `TimeSeries`, builder DI dan event bus |
 | **Electrical.Circuit** | Analisis nodal termodifikasi (MNA): titik kerja DC, sapuan AC / Bode, transien (trapezoidal, backward Euler); R, L, C, induktor terkopel, sumber, dioda, saklar, sumber terkendali, trafo ideal; netlist mirip SPICE; rangkaian tiga fasa bintang/segitiga |
-| **Electrical.PowerFlow** | Newton–Raphson (sparse, batas Q, beban ZIP), Gauss–Seidel, fast-decoupled XB, DC, backward/forward sweep; penyaringan kontingensi N-1 (paralel); PTDF / LODF |
+| **Electrical.PowerFlow** | Newton–Raphson (sparse, batas Q, beban ZIP, flat start berawal DC), Gauss–Seidel, fast-decoupled XB, DC, backward/forward sweep; penyaringan kontingensi N-1 (paralel); PTDF / LODF |
+| **Electrical.Distribution** (1.1) | Aliran daya tiga fasa tak seimbang dalam kerangka fasa (ladder sweep, injeksi arus), konstanta saluran Carson/Kron untuk saluran udara dan kabel, beban ZIP bintang/delta, trafo tiga fasa, regulator bertingkat dengan LDC, kapasitor terswitch, pengendali per fasa dan deret waktu, pembaca OpenDSS, penyulang IEEE 4 dan 13 node, reduksi seimbang |
 | **Electrical.ShortCircuit** | IEC 60909: gangguan 3φ, SLG, LL, LLG melalui jaringan urutan; faktor c, κ (metode A/B/C), I″k, ip, Ib, Ith, komponen DC; kontribusi cabang dan sumber; pemindaian semua bus |
 | **Electrical.Protection** | Relai waktu-terbalik IEC 60255 / IEEE C37.112, fuse, kurva TCC, koordinasi CTI, zona jarak mho, relai diferensial persentase, kemampuan pemutus (breaker duty), arc flash IEEE 1584-2002 |
 | **Electrical.Stability** | Stabilitas transien multi-mesin model klasik (RK4) dengan daftar kejadian, waktu pemutusan kritis, kriteria luas sama SMIB, analisis eigen sinyal kecil dengan faktor partisipasi, kurva PV / QV, indeks-L, respons frekuensi (ROCOF, nadir) |
@@ -42,17 +65,18 @@ Console.WriteLine(pf);
 | **Electrical.SCADA** | Klien/server Modbus TCP dan codec PDU, basis data tag dengan penskalaan dan kualitas, alarm ISA-18.2, historian swinging-door, simulator RTU, codec APDU IEC 60870-5-104 |
 | **Electrical.IEC61850** | Parser SCL (ICD/CID/SCD), object reference dan katalog logical node, data MMS, ASN.1 BER, frame GOOSE dan Sampled Values (9-2LE), retransmisi GOOSE |
 | **Electrical.CIM** | Ekspor RDF/XML IEC 61970 CIM / gaya CGMES (EQ, TP, SSH, SV) dan impor dengan pemrosesan topologi |
+| **Electrical.Interop** (1.1) | Baca dan tulis PSS/E RAW v33/v35, pembaca IEEE Common Data Format, deteksi format berbasis isi (RAW, CDF, MATPOWER, JSON Cloud) dengan peringatan konversi, sampel IEEE 14 bus tertanam |
 | **Electrical.DigitalTwin** | Kembaran jaringan langsung: tag SCADA → estimasi keadaan WLS dengan penghapusan bad data → KPI, alarm yang dijelaskan, deviasi prakiraan; simulasi what-if; penuaan aset IEEE C57.91; simulator twin loop tertutup |
 | **Electrical.Forecasting** | Holt–Winters (musiman tunggal/ganda), regresi dengan fitur cuaca, k-NN hari serupa, ensemble, prakiraan daya surya dan angin, metrik galat, profil sintetis |
 | **Electrical.AI** | Agen operator jaringan LLM dwibahasa dengan 10 tool yang membumi (OpenAI, Azure OpenAI, Hugging Face, Ollama, atau aturan offline), deteksi anomali (robust z, EWMA, CUSUM), klasifikasi dan lokasi gangguan, klasterisasi profil beban, lingkungan RL Volt/VAR dengan Q-learning |
 | **Electrical.GIS** | Ekspor/impor GeoJSON, Web Mercator, panjang saluran haversine, tata letak geografis force-directed, indeks spasial, peta SVG, area padam |
 | **Electrical.Visualization** (+ **.Blazor**) | Tata letak dan render SVG diagram segaris otomatis dengan overlay aliran daya, grafik SVG (garis, batang, heatmap, gauge, fasor, TCC), encoder PNG, variabel tema terang/gelap; komponen Blazor |
-| **Electrical.Simulation** | Simulasi deret waktu kuasi-statis (QSTS) dengan profil beban/PV dan kejadian, manajer skenario, kecukupan pembangkitan (analitis dan Monte-Carlo sekuensial) |
+| **Electrical.Simulation** | Simulasi deret waktu kuasi-statis (QSTS) dengan profil beban/PV, kejadian, dan loop kendali (OLTC, regulator tegangan LDC, kapasitor terswitch), manajer skenario, kecukupan pembangkitan (analitis dan Monte-Carlo sekuensial) |
 | **Electrical.Cloud** | Runner job studi, kontrak JSON jaringan, minimal API ASP.NET Core (`MapElectricalApi`), penyimpanan skenario multi-tenant |
 | **Electrical.HPC** | Aliran daya batch paralel, sapuan beban, aliran daya probabilistik Monte-Carlo, benchmark skalabilitas |
 | **Electrical.Native** | Kernel Rust (FFT, harmonik Goertzel, THD/RMS, injeksi daya kompleks sparse, sampling normal deterministik) dengan fallback managed yang identik |
-| **Electrical.Cli** | Dotnet tool `eln` dengan 30 perintah (termasuk `eln ask` dan `eln twin`) |
-| **Electrical.Templates** | `dotnet new eln-console / eln-blazor / eln-avalonia / eln-scada / eln-webapi` |
+| **Electrical.Cli** | Dotnet tool `eln` dengan 33 perintah (termasuk `eln ask`, `eln twin`, `eln dist`, dan `eln dss`); membaca berkas MATPOWER, PSS/E RAW, IEEE CDF, JSON, dan CIM |
+| **Electrical.Templates** | `dotnet new eln-console / eln-blazor / eln-avalonia / eln-scada / eln-webapi / eln-distribution` |
 
 ## Mulai cepat
 
@@ -140,13 +164,19 @@ Setiap baris di bawah ini diuji oleh suite xUnit di `tests/Electrical.Tests` (si
 | Tabel probabilitas kapasitas keluar | Billinton & Allan §2.2 | 0,9604 / 0,0392 / 0,0004 | identik |
 | Estimasi keadaan WLS tanpa derau | Solusi aliran daya | keadaan eksak | diperoleh kembali secara eksak; aliran buruk dihapus oleh uji LNR |
 | Round trip CIM | Jaringan asli | aliran daya identik | identik (case14 13,393 MW, case33 202,7 kW) |
+| Aliran daya tak seimbang, IEEE 13 node | Hasil penyulang uji IEEE PES (node 675: 0,9835 / 1,0553 / 0,9758 pu) | galat terbesar thd tegangan terbitan | 0,9831 / 1,0559 / 0,9772 pu; terbesar 0,148 % |
+| Aliran daya tak seimbang, IEEE 4 node (GrY–GrY, Δ–GrY) | Hasil penyulang uji IEEE PES | galat terbesar | 0,026 % |
+| Konstanta saluran udara | Kersting Contoh 4.1 | z<sub>aa</sub> = 0,4576 + j1,0780 Ω/mil | 0,4576 + j1,0781 Ω/mil |
+| Konfigurasi IEEE 13 node 601–607 dari geometri | Lembar data IEEE | matriks impedansi fasa | dalam 0,0001 Ω/mil |
+| PSS/E RAW v33/v35 dan IEEE CDF, IEEE 14 bus | MATPOWER case14 | rugi 13,393 MW | 13,393 MW |
+| Kendali volt/var QSTS, 33 bus di belakang trafo 10 MVA | Hari yang sama tanpa kendali | 64 langkah pelanggaran, V<sub>min</sub> 0,9237 pu | 1 langkah, V<sub>min</sub> 0,9617 pu (4 langkah tap, 2 pensaklaran) |
 | Penuaan trafo | IEEE C57.91 | θ<sub>H</sub> = 110 °C pada beban pengenal (ambien 30 °C), F<sub>AA</sub>(110 °C) = 1, ≈ 2 pada 116,8 °C | 110 °C, 1,0, 2,0 |
 | Digital twin, case14 24 jam dengan derau RTU | Keadaan aliran daya sebenarnya | galat tegangan < 0,005 pu, beban dalam 3 % | rata-rata 0,00017 pu, maks 0,00077 pu |
 | Agen LLM, live | Azure OpenAI `gpt-5-mini`, rugi case14 (MATPOWER 13,393 MW) | 13,39 MW dikutip dari tool | lulus |
 
 ## Galeri
 
-Dua puluh demo langsung yang mencakup semua modul dengan UI profesional, sebagai aplikasi web **Blazor** dan aplikasi desktop **Avalonia** yang berbagi kode skenario
+Dua puluh tiga demo langsung yang mencakup semua modul dengan UI profesional, sebagai aplikasi web **Blazor** dan aplikasi desktop **Avalonia** yang berbagi kode skenario
 (`gallery/Electrical.Gallery.Shared`). Setiap angka dihitung oleh pustaka saat aplikasi berjalan, di samping kode C# yang menghasilkannya.
 
 ```bash
@@ -161,6 +191,8 @@ dotnet run --project gallery/Electrical.Gallery.Desktop
 | ![Hubung singkat](docs/images/web-shortcircuit.png) | ![Stabilitas](docs/images/desktop-stability.png) |
 | ![SCADA](docs/images/web-scada.png) | ![IEC 61850](docs/images/desktop-iec61850.png) |
 | ![Peta GIS](docs/images/web-gis.png) | ![Smart grid](docs/images/desktop-smartgrid.png) |
+| ![Distribusi tak seimbang](docs/images/web-distribution.png) | ![Pertukaran model](docs/images/desktop-interop.png) |
+| ![Kendali tegangan](docs/images/web-voltagecontrol.png) | ![Distribusi tak seimbang](docs/images/desktop-distribution.png) |
 
 Tema gelap: ![Tema gelap](docs/images/web-home-dark.png)
 
@@ -175,9 +207,9 @@ graph TD
     Native[Electrical.Native<br/>kernel Rust]
     PF[PowerFlow]
     Core --> PF
-    Core --> Circuit & ShortCircuit & IEC61850 & CIM & Forecasting
+    Core --> Circuit & ShortCircuit & IEC61850 & CIM & Forecasting & Interop
     ShortCircuit --> Protection
-    PF --> Stability & Harmonic & Renewable & Optimization & StateEstimation & SCADA & GIS & Visualization
+    PF --> Stability & Harmonic & Renewable & Optimization & StateEstimation & SCADA & GIS & Visualization & Distribution
     Renewable --> SmartGrid
     Renewable --> Simulation
     Forecasting --> Simulation
@@ -205,7 +237,7 @@ memakai satuan teknik di permukaan API (MW, Mvar, kV, kA, Ω, pu, derajat, detik
 ## Struktur repositori
 
 ```
-src/              23 paket pustaka (+ Electrical.Visualization.Blazor)
+src/              25 paket pustaka (+ Electrical.Visualization.Blazor)
 native/           Crate Rust electrical-native (C ABI, fungsi eln_*)
 tools/            Electrical.Cli (dotnet tool "eln")
 templates/        Electrical.Templates (paket dotnet new)
@@ -231,9 +263,9 @@ memublikasikan paket ke NuGet.
 
 ## Dokumentasi
 
-- Bahasa Indonesia: [docs/id](docs/id/README.md): memulai, arsitektur, panduan modul, aliran daya, hubung singkat & proteksi, stabilitas,
-  harmonik, energi terbarukan & smart grid, optimasi, estimasi keadaan, SCADA / IEC 61850 / CIM, GIS & visualisasi, simulasi / HPC / native,
-  API cloud, AI & digital twin, CLI, templat, galeri.
+- Bahasa Indonesia: [docs/id](docs/id/README.md): memulai, arsitektur, panduan modul, aliran daya, distribusi tak seimbang, hubung singkat &
+  proteksi, stabilitas, harmonik, energi terbarukan & smart grid, optimasi, estimasi keadaan, SCADA / IEC 61850 / CIM, pertukaran model,
+  GIS & visualisasi, simulasi / HPC / native, API cloud, AI & digital twin, CLI, templat, galeri.
 - English: [docs/en](docs/en/README.md).
 - Peta jalan: [PLAN.md](PLAN.md).
 

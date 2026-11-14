@@ -13,7 +13,10 @@ public static partial class Extra
             "twin" => Intelligence.Twin(cli),
             _ => null,
         };
+        DispatchDistribution(cli, ref result);
     }
+
+    static partial void DispatchDistribution(Args cli, ref Task<int>? result);
 }
 
 public static partial class Commands
@@ -26,7 +29,10 @@ public static partial class Commands
                                                       (LLM via ELECTRICAL_LLM_PROVIDER/_ENDPOINT/_API_KEY/_MODEL, offline otherwise)
               twin [--steps 24] [--lang en|id]        Digital twin: SCADA → state estimation → explained alarms → asset health
             """;
+        MoreHelpDistribution(ref text);
     }
+
+    static partial void MoreHelpDistribution(ref string text);
 }
 
 internal static class Intelligence

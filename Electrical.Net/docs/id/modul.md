@@ -29,7 +29,8 @@ var islands = Topology.Islands(net);
 ```
 
 **Acuan / batasan.** Format kasus dan data MATPOWER untuk case9/case14; Baran & Wu (1989) untuk case33bw. Model berupa bus-cabang urutan positif
-seimbang; pemodelan tiga fasa tak seimbang (phase-frame) ada di peta jalan (v1.1).
+seimbang; untuk penyulang tiga fasa tak seimbang (phase-frame) lihat [Electrical.Distribution](#electricaldistribution), dan untuk berkas
+PSS/E RAW serta IEEE CDF [Electrical.Interop](#electricalinterop).
 
 ## Electrical.Circuit
 
@@ -67,8 +68,28 @@ var feeder = PowerFlowSolver.Solve(TestCases.Case33BW(),
 // rugi 202,7 kW, Vmin 0,9131 pu @ bus 18
 ```
 
-**Acuan / batasan.** Hasil MATPOWER case9 dan case14; Baran & Wu 33-bus. Hanya urutan positif seimbang; tidak ada loop kendali tap trafo atau
-shunt otomatis di dalam aliran daya (event QSTS dapat mengatur shunt).
+**Acuan / batasan.** Hasil MATPOWER case9 dan case14; Baran & Wu 33-bus; flat start berawal DC divalidasi pada pergeseran fasa besar.
+Hanya urutan positif seimbang (tiga fasa: [Electrical.Distribution](#electricaldistribution)); tidak ada loop kendali tap atau shunt dalam
+satu kali penyelesaian (loop kendali deret waktu berjalan di [Electrical.Simulation](#electricalsimulation)).
+
+## Electrical.Distribution
+
+**Tujuan.** Penyulang distribusi tiga fasa tak seimbang dalam kerangka fasa (v1.1). Panduan: [Distribusi tak seimbang](distribusi.md).
+
+**Tipe utama.** `DistributionNetwork`, `UnbalancedPowerFlow` (`Solve`, ladder sweep atau injeksi arus), `DistributionPowerFlowOptions`,
+`DistributionPowerFlowResult` (`Bus(name).VmPu/VaDeg/VoltageUnbalanceFactor/NemaUnbalance`, `Branch(name)`, `RegulatorTaps`, `LossesKw`),
+`LineConstants` (`Overhead`, `ConcentricNeutral`, `TapeShielded`), `OverheadConfiguration`, `ConductorLibrary`, `LineImpedance`, `LineCode`,
+`VoltageRegulator`, `VoltageRegulatorController`, `OltcController`, `CapacitorController`, `DistributionTimeSeries`, `OpenDssReader`,
+`DistributionTestCases` (IEEE 4 dan 13 node), `ToBalanced`, `AddDistribution`.
+
+```csharp
+var r = UnbalancedPowerFlow.Solve(DistributionTestCases.Ieee13Node());
+var b = r.Bus("675");   // 0,9831 / 1,0559 / 0,9772 pu (IEEE: 0,9835 / 1,0553 / 0,9758)
+```
+
+**Acuan / batasan.** Penyulang uji IEEE PES 4 dan 13 node (galat tegangan terbesar 0,026 % dan 0,148 %), Kersting Contoh 4.1–4.3 dan
+5.1–5.2; konfigurasi 601–607 dihitung ulang dari geometri dalam 0,0001 Ω/mil. Sumber ideal; subset OpenDSS (trafo dua belitan, beban,
+kapasitor, regulator, kode dan geometri saluran); belum ada analisis gangguan atau harmonik pada model fasa (gunakan `ToBalanced`).
 
 ## Electrical.ShortCircuit
 
@@ -238,6 +259,23 @@ tidak ada publisher/subscriber raw-socket atau klien/server MMS.
 PowerTransformer, SynchronousMachine, ExternalNetworkInjection, EnergyConsumer, LinearShuntCompensator, saklar (untuk pemrosesan topologi),
 dan SvVoltage. Cakupan dan validasi CGMES 3.0 penuh ada di peta jalan (v1.4).
 
+## Electrical.Interop
+
+**Tujuan.** Pertukaran model dengan perangkat perencanaan (v1.1). Panduan: [Pertukaran model](pertukaran-model.md).
+
+**Tipe utama.** `NetworkFormats` (`Detect`, `Load`, `Parse`, `FromExtension`), `ImportResult` (`Network`, `Format`, `Warnings`),
+`NetworkFormat`, `PsseRaw` (`Read`, `Parse`, `Load`, `Write`, `Save`; revisi 33 dan 35), `IeeeCdf` (`Read`, `Parse`), `InteropSamples`
+(IEEE 14 bus sebagai RAW v33, RAW v35, dan CDF), `INetworkImporter`, `AddInterop`.
+
+```csharp
+var import = NetworkFormats.Load("grid.raw");           // PSS/E RAW, IEEE CDF, MATPOWER, atau JSON Cloud, dideteksi dari isinya
+string raw35 = PsseRaw.Write(import.Network, version: 35);
+```
+
+**Acuan / batasan.** IEEE 14 bus RAW v33/v35 dan CDF mereproduksi MATPOWER case14 (13,393 MW). Trafo tiga belitan menjadi ekuivalen bintang,
+shunt terswitch dan trafo pengatur dibekukan, bagian HVDC/FACTS dilewati dengan peringatan; penulis hanya menghasilkan trafo dua belitan;
+CDF hanya dapat dibaca.
+
 ## Electrical.DigitalTwin
 
 **Tujuan.** Kembaran jaringan langsung yang disinkronkan dari pengukuran SCADA melalui estimasi keadaan, simulasi what-if, kesehatan aset, dan
@@ -318,10 +356,14 @@ File.WriteAllText("sld.svg", SvgTheme.Resolve(svg, dark: false));
 **Tujuan.** Studi operasional domain waktu dan kecukupan pembangkitan. Panduan: [Simulasi, HPC & native](simulasi-hpc-native.md).
 
 **Tipe utama.** `QstsSimulation`, `QstsResult`, `PvSystem`, `SimulationEvent`, `SimulationEventKind`, `ScenarioManager`, `ScenarioSummary`,
-`AdequacyAssessment` (`Analytical`, `SequentialMonteCarlo`, `CapacityOutageTable`), `GeneratingUnit`, `AdequacyIndices`.
+`AdequacyAssessment` (`Analytical`, `SequentialMonteCarlo`, `CapacityOutageTable`), `GeneratingUnit`, `AdequacyIndices`; loop kendali v1.1:
+`QstsController`, `OltcController`, `VoltageRegulatorController` (LDC), `CapacitorController` (`CapacitorControlMode` Voltage / ReactivePower),
+`QstsSimulation.Controllers`, `QstsSimulation.Case33ControlDemo`.
 
-**Acuan / batasan.** Tabel capacity outage Billinton & Allan; Monte-Carlo sesuai dengan LOLE analitis dalam 10 % di tes. QSTS tidak memiliki
-dinamika pengendali (loop regulator/OLTC ada di peta jalan, v1.1).
+**Acuan / batasan.** Tabel capacity outage Billinton & Allan; Monte-Carlo sesuai dengan LOLE analitis dalam 10 % di tes.
+Case33ControlDemo: OLTC + kapasitor terswitch menurunkan langkah pelanggaran tegangan dari 64 menjadi 1 dari 96 (V<sub>min</sub> 0,9237 → 0,9617 pu)
+dengan 4 langkah tap dan 2 pensaklaran. Pengendali bersifat diskret dan kuasi-statis (tanpa dinamika mekanis); pengendali per fasa untuk
+penyulang tak seimbang ada di [Electrical.Distribution](#electricaldistribution).
 
 ## Electrical.Cloud
 

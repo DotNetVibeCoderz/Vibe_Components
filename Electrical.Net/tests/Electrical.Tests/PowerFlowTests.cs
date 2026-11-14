@@ -94,6 +94,27 @@ public class PowerFlowTests
         Assert.True(r.Elapsed.TotalSeconds < 5);
     }
 
+    [Theory]
+    [InlineData(10.0)]
+    [InlineData(30.0)]
+    [InlineData(45.0)]
+    public void LargePhaseShift_FlatStartConvergesToOperationalSolution(double shift)
+    {
+        // An ideal phase shifter feeding an unloaded bus: V3 must equal V2 rotated by -shift. A pure flat start used to
+        // diverge (30°) or land on a spurious solution (45°); the DC-initialised start reaches the right one.
+        var b = new NetworkBuilder("ps", 100, 50);
+        b.AddBus(1, 110, BusType.Slack); b.AddBus(2, 110); b.AddBus(3, 110);
+        b.AddGenerator(1, 0, 1.0);
+        b.AddLineOhm(1, 2, 2, 20);
+        b.Network.Branches.Add(new Branch { From = 2, To = 3, X = 0.1, Tap = 1, ShiftDeg = shift, Kind = BranchKind.Transformer });
+        b.AddLoad(2, 30, 10);
+        var r = PowerFlowSolver.Solve(b.Build());
+        Assert.True(r.Converged);
+        Assert.InRange(r.Iterations, 1, 6);
+        Assert.Equal(r.Bus(2).VaDeg - shift, r.Bus(3).VaDeg, 6);
+        Assert.Equal(r.Bus(2).Vm, r.Bus(3).Vm, 6);
+    }
+
     [Fact]
     public void Matpower_RoundTrip()
     {
