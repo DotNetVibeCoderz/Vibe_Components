@@ -22,6 +22,9 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Medical.AI/Medical.AI.csproj" />
     <ProjectReference Include="../../src/Medical.HuggingFace/Medical.HuggingFace.csproj" />
+    <ProjectReference Include="../../src/Medical.Devices/Medical.Devices.csproj" />
+    <ProjectReference Include="../../apps/Medical.Rounds.Core/Medical.Rounds.Core.csproj" />
+    <ProjectReference Include="../../apps/Medical.His/Medical.His.csproj" />
     <ProjectReference Include="../../src/Medical.AspNetCore/Medical.AspNetCore.csproj" />
     <ProjectReference Include="../../src/Medical.Emr/Medical.Emr.csproj" />
     <ProjectReference Include="../../src/Medical.Bpjs/Medical.Bpjs.csproj" />

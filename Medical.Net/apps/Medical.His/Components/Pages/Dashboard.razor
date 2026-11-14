@@ -1,0 +1,59 @@
+@page "/{Tenant}"
+@inherits HisPage
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+<header class="head"><p class="eyebrow">@S.TenantName</p><h1>@T("Hospital dashboard", "Dasbor rumah sakit")</h1></header>
+@if (Error is { } err) { <div class="alert critical">@err</div> }
+@if (_d is { } d)
+{
+    <div class="readouts">
+        <div class="readout"><span class="k">@T("Outpatients today", "Rawat jalan hari ini")</span><span class="v">@d.OutpatientsToday</span><span class="n">IGD @d.EmergencyToday</span></div>
+        <div class="readout"><span class="k">@T("Inpatients", "Pasien rawat inap")</span><span class="v">@d.Inpatients</span><span class="n">@T($"{d.AdmissionsToday} admitted, {d.DischargesToday} discharged today", $"{d.AdmissionsToday} masuk, {d.DischargesToday} pulang hari ini")</span></div>
+        <div class="readout"><span class="k">BOR</span><span class="v">@d.BedOccupancyRate.ToString("0.#", CultureInfo.InvariantCulture)<small>%</small></span><span class="n">ALOS @d.AverageLengthOfStay.ToString("0.#", CultureInfo.InvariantCulture) @T("days", "hari")</span></div>
+        <div class="readout"><span class="k">@T("Revenue today", "Pendapatan hari ini")</span><span class="v small">@Rp(d.RevenueToday)</span><span class="n">@T("all charges posted", "seluruh tagihan tercatat")</span></div>
+    </div>
+    <div class="grid-3">
+        <section class="panel">
+            <h3>@T("Bed occupancy", "Keterisian tempat tidur")</h3>
+            @foreach (var w in d.Wards)
+            {
+                <div class="bar-row">
+                    <span>@w.Ward</span>
+                    <span class="bar"><i class="occ" style="width:@Pct(w.Occupied, w.Beds)"></i><i class="cln" style="width:@Pct(w.Cleaning, w.Beds)"></i></span>
+                    <span class="mono">@w.Occupied/@w.Beds</span>
+                </div>
+            }
+            <p class="legend"><i class="sw occ"></i>@T("occupied", "terisi") <i class="sw cln"></i>@T("cleaning", "dibersihkan")</p>
+        </section>
+        <section class="panel">
+            <h3>@T("Clinic queues", "Antrean poli")</h3>
+            <table class="data"><tr><th>@T("Clinic", "Poli")</th><th>@T("Waiting", "Menunggu")</th><th>@T("In room", "Diperiksa")</th></tr>
+                @foreach (var q in d.Queues) { <tr><td>@q.Clinic</td><td class="mono">@q.Waiting</td><td class="mono">@q.InConsultation</td></tr> }
+            </table>
+            <p class="label">@T("Pending work", "Pekerjaan tertunda")</p>
+            <ul class="plain">
+                <li>@T("Lab orders", "Order lab"): <strong>@d.PendingLab</strong> @if (d.CriticalUnacknowledged > 0) { <span class="tag red">@d.CriticalUnacknowledged @T("critical unreported", "kritis belum dilaporkan")</span> }</li>
+                <li>@T("Radiology", "Radiologi"): <strong>@d.PendingRadiology</strong></li>
+                <li>@T("Prescriptions to review", "Resep perlu ditelaah"): <strong>@d.PrescriptionsToReview</strong></li>
+            </ul>
+        </section>
+        <section class="panel">
+            <h3>@T("Early-warning watch list", "Daftar pantau peringatan dini") <small>NEWS2 ≥ 5</small></h3>
+            @if (d.HighNews2.Count == 0) { <p class="muted">@T("No inpatient at NEWS2 5 or more.", "Tidak ada pasien dengan NEWS2 ≥ 5.")</p> }
+            @foreach (var w in d.HighNews2)
+            {
+                <div class="watch"><span class="news n@(w.News2 >= 7 ? "high" : "med")">@w.News2</span><div><strong>@w.Name</strong><small>@w.Bed · @Local(w.At)</small></div></div>
+            }
+        </section>
+    </div>
+}
+@code {
+    protected override string Module => "dashboard";
+    private HospitalDashboard? _d;
+    private static string Pct(int n, int of) => of == 0 ? "0%" : (100.0 * n / of).ToString("0.#", CultureInfo.InvariantCulture) + "%";
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = S.Db();
+        _d = await new DashboardService(db, S.Clock).SnapshotAsync();
+    }
+}

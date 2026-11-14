@@ -16,6 +16,9 @@ Building blocks for hospital information systems, EMR/EHR, health-data exchange,
 - **Medical.Rules**: NRules decision support (sepsis, early warning, drug interactions, allergies, renal dosing) + JSON workflows on Microsoft RulesEngine; pluggable drug-interaction sources (FDA-label contraindications, CSV, DrugBank XML)
 - **Medical.AI**: ML.NET risk models with explanations, Claude / OpenAI-compatible / offline clinical assistant, CT haemorrhage and lung-nodule AI, clinical NLP with ICD-10 suggestions, guideline answers with citations, federated learning, model cards, drift monitoring
 - **Medical.HuggingFace**: Hugging Face NER and sentence embeddings in-process via HF.Net
+- **Medical.Hospital**: multi-tenant hospital information system core on EF Core (SQLite / SQL Server): registration and queues, SOAP + ICD-10, vitals with NEWS2, admission / transfer / discharge, pharmacy review with FEFO dispensing, lab critical values and HL7 OML / ORU, radiology, billing with BPJS INA-CBG claim data, dashboards, a real-time NEWS2 monitoring engine
+- **Medical.Sync**: offline-first sync with hybrid logical clocks, per-type conflict policies, server-sequence pull cursors and a SQLite client store
+- **Medical.Devices** *(preview)*: HL7 v2 / MLLP patient monitors, MQTT + SenML sensors and infusion pumps, and simulators on IoTCom.Net (prerelease), feeding the NEWS2 engine
 - **Medical.Signals / Privacy / Emr / AspNetCore / Visualization / Native** (Rust kernels) · **Medical.Cli** · **Medical.Templates**
 
 ```csharp

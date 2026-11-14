@@ -3,6 +3,9 @@
     <Description>Shared use-case scenarios for the Medical.Net Gallery (Blazor + Avalonia).</Description>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.4.0" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../src/Medical.AI/Medical.AI.csproj" />
     <ProjectReference Include="../../src/Medical.Hl7/Medical.Hl7.csproj" />
     <ProjectReference Include="../../src/Medical.Privacy/Medical.Privacy.csproj" />
@@ -10,5 +13,7 @@
     <ProjectReference Include="../../src/Medical.Visualization/Medical.Visualization.csproj" />
     <ProjectReference Include="../../src/Medical.Emr/Medical.Emr.csproj" />
     <ProjectReference Include="../../src/Medical.Bpjs/Medical.Bpjs.csproj" />
+    <ProjectReference Include="../../src/Medical.Hospital/Medical.Hospital.csproj" />
+    <ProjectReference Include="../../src/Medical.Devices/Medical.Devices.csproj" />
   </ItemGroup>
 </Project>

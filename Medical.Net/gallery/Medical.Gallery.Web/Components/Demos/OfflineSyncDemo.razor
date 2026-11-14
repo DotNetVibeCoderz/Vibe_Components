@@ -1,0 +1,21 @@
+@inherits DemoBase
+@{ var s = Scenarios.OfflineSync(_step); }
+<div class="controls">
+    <div class="seg">@for (int i = 0; i < Scenarios.SyncSteps; i++) { int k = i; <button class="@(k == _step ? "on" : "")" @onclick="() => _step = k">@(k + 1)</button> }</div>
+    <strong>@s.Title[Lang]</strong>
+</div>
+<p class="lede">@s.Explanation[Lang]</p>
+<div class="grid-3">
+    @foreach (var (name, rows, online) in new[] { ("HIS server", s.Server, true), ("Tablet A · ns.dewi", s.TabletA, s.AOnline), ("Tablet B · ns.eko", s.TabletB, s.BOnline) })
+    {
+        <div class="panel">
+            <h3>@name <small>@(online ? T("online", "daring") : T("offline", "luring"))</small></h3>
+            <table class="data">
+                @foreach (var r in rows) { <tr class="@(r.Dirty ? "flag" : "")"><td><span class="tag">@r.Type</span></td><td class="wrap">@r.Summary</td></tr> }
+            </table>
+        </div>
+    }
+</div>
+<div class="panel"><h3>@T("Sync log", "Log sinkronisasi")</h3><pre class="mono small">@string.Join("\n", s.Log)</pre></div>
+<p class="note">@T("Highlighted rows are local changes not yet accepted by the server.", "Baris bersorot adalah perubahan lokal yang belum diterima server.")</p>
+@code { private int _step = 4; }

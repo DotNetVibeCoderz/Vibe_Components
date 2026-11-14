@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Medical.Net hospital information system core: multi-tenant EF Core model and services for registration and queues, outpatient (SOAP, ICD-10), inpatient bed management, pharmacy (FEFO stock, interaction / allergy / renal checks), laboratory (critical values, HL7 ORM / ORU), radiology (accession, reports), billing (tariffs, BPJS INA-CBG claims, payments), dashboards, a real-time NEWS2 monitoring engine and the server side of offline-first sync.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="$(MsExtVersion)" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="$(MsExtVersion)" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Medical.Rules/Medical.Rules.csproj" />
+    <ProjectReference Include="../Medical.Bpjs/Medical.Bpjs.csproj" />
+    <ProjectReference Include="../Medical.Hl7/Medical.Hl7.csproj" />
+    <ProjectReference Include="../Medical.Sync/Medical.Sync.csproj" />
+  </ItemGroup>
+</Project>

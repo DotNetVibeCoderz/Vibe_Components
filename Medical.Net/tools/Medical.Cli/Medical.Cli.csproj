@@ -5,7 +5,7 @@
     <ToolCommandName>medical</ToolCommandName>
     <IsPackable>true</IsPackable>
     <PackageId>Medical.Cli</PackageId>
-    <Description>Medical.Net command-line tool: clinical scores and calculators, terminology search, drug safety, FHIR (patient, IPS, profile validation), SATUSEHAT workflow bundles, BPJS INA-CBG claims, HL7 v2 (orders, scheduling, documents, conformance, MLLP send/listen), DICOM (phantom, info, render, anonymize, echo), ECG analysis, de-identification, decision support, risk models, the AI clinical assistant, critical-care and cardiovascular scores, WHO growth, organ dosing, clinical NLP with ICD-10 suggestions, cited guideline answers, federated learning and drift monitoring. Made by Gravicode Studios, led by Kang Fadhil.</Description>
+    <Description>Medical.Net command-line tool: clinical scores and calculators, terminology search, drug safety, FHIR (patient, IPS, profile validation), SATUSEHAT workflow bundles, BPJS INA-CBG claims, HL7 v2 (orders, scheduling, documents, conformance, MLLP send/listen), DICOM (phantom, info, render, anonymize, echo), ECG analysis, de-identification, decision support, risk models, the AI clinical assistant, critical-care and cardiovascular scores, WHO growth, organ dosing, clinical NLP with ICD-10 suggestions, cited guideline answers, federated learning and drift monitoring, plus the v2.0 hospital platform: a seeded multi-tenant HIS (dashboard, patient lookup with FHIR summary), simulated ICU monitors feeding real-time NEWS2 alerts, and an offline-first sync walkthrough. Made by Gravicode Studios, led by Kang Fadhil.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
@@ -24,5 +24,7 @@
     <ProjectReference Include="../../src/Medical.Privacy/Medical.Privacy.csproj" />
     <ProjectReference Include="../../src/Medical.Signals/Medical.Signals.csproj" />
     <ProjectReference Include="../../src/Medical.Visualization/Medical.Visualization.csproj" />
+    <ProjectReference Include="../../src/Medical.Hospital/Medical.Hospital.csproj" />
+    <ProjectReference Include="../../src/Medical.Devices/Medical.Devices.csproj" />
   </ItemGroup>
 </Project>

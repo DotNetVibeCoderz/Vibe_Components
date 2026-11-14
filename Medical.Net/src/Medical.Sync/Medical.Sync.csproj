@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Medical.Net offline-first synchronisation: hybrid logical clocks, per-type conflict policies (append-only clinical data, last-writer-wins, server-wins), a sync server over any store, and a SQLite client store with HTTP or in-process transport — for ward-round apps that keep working without a network.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="$(MsExtVersion)" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Medical.Core/Medical.Core.csproj" />
+  </ItemGroup>
+</Project>

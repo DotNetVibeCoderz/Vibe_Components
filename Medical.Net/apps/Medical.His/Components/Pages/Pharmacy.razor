@@ -1,0 +1,92 @@
+@page "/{Tenant}/pharmacy"
+@inherits HisPage
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+<header class="head"><p class="eyebrow">@S.TenantName</p><h1>@T("Pharmacy", "Farmasi")</h1></header>
+@if (Error is { } err) { <div class="alert critical">@err</div> }
+@if (Info is { } info) { <div class="alert info">@info</div> }
+@if (Ready)
+{
+    <div class="grid-2 wide-right">
+        <section class="panel">
+            <h3>@T("Prescriptions", "Resep") <small>@T("to review and dispense", "untuk ditelaah dan diserahkan")</small></h3>
+            <table class="data">
+                @foreach (var (rx, p) in _queue)
+                {
+                    <tr class="@(rx.Id == _rx?.Id ? "hl-soft" : "")" @onclick="() => Open(rx.Id)">
+                        <td>@p.FullName<br /><small class="muted">RM @p.Mrn · @Local(rx.OrderedAt)</small></td>
+                        <td>@string.Join(", ", rx.Items.Select(i => i.Generic))</td>
+                        <td><span class="tag @(rx.State == PrescriptionState.Verified ? "teal" : "")">@rx.State</span></td>
+                    </tr>
+                }
+            </table>
+            <p class="label">@T("Stock alerts", "Peringatan stok")</p>
+            <table class="data"><tr><th>@T("Drug", "Obat")</th><th>@T("Stock", "Stok")</th><th>@T("Nearest expiry", "Kedaluwarsa terdekat")</th><th></th></tr>
+                @foreach (var a in _alerts) { <tr><td>@a.Generic</td><td class="mono">@a.Quantity / @a.ReorderLevel</td><td class="mono">@a.NearestExpiry?.ToString("dd-MM-yyyy")</td><td>@if (a.Low) { <span class="tag warn">@T("low", "menipis")</span> } @if (a.Expiring) { <span class="tag red">@T("expiring", "segera kedaluwarsa")</span> }</td></tr> }
+            </table>
+        </section>
+        <section class="panel">
+            @if (_rx is { } rx2)
+            {
+                <h3>@T("Prescription", "Resep") <small>@rx2.State · @T("prescriber", "dokter") @(_prescriber ?? "—")</small></h3>
+                <table class="data"><tr><th>@T("Drug", "Obat")</th><th>@T("Dose", "Dosis")</th><th>@T("Qty", "Jumlah")</th></tr>
+                    @foreach (var i in rx2.Items) { <tr><td>@i.Generic</td><td class="mono">@i.DoseMg.ToString("0.#", CultureInfo.InvariantCulture) mg × @i.FrequencyPerDay/@T("day", "hari") × @i.Days @T("d", "hr")</td><td class="mono">@i.Quantity</td></tr> }
+                </table>
+                <div class="controls"><button @onclick="ReviewAsync">@T("Run pharmacist review", "Telaah resep")</button></div>
+                @if (_review is { } rv)
+                {
+                    @if (rv.Findings.Count == 0) { <div class="alert info"><strong>@T("No problems found.", "Tidak ada masalah.")</strong></div> }
+                    @foreach (var f in rv.Findings)
+                    {
+                        <div class="alert @(f.Severity == ReviewSeverity.Stop ? "critical" : f.Severity == ReviewSeverity.Warning ? "warning" : "info")"><span class="tag">@f.Severity · @f.Kind</span><span>@f.Message[S.Lang]</span></div>
+                    }
+                }
+                else if (rx2.Review is { Length: > 0 } text) { <pre class="doc">@text</pre> }
+                <div class="controls end">
+                    @if (rx2.State == PrescriptionState.Verified) { <button class="primary" @onclick="() => DispenseAsync(null)">@T("Dispense (FEFO)", "Serahkan (FEFO)")</button> }
+                    else if (rx2.State == PrescriptionState.Ordered)
+                    {
+                        <input @bind="_override" placeholder="@T("Override reason (after consulting the prescriber)…", "Alasan override (setelah konfirmasi dokter)…")" style="min-width:20em" />
+                        <button class="warn" @onclick="() => DispenseAsync(_override)">@T("Dispense with override", "Serahkan dengan override")</button>
+                    }
+                </div>
+            }
+            else { <p class="empty">@T("Pick a prescription.", "Pilih resep.")</p> }
+        </section>
+    </div>
+}
+@code {
+    protected override string Module => "pharmacy";
+    private List<(Prescription, HisPatient)> _queue = [];
+    private IReadOnlyList<StockAlert> _alerts = [];
+    private Prescription? _rx;
+    private PharmacyReview? _review;
+    private string? _override, _prescriber;
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = S.Db();
+        var list = await db.Prescriptions.Include(r => r.Items).Where(r => r.State == PrescriptionState.Ordered || r.State == PrescriptionState.Verified)
+            .Join(db.Patients, r => r.PatientId, p => p.Id, (r, p) => new { r, p }).ToListAsync();
+        _queue = list.OrderBy(x => x.r.OrderedAt).Select(x => (x.r, x.p)).ToList();
+        _alerts = await new PharmacyService(db, S.Clock).StockAlertsAsync();
+        if (_rx is not null) await LoadRx(_rx.Id); else if (_queue.Count > 0) await LoadRx(_queue[0].Item1.Id);
+    }
+
+    private async Task Open(string id) { _review = null; await LoadRx(id); }
+
+    private async Task LoadRx(string id)
+    {
+        await using var db = S.Db();
+        _rx = await db.Prescriptions.Include(r => r.Items).FirstOrDefaultAsync(r => r.Id == id);
+        _prescriber = _rx?.PrescriberId is { } pid ? (await db.Staff.FirstOrDefaultAsync(s => s.Id == pid))?.Name : null;
+    }
+
+    private Task ReviewAsync() => Run(async () => { await using var db = S.Db(); _review = await new PharmacyService(db, S.Clock).ReviewAsync(_rx!.Id); });
+
+    private Task DispenseAsync(string? reason) => Run(async () =>
+    {
+        await using var db = S.Db();
+        await new PharmacyService(db, S.Clock).DispenseAsync(_rx!.Id, reason);
+        _rx = null; _review = null; _override = null;
+    }, T("Dispensed and charged.", "Obat diserahkan dan ditagihkan."));
+}

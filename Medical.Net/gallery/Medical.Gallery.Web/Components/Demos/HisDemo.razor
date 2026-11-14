@@ -1,0 +1,45 @@
+@inherits DemoBase
+@using Medical.Hospital
+@if (_v is { } v)
+{
+    var d = v.Dashboard;
+    <div class="controls">
+        <div class="seg">@foreach (var t in v.Tenants) { <button class="@(t.Id == v.TenantId ? "on" : "")" @onclick="() => Load(t.Id, null)">@t.Name · @t.City</button> }</div>
+        <div class="seg">@foreach (var w in v.Wards) { <button class="@(w.Id == v.WardId ? "on" : "")" @onclick="() => Load(v.TenantId, w.Code)">@w.NameId</button> }</div>
+    </div>
+    <div class="readouts">
+        <div class="readout"><span class="k">@T("Outpatients today", "Rawat jalan hari ini")</span><span class="v">@d.OutpatientsToday</span><span class="n">IGD @d.EmergencyToday</span></div>
+        <div class="readout"><span class="k">@T("Inpatients", "Rawat inap")</span><span class="v">@d.Inpatients</span><span class="n">BOR @Scenarios.Fmt(d.BedOccupancyRate, "0.#") %</span></div>
+        <div class="readout"><span class="k">@T("Pending work", "Pekerjaan tertunda")</span><span class="v">@(d.PendingLab + d.PendingRadiology + d.PrescriptionsToReview)</span><span class="n">lab @d.PendingLab · rad @d.PendingRadiology · @T("Rx", "resep") @d.PrescriptionsToReview · @T("critical", "kritis") @d.CriticalUnacknowledged</span></div>
+        <div class="readout"><span class="k">@T("Revenue today", "Pendapatan hari ini")</span><span class="v">@Scenarios.Fmt((double)(d.RevenueToday / 1_000_000m), "0.0")<small>@T("M Rp", "jt Rp")</small></span><span class="n">@T("all charges posted", "seluruh tagihan")</span></div>
+    </div>
+    <div class="grid-2 wide-right">
+        <div class="panel">
+            <h3>@T("Clinic queues", "Antrean poli")</h3>
+            <table class="data"><tr><th>@T("Clinic", "Poli")</th><th>@T("Waiting", "Menunggu")</th><th>@T("In room", "Diperiksa")</th></tr>
+                @foreach (var q in d.Queues) { <tr><td>@q.Clinic</td><td class="mono">@q.Waiting</td><td class="mono">@q.InConsultation</td></tr> }</table>
+            <p class="label">@T("NEWS2 watch list", "Daftar pantau NEWS2")</p>
+            @foreach (var w in d.HighNews2) { <p><span class="risk risk-@(w.News2 >= 7 ? "high" : "medium")">NEWS2 @w.News2</span> <strong>@w.Name</strong> <small class="muted">@w.Bed</small></p> }
+        </div>
+        <div class="panel">
+            <h3>@T("Bed board", "Papan tempat tidur") <small>@v.Wards.First(w => w.Id == v.WardId).NameId</small></h3>
+            <div class="beds">
+                @foreach (var b in v.Board)
+                {
+                    <div class="bedtile @b.Status.ToString().ToLowerInvariant() @(b.News2 >= 7 ? "hi" : b.News2 >= 5 ? "me" : "")">
+                        <span class="mono">@b.Code</span> <small class="muted">@b.Class</small>
+                        <strong>@(b.PatientName ?? (b.Status == BedStatus.Free ? T("free", "kosong") : b.Status.ToString()))</strong>
+                        @if (b.News2 is { } n) { <span class="risk risk-@(n >= 7 ? "high" : n >= 5 ? "medium" : "low")">NEWS2 @n</span> }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+    <p class="note">@T("Shared schema, TenantId on every row: global query filters hide other hospitals' rows, SaveChanges refuses cross-tenant writes. The full reference app is apps/Medical.His.",
+                       "Skema bersama, TenantId di setiap baris: filter kueri global menyembunyikan baris rumah sakit lain, SaveChanges menolak penulisan lintas tenant. Aplikasi referensi lengkap ada di apps/Medical.His.")</p>
+}
+@code {
+    private HisView? _v;
+    protected override async Task OnInitializedAsync() { base.OnInitialized(); _v = await Scenarios.His(); }
+    private async Task Load(string tenant, string? ward) => _v = await Scenarios.His(tenant, ward);
+}

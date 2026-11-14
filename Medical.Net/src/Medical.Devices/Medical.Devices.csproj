@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Medical.Net bedside devices on IoTCom.Net (preview): HL7 v2 / MLLP patient monitors, MQTT + SenML sensors and infusion pumps, and simulators — feeding the real-time NEWS2 engine of Medical.Hospital. Preview because IoTCom.Net is still in preview.</Description>
+    <VersionSuffix>preview</VersionSuffix>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="IoTCom.Net.Protocols.Hl7" Version="0.22.0-preview.1" />
+    <PackageReference Include="IoTCom.Net.Adapters.Mqtt" Version="0.22.0-preview.1" />
+    <PackageReference Include="IoTCom.Net.Serialization.SenML" Version="0.22.0-preview.1" />
+    <!-- CVE-2026-118747 (DoS) is fixed in 10.0.15; IoTCom.Net 0.22 brings 10.0.12 transitively. -->
+    <PackageReference Include="System.Formats.Cbor" Version="10.0.15" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Medical.Hospital/Medical.Hospital.csproj" />
+  </ItemGroup>
+</Project>

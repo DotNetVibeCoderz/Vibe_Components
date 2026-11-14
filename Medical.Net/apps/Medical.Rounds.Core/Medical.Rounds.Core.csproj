@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Platform-independent core of the Medical.Net ward-rounds app: offline store and sync against the HIS, ward list, vital signs with on-device NEWS2, tasks and notes.</Description>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Medical.Sync/Medical.Sync.csproj" />
+    <ProjectReference Include="../../src/Medical.Clinical/Medical.Clinical.csproj" />
+  </ItemGroup>
+</Project>

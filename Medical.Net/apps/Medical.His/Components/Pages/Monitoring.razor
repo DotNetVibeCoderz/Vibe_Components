@@ -1,0 +1,98 @@
+@page "/{Tenant}/monitoring"
+@inherits HisPage
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject MonitoringHub Hub
+<header class="head"><p class="eyebrow">@S.TenantName · ICU</p><h1>@T("Live monitoring", "Monitor pasien langsung")</h1>
+    <p class="lede">@T("Bedside monitors send HL7 v2 ORU^R01 over MLLP (IoTCom.Net); NEWS2 is recomputed on every reading, alerts need two consistent evaluations, and a set is charted every 15 minutes for nurse validation.",
+                       "Monitor bedside mengirim HL7 v2 ORU^R01 lewat MLLP (IoTCom.Net); NEWS2 dihitung ulang setiap pembacaan, peringatan butuh dua evaluasi konsisten, dan satu set dicatat tiap 15 menit untuk divalidasi perawat.")</p></header>
+@if (Error is { } err) { <div class="alert critical">@err</div> }
+@if (Ready)
+{
+    <div class="grid-2 wide-left">
+        <section class="monitors">
+            @foreach (var s in _beds)
+            {
+                <div class="monitor @Lvl(s.Level)">
+                    <div class="mhead"><strong>@s.BedCode</strong><span>@(s.PatientName ?? T("empty bed", "tempat tidur kosong"))</span>
+                        @if (s.News2 is { } n) { <span class="news n@(n.Score >= 7 ? "high" : n.Score >= 5 ? "med" : "low")">NEWS2 @n.Score</span> }</div>
+                    <div class="params">
+                        @P(s, VitalParameter.HeartRate, T("HR", "Nadi"), "/min", "hr")
+                        @P(s, VitalParameter.SpO2, "SpO₂", "%", "spo2")
+                        @P(s, VitalParameter.RespiratoryRate, "RR", "/min", "rr")
+                        <div class="param bp"><span class="k">@T("BP", "TD")</span><span class="v">@V(s, VitalParameter.SystolicBp)/@V(s, VitalParameter.DiastolicBp)</span><span class="u">mmHg</span></div>
+                        @P(s, VitalParameter.TemperatureC, T("Temp", "Suhu"), "°C", "t", "0.0")
+                    </div>
+                    <div class="mfoot">
+                        <span>@(s.Level == EscalationLevel.None ? T("no response needed", "tanpa respons khusus") : MonitoringEngine.Message(s.Level, s.News2?.Score ?? 0)[S.Lang])</span>
+                        <span class="mono">@s.Updated.ToOffset(TimeSpan.FromHours(7)).ToString("HH:mm")</span>
+                    </div>
+                </div>
+            }
+        </section>
+        <section>
+            <div class="panel">
+                <h3>@T("Alerts", "Peringatan") <small>@T("confirmed, with hysteresis", "terkonfirmasi, dengan histeresis")</small></h3>
+                @if (_alerts.Count == 0) { <p class="muted">@T("No alerts yet.", "Belum ada peringatan.")</p> }
+                @foreach (var a in _alerts.Take(8))
+                {
+                    <div class="alert @(a.Raised ? (a.Level >= EscalationLevel.High ? "critical" : "warning") : "info")">
+                        <span class="tag">@a.BedCode · @a.At.ToOffset(TimeSpan.FromHours(7)).ToString("HH:mm") · @a.Level</span>
+                        <strong>@a.PatientName</strong><span>@a.Message[S.Lang]</span>
+                    </div>
+                }
+            </div>
+            <div class="panel">
+                <h3>@T("Infusion pumps", "Pompa infus")</h3>
+                <table class="data"><tr><th>@T("Pump", "Pompa")</th><th>@T("Drug", "Obat")</th><th>mL/h</th><th>@T("Left", "Sisa")</th></tr>
+                    @foreach (var p in _pumps)
+                    {
+                        <tr class="@(p.Alarm is null ? "" : "flag")"><td class="mono">@p.DeviceId</td><td>@p.Drug</td><td class="mono">@p.RateMlPerHour</td>
+                            <td class="mono">@(p.MinutesRemaining is { } m ? $"{m:0} min" : "—") @if (p.Alarm is { } al) { <span class="tag red">@al</span> }</td></tr>
+                    }
+                </table>
+            </div>
+        </section>
+    </div>
+}
+@code {
+    protected override string Module => "monitoring";
+    private IReadOnlyList<BedSnapshot> _beds = [];
+    private IReadOnlyList<EarlyWarningAlert> _alerts = [];
+    private IReadOnlyList<Medical.Devices.InfusionPumpStatus> _pumps = [];
+    private DateTime _lastRender;
+
+    private static string Lvl(EscalationLevel l) => l switch { EscalationLevel.High => "lv-high", EscalationLevel.Medium => "lv-med", EscalationLevel.LowMedium => "lv-lowmed", _ => "" };
+    private static string V(BedSnapshot s, VitalParameter p, string fmt = "0") => s.Latest.TryGetValue(p, out var x) ? x.Value.ToString(fmt, CultureInfo.InvariantCulture) : "—";
+    private RenderFragment P(BedSnapshot s, VitalParameter p, string label, string unit, string cls, string fmt = "0") =>
+        @<div class="param @cls"><span class="k">@label</span><span class="v">@V(s, p, fmt)</span><span class="u">@unit</span></div>;
+
+    protected override Task LoadAsync()
+    {
+        _beds = Hub.Engine(S.TenantId).Snapshots;
+        _alerts = Hub.Alerts(S.TenantId);
+        _pumps = Hub.Pumps(S.TenantId);
+        if (!_subscribed) { Hub.Updated += OnUpdate; Hub.Alerted += OnAlert; _subscribed = true; }
+        return Task.CompletedTask;
+    }
+
+    private bool _subscribed;
+
+    private void OnUpdate(string tenant, BedSnapshot s)
+    {
+        if (tenant != S.TenantId || (DateTime.UtcNow - _lastRender).TotalMilliseconds < 400) return;   // throttle: six readings arrive per ORU
+        _lastRender = DateTime.UtcNow;
+        _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    }
+
+    private void OnAlert(string tenant, EarlyWarningAlert a)
+    {
+        if (tenant == S.TenantId) _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    }
+
+    public override void Dispose()
+    {
+        Hub.Updated -= OnUpdate;
+        Hub.Alerted -= OnAlert;
+        base.Dispose();
+    }
+}

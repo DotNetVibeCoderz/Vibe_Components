@@ -1,0 +1,42 @@
+@inherits DemoBase
+@using Medical.Hospital.Monitoring
+@if (_f is { } f)
+{
+    <div class="controls">
+        <label>@T("Simulated time", "Waktu simulasi") <input type="range" min="10" max="@Scenarios.MonitorMinutes" step="10" value="@_minute" @onchange="Move" /> <span class="mono">@f.Minute min</span></label>
+        <span class="muted">@f.Messages HL7 ORU^R01 · MLLP</span>
+    </div>
+    <div class="monitors">
+        @foreach (var s in f.Beds)
+        {
+            <div class="monitor @(s.Level switch { EscalationLevel.High => "lv-high", EscalationLevel.Medium => "lv-med", EscalationLevel.LowMedium => "lv-lowmed", _ => "" })">
+                <div class="mhead"><strong>@s.BedCode</strong><span>@s.PatientName</span><span class="risk risk-@((s.News2?.Score ?? 0) >= 7 ? "high" : (s.News2?.Score ?? 0) >= 5 ? "medium" : "low")">NEWS2 @(s.News2?.Score.ToString() ?? "—")</span></div>
+                <div class="params">
+                    <div class="param hr"><span class="k">@T("HR", "Nadi")</span><span class="v">@V(s, VitalParameter.HeartRate)</span></div>
+                    <div class="param spo2"><span class="k">SpO₂</span><span class="v">@V(s, VitalParameter.SpO2)</span></div>
+                    <div class="param rr"><span class="k">RR</span><span class="v">@V(s, VitalParameter.RespiratoryRate)</span></div>
+                    <div class="param bp"><span class="k">@T("BP", "TD")</span><span class="v">@V(s, VitalParameter.SystolicBp)/@V(s, VitalParameter.DiastolicBp)</span></div>
+                    <div class="param t"><span class="k">°C</span><span class="v">@V(s, VitalParameter.TemperatureC, "0.0")</span></div>
+                </div>
+            </div>
+        }
+    </div>
+    <div class="grid-2 wide-left">
+        <div class="panel"><h3>NEWS2 <small>@T("4 ICU beds", "4 tempat tidur ICU")</small></h3>@Svg(f.Chart)</div>
+        <div class="panel">
+            <h3>@T("Alerts", "Peringatan") <small>@T("confirmed, with hysteresis", "terkonfirmasi, dengan histeresis")</small></h3>
+            @foreach (var a in f.Alerts.Take(6))
+            {
+                <div class="alert @(a.Raised ? (a.Level >= EscalationLevel.High ? "critical" : "warning") : "info")"><span class="tag">@a.BedCode · @a.Level</span><strong>@a.PatientName</strong><span>@a.Message[Lang]</span></div>
+            }
+        </div>
+    </div>
+}
+else { <p class="empty">@T("Running the simulated ICU…", "Menjalankan ICU tersimulasi…")</p> }
+@code {
+    private MonitorFrame? _f;
+    private int _minute = 180;
+    private static string V(BedSnapshot s, VitalParameter p, string fmt = "0") => s.Latest.TryGetValue(p, out var x) ? Scenarios.Fmt(x.Value, fmt) : "—";
+    protected override async Task OnInitializedAsync() { base.OnInitialized(); _f = await Scenarios.Monitoring(_minute); }
+    private async Task Move(ChangeEventArgs e) { _minute = int.Parse(e.Value?.ToString() ?? "180"); _f = await Scenarios.Monitoring(_minute); }
+}

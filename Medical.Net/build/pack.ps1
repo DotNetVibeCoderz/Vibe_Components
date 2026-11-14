@@ -21,8 +21,8 @@ try {
     }
     $projects = @(Get-ChildItem src -Recurse -Filter *.csproj) + (Get-Item tools/Medical.Cli/Medical.Cli.csproj) + (Get-Item templates/Medical.Templates/Medical.Templates.csproj)
     foreach ($p in $projects) {
-        dotnet pack $p.FullName -c Release -o $out -p:Version=$Version --nologo
+        dotnet pack $p.FullName -c Release -o $out -p:VersionPrefix=$Version --nologo
         if ($LASTEXITCODE -ne 0) { throw "Pack failed: $($p.Name)" }
     }
-    Get-ChildItem $out -Filter "*.$Version.nupkg" | Select-Object Name, Length | Format-Table -AutoSize
+    Get-ChildItem $out -Filter "*.$Version*.nupkg" | Select-Object Name, Length | Format-Table -AutoSize
 } finally { Pop-Location }

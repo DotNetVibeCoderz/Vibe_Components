@@ -28,6 +28,9 @@ medical help
 | NLP & guidelines (v1.3) | `medical nlp "<note>" [--hf]` · `medical guideline ask "<question>" [--corpus dir] [--hf-embed] [--offline]` |
 | Learning (v1.3) | `medical federated [--noise 1.0 --clip 0.5] [--card card.md]` · `medical drift --shift 0.8` |
 | EMR | `medical emr seed --db medical.db --count 50` · `medical emr show pat-00007` |
+| HIS (v2.0) | `medical his seed [--db his.db] [--patients 40]` · `medical his dashboard [--db his.db] [--tenant rs-nusantara]` · `medical his patient <mrn> [--db his.db] [--tenant rs-nusantara] [--fhir summary.json]` |
+| Monitoring (v2.0) | `medical monitor [--minutes 120] [--step 5]` (simulated ICU monitors → HL7 / MLLP → NEWS2 alerts; exit code 3 on a high alert) |
+| Sync (v2.0) | `medical sync demo` (offline ward rounds: two tablets, conflicts, convergence) |
 
 Add `--lang id` for Bahasa Indonesia output.
 
@@ -45,11 +48,11 @@ dotnet new install Medical.Templates
 | `medical-blazor` | Blazor ward board ranked by NEWS2 with observation charts and alerts |
 | `medical-avalonia` | Avalonia DICOM viewer with window presets, HU statistics and haemorrhage screening |
 
-All templates accept `--MedicalNetVersion` (default `1.3.0`).
+All templates accept `--MedicalNetVersion` (default `2.0.0`).
 
 ## Gallery
 
-Twenty-nine use cases — early warning, decision support, calculators, DICOM viewer, haemorrhage screen, **MPR & MIP**, **3D volume**, **compression**, ECG, **12-lead ECG**, **imaging AI → SEG / SR**, FHIR patient summary, HL7 feed, **FHIR server**, **HL7 orders & scheduling**, terminology, **SATUSEHAT visit**, **BPJS claim (INA-CBG)**, clinical assistant, risk models, de-identification, EMR, and (v1.3) **ICU & obstetric scores**, **cardiovascular risk**, **WHO growth**, **drug safety & dosing**, **clinical NLP & coding**, **guideline answers**, **federated learning** — in two apps that share `gallery/Medical.Gallery.Shared`:
+Thirty-two use cases — early warning, decision support, calculators, DICOM viewer, haemorrhage screen, **MPR & MIP**, **3D volume**, **compression**, ECG, **12-lead ECG**, **imaging AI → SEG / SR**, FHIR patient summary, HL7 feed, **FHIR server**, **HL7 orders & scheduling**, terminology, **SATUSEHAT visit**, **BPJS claim (INA-CBG)**, clinical assistant, risk models, de-identification, EMR, and (v1.3) **ICU & obstetric scores**, **cardiovascular risk**, **WHO growth**, **drug safety & dosing**, **clinical NLP & coding**, **guideline answers**, **federated learning**, and (v2.0, group *Hospital platform*) **multi-tenant HIS**, **live bedside monitoring** and **offline ward rounds** — in two apps that share `gallery/Medical.Gallery.Shared`:
 
 ```bash
 dotnet run --project gallery/Medical.Gallery.Web --urls http://localhost:5290      # /?lang=id for Indonesian
@@ -63,8 +66,42 @@ dotnet run --project gallery/Medical.Gallery.Desktop -- --screenshot docs/images
 | ![](../images/web-terminology.png) | ![](../images/web-risk.png) |
 | ![](../images/desktop-hemorrhage.png) | ![](../images/desktop-cds.png) |
 | ![](../images/web-hl7-orders.png) | ![](../images/desktop-satusehat.png) |
+| ![](../images/web-his.png) | ![](../images/desktop-live-monitoring.png) |
 
 Web screenshots are produced with headless Chrome (`--screenshot`, `--blink-settings=preferredColorScheme=1` for light mode, `--force-prefers-reduced-motion` so the ECG draw-on animation is complete). The 3D page needs WebGL (`--use-angle=swiftshader --enable-unsafe-swiftshader`) and is captured at `/demo/volume3d?still=1`: virtual time would drop the Blazor circuit, so still mode builds the scene from the prerendered markup and swaps the canvas for an image. The desktop 3D view renders offscreen with ThreeNet in `--screenshot` mode.
+
+## Hospital apps (v2.0)
+
+```bash
+ASPNETCORE_ENVIRONMENT=Development dotnet run --project apps/Medical.His --urls http://localhost:5300
+dotnet build Medical.Rounds.slnx                                          # MAUI; needs the maui-windows workload
+dotnet run --project apps/Medical.Rounds -f net10.0-windows10.0.19041.0
+```
+
+Run the HIS in Development, or publish it. Static web assets don't resolve when the `bin` executable runs in Production.
+See [Hospital platform](platform.md) for configuration, roles and APIs.
+
+**HIS screenshots.** With the HIS running, sign in through `/account/demo` in the screenshot URL. Use a fresh
+`--user-data-dir` for every shot so that no cookie from an earlier user, hospital or language is reused:
+
+```bash
+chrome --headless=new --user-data-dir="$(mktemp -d)" --blink-settings=preferredColorScheme=1 --window-size=1440,1000 \
+  --screenshot=docs/images/his-dashboard-en.png \
+  "http://localhost:5300/account/demo?tenant=rs-nusantara&user=admin&lang=en&returnUrl=/rs-nusantara"
+```
+
+Use `lang=id` and no suffix for the Indonesian shots (`his-dashboard.png`), and `returnUrl=/rs-nusantara/monitoring`,
+`/registration`, `/pharmacy` and so on for the other pages.
+
+**Rounds screenshots.** With the HIS running on `http://localhost:5300`, the MAUI app captures itself and exits:
+
+```bash
+apps/Medical.Rounds/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Medical.Rounds.exe --capture docs/images en   # rounds-ward.png, rounds-patient.png, …
+apps/Medical.Rounds/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Medical.Rounds.exe --capture docs/images id   # rounds-ward-id.png, …
+```
+
+The capture records vitals and a note on the sickest patient (they stay on the device's in-memory store) and writes
+`rounds-capture[-id].log` with the sync result.
 
 ## QT validation
 

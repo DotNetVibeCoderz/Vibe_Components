@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <Description>Medical.Net HIS — multi-tenant hospital information system reference app (registration, outpatient, wards, live monitoring, pharmacy, laboratory, radiology, billing) with the ward-round sync API.</Description>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Medical.Hospital/Medical.Hospital.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="$(MsExtVersion)" />
+    <ProjectReference Include="../../src/Medical.Devices/Medical.Devices.csproj" />
+    <ProjectReference Include="../../src/Medical.Fhir/Medical.Fhir.csproj" />
+    <ProjectReference Include="../../src/Medical.Visualization/Medical.Visualization.csproj" />
+  </ItemGroup>
+</Project>

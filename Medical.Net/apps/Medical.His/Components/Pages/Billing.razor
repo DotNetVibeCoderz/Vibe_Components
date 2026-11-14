@@ -1,0 +1,91 @@
+@page "/{Tenant}/billing"
+@inherits HisPage
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+<header class="head"><p class="eyebrow">@S.TenantName</p><h1>@T("Billing & claims", "Kasir & klaim")</h1></header>
+@if (Error is { } err) { <div class="alert critical">@err</div> }
+@if (Info is { } info) { <div class="alert info">@info</div> }
+@if (Ready)
+{
+    <div class="grid-2 wide-right">
+        <section class="panel">
+            <h3>@T("Visits with open charges", "Kunjungan dengan tagihan terbuka")</h3>
+            <table class="data">
+                @foreach (var r in _open)
+                {
+                    <tr class="@(r.VisitId == _visit ? "hl-soft" : "")" @onclick="() => OpenAsync(r.VisitId)"><td>@r.Name<br /><small class="muted">@r.Kind · @r.Status</small></td><td><span class="tag">@r.Payer</span></td><td class="mono num">@Rp(r.Total)</td></tr>
+                }
+            </table>
+            <p class="label">@T("Recent invoices", "Invoice terakhir")</p>
+            <table class="data">@foreach (var i in _invoices) { <tr><td class="mono">@i.Number</td><td><span class="tag">@i.Payer</span></td><td class="mono num">@Rp(i.Total)</td><td><span class="tag @(i.State == InvoiceState.Paid ? "teal" : "warn")">@i.State</span></td>
+                <td>@if (i.State == InvoiceState.Issued) { <button @onclick="() => PayAsync(i)">@T("Pay", "Bayar") @Rp(i.PatientAmount - i.Paid)</button> }</td></tr> }</table>
+        </section>
+        <section class="panel">
+            @if (_sum is { } s)
+            {
+                <h3>@T("Bill", "Rincian tagihan") <small>@s.Payer</small></h3>
+                <table class="data">
+                    @foreach (var c in s.Charges) { <tr><td>@c.Description</td><td class="mono">@c.Category</td><td class="mono num">@Rp(c.Amount)</td></tr> }
+                    <tr class="total"><td colspan="2"><strong>@T("Total", "Total")</strong></td><td class="mono num"><strong>@Rp(s.Total)</strong></td></tr>
+                </table>
+                <div class="controls end"><button class="primary" @onclick="IssueAsync">@T("Issue invoice", "Terbitkan invoice")</button>
+                    @if (s.Payer == PayerType.Bpjs) { <button @onclick="ClaimAsync">@T("INA-CBG claim check", "Cek klaim INA-CBG")</button> }</div>
+                @if (_claim is { } cl)
+                {
+                    <p class="label">E-Klaim · SEP @cl.Claim.NomorSep · @cl.Claim.JenisRawat · @T("class", "kelas") @cl.Claim.KelasRawat</p>
+                    <p>@T("Diagnoses", "Diagnosis"): @string.Join(", ", cl.Claim.Diagnoses) · @T("hospital tariff", "tarif RS") <strong>@Rp(cl.Claim.Tariff.Total)</strong></p>
+                    @if (cl.Issues.Count == 0) { <div class="alert info"><strong>@T("Ready to send to E-Klaim.", "Siap dikirim ke E-Klaim.")</strong></div> }
+                    @foreach (var i in cl.Issues) { <div class="alert @(i.Severity == Medical.Bpjs.InaCbg.ClaimIssueSeverity.Error ? "critical" : "warning")"><span class="tag">@i.Field</span><span>@i.Message[S.Lang]</span></div> }
+                }
+            }
+            else { <p class="empty">@T("Pick a visit.", "Pilih kunjungan.")</p> }
+        </section>
+    </div>
+}
+@code {
+    protected override string Module => "billing";
+    private sealed record Row(string VisitId, string Name, VisitKind Kind, VisitStatus Status, PayerType Payer, decimal Total);
+    private List<Row> _open = [];
+    private List<Invoice> _invoices = [];
+    private string? _visit;
+    private BillSummary? _sum;
+    private (Medical.Bpjs.InaCbg.InaCbgClaim Claim, IReadOnlyList<Medical.Bpjs.InaCbg.ClaimIssue> Issues)? _claim;
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = S.Db();
+        var charges = await db.Charges.Where(c => c.InvoiceId == null).ToListAsync();
+        var visitIds = charges.Select(c => c.VisitId).Distinct().ToList();
+        var visits = await db.Visits.Where(v => visitIds.Contains(v.Id)).ToListAsync();
+        // Bill at the end of the chain: an outpatient visit that led to an admission is billed with the stay.
+        var parents = (await db.Visits.Where(v => v.ParentVisitId != null).Select(v => v.ParentVisitId!).ToListAsync()).ToHashSet();
+        var names = await db.Patients.ToDictionaryAsync(p => p.Id, p => p.Given + " " + p.Family);
+        _open = visits.Where(v => !parents.Contains(v.Id) && v.Status is VisitStatus.Done or VisitStatus.Discharged or VisitStatus.Admitted)
+            .Select(v => new Row(v.Id, names.GetValueOrDefault(v.PatientId, "?"), v.Kind, v.Status, v.Payer, charges.Where(c => c.VisitId == v.Id).Sum(c => c.Amount)))
+            .OrderByDescending(r => r.Status == VisitStatus.Discharged).ThenByDescending(r => r.Total).Take(15).ToList();
+        _invoices = (await db.Invoices.ToListAsync()).OrderByDescending(i => i.IssuedAt).Take(8).ToList();
+        if (_visit is not null) await OpenAsync(_visit);
+        else if (_open.FirstOrDefault(r => r.Payer == PayerType.Bpjs && r.Status == VisitStatus.Admitted) is { } first) await OpenAsync(first.VisitId);
+    }
+
+    private async Task OpenAsync(string visitId)
+    {
+        _visit = visitId;
+        _claim = null;
+        await using var db = S.Db();
+        var bill = new BillingService(db, S.Clock);
+        var sum = await bill.SummaryAsync(visitId);
+        _sum = sum.Charges.Count == 0 ? null : sum;
+    }
+
+    private Task IssueAsync() => Run(async () =>
+    {
+        await using var db = S.Db();
+        var inv = await new BillingService(db, S.Clock).IssueAsync(_visit!);
+        _visit = null; _sum = null;
+        Info = T($"Invoice {inv.Number}: patient pays {Rp(inv.PatientAmount)}, payer {Rp(inv.PayerAmount)}.", $"Invoice {inv.Number}: pasien membayar {Rp(inv.PatientAmount)}, penjamin {Rp(inv.PayerAmount)}.");
+    });
+
+    private Task PayAsync(Invoice i) => Run(async () => { await using var db = S.Db(); await new BillingService(db, S.Clock).PayAsync(i.Id, i.PatientAmount - i.Paid); }, T("Payment received.", "Pembayaran diterima."));
+
+    private Task ClaimAsync() => Run(async () => { await using var db = S.Db(); _claim = await new BillingService(db, S.Clock).BpjsClaimAsync(_visit!, "3171000000000001"); });
+}

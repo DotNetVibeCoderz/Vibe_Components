@@ -1,0 +1,125 @@
+@page "/{Tenant}/wards"
+@inherits HisPage
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject MonitoringHub Hub
+<header class="head"><p class="eyebrow">@S.TenantName</p><h1>@T("Wards & beds", "Bangsal & tempat tidur")</h1></header>
+@if (Error is { } err) { <div class="alert critical">@err</div> }
+@if (Info is { } info) { <div class="alert info">@info</div> }
+@if (Ready)
+{
+    <div class="controls"><div class="seg">@foreach (var w in _wards) { <button class="@(w.Id == _ward ? "on" : "")" @onclick="() => PickAsync(w.Id)">@w.NameId</button> }</div></div>
+    <div class="grid-2 wide-left">
+        <section class="beds">
+            @foreach (var b in _board)
+            {
+                <button class="bed @b.Status.ToString().ToLowerInvariant() @(b.News2 >= 7 ? "n-high" : b.News2 >= 5 ? "n-med" : "") @(b.BedId == _bed?.BedId ? "sel" : "")" @onclick="() => OpenAsync(b)">
+                    <span class="code">@b.Code <small>@b.Class</small></span>
+                    @if (b.PatientName is { } n) { <strong>@n</strong><small>RM @b.Mrn</small> }
+                    else { <small>@(b.Status switch { BedStatus.Free => T("free", "kosong"), BedStatus.Cleaning => T("cleaning", "dibersihkan"), _ => T("blocked", "diblokir") })</small> }
+                    @if (b.News2 is { } n2) { <span class="news n@(n2 >= 7 ? "high" : n2 >= 5 ? "med" : "low")">@n2</span> }
+                    @if (b.MonitorId is not null) { <span class="mon" title="@b.MonitorId">●</span> }
+                </button>
+            }
+        </section>
+        <section class="panel">
+            @if (_bed is { } bed && _stay is { } stay && _patient is { } p)
+            {
+                <h3>@p.FullName <small>@bed.Code · RM @p.Mrn · @T("since", "sejak") @Local(stay.Start) · @stay.Payer</small></h3>
+                <p>@foreach (var d in _dx) { <span class="tag @(d.Primary ? "teal" : "")">@d.Icd10 @d.Display</span> }</p>
+                @if (_trend is { } svg) { <p class="label">NEWS2 · @T("vital-sign trend", "tren tanda vital")</p>@((MarkupString)svg) }
+                <table class="data">
+                    <tr><th>@T("Time", "Waktu")</th><th>RR</th><th>SpO₂</th><th>TD</th><th>@T("HR", "Nadi")</th><th>@T("T", "Suhu")</th><th>NEWS2</th><th>@T("Source", "Sumber")</th></tr>
+                    @foreach (var v in _vitals.Take(6))
+                    {
+                        <tr class="@(v.Validated ? "" : "flag")"><td class="mono">@Local(v.Time)</td><td class="mono">@v.RespiratoryRate</td><td class="mono">@v.SpO2</td><td class="mono">@v.SystolicBp/@v.DiastolicBp</td><td class="mono">@v.HeartRate</td><td class="mono">@v.TemperatureC.ToString("0.0", CultureInfo.InvariantCulture)</td>
+                            <td><span class="news n@(v.News2 >= 7 ? "high" : v.News2 >= 5 ? "med" : "low")">@v.News2</span></td>
+                            <td>@v.Source @if (!v.Validated) { <button @onclick="() => ValidateAsync(v.Id)">@T("validate", "validasi")</button> }</td></tr>
+                    }
+                </table>
+                <p class="label">@T("Ward tasks", "Tugas bangsal")</p>
+                <ul class="plain">@foreach (var t in _tasks) { <li>@(t.State == WardTaskState.Done ? "✓" : "○") @t.Title <small class="muted">@Local(t.Due) @(t.DoneBy is { } by ? "· " + by : "")</small></li> }</ul>
+                <div class="controls">
+                    <input @bind="_task" placeholder="@T("New task…", "Tugas baru…")" /><button @onclick="AddTaskAsync">@T("Add task", "Tambah tugas")</button>
+                </div>
+                <div class="controls end">
+                    <label>@T("Transfer to", "Pindah ke")<select @bind="_to">@foreach (var f in _free) { <option value="@f.Id">@f.Code (@f.Class)</option> }</select></label>
+                    <button @onclick="TransferAsync">@T("Transfer", "Pindahkan")</button>
+                    <button class="warn" @onclick="DischargeAsync">@T("Discharge home", "Pulangkan")</button>
+                </div>
+                @if (_summary is { } sum) { <pre class="doc">@sum</pre> }
+            }
+            else if (_bed is { Status: BedStatus.Cleaning } cl)
+            {
+                <h3>@cl.Code</h3><button class="primary" @onclick="() => CleanAsync(cl.BedId)">@T("Mark clean", "Tandai sudah bersih")</button>
+            }
+            else { <p class="empty">@T("Pick an occupied bed.", "Pilih tempat tidur yang terisi.")</p> }
+        </section>
+    </div>
+}
+@code {
+    protected override string Module => "wards";
+    private List<Department> _wards = [];
+    private string _ward = "";
+    private IReadOnlyList<BedTile> _board = [];
+    private BedTile? _bed;
+    private Visit? _stay;
+    private HisPatient? _patient;
+    private List<Diagnosis> _dx = [];
+    private List<VitalsEntry> _vitals = [];
+    private List<WardTask> _tasks = [];
+    private List<Bed> _free = [];
+    private string? _trend, _task, _to, _summary;
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = S.Db();
+        _wards = await db.Departments.Where(d => d.Kind == DepartmentKind.Ward || d.Kind == DepartmentKind.Icu).OrderBy(d => d.Kind).ThenBy(d => d.Code).ToListAsync();
+        if (_ward.Length == 0) _ward = _wards.First().Id;
+        _board = await new DashboardService(db, S.Clock).BedBoardAsync(_ward);
+        _free = await db.Beds.Where(b => b.Status == BedStatus.Free).OrderBy(b => b.Code).ToListAsync();
+        _to ??= _free.FirstOrDefault()?.Id;
+        if (_bed is not null) await OpenAsync(_board.First(b => b.BedId == _bed.BedId));
+        else if (_board.FirstOrDefault(b => b.PatientName is not null) is { } first) await OpenAsync(first);
+    }
+
+    private async Task PickAsync(string id) { _ward = id; _bed = null; _summary = null; await LoadAsync(); }
+
+    private async Task OpenAsync(BedTile b)
+    {
+        _bed = b;
+        await using var db = S.Db();
+        var bed = await db.Beds.FirstAsync(x => x.Id == b.BedId);
+        _stay = bed.VisitId is { } vid ? await db.Visits.FirstOrDefaultAsync(v => v.Id == vid) : null;
+        _patient = bed.PatientId is { } pid ? await db.Patients.FirstOrDefaultAsync(p => p.Id == pid) : null;
+        if (_stay is null || _patient is null) { _trend = null; return; }
+        _dx = await db.Diagnoses.Where(d => d.VisitId == _stay.Id).ToListAsync();
+        _vitals = (await db.Vitals.Where(v => v.PatientId == _patient.Id).ToListAsync()).OrderByDescending(v => v.Time).ToList();
+        _tasks = (await db.Tasks.Where(t => t.VisitId == _stay.Id && t.State != WardTaskState.Cancelled).ToListAsync()).OrderBy(t => t.Due).ToList();
+        var pts = _vitals.Where(v => v.Validated).OrderBy(v => v.Time).TakeLast(24).ToList();
+        _trend = pts.Count < 2 ? null : Medical.Visualization.Charts.Trend(
+        [
+            new("NEWS2", pts.Select(v => (new DateTimeOffset(DateTime.SpecifyKind(v.Time, DateTimeKind.Utc)).ToOffset(TimeSpan.FromHours(7)), (double)v.News2)).ToList(), "#C8372D"),
+        ], 0, 20, (0, 4), "NEWS2", 560, 150);
+    }
+
+    private Task ValidateAsync(string id) => Run(async () => { await using var db = S.Db(); await new ClinicalService(db, S.Clock).ValidateVitalsAsync(id); });
+    private Task AddTaskAsync() => Run(async () => { await using var db = S.Db(); var stay = await db.Visits.FirstAsync(v => v.Id == _stay!.Id); await RoundsSync.AddTaskAsync(db, stay, _task ?? "", Now.AddHours(4)); _task = null; });
+    private Task CleanAsync(string bedId) => Run(async () => { await using var db = S.Db(); await new ClinicalService(db, S.Clock).MarkBedCleanAsync(bedId); _bed = null; });
+
+    private Task TransferAsync() => Run(async () =>
+    {
+        await using var db = S.Db();
+        await new ClinicalService(db, S.Clock).TransferAsync(_stay!.Id, _to ?? throw new InvalidOperationException(T("No free bed.", "Tidak ada tempat tidur kosong.")));
+        await Hub.RebindAsync(S.TenantId);
+        _bed = null; _to = null;
+    }, T("Transferred.", "Pasien dipindahkan."));
+
+    private Task DischargeAsync() => Run(async () =>
+    {
+        await using var db = S.Db();
+        var doc = await new ClinicalService(db, S.Clock).DischargeAsync(_stay!.Id, DischargeType.Home, T("Follow-up in clinic in one week.", "Kontrol poli 1 minggu."));
+        await Hub.RebindAsync(S.TenantId);
+        _summary = doc.Text;
+        _bed = null;
+    }, T("Discharged — bill ready at the cashier.", "Pasien pulang — tagihan siap di kasir."));
+}

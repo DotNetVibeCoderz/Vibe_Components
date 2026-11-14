@@ -1,0 +1,83 @@
+@page "/{Tenant}/lab"
+@inherits HisPage
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+<header class="head"><p class="eyebrow">@S.TenantName</p><h1>@T("Laboratory", "Laboratorium")</h1></header>
+@if (Error is { } err) { <div class="alert critical">@err</div> }
+@if (Info is { } info) { <div class="alert info">@info</div> }
+@if (Ready)
+{
+    <div class="grid-2 wide-right">
+        <section class="panel">
+            <h3>@T("Work list", "Daftar kerja")</h3>
+            <table class="data">
+                @foreach (var (o, p) in _orders)
+                {
+                    <tr class="@(o.Id == _order?.Id ? "hl-soft" : "") @(o.Results.Any(r => r.Critical && r.CriticalNotifiedAt == null) ? "hl" : "")" @onclick="() => Open(o.Id)">
+                        <td class="mono">@o.PlacerNumber</td><td>@p.FullName</td>
+                        <td><span class="tag @(o.Priority == OrderPriority.Stat ? "red" : o.Priority == OrderPriority.Urgent ? "warn" : "")">@o.Priority</span> <span class="tag">@o.State</span></td>
+                    </tr>
+                }
+            </table>
+        </section>
+        <section class="panel">
+            @if (_order is { } o2)
+            {
+                <h3>@o2.PlacerNumber <small>@o2.State @(o2.SpecimenBarcode is { } bc ? "· " + T("specimen", "spesimen") + " " + bc : "")</small></h3>
+                @if (o2.State == OrderState.Ordered) { <button class="primary" @onclick="CollectAsync">@T("Collect specimen", "Ambil spesimen")</button> }
+                <table class="data">
+                    <tr><th>@T("Test", "Pemeriksaan")</th><th>@T("Result", "Hasil")</th><th>@T("Reference", "Rujukan")</th><th>@T("Flag", "Tanda")</th></tr>
+                    @foreach (var r in o2.Results)
+                    {
+                        <tr class="@(r.Critical ? "hl" : r.Flag != ResultFlag.Normal && r.Value is not null ? "flag" : "")">
+                            <td>@r.Display</td>
+                            <td>@if (r.Value is null && o2.State is OrderState.Collected) { <input type="number" step="any" style="width:6em" @bind="_entry[r.Loinc]" /> <button @onclick="() => EnterAsync(r.Loinc)">OK</button> }
+                                else { <span class="mono">@(r.Value?.ToString("0.##", CultureInfo.InvariantCulture) ?? r.Text ?? "—") @r.Unit</span> }</td>
+                            <td class="mono">@(r.RefLow is { } lo ? $"{lo:0.##}–{r.RefHigh:0.##}" : "")</td>
+                            <td>@if (r.Value is not null) { <span class="tag @(r.Critical ? "red" : r.Flag == ResultFlag.Normal ? "" : "warn")">@r.Flag</span> }
+                                @if (r.Critical && r.CriticalNotifiedAt is null) { <button class="warn" @onclick="() => NotifyAsync(r.Id)">@T("Report critical (read-back)", "Laporkan nilai kritis")</button> }
+                                @if (r.CriticalNotifiedTo is { } to) { <small class="muted">→ @to</small> }</td>
+                        </tr>
+                    }
+                </table>
+                <div class="controls end">
+                    @if (o2.State == OrderState.Resulted) { <button class="primary" @onclick="VerifyAsync">@T("Verify & release", "Verifikasi & rilis")</button> }
+                    <button @onclick="Hl7Async">@T("Show HL7 OML^O21", "Lihat HL7 OML^O21")</button>
+                </div>
+                @if (_hl7 is { } h) { <pre class="doc">@h.Replace("\r", "\n")</pre> }
+            }
+            else { <p class="empty">@T("Pick an order.", "Pilih order.")</p> }
+        </section>
+    </div>
+}
+@code {
+    protected override string Module => "lab";
+    private List<(LabOrder, HisPatient)> _orders = [];
+    private LabOrder? _order;
+    private Dictionary<string, double?> _entry = [];
+    private string? _hl7;
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = S.Db();
+        var list = await db.LabOrders.Include(o => o.Results).Where(o => o.State != OrderState.Verified && o.State != OrderState.Cancelled)
+            .Join(db.Patients, o => o.PatientId, p => p.Id, (o, p) => new { o, p }).ToListAsync();
+        _orders = list.OrderBy(x => x.o.Priority == OrderPriority.Stat ? 0 : x.o.Priority == OrderPriority.Urgent ? 1 : 2).ThenBy(x => x.o.OrderedAt).Select(x => (x.o, x.p)).ToList();
+        string? id = _order?.Id ?? _orders.FirstOrDefault(x => x.Item1.Results.Any(r => r.Critical && r.CriticalNotifiedAt == null)).Item1?.Id ?? _orders.FirstOrDefault().Item1?.Id;
+        if (id is not null) await Load(id);
+    }
+
+    private async Task Open(string id) { _hl7 = null; await Load(id); }
+
+    private async Task Load(string id)
+    {
+        await using var db = S.Db();
+        _order = await db.LabOrders.Include(o => o.Results).FirstOrDefaultAsync(o => o.Id == id);
+        foreach (var r in _order?.Results ?? []) _entry.TryAdd(r.Loinc, null);
+    }
+
+    private Task CollectAsync() => Run(async () => { await using var db = S.Db(); var bc = await new LabService(db, S.Clock).CollectAsync(_order!.Id); Info = $"{T("Specimen label", "Label spesimen")} {bc}"; });
+    private Task EnterAsync(string loinc) => Run(async () => { await using var db = S.Db(); await new LabService(db, S.Clock).EnterResultAsync(_order!.Id, loinc, _entry[loinc]); });
+    private Task NotifyAsync(string id) => Run(async () => { await using var db = S.Db(); await new LabService(db, S.Clock).NotifyCriticalAsync(id, "dr. DPJP (telepon)"); }, T("Read-back documented.", "Konfirmasi baca-ulang dicatat."));
+    private Task VerifyAsync() => Run(async () => { await using var db = S.Db(); await new LabService(db, S.Clock).VerifyAsync(_order!.Id); _order = null; }, T("Verified and released.", "Diverifikasi dan dirilis."));
+    private Task Hl7Async() => Run(async () => { await using var db = S.Db(); _hl7 = await new LabService(db, S.Clock).ToHl7Async(_order!.Id); });
+}

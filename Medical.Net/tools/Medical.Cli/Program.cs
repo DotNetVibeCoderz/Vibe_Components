@@ -60,6 +60,9 @@ try
         "emr" => await Emr(),
         "bpjs" => Bpjs(),
         "satusehat" => SatuSehat(),
+        "his" => await PlatformCommands.His(a, lang),
+        "monitor" => await PlatformCommands.Monitor(a, lang),
+        "sync" => await PlatformCommands.Sync(a, lang),
         _ => Fail($"Unknown command '{a.Command}'. Run 'medical help'."),
     };
 }
@@ -129,6 +132,12 @@ int Help()
           nlp "<note>" | --file note.txt [--hf [model]]   (entities, negation, ICD-10 suggestions; --hf = d4data/biomedical-ner-all)
           guideline ask "<question>" [--corpus dir] [--hf-embed] [--offline]   (cited answers)
           federated [--noise 1.0 --clip 0.5] [--no-secure] [--card card.md]     drift [--shift 0.8]
+        Hospital platform (v2.0)
+          his seed [--db his.db] [--patients 40]          (two demo hospitals: rs-nusantara, rs-bahari)
+          his dashboard [--db his.db] [--tenant rs-nusantara]   (census, BOR, ALOS, queues, wards, NEWS2 watch list, revenue)
+          his patient <mrn> [--db his.db] [--tenant rs-nusantara] [--fhir summary.json]
+          monitor [--minutes 120] [--step 5]   (simulated ICU monitors → HL7/MLLP → NEWS2 alerts; exit 3 on a high alert)
+          sync demo                            (offline-first ward rounds: two tablets, conflicts, convergence)
         """);
     return 0;
 }

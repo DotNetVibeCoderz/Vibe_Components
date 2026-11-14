@@ -1,0 +1,58 @@
+@page "/login"
+@page "/"
+@using Microsoft.AspNetCore.Authorization
+@attribute [AllowAnonymous]
+@inject DbContextOptions<HospitalDbContext> Options
+@inject HisSession S
+@inject NavigationManager Nav
+<div class="login">
+    <h1>Medical.Net HIS</h1>
+    <p class="lede">@S.T("Hospital information system reference app — one installation, many hospitals.", "Aplikasi referensi SIMRS — satu instalasi, banyak rumah sakit.")</p>
+    @if (Error) { <div class="alert critical"><strong>@S.T("Unknown hospital or user.", "Rumah sakit atau pengguna tidak dikenal.")</strong></div> }
+    <form method="post" action="/account/login" class="panel">
+        <label>@S.T("Hospital", "Rumah sakit")
+            <select name="tenant" @bind="_tenant">@foreach (var t in _tenants) { <option value="@t.Id">@t.Name — @t.City (kelas @t.Class)</option> }</select>
+        </label>
+        <label>@S.T("User (demo)", "Pengguna (demo)")
+            <select name="user">@foreach (var u in _staff) { <option value="@u.UserName">@u.Name — @u.Role</option> }</select>
+        </label>
+        <input type="hidden" name="lang" value="@S.Lang" />
+        <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+        <button class="primary" type="submit">@S.T("Sign in", "Masuk")</button>
+        <p class="note">@S.T("Demo sign-in without passwords. Connect your identity provider (OpenID Connect) before real use.",
+                             "Masuk demo tanpa kata sandi. Hubungkan penyedia identitas (OpenID Connect) sebelum dipakai sungguhan.")</p>
+    </form>
+</div>
+@code {
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+    [SupplyParameterFromQuery(Name = "error")] public string? ErrorQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "lang")] public string? LangQuery { get; set; }
+    private bool Error => ErrorQuery is not null;
+    private List<Tenant> _tenants = [];
+    private List<Staff> _staff = [];
+    private string _tenantValue = "";
+
+    private string _tenant
+    {
+        get => _tenantValue;
+        set { _tenantValue = value; _ = LoadStaffAsync(); }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (LangQuery is "en" or "id") S.Lang = LangQuery;
+        await S.LoadAsync();
+        if (S.SignedIn && Nav.ToBaseRelativePath(Nav.Uri).Length == 0) { Nav.NavigateTo($"/{S.TenantId}"); return; }
+        await using var db = new HospitalDbContext(Options, new FixedTenantContext(""));
+        _tenants = await db.Tenants.Where(t => t.Active).OrderBy(t => t.Name).ToListAsync();
+        _tenantValue = _tenants.FirstOrDefault()?.Id ?? "";
+        await LoadStaffAsync();
+    }
+
+    private async Task LoadStaffAsync()
+    {
+        await using var db = new HospitalDbContext(Options, new FixedTenantContext(_tenantValue));
+        _staff = await db.Staff.OrderBy(s => s.Role).ThenBy(s => s.Name).ToListAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+}

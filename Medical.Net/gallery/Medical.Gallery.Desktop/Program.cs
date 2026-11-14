@@ -22,7 +22,7 @@ internal static class Program
         {
             Headless = true;
             BuildHeadless().SetupWithoutStarting();
-            return Screenshots.Capture(args[1], args.Length > 2 ? args[2] : "en");
+            return Screenshots.Capture(args[1], args.Length > 2 ? args[2] : "en", args.Length > 3 ? args[3].Split(',') : null);
         }
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         return 0;
@@ -48,13 +48,13 @@ public partial class App : Application
 /// <summary>Off-screen renderer producing documentation screenshots of the desktop gallery.</summary>
 internal static class Screenshots
 {
-    public static int Capture(string outDir, string lang)
+    public static int Capture(string outDir, string lang, string[]? only = null)
     {
         Directory.CreateDirectory(outDir);
         var window = new MainWindow { Width = 1440, Height = 960 };
         window.Show();
         window.SetLang(lang);
-        foreach (var slug in new[] { "news2", "cds", "dicom", "hemorrhage", "ecg", "terminology", "risk", "assistant", "fhir-server", "hl7-orders", "satusehat", "bpjs", "mpr", "volume3d", "codecs", "imaging-ai", "ecg12", "icu-scores", "cvrisk", "growth", "drug-safety", "clinical-nlp", "guidelines", "federated" })
+        foreach (var slug in new[] { "news2", "cds", "dicom", "hemorrhage", "ecg", "terminology", "risk", "assistant", "fhir-server", "hl7-orders", "satusehat", "bpjs", "mpr", "volume3d", "codecs", "imaging-ai", "ecg12", "icu-scores", "cvrisk", "growth", "drug-safety", "clinical-nlp", "guidelines", "federated", "his", "live-monitoring", "offline-sync" }.Where(s => only is null || only.Contains(s)))
         {
             window.Navigate(slug);
             for (int i = 0; i < 5; i++) Avalonia.Threading.Dispatcher.UIThread.RunJobs();

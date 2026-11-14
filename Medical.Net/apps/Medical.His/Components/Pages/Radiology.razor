@@ -1,0 +1,62 @@
+@page "/{Tenant}/radiology"
+@inherits HisPage
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+<header class="head"><p class="eyebrow">@S.TenantName</p><h1>@T("Radiology", "Radiologi")</h1></header>
+@if (Error is { } err) { <div class="alert critical">@err</div> }
+@if (Info is { } info) { <div class="alert info">@info</div> }
+@if (Ready)
+{
+    <div class="grid-2 wide-right">
+        <section class="panel">
+            <h3>@T("Modality worklist", "Worklist modalitas")</h3>
+            <div class="seg">@foreach (var m in new[] { "CR", "CT" }) { <button class="@(m == _modality ? "on" : "")" @onclick="() => PickAsync(m)">@m</button> }</div>
+            <table class="data">
+                @foreach (var (o, p) in _list)
+                {
+                    <tr class="@(o.Id == _order?.Id ? "hl-soft" : "")" @onclick="() => _order = o"><td class="mono">@o.AccessionNumber</td><td>@p.FullName</td><td>@o.Procedure</td><td><span class="tag">@o.State</span></td></tr>
+                }
+            </table>
+            <p class="label">@T("Awaiting report", "Menunggu ekspertise")</p>
+            <table class="data">@foreach (var o in _inProgress) { <tr @onclick="() => _order = o"><td class="mono">@o.AccessionNumber</td><td>@o.Procedure</td><td class="mono">@o.StudyInstanceUid</td></tr> }</table>
+        </section>
+        <section class="panel">
+            @if (_order is { } o2)
+            {
+                <h3>@o2.Procedure <small>@o2.AccessionNumber · @o2.State · @o2.Priority</small></h3>
+                <p>@T("Clinical information", "Keterangan klinis"): @(o2.ClinicalInfo ?? "—")</p>
+                @if (o2.State is OrderState.Ordered or OrderState.Scheduled) { <button class="primary" @onclick="PerformAsync">@T("Mark performed (study received)", "Tandai sudah diperiksa (studi diterima)")</button> }
+                @if (o2.State == OrderState.InProgress)
+                {
+                    <div class="form wide">
+                        <label>@T("Findings", "Temuan")<textarea rows="4" @bind="_findings"></textarea></label>
+                        <label>@T("Impression", "Kesan")<textarea rows="2" @bind="_impression"></textarea></label>
+                    </div>
+                    <button class="primary" @onclick="ReportAsync">@T("Sign report", "Tanda tangani ekspertise")</button>
+                }
+                @if (o2.State == OrderState.Reported) { <pre class="doc">@o2.Findings&#10;&#10;@T("Impression", "Kesan"): @o2.Impression&#10;— @o2.Radiologist</pre> }
+            }
+            else { <p class="empty">@T("Pick an examination.", "Pilih pemeriksaan.")</p> }
+        </section>
+    </div>
+}
+@code {
+    protected override string Module => "radiology";
+    private string _modality = "CR";
+    private IReadOnlyList<(RadiologyOrder, HisPatient)> _list = [];
+    private List<RadiologyOrder> _inProgress = [];
+    private RadiologyOrder? _order;
+    private string? _findings = "Cor tidak membesar. Tampak infiltrat di lapangan bawah paru kanan. Sinus dan diafragma baik.", _impression = "Pneumonia lobus bawah kanan.";
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = S.Db();
+        _list = await new RadiologyService(db, S.Clock).WorklistAsync(_modality);
+        _inProgress = await db.RadiologyOrders.Where(o => o.State == OrderState.InProgress).ToListAsync();
+        if (_order is not null) _order = await db.RadiologyOrders.FirstOrDefaultAsync(o => o.Id == _order.Id);
+        _order ??= _list.FirstOrDefault().Item1 ?? _inProgress.FirstOrDefault();
+    }
+
+    private async Task PickAsync(string m) { _modality = m; _order = null; await LoadAsync(); }
+    private Task PerformAsync() => Run(async () => { await using var db = S.Db(); await new RadiologyService(db, S.Clock).PerformedAsync(_order!.Id, $"1.2.826.0.1.3680043.10.1427.{DateTime.UtcNow.Ticks}"); });
+    private Task ReportAsync() => Run(async () => { await using var db = S.Db(); await new RadiologyService(db, S.Clock).ReportAsync(_order!.Id, _findings ?? "", _impression ?? ""); }, T("Report signed.", "Ekspertise ditandatangani."));
+}

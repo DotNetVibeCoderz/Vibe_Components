@@ -19,6 +19,10 @@ dotnet run --project gallery/Medical.Gallery.Web --urls http://localhost:5290   
 dotnet run --project gallery/Medical.Gallery.Desktop -- --screenshot docs/images [en|id]
 # web shots: chrome --headless=new --force-prefers-reduced-motion --blink-settings=preferredColorScheme=1 --window-size=1440,1000 --screenshot=<file> http://localhost:5290/demo/<slug>
 dotnet run --project tools/Medical.Cli -- help
+ASPNETCORE_ENVIRONMENT=Development dotnet run --project apps/Medical.His --urls http://localhost:5300   # HIS (static assets need Development or a publish)
+# HIS shots (fresh profile each time, so no old cookie): chrome --headless=new --user-data-dir=<new temp dir> --blink-settings=preferredColorScheme=1 --window-size=1440,1000 --screenshot=docs/images/his-<page>[-en].png "http://localhost:5300/account/demo?tenant=rs-nusantara&user=admin&lang=en|id&returnUrl=/rs-nusantara/<page>"
+dotnet build Medical.Rounds.slnx   # MAUI ward rounds (maui-windows workload; -p:IncludeAndroid=true + maui-android for Android)
+# Rounds shots, HIS running: apps/Medical.Rounds/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Medical.Rounds.exe --capture docs/images [en|id]
 cd services/medical-ai-service && uvicorn app:app --port 8000                # optional imaging AI
 ```
 
@@ -63,6 +67,29 @@ To verify templates, install the packed `Medical.Templates` into a custom hive (
   `LlmOptions.FromEnvironment()` chooses among them.
 - The gallery's computation lives in `gallery/Medical.Gallery.Shared` (`GalleryCatalog` + `Scenarios`). Blazor (`Components/Demos/*Demo.razor`) and Avalonia (`Views.cs`, code-first `Ui.cs`)
   render the same results. SVG from `Medical.Visualization` uses `var(--token, #fallback)`, and `SvgTheme.Resolve` swaps in literal colours for Svg.Skia.
+
+- v2.0 platform (docs: `docs/en/platform.md`):
+  - `Medical.Hospital`: `HospitalDbContext` is shared-schema multi-tenancy. Every `TenantEntity` gets a `TenantId` query filter, and `SaveChanges` stamps new rows and throws
+    `TenantViolationException` on cross-tenant writes; `NextAsync(key)` is the per-tenant counter (MRN, queues, accession, invoices). Services are plain classes over a
+    context (`RegistrationService`, `ClinicalService`, `PharmacyService`, `LabService`, `RadiologyService`, `BillingService`, `DashboardService`), with no DI extension.
+    `ITenantContext` comes from the caller (`FixedTenantContext`, `HisSession`). `Monitoring.cs` has `MonitoringEngine` (plausibility, median, NEWS2, RCP levels, 2-evaluation
+    confirmation, 3-evaluation clear, `ChartDue` every 15 min, no alerts for unbound devices). `RoundsSync.cs` is the outbox (`SyncLog`) plus `HospitalSyncStore`.
+    `HospitalSeeder` creates the schema with `EnsureCreated` (no migrations) and two fictional tenants, `rs-nusantara` and `rs-bahari`.
+  - `Medical.Sync`: `HybridLogicalClock`, `ConflictPolicy` (AppendOnly / LastWriterWins / ServerWins / ReadOnly) and `SyncServer`. Pull cursors are the server `Seq`, never the HLC,
+    so late offline pushes are not skipped. The package also holds `SqliteSyncStore` / `SyncClient` and the ward-round contracts in `Rounds.cs` (`RoundsTypes.Policies`).
+  - `Medical.Devices` is a preview (`<VersionSuffix>preview</VersionSuffix>`) because IoTCom.Net 0.22.0-preview.1 is prerelease. `pack.ps1` and CI pass `-p:VersionPrefix`
+    (not `Version`), so the suffix survives. Keep the `System.Formats.Cbor` 10.0.15 pin (CVE-2026-118747; IoTCom brings 10.0.12).
+  - `apps/Medical.His` (Blazor Server, not packed):
+    - Demo cookie sign-in via `/account/demo`, to be replaced by OpenID Connect. Config: `His:Provider=SqlServer` + `ConnectionStrings:His`, `His:DeviceKeys:{tenant}`,
+      `His:SimulateDevices`, `His:MllpPort`, `His:TickSeconds`.
+    - The sync API is `/api/{tenant}/sync/push|pull?ward=`. `MonitoringHub` simulates monitors at occupied ICU beds, and `HisSession.Can` maps roles to modules.
+    - Run it in Development (or published): static web assets don't resolve when the `bin` exe runs in Production.
+  - `apps/Medical.Rounds(.Core)` (MAUI, not packed):
+    - Not in `Medical.Net.slnx` (CI has no MAUI workloads); build with `Medical.Rounds.slnx`. The csproj clears the `TargetFramework` that `Directory.Build.props` sets
+      and uses platform `TargetFrameworks`; Android only with `-p:IncludeAndroid=true`.
+    - `RoundsApp` (Core) holds all logic so tests run without MAUI. The emulator default server is `http://10.0.2.2:5300`.
+  - Tests (`V20*Tests.cs`) need no opt-in: SQLite in memory, an in-process MLLP feed, and `WebApplicationFactory` with `His:SimulateDevices=false`.
+    The existing opt-ins remain (`MEDNET_HF_TESTS`, `MEDNET_LLM_TESTS`, `MEDNET_QTDB_SPLIT`).
 
 ## Conventions
 

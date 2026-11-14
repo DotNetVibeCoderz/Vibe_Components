@@ -23,7 +23,19 @@ Dibuat oleh **Gravicode Studios** dipimpin oleh **Kang Fadhil**. · [English](RE
 | `Medical.HuggingFace` | Model Hugging Face dalam proses: NER biomedis dan embedding kalimat multibahasa untuk pencarian pedoman | HF.Net |
 | `Medical.Bpjs` | **BPJS Kesehatan**: klien VClaim dan PCare (tanda tangan HMAC, respons AES + LZ-String), web service E-Klaim (terenkripsi), penyusun klaim INA-CBG dengan pemeriksaan koding sebelum grouping | — |
 | `Medical.Signals` / `Privacy` / `Emr` / `AspNetCore` / `Visualization` / `Native` | EKG & HRV, de-identifikasi & persetujuan (UU PDP), penyimpanan EMR EF Core + Redis dan **repositori FHIR berversi**, server FHIR + **otorisasi SMART on FHIR** & MLLP, grafik SVG, kernel Rust | — |
+| `Medical.Hospital` | **Inti SIMRS multi-tenant**: model EF Core skema bersama (SQLite / SQL Server) dengan filter kueri dan penjaga tulis per tenant; pendaftaran (de-duplikasi NIK, nomor RM, nomor antrean harian), SOAP + ICD-10, tanda vital dengan NEWS2, rawat inap / pindah / pulang; telaah farmasi (interaksi, alergi, dosis ginjal) dengan penyerahan FEFO; nilai kritis lab dengan konfirmasi baca ulang serta HL7 OML / ORU; worklist dan ekspertise radiologi; kasir (Umum / BPJS / asuransi) dengan data klaim INA-CBG; dasbor (BOR, ALOS, antrean); `MonitoringEngine` NEWS2 waktu nyata | EF Core 10 |
+| `Medical.Sync` | **Sinkronisasi offline-first**: hybrid logical clock, kebijakan konflik per tipe (append-only, penulis terakhir menang, server menang, hanya-baca), kursor tarik berdasarkan nomor urut server, penyimpanan klien SQLite, transport HTTP / dalam proses | Microsoft.Data.Sqlite |
+| `Medical.Devices` *(pratinjau)* | **Perangkat samping tempat tidur**: monitor pasien HL7 v2 / MLLP, sensor dan pompa infus MQTT + SenML, simulator monitor dan pompa, gateway ke mesin NEWS2. Versi `2.0.0-preview` karena IoTCom.Net masih prarilis | IoTCom.Net 0.22 (pratinjau) |
 | `Medical.Cli` · `Medical.Templates` | Perintah `medical` dan templat `dotnet new` | — |
+
+## Yang baru di 2.0
+
+- **Inti SIMRS** (`Medical.Hospital`): satu basis data untuk banyak rumah sakit, dengan setiap baris diberi tenant, difilter dan dijaga dari penulisan lintas tenant. Cakupannya pendaftaran dan antrean, rawat jalan dan rawat inap, farmasi, laboratorium, radiologi, kasir dengan data klaim INA-CBG BPJS, serta dasbor.
+- **Pemantauan waktu nyata** (`Medical.Devices`, pratinjau): monitor HL7 / MLLP serta sensor dan pompa MQTT / SenML (IoTCom.Net) mengalirkan data ke mesin NEWS2. Mesin ini menyaring plausibilitas dan median, mengikuti eskalasi RCP, memberi peringatan terkonfirmasi dengan histeresis, dan mencatat tiap 15 menit untuk divalidasi perawat.
+- **Sinkronisasi offline-first** (`Medical.Sync`): hybrid logical clock, data klinis append-only, tugas penulis-terakhir-menang, daftar pasien hanya-baca, dan kursor tarik berdasarkan nomor urut server sehingga kiriman luring yang terlambat tidak pernah terlewat.
+- **Aplikasi referensi**: SIMRS Blazor Server untuk dua rumah sakit fiktif (`apps/Medical.His`) dan aplikasi visite MAUI untuk Windows dan Android (`apps/Medical.Rounds`).
+
+Lihat [Platform rumah sakit](docs/id/platform.md).
 
 ## Yang baru di 1.3
 
@@ -71,12 +83,14 @@ medical dicom ai ct/ --out-dir hasil && medical ecg12 --pattern inferior --out e
 medical hl7 sample --type siu --out siu.hl7 && medical hl7 conform siu.hl7
 medical growth --sex f --age-months 24 --weight 9 --height 77.5 --lang id && medical nlp "demam berdarah, tidak ada sesak napas" --lang id
 medical guideline ask "Berapa lama pengobatan TB paru?" --lang id
+medical his seed --db his.db && medical his dashboard --db his.db --tenant rs-bahari --lang id
+medical monitor --minutes 120 --lang id && medical sync demo --lang id
 dotnet new install Medical.Templates && dotnet new medical-fhir-api -n RumahSakit.Api --smart --persist
 ```
 
 ## Galeri
 
-Dua puluh sembilan kasus penggunaan di Galeri Medical.Net tersedia untuk web (Blazor) dan desktop (Avalonia) dalam bahasa Indonesia dan Inggris:
+Tiga puluh dua kasus penggunaan di Galeri Medical.Net tersedia untuk web (Blazor) dan desktop (Avalonia) dalam bahasa Indonesia dan Inggris:
 
 | Web | Desktop |
 |---|---|
@@ -87,11 +101,30 @@ Dua puluh sembilan kasus penggunaan di Galeri Medical.Net tersedia untuk web (Bl
 | ![](docs/images/web-volume3d.png) | ![](docs/images/desktop-ecg12-id.png) |
 | ![](docs/images/web-growth.png) | ![](docs/images/desktop-clinical-nlp-id.png) |
 | ![](docs/images/web-federated.png) | ![](docs/images/desktop-drug-safety-id.png) |
+| ![](docs/images/web-live-monitoring.png) | ![](docs/images/desktop-offline-sync-id.png) |
 
 ```bash
 dotnet run --project gallery/Medical.Gallery.Web --urls http://localhost:5290   # buka /?lang=id
 dotnet run --project gallery/Medical.Gallery.Desktop
 ```
+
+## Aplikasi rumah sakit
+
+Aplikasi referensi SIMRS menjalankan dua rumah sakit fiktif — RS Medika Nusantara (Jakarta) dan RSUD Kota Bahari (Makassar) — dengan monitor ICU tersimulasi:
+
+| | |
+|---|---|
+| ![](docs/images/his-dashboard.png) | ![](docs/images/his-monitoring.png) |
+| ![](docs/images/his-registration.png) | ![](docs/images/his-lab.png) |
+| ![](docs/images/rounds-ward-id.png) | ![](docs/images/rounds-vitals-id.png) |
+
+```bash
+ASPNETCORE_ENVIRONMENT=Development dotnet run --project apps/Medical.His --urls http://localhost:5300   # login demo di /login
+dotnet build Medical.Rounds.slnx                                    # visite MAUI (perlu workload maui-windows)
+dotnet run --project apps/Medical.Rounds -f net10.0-windows10.0.19041.0
+```
+
+Login demo tidak memakai kata sandi. Ganti dengan OpenID Connect dan isi `His:DeviceKeys:{tenant}` sebelum dipakai sungguhan. Lihat [Platform rumah sakit](docs/id/platform.md).
 
 ## Build dari kode sumber
 

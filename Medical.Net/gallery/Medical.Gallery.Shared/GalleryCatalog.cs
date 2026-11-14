@@ -21,6 +21,7 @@ public static class GalleryCatalog
         new("national", new("Indonesia: SATUSEHAT & BPJS", "Indonesia: SATUSEHAT & BPJS")),
         new("ai", new("Clinical AI", "AI klinis")),
         new("intelligence", new("Clinical intelligence", "Kecerdasan klinis")),
+        new("platform", new("Hospital platform", "Platform rumah sakit")),
         new("data", new("Data & privacy", "Data & privasi")),
     ];
 
@@ -324,6 +325,36 @@ public static class GalleryCatalog
             double epsilon = fed.Epsilon(delta: 1e-5);
             ModelCard card = ModelCard.Create("Deterioration", intendedUse, predictions, labels, subgroups);
             DriftReport drift = new DriftMonitor(features, reference, refPred, refLabels).Check(current, pred, labels);
+            """),
+        new("his", "platform", new("Multi-tenant HIS", "SIMRS multi-tenant"),
+            new("Two hospitals on one installation: registration, clinics, wards, pharmacy, lab, radiology and billing, each tenant isolated by query filters and write guards.",
+                "Dua rumah sakit dalam satu instalasi: pendaftaran, poli, bangsal, farmasi, lab, radiologi dan kasir, setiap tenant terisolasi dengan filter kueri dan penjaga tulis."),
+            "Medical.Hospital", """
+            await using var db = new HospitalDbContext(options, new FixedTenantContext("rs-nusantara", "dr.sari", StaffRole.Doctor));
+            var patient = await new RegistrationService(db).RegisterAsync(new NewPatient("Siti", "Rahayu", Gender.Female, new(1990, 1, 25), nik));
+            var visit = await new RegistrationService(db).StartVisitAsync(patient.Id, poliDalam, VisitKind.Outpatient, PayerType.Bpjs, sep);   // "B-007"
+            var stay = await new ClinicalService(db).AdmitAsync(visit.Id, melati);          // bed, ward-round sync, events
+            HospitalDashboard d = await new DashboardService(db).SnapshotAsync();            // BOR, ALOS, queues, NEWS2 watch list
+            """),
+        new("live-monitoring", "platform", new("Live bedside monitoring", "Monitor pasien langsung"),
+            new("Simulated ICU monitors send HL7 ORU^R01 over MLLP (IoTCom.Net); the engine filters artefacts, recomputes NEWS2 and raises confirmed alerts with hysteresis.",
+                "Monitor ICU tersimulasi mengirim HL7 ORU^R01 lewat MLLP (IoTCom.Net); mesin menyaring artefak, menghitung ulang NEWS2 dan memberi peringatan terkonfirmasi dengan histeresis."),
+            "Medical.Devices (preview) · Medical.Hospital", """
+            await using var feed = Hl7MonitorFeed.Tcp(2575);                  // or MqttSenMLFeed.Connect(broker, 1883) for sensors and pumps
+            var engine = new MonitoringEngine();
+            engine.Bind("ICU-MON-01", "ICU-01", patientId, "Budi Santoso", visitId);
+            engine.Alert += a => page.Notify(a);                              // confirmed after two evaluations, cleared with hysteresis
+            engine.ChartDue += s => clinical.RecordVitalsAsync(s.PatientId!, s.VisitId, s.Vitals!, VitalsSource.Device);
+            await new DeviceGateway(engine, feed).RunAsync(stopping);
+            """),
+        new("offline-sync", "platform", new("Offline ward rounds", "Visite luring"),
+            new("Two tablets and the HIS: offline edits in SQLite, hybrid logical clocks, append-only vitals, last-writer-wins tasks and a read-only census — step by step to convergence.",
+                "Dua tablet dan SIMRS: perubahan luring di SQLite, hybrid logical clock, tanda vital append-only, tugas penulis-terakhir-menang dan daftar pasien hanya-baca — langkah demi langkah sampai konvergen."),
+            "Medical.Sync · Medical.Hospital", """
+            var tablet = new SyncClient(SqliteSyncStore.Open(path), new HttpSyncTransport(http, $"{his}/api/{tenant}/sync"), "tablet-melati");
+            tablet.Save(RoundsTypes.Vitals, vitals.Id, vitals);               // works without a network
+            SyncReport r = await tablet.SyncAsync();                           // push dirty, pull since cursor (server sequence)
+            // server: RoundsSync.Server(db).Push(...) applies vitals, notes and task completions to the clinical record
             """),
     ];
 

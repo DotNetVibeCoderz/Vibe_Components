@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="apps/Medical.Rounds.Core/Medical.Rounds.Core.csproj" />
+  <Project Path="apps/Medical.Rounds/Medical.Rounds.csproj" />
+</Solution>

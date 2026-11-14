@@ -1,0 +1,40 @@
+@inherits LayoutComponentBase
+@inject HisSession S
+@inject NavigationManager Nav
+<div class="shell">
+    <aside class="rail">
+        <div class="brand">
+            <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#14233A"/><path d="M4 17h6l2-6 4 12 3-9 2 3h7" fill="none" stroke="#E39C97" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+            <div><strong>Medical.Net HIS</strong><small>@(S.SignedIn ? S.TenantName : "v" + MedicalInfo.Version)</small></div>
+        </div>
+        @if (S.SignedIn)
+        {
+            <div class="lang"><button class="@(S.Lang == "id" ? "on" : "")" @onclick='() => S.SetLang("id")'>ID</button><button class="@(S.Lang == "en" ? "on" : "")" @onclick='() => S.SetLang("en")'>EN</button></div>
+            <nav>
+                @foreach (var (m, en, id) in Menu)
+                {
+                    if (!S.Can(m)) continue;
+                    string href = m == "dashboard" ? $"/{S.TenantId}" : $"/{S.TenantId}/{m}";
+                    <NavLink href="@href" Match="@(m == "dashboard" ? NavLinkMatch.All : NavLinkMatch.Prefix)">@S.T(en, id)</NavLink>
+                }
+            </nav>
+            <div class="who"><strong>@S.DisplayName</strong><small>@S.Role · @S.UserName</small><a href="/account/logout">@S.T("Sign out", "Keluar")</a></div>
+        }
+    </aside>
+    <main class="page">@Body</main>
+</div>
+<footer class="credit">Medical.Net — @(S.Lang == "en" ? MedicalInfo.Credit : MedicalInfo.CreditId) · @(S.Lang == "en" ? MedicalInfo.Disclaimer : MedicalInfo.DisclaimerId)</footer>
+@code {
+    private static readonly (string, string, string)[] Menu =
+    [
+        ("dashboard", "Dashboard", "Dasbor"), ("registration", "Registration", "Pendaftaran"), ("outpatient", "Outpatient", "Rawat jalan"),
+        ("wards", "Wards & beds", "Bangsal & tempat tidur"), ("monitoring", "Live monitoring", "Monitor pasien"), ("pharmacy", "Pharmacy", "Farmasi"),
+        ("lab", "Laboratory", "Laboratorium"), ("radiology", "Radiology", "Radiologi"), ("billing", "Billing", "Kasir & klaim"),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await S.LoadAsync();
+        S.Changed += () => InvokeAsync(StateHasChanged);
+    }
+}

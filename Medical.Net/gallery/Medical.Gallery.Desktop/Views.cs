@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Medical.AI.Assistant;
@@ -48,6 +49,9 @@ internal static class Views
         public bool Busy;
         public IClinicalLlm Llm = LlmOptions.FromEnvironment().Create();
     }
+    private sealed class HisState { public string? Tenant, Ward; }
+    private sealed class MonState { public int Minute = 180; }
+    private sealed class SyncState { public int Step = 4; }
     private sealed class FedState { public double Noise, Shift = 0.8; public bool Secure = true; }
     private sealed class ChatState
     {
@@ -538,6 +542,83 @@ internal static class Views
                             Eyebrow(T("Drift since deployment", "Drift sejak penerapan")),
                             Table([T("Feature", "Fitur"), "PSI", "KS", T("Level", "Tingkat")], v.Drift.Features.Append(v.Drift.Prediction!).Select(f => new[] { f.Feature, $"{f.Psi:0.000}", $"{f.KsStatistic:0.000}", f.Level.ToString() }), 1, 2),
                             Stack(0, v.Drift.Alerts.Select(a => Alert("warning", "drift", a, "")).ToArray())))));
+            }
+            case "his":
+            {
+                var st = S<HisState>();
+                var v = Task.Run(() => Scenarios.His(st.Tenant, st.Ward)).GetAwaiter().GetResult();
+                var d = v.Dashboard;
+                var beds = new WrapPanel { Orientation = Orientation.Horizontal };
+                foreach (var b in v.Board)
+                {
+                    var tone = b.News2 >= 7 ? "Red" : b.News2 >= 5 ? "Amber" : b.Status == Medical.Hospital.BedStatus.Occupied ? "Teal" : "Rule";
+                    beds.Children.Add(new Border
+                    {
+                        Width = 150, Margin = new Thickness(0, 0, 8, 8), Padding = new Thickness(10, 8), CornerRadius = new CornerRadius(8), BorderBrush = Brush(tone),
+                        BorderThickness = new Thickness(1, 4, 1, 1), Background = Brush("Paper"),
+                        Child = Stack(2, Mono($"{b.Code}  {b.Class}", 12), Text(b.PatientName ?? (b.Status == Medical.Hospital.BedStatus.Free ? T("free", "kosong") : b.Status.ToString()), 13.5, weight: FontWeight.Bold),
+                            b.News2 is { } n ? Pill($"NEWS2 {n}", n >= 7 ? "high" : n >= 5 ? "medium" : "low") : Text("", 4)),
+                    });
+                }
+                return Stack(16,
+                    Controls(Segmented(v.Tenants.Select(t => (t.Id, $"{t.Name} · {t.City}")), v.TenantId, x => { st.Tenant = x; st.Ward = null; rerender(); }),
+                        Segmented(v.Wards.Select(w => (w.Code, w.NameId)), v.Wards.First(w => w.Id == v.WardId).Code, x => { st.Ward = x; rerender(); })),
+                    Columns([1, 1, 1, 1],
+                        Readout(T("Outpatients today", "Rawat jalan hari ini"), $"{d.OutpatientsToday}", null, $"IGD {d.EmergencyToday}"),
+                        Readout(T("Inpatients", "Rawat inap"), $"{d.Inpatients}", null, $"BOR {d.BedOccupancyRate:0.#} %"),
+                        Readout(T("Pending work", "Pekerjaan tertunda"), $"{d.PendingLab + d.PendingRadiology + d.PrescriptionsToReview}", null, $"lab {d.PendingLab} · rad {d.PendingRadiology} · {T("critical", "kritis")} {d.CriticalUnacknowledged}"),
+                        Readout(T("Revenue today", "Pendapatan hari ini"), $"{d.RevenueToday / 1_000_000m:0.0}", T("M Rp", "jt Rp"), T("all charges", "seluruh tagihan"))),
+                    Columns([2, 3],
+                        Panel(T("Clinic queues", "Antrean poli"), Stack(8,
+                            Table([T("Clinic", "Poli"), T("Waiting", "Menunggu"), T("In room", "Diperiksa")], d.Queues.Select(q => new[] { q.Clinic, $"{q.Waiting}", $"{q.InConsultation}" }), 1, 2),
+                            Eyebrow(T("NEWS2 watch list", "Daftar pantau NEWS2")),
+                            Table(["NEWS2", T("Patient", "Pasien"), T("Bed", "TT")], d.HighNews2.Select(w => new[] { $"{w.News2}", w.Name, w.Bed }), 0, 2))),
+                        Panel(T("Bed board", "Papan tempat tidur"), beds, v.Wards.First(w => w.Id == v.WardId).NameId)));
+            }
+            case "live-monitoring":
+            {
+                var st = S<MonState>();
+                var f = Task.Run(() => Scenarios.Monitoring(st.Minute)).GetAwaiter().GetResult();   // off the UI thread: the simulation awaits internally
+                string V(Medical.Hospital.Monitoring.BedSnapshot s, Medical.Hospital.Monitoring.VitalParameter p, string fmt = "0") => s.Latest.TryGetValue(p, out var x) ? x.Value.ToString(fmt, System.Globalization.CultureInfo.InvariantCulture) : "—";
+                var mons = new UniformGrid { Columns = 4 };
+                foreach (var s in f.Beds)
+                {
+                    var lvl = s.Level;
+                    IBrush border = lvl >= Medical.Hospital.Monitoring.EscalationLevel.High ? Brush("Red") : lvl >= Medical.Hospital.Monitoring.EscalationLevel.LowMedium ? Brush("Amber") : new SolidColorBrush(Color.Parse("#1E2A35"));
+                    TextBlock Big(string t, string c, double size = 26) => new() { Text = t, FontFamily = Font("Mono"), FontSize = size, Foreground = new SolidColorBrush(Color.Parse(c)) };
+                    TextBlock Small(string t) => new() { Text = t, FontSize = 11, Foreground = new SolidColorBrush(Color.Parse("#9FB0C0")) };
+                    mons.Children.Add(new Border
+                    {
+                        Margin = new Thickness(0, 0, 10, 0), Padding = new Thickness(12, 10), CornerRadius = new CornerRadius(10), Background = new SolidColorBrush(Color.Parse("#0C1116")),
+                        BorderBrush = border, BorderThickness = new Thickness(2),
+                        Child = Stack(4,
+                            new TextBlock { Text = $"{s.BedCode} · {s.PatientName}", Foreground = Brushes.White, FontWeight = FontWeight.Bold },
+                            Pill($"NEWS2 {s.News2?.Score.ToString() ?? "—"}", (s.News2?.Score ?? 0) >= 7 ? "high" : (s.News2?.Score ?? 0) >= 5 ? "medium" : "low"),
+                            new StackPanel { Orientation = Orientation.Horizontal, Spacing = 14, Children = { Stack(0, Small(T("HR", "NADI")), Big(V(s, Medical.Hospital.Monitoring.VitalParameter.HeartRate), "#5BE37D")),
+                                Stack(0, Small("SpO₂"), Big(V(s, Medical.Hospital.Monitoring.VitalParameter.SpO2), "#5EC8F2")), Stack(0, Small("RR"), Big(V(s, Medical.Hospital.Monitoring.VitalParameter.RespiratoryRate), "#F5D76E")) } },
+                            new StackPanel { Orientation = Orientation.Horizontal, Spacing = 14, Children = { Stack(0, Small(T("BP", "TD")), Big($"{V(s, Medical.Hospital.Monitoring.VitalParameter.SystolicBp)}/{V(s, Medical.Hospital.Monitoring.VitalParameter.DiastolicBp)}", "#F28BB0", 20)),
+                                Stack(0, Small("°C"), Big(V(s, Medical.Hospital.Monitoring.VitalParameter.TemperatureC, "0.0"), "#E8E8E8", 20)) } }),
+                    });
+                }
+                var alerts = Stack(0, f.Alerts.Take(5).Select(a => Alert(a.Raised ? (a.Level >= Medical.Hospital.Monitoring.EscalationLevel.High ? "critical" : "warning") : "info", $"{a.BedCode} · {a.Level}", a.PatientName ?? "", a.Message[lang])).ToArray());
+                return Stack(16,
+                    Controls(Slider(T("Simulated time", "Waktu simulasi"), 10, Scenarios.MonitorMinutes, st.Minute, 10, x => { st.Minute = (int)x; rerender(); }, x => $"{x:0} min"),
+                        Text($"{f.Messages} HL7 ORU^R01 · MLLP (IoTCom.Net)", 13, "muted")),
+                    mons,
+                    Columns([3, 2], Panel("NEWS2", SvgView(f.Chart)), Panel(T("Alerts", "Peringatan"), alerts, T("confirmed, with hysteresis", "terkonfirmasi, dengan histeresis"))));
+            }
+            case "offline-sync":
+            {
+                var st = S<SyncState>();
+                var s = Task.Run(() => Scenarios.OfflineSync(st.Step)).GetAwaiter().GetResult();
+                Control Node(string name, IReadOnlyList<SyncNodeRow> rows, bool online) =>
+                    Panel(name, Table([T("Type", "Jenis"), T("Record", "Data")], rows.Select(r => new[] { r.Type + (r.Dirty ? " ⟳" : ""), r.Summary }), 0), online ? T("online", "daring") : T("offline", "luring"));
+                return Stack(16,
+                    Controls(Segmented(Enumerable.Range(0, Scenarios.SyncSteps).Select(i => (i, $"{i + 1}")), st.Step, x => { st.Step = x; rerender(); }),
+                        Text(s.Title[lang], 15, weight: FontWeight.Bold).Also(t => t.VerticalAlignment = VerticalAlignment.Center)),
+                    Text(s.Explanation[lang], 14.5, "muted"),
+                    Columns([1, 1, 1], Node("HIS server", s.Server, true), Node("Tablet A · ns.dewi", s.TabletA, s.AOnline), Node("Tablet B · ns.eko", s.TabletB, s.BOnline)),
+                    Panel(T("Sync log", "Log sinkronisasi"), Mono(string.Join("\n", s.Log), 12)));
             }
             default:
                 return Text(T("Pick a use case from the list.", "Pilih kasus dari daftar."));

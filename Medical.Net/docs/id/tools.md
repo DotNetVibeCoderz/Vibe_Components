@@ -96,9 +96,61 @@ Galeri v1.2 menambahkan **MPR & MIP**, **Volume 3D** (ThreeNet / three.js), **Ko
 | NLP & pedoman | `medical nlp "<catatan>" --lang id [--hf]` · `medical guideline ask "<pertanyaan>" --lang id [--corpus pedoman/]` |
 | Pembelajaran | `medical federated --noise 1.0 --clip 0.5 --card card.md` · `medical drift --shift 0.8` |
 
-Galeri kini berisi dua puluh sembilan kasus, termasuk **Skor ICU & obstetri**, **Risiko kardiovaskular**, **Pertumbuhan WHO**, **Keamanan obat & dosis**, **NLP klinis & pengodean**, **Jawaban pedoman** dan **Federated learning**. Templat memakai `--MedicalNetVersion` bawaan `1.3.0`.
+Galeri v1.3 berisi dua puluh sembilan kasus, termasuk **Skor ICU & obstetri**, **Risiko kardiovaskular**, **Pertumbuhan WHO**, **Keamanan obat & dosis**, **NLP klinis & pengodean**, **Jawaban pedoman** dan **Federated learning**. Templat memakai `--MedicalNetVersion` bawaan `1.3.0`.
 
 | | |
 |---|---|
 | ![](../images/desktop-icu-scores-id.png) | ![](../images/desktop-growth-id.png) |
 | ![](../images/desktop-guidelines-id.png) | ![](../images/desktop-federated-id.png) |
+
+## Baru di 2.0
+
+| Perintah | Contoh |
+|---|---|
+| SIMRS | `medical his seed [--db his.db] [--patients 40]` · `medical his dashboard [--db his.db] [--tenant rs-bahari] --lang id` · `medical his patient <no-rm> [--db his.db] [--tenant rs-nusantara] [--fhir ringkasan.json]` |
+| Pemantauan | `medical monitor [--minutes 120] [--step 5] --lang id` (monitor ICU tersimulasi → HL7 / MLLP → peringatan NEWS2; kode keluar 3 bila ada peringatan High) |
+| Sinkronisasi | `medical sync demo --lang id` (visite luring: dua tablet, konflik, konvergensi) |
+
+Galeri kini berisi tiga puluh dua kasus. Kelompok baru **Platform rumah sakit** memuat **SIMRS multi-tenant**,
+**Monitor pasien langsung** dan **Visite luring**. Templat memakai `--MedicalNetVersion` bawaan `2.0.0`.
+
+| | |
+|---|---|
+| ![](../images/desktop-his-id.png) | ![](../images/desktop-live-monitoring-id.png) |
+| ![](../images/desktop-offline-sync-id.png) | ![](../images/web-his.png) |
+
+### Aplikasi rumah sakit
+
+```bash
+ASPNETCORE_ENVIRONMENT=Development dotnet run --project apps/Medical.His --urls http://localhost:5300
+dotnet build Medical.Rounds.slnx                                          # MAUI; perlu workload maui-windows
+dotnet run --project apps/Medical.Rounds -f net10.0-windows10.0.19041.0
+```
+
+Jalankan SIMRS dalam lingkungan Development, atau publish aplikasinya. Aset web statis tidak ditemukan bila file
+executable di `bin` dijalankan dalam lingkungan Production. Konfigurasi, peran dan API dijelaskan di
+[Platform rumah sakit](platform.md).
+
+**Tangkapan layar SIMRS.** Dengan SIMRS berjalan, masuk melalui `/account/demo` di URL tangkapan layar. Gunakan
+`--user-data-dir` baru untuk setiap tangkapan agar cookie dari pengguna, rumah sakit atau bahasa sebelumnya tidak
+terpakai lagi:
+
+```bash
+chrome --headless=new --user-data-dir="$(mktemp -d)" --blink-settings=preferredColorScheme=1 --window-size=1440,1000 \
+  --screenshot=docs/images/his-dashboard.png \
+  "http://localhost:5300/account/demo?tenant=rs-nusantara&user=admin&lang=id&returnUrl=/rs-nusantara"
+```
+
+Gunakan `lang=en` dan akhiran `-en` untuk versi bahasa Inggris (`his-dashboard-en.png`), serta
+`returnUrl=/rs-nusantara/monitoring`, `/registration`, `/pharmacy` dan seterusnya untuk halaman lain.
+
+**Tangkapan layar visite.** Dengan SIMRS berjalan di `http://localhost:5300`, aplikasi MAUI menangkap layarnya sendiri
+lalu keluar:
+
+```bash
+apps/Medical.Rounds/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Medical.Rounds.exe --capture docs/images id   # rounds-ward-id.png, …
+apps/Medical.Rounds/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Medical.Rounds.exe --capture docs/images en   # rounds-ward.png, …
+```
+
+Saat menangkap layar, aplikasi mencatat tanda vital dan satu catatan pada pasien paling berat (hanya di penyimpanan
+memori perangkat), lalu menulis `rounds-capture[-id].log` berisi hasil sinkronisasi.

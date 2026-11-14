@@ -28,8 +28,20 @@ Made by **Gravicode Studios**, led by **Kang Fadhil**. · [Bahasa Indonesia](REA
 | `Medical.AspNetCore` | FHIR REST server (`MapMedicalFhir`: search, `_history`, vread, `$validate`, `$everything`, transactions, ETags), **SMART on FHIR authorization** (`MapSmartAuthorization`), clinical JSON API, hosted MLLP listener with conformance checks | ASP.NET Core |
 | `Medical.Visualization` | SVG ECG strips, NEWS2 observation charts, trends, gauges, risk-driver bars, histograms, **WHO growth charts**, score bars, XY charts | — |
 | `Medical.Native` | Rust kernels (window/level, pixel statistics, QRS detection, **MPR / slab projections**) with a bit-identical managed fallback | Rust |
+| `Medical.Hospital` | **Multi-tenant HIS core**: shared-schema EF Core model (SQLite / SQL Server) with tenant query filters and write guards; registration (NIK de-duplication, MRN, daily queue numbers), SOAP + ICD-10, vitals with NEWS2, admission / transfer / discharge; pharmacy review (interactions, allergies, renal dosing) with FEFO dispensing; lab critical values with read-back and HL7 OML / ORU; radiology worklist and reports; billing (Umum / BPJS / insurance) with INA-CBG claim data; dashboard (BOR, ALOS, queues); real-time NEWS2 `MonitoringEngine` | EF Core 10 |
+| `Medical.Sync` | **Offline-first sync**: hybrid logical clocks, per-type conflict policies (append-only, last-writer-wins, server-wins, read-only), server-sequence pull cursors, SQLite client store, HTTP / in-process transports | Microsoft.Data.Sqlite |
+| `Medical.Devices` *(preview)* | **Bedside devices**: HL7 v2 / MLLP patient monitors, MQTT + SenML sensors and infusion pumps, monitor and pump simulators, a gateway into the NEWS2 engine. `2.0.0-preview` because IoTCom.Net is prerelease | IoTCom.Net 0.22 (preview) |
 | `Medical.Cli` | `medical` .NET tool | — |
 | `Medical.Templates` | `dotnet new` templates | — |
+
+## What's new in 2.0
+
+- **Hospital information system core** (`Medical.Hospital`): one database for many hospitals, with every row tenant-stamped, filtered and guarded against cross-tenant writes. It covers registration and queues, outpatient and inpatient care, pharmacy, laboratory, radiology, billing with BPJS INA-CBG claim data, and dashboards.
+- **Real-time monitoring** (`Medical.Devices`, preview): HL7 / MLLP monitors and MQTT / SenML sensors and pumps (IoTCom.Net) feed a NEWS2 engine with plausibility and median filtering, RCP escalation, confirmed alerts with hysteresis, and 15-minute charting for nurse validation.
+- **Offline-first sync** (`Medical.Sync`): hybrid logical clocks, append-only clinical data, last-writer-wins tasks, a read-only census, and pull cursors by server sequence so late offline pushes are never skipped.
+- **Reference apps**: a Blazor Server HIS for two fictional hospitals (`apps/Medical.His`) and a MAUI ward-round app for Windows and Android (`apps/Medical.Rounds`).
+
+See [Hospital platform](docs/en/platform.md).
 
 ## What's new in 1.3
 
@@ -102,6 +114,8 @@ medical ecg12 --pattern inferior --out ecg.svg
 medical satusehat bundle --index 3 && medical bpjs claim --index 7
 medical score sofa --pf 150 --ventilated --plt 80 --gcs 13 && medical growth --sex f --age-months 24 --weight 9 --height 77.5
 medical nlp "demam berdarah, tidak ada sesak napas" && medical guideline ask "Berapa lama pengobatan TB paru?"
+medical his seed --db his.db && medical his dashboard --db his.db --tenant rs-nusantara
+medical monitor --minutes 120 && medical sync demo
 
 dotnet new install Medical.Templates
 dotnet new medical-fhir-api -n MyHospital.Api --smart --persist   # also: medical-console, medical-hl7-gateway, medical-blazor, medical-avalonia
@@ -109,7 +123,7 @@ dotnet new medical-fhir-api -n MyHospital.Api --smart --persist   # also: medica
 
 ## Gallery
 
-Twenty-nine use cases run live in the **Medical.Net Gallery**, in Blazor (web) and Avalonia (desktop), in English and Bahasa Indonesia:
+Thirty-two use cases run live in the **Medical.Net Gallery**, in Blazor (web) and Avalonia (desktop), in English and Bahasa Indonesia:
 
 | Web (Blazor) | Desktop (Avalonia) |
 |---|---|
@@ -122,11 +136,30 @@ Twenty-nine use cases run live in the **Medical.Net Gallery**, in Blazor (web) a
 | ![](docs/images/web-mpr.png) | ![](docs/images/desktop-imaging-ai.png) |
 | ![](docs/images/web-icu-scores.png) | ![](docs/images/desktop-growth.png) |
 | ![](docs/images/web-clinical-nlp.png) | ![](docs/images/desktop-federated.png) |
+| ![](docs/images/web-live-monitoring.png) | ![](docs/images/desktop-offline-sync.png) |
 
 ```bash
 dotnet run --project gallery/Medical.Gallery.Web --urls http://localhost:5290
 dotnet run --project gallery/Medical.Gallery.Desktop
 ```
+
+## Hospital apps
+
+The HIS reference app runs two fictional hospitals — RS Medika Nusantara (Jakarta) and RSUD Kota Bahari (Makassar) — with simulated ICU monitors:
+
+| | |
+|---|---|
+| ![](docs/images/his-dashboard-en.png) | ![](docs/images/his-monitoring-en.png) |
+| ![](docs/images/his-pharmacy.png) | ![](docs/images/his-billing.png) |
+| ![](docs/images/rounds-ward.png) | ![](docs/images/rounds-vitals.png) |
+
+```bash
+ASPNETCORE_ENVIRONMENT=Development dotnet run --project apps/Medical.His --urls http://localhost:5300   # demo sign-in at /login
+dotnet build Medical.Rounds.slnx                                    # MAUI ward rounds (needs the maui-windows workload)
+dotnet run --project apps/Medical.Rounds -f net10.0-windows10.0.19041.0
+```
+
+The demo sign-in has no passwords; replace it with OpenID Connect and set `His:DeviceKeys:{tenant}` before any real use. See [Hospital platform](docs/en/platform.md).
 
 ## Build from source
 

@@ -1,4 +1,8 @@
 <Solution>
+  <Folder Name="/apps/">
+    <Project Path="apps/Medical.His/Medical.His.csproj" />
+    <Project Path="apps/Medical.Rounds.Core/Medical.Rounds.Core.csproj" />
+  </Folder>
   <Folder Name="/gallery/">
     <Project Path="gallery/Medical.Gallery.Desktop/Medical.Gallery.Desktop.csproj" />
     <Project Path="gallery/Medical.Gallery.Shared/Medical.Gallery.Shared.csproj" />
@@ -11,14 +15,17 @@
     <Project Path="src/Medical.Clinical/Medical.Clinical.csproj" />
     <Project Path="src/Medical.Core/Medical.Core.csproj" />
     <Project Path="src/Medical.Dicom/Medical.Dicom.csproj" />
+    <Project Path="src/Medical.Devices/Medical.Devices.csproj" />
     <Project Path="src/Medical.Emr/Medical.Emr.csproj" />
     <Project Path="src/Medical.Fhir/Medical.Fhir.csproj" />
     <Project Path="src/Medical.Hl7/Medical.Hl7.csproj" />
+    <Project Path="src/Medical.Hospital/Medical.Hospital.csproj" />
     <Project Path="src/Medical.HuggingFace/Medical.HuggingFace.csproj" />
     <Project Path="src/Medical.Native/Medical.Native.csproj" />
     <Project Path="src/Medical.Privacy/Medical.Privacy.csproj" />
     <Project Path="src/Medical.Rules/Medical.Rules.csproj" />
     <Project Path="src/Medical.Signals/Medical.Signals.csproj" />
+    <Project Path="src/Medical.Sync/Medical.Sync.csproj" />
     <Project Path="src/Medical.Terminology/Medical.Terminology.csproj" />
     <Project Path="src/Medical.Visualization/Medical.Visualization.csproj" />
   </Folder>

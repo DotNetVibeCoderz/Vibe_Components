@@ -116,7 +116,8 @@ jobs:
         shell: bash
         run: |
           if [[ "$GITHUB_REF" == refs/tags/medical-net-v* ]]; then
-            echo "args=-p:Version=${GITHUB_REF#refs/tags/medical-net-v}" >> "$GITHUB_OUTPUT"
+            # VersionPrefix (not Version) so packages with their own VersionSuffix (Medical.Devices: preview) stay prerelease
+            echo "args=-p:VersionPrefix=${GITHUB_REF#refs/tags/medical-net-v}" >> "$GITHUB_OUTPUT"
           else
             echo "args=-p:VersionSuffix=ci.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
           fi

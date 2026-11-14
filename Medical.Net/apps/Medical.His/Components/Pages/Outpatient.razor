@@ -1,0 +1,149 @@
+@page "/{Tenant}/outpatient"
+@inherits HisPage
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+<header class="head"><p class="eyebrow">@S.TenantName</p><h1>@T("Outpatient clinic", "Poliklinik rawat jalan")</h1></header>
+@if (Error is { } err) { <div class="alert critical">@err</div> }
+@if (Info is { } info) { <div class="alert info">@info</div> }
+@if (Ready)
+{
+    <div class="controls">
+        <div class="seg">@foreach (var d in _depts) { <button class="@(d.Id == _dept ? "on" : "")" @onclick="() => PickDept(d.Id)">@d.NameId</button> }</div>
+        <button class="primary" @onclick="CallNextAsync">@T("Call next patient", "Panggil pasien berikutnya")</button>
+    </div>
+    <div class="grid-2 wide-right">
+        <section class="panel">
+            <h3>@T("Queue", "Antrean") <small>@_queue.Count @T("patients", "pasien")</small></h3>
+            <table class="data">
+                @foreach (var (v, p) in _queue)
+                {
+                    <tr class="@(v.Id == _visit?.Id ? "hl-soft" : "")" @onclick="() => OpenAsync(v.Id)">
+                        <td class="mono">@v.QueueNumber</td><td>@p.FullName<br /><small class="muted">@v.ChiefComplaint</small></td>
+                        <td><span class="tag @(v.Status == VisitStatus.InConsultation ? "teal" : "")">@(v.Status == VisitStatus.InConsultation ? T("in room", "diperiksa") : T("waiting", "menunggu"))</span> <span class="tag">@v.Payer</span></td>
+                    </tr>
+                }
+            </table>
+        </section>
+        @if (_visit is { } v2 && _patient is { } p2)
+        {
+            <section class="panel">
+                <h3>@p2.FullName <small>RM @p2.Mrn · @(Age(p2)) @T("y", "th") · @v2.Payer @(p2.Allergies is { Length: > 0 } a ? "· " + T("allergy", "alergi") + ": " + a : "")</small></h3>
+                <div class="form wide">
+                    <label>S<textarea @bind="_s" rows="2"></textarea></label>
+                    <label>O<textarea @bind="_o" rows="2"></textarea></label>
+                    <label>A<textarea @bind="_a" rows="2"></textarea></label>
+                    <label>P<textarea @bind="_p" rows="2"></textarea></label>
+                </div>
+                <div class="controls">
+                    <button @onclick="SaveSoapAsync">@T("Save SOAP", "Simpan SOAP")</button>
+                    <label>ICD-10<input @bind="_icd" placeholder="A91" style="width:7em" /></label><button @onclick="AddDxAsync">@T("Add diagnosis", "Tambah diagnosis")</button>
+                </div>
+                <p>@foreach (var d in _dx) { <span class="tag @(d.Primary ? "teal" : "")">@d.Icd10 @d.Display</span> }</p>
+                <p class="label">@T("Vital signs", "Tanda vital")</p>
+                <div class="controls vitals">
+                    <label>RR<input type="number" @bind="_vs.Rr" /></label><label>SpO₂<input type="number" @bind="_vs.Spo2" /></label>
+                    <label>@T("TD sys", "TD sis")<input type="number" @bind="_vs.Sbp" /></label><label>@T("TD dia", "TD dia")<input type="number" @bind="_vs.Dbp" /></label>
+                    <label>@T("Pulse", "Nadi")<input type="number" @bind="_vs.Hr" /></label><label>@T("Temp", "Suhu")<input type="number" step="0.1" @bind="_vs.T" /></label>
+                    <label class="check"><input type="checkbox" @bind="_vs.O2" /> O₂</label>
+                    <button @onclick="VitalsAsync">@T("Chart", "Catat")</button>
+                    @if (_lastNews is { } n) { <span class="news n@(n >= 7 ? "high" : n >= 5 ? "med" : "low")">NEWS2 @n</span> }
+                </div>
+                <p class="label">@T("Orders", "Order")</p>
+                <div class="controls">
+                    <button @onclick='() => LabAsync(["718-7", "777-3", "6690-2"])'>@T("Lab: blood count", "Lab: darah rutin")</button>
+                    <button @onclick='() => LabAsync(["2160-0", "2823-3"])'>@T("Lab: renal", "Lab: fungsi ginjal")</button>
+                    <button @onclick="ChestXrayAsync">@T("Chest X-ray", "Foto toraks")</button>
+                    <label>@T("Drug", "Obat")<input @bind="_drug" style="width:9em" /></label><label>mg<input type="number" @bind="_dose" style="width:5em" /></label>
+                    <label>×/@T("day", "hari")<input type="number" @bind="_freq" style="width:4em" /></label><label>@T("days", "hari")<input type="number" @bind="_days" style="width:4em" /></label>
+                    <button @onclick="PrescribeAsync">@T("Prescribe", "Resepkan")</button>
+                </div>
+                <div class="controls end">
+                    <button class="primary" @onclick="FinishAsync">@T("Finish visit", "Selesai")</button>
+                    <label>@T("Admit to", "Rawat inap ke")<select @bind="_ward">@foreach (var w in _wards) { <option value="@w.Id">@w.NameId</option> }</select></label>
+                    <button class="warn" @onclick="AdmitAsync">@T("Admit", "Rawat inap")</button>
+                </div>
+            </section>
+        }
+        else { <section class="panel"><p class="empty">@T("Call or pick a patient from the queue.", "Panggil atau pilih pasien dari antrean.")</p></section> }
+    </div>
+}
+@code {
+    protected override string Module => "outpatient";
+    private sealed class Vs { public double Rr = 18, Spo2 = 97, Sbp = 120, Dbp = 80, Hr = 84, T = 37.0; public bool O2; }
+    private List<Department> _depts = [], _wards = [];
+    private string _dept = "", _ward = "";
+    private IReadOnlyList<(Visit, HisPatient)> _queue = [];
+    private Visit? _visit;
+    private HisPatient? _patient;
+    private List<Diagnosis> _dx = [];
+    private string? _s, _o, _a, _p, _icd;
+    private Vs _vs = new();
+    private int? _lastNews;
+    private string _drug = "paracetamol";
+    private double _dose = 500, _freq = 3;
+    private int _days = 3;
+
+    private int Age(HisPatient p) => new Patient { Id = "", Mrn = "", Name = new("", ""), BirthDate = p.BirthDate }.AgeAt(DateOnly.FromDateTime(Now));
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = S.Db();
+        _depts = await db.Departments.Where(d => d.QueuePrefix != null).OrderBy(d => d.QueuePrefix).ToListAsync();
+        _wards = await db.Departments.Where(d => d.Kind == DepartmentKind.Ward || d.Kind == DepartmentKind.Icu).ToListAsync();
+        if (_ward.Length == 0) _ward = _wards.FirstOrDefault()?.Id ?? "";
+        if (_dept.Length == 0)
+        {
+            var mine = await db.Staff.FirstOrDefaultAsync(s => s.Id == S.StaffId);
+            _dept = _depts.FirstOrDefault(d => d.Id == mine?.DepartmentId)?.Id ?? _depts.First().Id;
+        }
+        _queue = await new RegistrationService(db, S.Clock).QueueAsync(_dept);
+        if (_visit is null && _queue.FirstOrDefault(q => q.Item1.Status == VisitStatus.InConsultation) is { Item1: { } current }) await OpenAsync(current.Id);
+        else if (_visit is not null) await OpenAsync(_visit.Id);
+    }
+
+    private async Task PickDept(string id) { _dept = id; _visit = null; _patient = null; await LoadAsync(); }
+
+    private async Task OpenAsync(string visitId)
+    {
+        await using var db = S.Db();
+        _visit = await db.Visits.FirstOrDefaultAsync(v => v.Id == visitId);
+        if (_visit is null || _visit.Status is VisitStatus.Done or VisitStatus.Admitted) { _visit = null; _patient = null; return; }
+        _patient = await db.Patients.FirstAsync(p => p.Id == _visit.PatientId);
+        _dx = await db.Diagnoses.Where(d => d.VisitId == visitId).ToListAsync();
+        (_s, _o, _a, _p) = (_visit.Subjective ?? _visit.ChiefComplaint, _visit.Objective, _visit.Assessment, _visit.Plan);
+        _lastNews = (await db.Vitals.Where(v => v.VisitId == visitId).ToListAsync()).OrderByDescending(v => v.Time).FirstOrDefault()?.News2;
+    }
+
+    private Task CallNextAsync() => Run(async () =>
+    {
+        await using var db = S.Db();
+        var v = await new ClinicalService(db, S.Clock).CallNextAsync(_dept, S.StaffId) ?? throw new InvalidOperationException(T("The queue is empty.", "Antrean kosong."));
+        _visit = v;
+    });
+
+    private Task SaveSoapAsync() => Run(async () => { await using var db = S.Db(); await new ClinicalService(db, S.Clock).SaveSoapAsync(_visit!.Id, _s, _o, _a, _p); }, T("Saved.", "Tersimpan."));
+    private Task AddDxAsync() => Run(async () => { await using var db = S.Db(); await new ClinicalService(db, S.Clock).AddDiagnosisAsync(_visit!.Id, _icd ?? ""); _icd = null; });
+
+    private Task VitalsAsync() => Run(async () =>
+    {
+        await using var db = S.Db();
+        var e = await new ClinicalService(db, S.Clock).RecordVitalsAsync(_patient!.Id, _visit!.Id, new VitalSigns
+        {
+            Timestamp = S.Clock.GetUtcNow(), RespiratoryRate = _vs.Rr, SpO2 = _vs.Spo2, SystolicBp = _vs.Sbp, DiastolicBp = _vs.Dbp, HeartRate = _vs.Hr, TemperatureC = _vs.T, OnSupplementalOxygen = _vs.O2,
+        });
+        _lastNews = e.News2;
+    });
+
+    private Task LabAsync(string[] codes) => Run(async () => { await using var db = S.Db(); var o = await new LabService(db, S.Clock).OrderAsync(_visit!.Id, codes); Info = $"{T("Lab order", "Order lab")} {o.PlacerNumber}"; });
+    private Task ChestXrayAsync() => Run(async () => { await using var db = S.Db(); var o = await new RadiologyService(db, S.Clock).OrderAsync(_visit!.Id, "87.44", "Foto toraks PA", "CR", clinicalInfo: _a); Info = $"{T("Radiology order", "Order radiologi")} {o.AccessionNumber}"; });
+    private Task PrescribeAsync() => Run(async () => { await using var db = S.Db(); await new PharmacyService(db, S.Clock).PrescribeAsync(_visit!.Id, [new(_drug, _dose, _freq, _days)]); }, T("Sent to pharmacy.", "Dikirim ke farmasi."));
+    private Task FinishAsync() => Run(async () => { await using var db = S.Db(); await new ClinicalService(db, S.Clock).FinishVisitAsync(_visit!.Id); _visit = null; _patient = null; }, T("Visit finished.", "Kunjungan selesai."));
+
+    private Task AdmitAsync() => Run(async () =>
+    {
+        await using var db = S.Db();
+        var stay = await new ClinicalService(db, S.Clock).AdmitAsync(_visit!.Id, _ward);
+        var bed = await db.Beds.FirstAsync(b => b.Id == stay.BedId);
+        Info = T($"Admitted to bed {bed.Code}.", $"Dirawat di tempat tidur {bed.Code}.");
+        _visit = null; _patient = null;
+    });
+}

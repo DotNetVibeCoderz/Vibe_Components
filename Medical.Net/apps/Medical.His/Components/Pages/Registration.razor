@@ -1,0 +1,97 @@
+@page "/{Tenant}/registration"
+@inherits HisPage
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+<header class="head"><p class="eyebrow">@S.TenantName</p><h1>@T("Registration", "Pendaftaran pasien")</h1></header>
+@if (Error is { } err) { <div class="alert critical">@err</div> }
+@if (Info is { } info) { <div class="alert info">@info</div> }
+@if (Ready)
+{
+    <div class="grid-2">
+        <section class="panel">
+            <h3>@T("Find patient", "Cari pasien") <small>@T("name, MRN, NIK or BPJS card", "nama, No. RM, NIK atau kartu BPJS")</small></h3>
+            <div class="controls"><input @bind="_q" @bind:event="oninput" @onkeyup="SearchAsync" placeholder="@T("Search…", "Cari…")" /></div>
+            <table class="data">
+                <tr><th>@T("MRN", "No. RM")</th><th>@T("Name", "Nama")</th><th>@T("Born", "Lahir")</th><th>BPJS</th><th></th></tr>
+                @foreach (var p in _found)
+                {
+                    <tr class="@(_selected?.Id == p.Id ? "hl-soft" : "")"><td class="mono">@p.Mrn</td><td>@p.FullName</td><td class="mono">@p.BirthDate.ToString("dd-MM-yyyy")</td><td class="mono">@(p.BpjsNumber ?? "—")</td>
+                        <td><button @onclick="() => _selected = p">@T("Select", "Pilih")</button></td></tr>
+                }
+            </table>
+        </section>
+        <section class="panel">
+            <h3>@T("New patient", "Pasien baru")</h3>
+            <div class="form">
+                <label>@T("Given name", "Nama depan")<input @bind="_n.Given" /></label>
+                <label>@T("Family name", "Nama belakang")<input @bind="_n.Family" /></label>
+                <label>@T("Sex", "Jenis kelamin")<select @bind="_n.Gender"><option value="@Gender.Female">@T("Female", "Perempuan")</option><option value="@Gender.Male">@T("Male", "Laki-laki")</option></select></label>
+                <label>@T("Date of birth", "Tanggal lahir")<input type="date" @bind="_n.Birth" /></label>
+                <label>NIK<input @bind="_n.Nik" maxlength="16" /></label>
+                <label>@T("BPJS card", "No. kartu BPJS")<input @bind="_n.Bpjs" maxlength="13" /></label>
+                <label>@T("Phone", "Telepon")<input @bind="_n.Phone" /></label>
+                <label>@T("Allergies", "Alergi")<input @bind="_n.Allergies" placeholder="penicillin, …" /></label>
+            </div>
+            <button class="primary" @onclick="RegisterAsync">@T("Register", "Daftarkan")</button>
+        </section>
+    </div>
+    @if (_selected is { } sel)
+    {
+        <section class="panel">
+            <h3>@sel.FullName <small>RM @sel.Mrn · NIK @(sel.Nik ?? "—") · @(sel.Allergies is { Length: > 0 } a ? T("allergy: ", "alergi: ") + a : T("no known allergy", "tidak ada alergi"))</small></h3>
+            <div class="controls">
+                <label>@T("Clinic", "Tujuan")<select @bind="_dept">@foreach (var d in _depts) { <option value="@d.Id">@d.NameId</option> }</select></label>
+                <label>@T("Payer", "Penjamin")<select @bind="_payer"><option value="@PayerType.Bpjs">BPJS (JKN)</option><option value="@PayerType.Umum">Umum</option><option value="@PayerType.Insurance">@T("Insurance", "Asuransi")</option></select></label>
+                @if (_payer == PayerType.Bpjs) { <label>SEP<input @bind="_sep" placeholder="0301R0011126V000123" /></label> }
+                <label>@T("Complaint", "Keluhan")<input @bind="_complaint" /></label>
+                <button class="primary" @onclick="StartAsync">@T("Open visit & queue", "Buka kunjungan & antrean")</button>
+            </div>
+        </section>
+    }
+}
+@code {
+    protected override string Module => "registration";
+    private sealed class Form { public string Given = "", Family = ""; public Gender Gender = Gender.Female; public DateOnly Birth = new(1990, 1, 1); public string? Nik, Bpjs, Phone, Allergies; }
+    private Form _n = new();
+    private string _q = "";
+    private List<HisPatient> _found = [];
+    private HisPatient? _selected;
+    private List<Department> _depts = [];
+    private string _dept = "";
+    private PayerType _payer = PayerType.Bpjs;
+    private string? _sep, _complaint;
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = S.Db();
+        _depts = await db.Departments.Where(d => d.QueuePrefix != null).OrderBy(d => d.QueuePrefix).ToListAsync();
+        if (_dept.Length == 0) _dept = _depts.FirstOrDefault()?.Id ?? "";
+        await SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        await using var db = S.Db();
+        _found = _q.Trim().Length == 0
+            ? (await db.Patients.ToListAsync()).OrderByDescending(p => p.RegisteredAt).ThenByDescending(p => p.Mrn).Take(12).ToList()
+            : (await new RegistrationService(db, S.Clock).SearchAsync(_q, 12)).ToList();
+    }
+
+    private Task RegisterAsync() => Run(async () =>
+    {
+        await using var db = S.Db();
+        var p = await new RegistrationService(db, S.Clock).RegisterAsync(new NewPatient(_n.Given, _n.Family, _n.Gender, _n.Birth,
+            string.IsNullOrWhiteSpace(_n.Nik) ? null : _n.Nik.Trim(), string.IsNullOrWhiteSpace(_n.Bpjs) ? null : _n.Bpjs.Trim(), _n.Phone, Allergies: _n.Allergies));
+        _selected = p;
+        _q = p.Mrn;
+        _n = new();
+    }, T("Patient registered.", "Pasien terdaftar."));
+
+    private Task StartAsync() => Run(async () =>
+    {
+        await using var db = S.Db();
+        var dept = _depts.First(d => d.Id == _dept);
+        var v = await new RegistrationService(db, S.Clock).StartVisitAsync(_selected!.Id, _dept, dept.Kind == DepartmentKind.Emergency ? VisitKind.Emergency : VisitKind.Outpatient,
+            _payer, _payer == PayerType.Bpjs ? _sep : null, complaint: _complaint);
+        Info = T($"Queue number {v.QueueNumber} — {dept.Name}", $"Nomor antrean {v.QueueNumber} — {dept.NameId}");
+    });
+}
