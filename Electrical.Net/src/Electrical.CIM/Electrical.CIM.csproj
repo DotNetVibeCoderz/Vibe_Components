@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>IEC CIM / CGMES: RDF/XML import and export of power networks (IEC 61970-301 equipment and topology), mapping to the Electrical.Net network model.</Description>
+    <Description>IEC CIM / CGMES: RDF/XML import and export of power networks (IEC 61970-301), CGMES 3.0 EQ/TP/SSH/SV profiles (IEC 61970-600 Ed.2), CGMES 2.4.15 import and a rule-based CGMES validator, mapping to the Electrical.Net network model.</Description>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
   </ItemGroup>
 </Project>

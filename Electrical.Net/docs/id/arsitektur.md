@@ -44,6 +44,14 @@ graph LR
     Optimization --> Markets
     Optimization --> Highs[Optimization.Highs] & OrTools[Optimization.OrTools]
     Visualization --> VizBlazor[Visualization.Blazor]
+    PowerFlow --> Pmu
+    PowerFlow --> Learning[AI.Learning]
+    Forecasting --> Learning
+    ShortCircuit --> Learning
+    AI --> Learning
+    DigitalTwin --> ThreeD[DigitalTwin.ThreeD]
+    Visualization --> ThreeD
+    ThreeD --> ThreeDAva[DigitalTwin.ThreeD.Avalonia]
 ```
 
 (Setiap modul juga mereferensikan `Electrical.Core`; hanya sisi tambahan yang digambar.) Graf ini asiklik dan berlapis:
@@ -56,8 +64,8 @@ Aplikasi berada di atasnya: CLI `eln`, templat `dotnet new`, dan galeri.
 | Kondisi tunak | PowerFlow, Circuit |
 | Analisis | ShortCircuit, Protection, Stability, Dynamics, Emt, Harmonic, StateEstimation, Optimization (+ adapter .Highs, .OrTools), Markets |
 | Sumber daya & tepi jaringan | Renewable, SmartGrid, Forecasting |
-| Data & protokol | SCADA, IEC61850, CIM, GIS, Visualization(.Blazor) |
-| Platform | Simulation, HPC, Cloud, DigitalTwin, AI |
+| Data & protokol | SCADA (Modbus, DNP3, IEC 104), Pmu, IEC61850, CIM (CGMES 3.0), Interop, GIS, Visualization(.Blazor) |
+| Platform | Simulation, HPC, Cloud, DigitalTwin, DigitalTwin.ThreeD (+ .Avalonia), AI, AI.Learning |
 
 ## Blok bangunan inti
 
@@ -109,6 +117,10 @@ SCADA, atau `TwinStateUpdated` dari digital twin.
 
 ## Aturan desain
 
+Paket v1.4 `Electrical.AI.Learning` (ML.NET), `Electrical.DigitalTwin.ThreeD`, dan `.ThreeD.Avalonia` (ThreeNet, inti native wgpu)
+adalah satu-satunya pustaka yang tidak kompatibel AOT; semua paket lain tetap `IsAotCompatible`. `Electrical.Pmu` serta stack DNP3 / IEC 104
+di `Electrical.SCADA` tidak memiliki dependensi pihak ketiga dan tetap kompatibel AOT.
+
 - **Ringan dependensi dan kompatibel AOT.** Pustaka memakai `IsAotCompatible`; tanpa JSON berbasis refleksi (`JsonNode`, `JsonDocument`,
   `Utf8JsonWriter` sebagai gantinya), tanpa `dynamic`. Core hanya bergantung pada `Microsoft.Extensions.DependencyInjection.Abstractions` dan
   `System.Numerics.Tensors`; Cloud memakai shared framework ASP.NET Core.
@@ -151,7 +163,7 @@ native/electrical-native   crate Rust (cdylib)
 tools/Electrical.Cli       tool eln
 templates/                 templat dotnet new
 gallery/                   Skenario bersama + web Blazor + desktop Avalonia
-tests/Electrical.Tests     tes xUnit (Analysis/, Operations/, Integration/, Intelligence/, Platform/)
+tests/Electrical.Tests     tes xUnit (Analysis/, Operations/, Integration/, Intelligence/, Platform/, Pmu/, Learning/, ThreeD/, …)
 build/                     build-native.ps1, pack.ps1, publish-nuget.ps1, ci/electrical-net.yml
 ```
 

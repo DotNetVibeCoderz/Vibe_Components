@@ -315,14 +315,37 @@ cek observabilitas numerik, tanpa optimasi penempatan meter.
 
 ## Electrical.SCADA
 
-**Tujuan.** Telemetri, alarm, dan historisasi. Panduan: [SCADA, IEC 61850 & CIM](scada-iec61850-cim.md).
+**Tujuan.** Telemetri, alarm, historisasi, dan protokol utilitas. Panduan: [SCADA, IEC 61850 & CIM](scada-iec61850-cim.md),
+[Protokol utilitas](protokol.md) (DNP3, IEC 104).
 
 **Tipe utama.** `ModbusTcpServer`, `ModbusTcpClient`, `ModbusRegisterMap`, `ModbusPdu`, `ModbusTcpAdu` (`Electrical.SCADA.Modbus`); `TagDatabase`,
 `Tag`, `TagAddress`, `TagScaling`, `TagQuality`; `AlarmManager`, `AlarmDefinition`, `AlarmEvent`; `Historian`, `CompressionMode`; `RtuSimulator`;
-`Iec104Codec`, `Apdu`, `Asdu`, `Cp56Time2a` (`Electrical.SCADA.Iec104`).
+`Iec104Codec`, `Apdu`, `Asdu`, `Cp56Time2a`, `Iec104Client`, `Iec104Server`, `Iec104PointMap`, `Iec104Parameters` (`Electrical.SCADA.Iec104`);
+`Dnp3Outstation`, `Dnp3Master`, `Dnp3Database`, `Dnp3PointMap`, `Crob`, `Dnp3LinkFrame`, `Dnp3Crc` (`Electrical.SCADA.Dnp3`); `AddScada()`,
+`AddDnp3()`, `AddIec104()`.
 
 **Acuan / batasan.** Contoh Modbus Application Protocol v1.1b3, state alarm ISA-18.2, swinging-door trending (Bristol 1990), byte frame
-IEC 60870-5-104. Hanya Modbus TCP (tanpa RTU serial); IEC 104 berupa codec (encode/decode APDU/ASDU), bukan sesi klien/server lengkap.
+IEC 60870-5-104 dan APDU GI, CRC-16/DNP 0xEA82 dan frame reset-link IEEE 1815 (v1.4). Hanya TCP (tanpa Modbus RTU serial, DNP3 serial,
+atau IEC 101); tanpa DNP3 Secure Authentication atau TLS IEC 62351.
+
+## Electrical.Pmu
+
+**Tujuan.** Sinkrofasor (v1.4): frame dan transport IEEE C37.118.2, simulasi PMU, estimasi fasor kelas P/M, estimasi keadaan PMU linear, dan
+penyelarasan PDC. Panduan: [Sinkrofasor](sinkrofasor.md).
+
+**Tipe utama.** `C37Codec`, `C37DataFrame`, `C37ConfigFrame`, `C37HeaderFrame`, `C37CommandFrame`, `PmuConfiguration`, `PhasorChannel`,
+`C37Time`, `CrcCcitt` (`Electrical.Pmu.C37118`); `PmuServer`, `PdcClient`, `PmuUdpPublisher`, `PdcUdpReceiver`; `PmuSimulator`,
+`PmuTimeSeriesSource`, `PmuChannelBinding`; `PhasorEstimator`, `PmuClass`, `PhasorEstimate`; `LinearStateEstimator`, `PhasorMeasurement`;
+`PdcAlignmentBuffer`; `AddPmu()`.
+
+```csharp
+var sim = new PmuSimulator(PowerFlowSolver.Solve(TestCases.Case14()), [2, 6, 7, 9], new PmuSimulatorOptions { FrequencyOffsetHz = 1.5 });
+byte[] frame = C37Codec.Encode(sim.CreateFrame(DateTimeOffset.UtcNow), sim.Configuration);
+```
+
+**Acuan / batasan.** IEEE C37.118.2-2011 (frame, nilai uji CRC-CCITT 0x29B1), C37.118.1-2011/-2014 Annex C (TVE kelas P 0,043 % pada ±2 Hz,
+kelas M 0,066 % pada ±5 Hz, respons step 0,72/f₀); SE linear pada case14 dalam 0,0016 pu dengan derau. Hanya estimator acuan (tanpa
+algoritme adaptif); tanpa keamanan C37.118 atau IEC 61850-90-5.
 
 ## Electrical.IEC61850
 
@@ -336,25 +359,29 @@ tidak ada publisher/subscriber raw-socket atau klien/server MMS.
 
 ## Electrical.CIM
 
-**Tujuan.** Pertukaran model CIM / CGMES. Panduan: [SCADA, IEC 61850 & CIM](scada-iec61850-cim.md#cim--cgmes).
+**Tujuan.** Pertukaran dan validasi model CIM / CGMES. Panduan: [SCADA, IEC 61850 & CIM](scada-iec61850-cim.md#cim--cgmes).
 
 **Tipe utama.** `CimExporter` (`Export`, `ExportString`, `Write`, `ExportProfiles`), `CimProfiles`, `CimImporter` (`Import`, `Load`,
-`ImportDetailed`), `CimImportOptions`, `CimImportResult`.
+`ImportDetailed`), `CimImportOptions`, `CimImportResult`; v1.4: `Cgmes3Exporter`, `Cgmes3ExportOptions`, `CgmesTopologyStyle`,
+`CgmesDocumentSet`, `CgmesImporter`, `CgmesImportResult`, `CgmesValidator` (22 aturan), `CgmesValidationReport`, `CgmesModelHeader`,
+`Cgmes3Namespaces`, `CgmesIds`.
 
 **Acuan / batasan.** IEC 61970-301, profil gaya CGMES 2.4.15 (EQ, TP, SSH, SV). Hanya trafo dua belitan; kelas yang didukung: ACLineSegment,
 PowerTransformer, SynchronousMachine, ExternalNetworkInjection, EnergyConsumer, LinearShuntCompensator, saklar (untuk pemrosesan topologi),
-dan SvVoltage. Cakupan dan validasi CGMES 3.0 penuh ada di peta jalan (v1.4).
+dan SvVoltage; CGMES 3.0 menambahkan ekspor node-breaker, PhaseTapChangerTabular, SvPowerFlow/SvStatus/SvTapStep, dan header dengan
+DependentOn. Round trip case9/14/33bw identik (Δrugi ≤ 5e-14 MW). Tanpa ekspor DL/GL/boundary dan tanpa mesin SHACL (validator
+mengimplementasikan 22 aturannya dalam kode).
 
 ## Electrical.Interop
 
 **Tujuan.** Pertukaran model dengan perangkat perencanaan (v1.1). Panduan: [Pertukaran model](pertukaran-model.md).
 
 **Tipe utama.** `NetworkFormats` (`Detect`, `Load`, `Parse`, `FromExtension`), `ImportResult` (`Network`, `Format`, `Warnings`),
-`NetworkFormat`, `PsseRaw` (`Read`, `Parse`, `Load`, `Write`, `Save`; revisi 33 dan 35), `IeeeCdf` (`Read`, `Parse`), `InteropSamples`
+`NetworkFormat` (termasuk `Cgmes`, v1.4), `PsseRaw` (`Read`, `Parse`, `Load`, `Write`, `Save`; revisi 33 dan 35), `IeeeCdf` (`Read`, `Parse`), `InteropSamples`
 (IEEE 14 bus sebagai RAW v33, RAW v35, dan CDF), `INetworkImporter`, `AddInterop`.
 
 ```csharp
-var import = NetworkFormats.Load("grid.raw");           // PSS/E RAW, IEEE CDF, MATPOWER, atau JSON Cloud, dideteksi dari isinya
+var import = NetworkFormats.Load("grid.raw");           // PSS/E RAW, IEEE CDF, MATPOWER, JSON Cloud, atau CGMES (.xml/.zip), dideteksi dari isinya
 string raw35 = PsseRaw.Write(import.Network, version: 35);
 ```
 
@@ -380,6 +407,24 @@ var w = sim.Twin.WhatIf(new OpenBranch(6), new ScaleLoad(1.1));
 
 **Acuan / batasan.** Hot spot dan faktor percepatan penuaan IEEE C57.91; WLS Abur & Expósito. Model bus-cabang seimbang, estimasi statis per
 siklus, model termal tunak.
+
+## Electrical.DigitalTwin.ThreeD dan Electrical.DigitalTwin.ThreeD.Avalonia
+
+**Tujuan.** Digital twin 3D (v1.4): adegan gardu induk/penyulang prosedural yang diwarnai oleh aliran daya atau keadaan twin, ekspor glTF,
+rendering di luar layar, dan tampilan Avalonia, dibangun di atas ThreeNet 0.12.2. Panduan: [Digital twin 3D](digital-twin-3d.md).
+
+**Tipe utama.** `GridSceneBuilder`, `GridSceneOptions`, `GridScene3D` (`ApplyPowerFlow`, `ApplyTwinState`, `UpdateAlarmFlash`), `SceneObject`,
+`GridElementKind`, `MeshData`, `Catenary`, `GlbExporter`, `ThreeNetGridScene` (`Create`, `Sync`, `UpdateLabels`, `RenderPng`);
+`GridTwin3DView` (Avalonia).
+
+```csharp
+var scene = GridSceneBuilder.Build(net);
+scene.ApplyPowerFlow(PowerFlowSolver.Solve(net));
+File.WriteAllBytes("grid.glb", GlbExporter.Export(scene));
+```
+
+**Acuan / batasan.** glTF 2.0 (tata letak header, chunk, dan accessor tervalidasi), lendutan katenari (a·(cosh(L/2a) − 1)). Geometri
+skematis; rendering memerlukan inti native ThreeNet dan adaptor GPU; tidak kompatibel AOT.
 
 ## Electrical.Forecasting
 
@@ -413,6 +458,23 @@ AgentAnswer a = await agent.AskAsync("Berapa arus hubung singkat 3 fasa di bus 4
 
 **Acuan / batasan.** Blackburn (klasifikasi gangguan), Arthur & Vassilvitskii (k-means++), Q-learning tabular (Watkins) pada penyulang Baran–Wu;
 tes live lulus di Azure OpenAI `gpt-5-mini`. Jawaban hanya selengkap tool yang tersedia; model offline memiliki kosakata dwibahasa terbatas.
+
+## Electrical.AI.Learning
+
+**Tujuan.** Pembelajaran mesin untuk jaringan (v1.4): peramalan beban ML, klasifikasi/lokasi gangguan, identifikasi topologi, dan kendali
+Volt/VAR deep-RL, di atas GraviLearn 2.0.0, ML.NET 6.0.0, dan Gravicode.RLNet 0.3.0. Panduan: [Pembelajaran mesin](pembelajaran-mesin.md).
+
+**Tipe utama.** `LoadFeatureBuilder`, `MlLoadForecaster`, `LoadForecastBenchmark`; `FaultDatasetGenerator`, `FaultLearning`,
+`FaultLearningModel`; `ReconfigurableFeeders`, `TopologyIdentification`, `CorrelationTopologyIdentifier`; `VoltVarRlEnvironment`,
+`VoltVarAgentTrainer`, `VoltVarRlAgent`; `ModelTrainer`, `TreeEnsembleRegressor`, `MlNetRegressor`, `MlNetClassifier`; `AddLearning()`
+(`ILearningService`).
+
+```csharp
+var cmp = VoltVarAgentTrainer.Compare(options: new VoltVarRlOptions { Steps = 6_000 });   // DQN −14.5 vs rule −25.2
+```
+
+**Acuan / batasan.** Beban bergantung suhu: MAPE FastTree 1,41 % / GraviLearn 1,43 % vs Holt–Winters 8,39 %; gangguan Case33: jenis 100 %,
+±1 bus 95 %; topologi 100 %; konfigurasi rugi minimum 139,5 kW (Goswami & Basu). Data latih sintetis; tidak kompatibel AOT.
 
 ## Electrical.GIS
 

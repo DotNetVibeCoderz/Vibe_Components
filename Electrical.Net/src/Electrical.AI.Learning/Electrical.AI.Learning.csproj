@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Machine learning for Electrical.Net: load forecasting (gradient boosting, neural nets), fault location and classification, topology identification from measurements, and reinforcement-learning Volt/VAR agents, built on GravicodeScience (GraviLearn), ML.NET and Gravicode.RLNet.</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+    <ProjectReference Include="../Electrical.Forecasting/Electrical.Forecasting.csproj" />
+    <ProjectReference Include="../Electrical.ShortCircuit/Electrical.ShortCircuit.csproj" />
+    <ProjectReference Include="../Electrical.AI/Electrical.AI.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Gravicode.Science.GraviLearn" Version="2.0.0" />
+    <PackageReference Include="Gravicode.RLNet" Version="0.3.0" />
+    <PackageReference Include="Microsoft.ML" Version="6.0.0" />
+    <PackageReference Include="Microsoft.ML.FastTree" Version="6.0.0" />
+  </ItemGroup>
+</Project>

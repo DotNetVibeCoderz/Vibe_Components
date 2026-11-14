@@ -26,8 +26,11 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | Electrical.Simulation | ✅ | QSTS, events, scenarios, sequential Monte-Carlo adequacy (LOLE/EENS); v1.1: OLTC, LDC regulator and switched-capacitor controllers in QSTS (Case33 demo: 64 → 1 violation steps) |
 | Electrical.Interop (v1.1) | ✅ | PSS/E RAW v33/v35 read/write (3-winding → star, switched shunt → fixed), IEEE CDF reader, format auto-detection; IEEE 14 RAW/CDF reproduce case14 (13.393 MW) |
 | Electrical.SCADA | ✅ | Modbus TCP client/server, tags, ISA-18.2 alarms, historian (swinging door), RTU simulator, IEC 104 codec |
+| DNP3 + full IEC 104 (v1.4) | ✅ | DNP3 (IEEE 1815): link (CRC-16/DNP 0xEA82 check, `05 64 05 C0 01 00 00 04 E9 21` reset-link vector), transport FIR/FIN/SEQ, application (IIN, qualifiers 00/01/06/07/08/17/28), g1v1/2, g2v1/2, g10, g12v1, g30v1/2/5, g32v1/3/5/7, g40, g41v1–3, g50v1, g52v2, g60, g80v1; TCP outstation (class 0–3 polls, confirmed event buffers with deadbands, multi-fragment responses, SBO + direct operate with echo, time write, restart IIN, unsolicited) and master. IEC 104: `Iec104Connection` (STARTDT/STOPDT/TESTFR, k/w, t0–t3, sequence checks), `Iec104Server` on `TagDatabase` (GI/group interrogation, clock sync, single/double/set-point commands with select/execute), `Iec104Client`; double-point, normalized, scaled, set-point, EI, IC, CS types. Tag bridges (`Dnp3PointMap`, `Iec104PointMap`) and `RtuSimulator.CreateDnp3Map/CreateIec104Map/UpdateTags`; `AddDnp3()`, `AddIec104()`; 13 loopback tests |
+| Electrical.Pmu (v1.4) | ✅ | IEEE C37.118.2-2011 codec (data int16/float rect/polar, CFG-1/2/3, header, command; CRC-CCITT "123456789" → 0x29B1; hand-assembled command and data frames byte-exact), TCP PMU server / PDC client, UDP publisher/receiver, `PmuSimulator` (power flow, off-nominal f, ROCOF, noise), `PmuTimeSeriesSource` (Dynamics replay), C37.118.1 Annex C estimator (P 2-cycle triangle, M Hamming-sinc): 50 Hz, Δf ±2 Hz P class TVE 0.043 % single-phase (FE 0.0017 Hz) / ≈0 positive sequence, M class ±5 Hz TVE 0.066 %; 5 % step response time ≈ 0.72/f₀ (limit 1.7/f₀), no overshoot; linear PMU WLS (case14, PMUs 2/6/7/9: exact 1e-9, noisy max ΔVm 0.0016 pu / ΔVa 0.08°), `PdcAlignmentBuffer`, `AddPmu()`; 24 tests |
 | Electrical.IEC61850 | ✅ | SCL parser, BER, GOOSE, Sampled Values 9-2LE, LN catalog |
 | Electrical.CIM | ✅ | CGMES-style RDF/XML export/import; lossless round trip |
+| CGMES 3.0 + validation (v1.4) | ✅ | `Cgmes3Exporter` (CIM100 EQ/TP/SSH/SV, md:FullModel headers with DependentOn, UUID v5 mRIDs, node-breaker / CN / bus-branch styles, zip), `CgmesImporter` (2.4.15 + 3.0 auto-detect, SV initial voltages), `CgmesValidator` (22 rules: headers, mRIDs, references, mandatory attributes, terminal counts, voltages, impedances, SV KCL); case9/14/33bw round trips identical (Δlosses ≤ 5e-14 MW), 42 tests |
 | Electrical.GIS | ✅ | GeoJSON, Web Mercator, k-d tree, force-directed layout, outage polygons, SVG maps |
 | Electrical.Visualization (+ Blazor) | ✅ | Auto single-line diagrams, SVG charts (TCC, phasor, heatmap…), PNG encoder, themeable CSS variables |
 | Electrical.Cloud | ✅ | JSON contracts, study runner with queue, scenario stores, minimal API (`MapElectricalApi`) |
@@ -35,8 +38,10 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | Electrical.Native (Rust) | ✅ | FFT, Goertzel harmonics, sparse complex injections, SplitMix64/Box–Muller; identical managed fallback |
 | Electrical.DigitalTwin | ✅ | Live twin (SCADA → WLS SE → explained EN/ID alarms), what-if, IEEE C57.91 asset ageing, deterministic TwinSimulator |
 | Electrical.AI | ✅ | GridAgent with 10 tools (live-tested on Azure OpenAI gpt-5-mini; offline EN/ID rule-based), anomaly detection, fault classification/location, clustering, Volt/VAR RL environment + Q-learning |
+| Electrical.AI.Learning (v1.4) | ✅ | GraviLearn 2.0.0 / ML.NET 6.0.0 (FastTree) / Gravicode.RLNet 0.3.0. ML load forecasting (lags 1/24/168, calendar, holiday, temperature; recursive day-ahead): temperature-dependent residential profile, 7 test days: GraviLearn GB 1.43 % / ML.NET FastTree 1.41 % MAPE vs Holt-Winters 8.39 % and linear regression 2.45 %. Fault classification/location from IEC 60909 simulations (bus + mid-line faults, R_f, 1 % noise): Case33 RF code 100 %, nearest bus 53 % (±1 bus 95 %); Case14 ML.NET code 92 %, ±1 bus 85 %. Topology identification (Case33 + 5 ties, 8 radial configs): RF 100 %, correlation 100 %; min-loss config 139.5 kW. RLNet Volt/VAR: DQN −14.5 (6k steps, ≈ 4 s) vs voltage rule −25.2, tabular Q −36.5, do-nothing −56.4; long budget DQN −13.8 / PPO −13.8. JSON (tree ensembles) / ML.NET zip / RLNet checkpoint persistence, `AddLearning()` |
+| Electrical.DigitalTwin.ThreeD (v1.4) | ✅ | ThreeNet 0.12.2: procedural substation/feeder scene (busbars, gantries, breakers, disconnectors, transformers, towers + catenary conductors, cables, generators, loads) from SLD layout or bus locations; voltage/loading ramps, switch states, flashing twin alarms, HUD labels; own GLB 2.0 exporter (ThreeNet has no exporter); off-screen PNG render; `Electrical.DigitalTwin.ThreeD.Avalonia` (`GridTwin3DView`, ThreeNet.Avalonia 0.12.2) |
 | Electrical.Distribution (v1.1) | ✅ | Unbalanced 3φ power flow, Carson/Kron (Kersting Ex. 4.1–4.3, 5.1), regulators/OLTC/capacitor controllers, OpenDSS reader; IEEE 13-node worst error 0.148 %, IEEE 4-node 0.026 % |
-| Tests | ✅ | 258 xUnit tests passing, 1 live-LLM test skipped by default (+ 5 Rust tests) |
+| Tests | ✅ | 456 xUnit tests passing, 1 live-LLM test skipped by default (+ 5 Rust tests) |
 | CLI (`eln`) | ✅ | 34 commands: power flow, faults, stability, dispatch, SE, forecasting, QSTS, SCADA RTU, REST server, AI agent, twin; v1.1 adds `dist`, `dss`, `linecode`, `.raw`/`.cdf` input and `qsts --control` |
 | Templates | ✅ | 6 templates (console, distribution feeder, Blazor, Avalonia, SCADA gateway, Web API) |
 | NuGet icon & packages | ✅ | 28 packages (+ symbols) pack without warnings; icon in `assets/` |
@@ -85,3 +90,22 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
   `FallbackSteps`); REPC_A voltage-control default gains limit-cycle in Q-control mode (documented). 31 tests (`tests/.../Dynamics`), ~2 s.
 - **2026-11-15**: CLI `dyn` (Kundur / case9 fault simulation + electromechanical modes) and `emt` (line energization, capacitor inrush);
   gallery demos and EN/ID docs for dynamics, IBR and EMT. Version 1.3.0.
+- **2026-11-15**: v1.4 CGMES 3.0 profiles and validation in `Electrical.CIM` (`Cgmes3Exporter`, `CgmesImporter`, `CgmesValidator`, `CgmesDocumentSet` zip,
+  `ICgmesService` via `AddCim()`); `NetworkFormats` detects CGMES RDF/XML and loads `.zip` sets (Interop now references CIM, CIM references PowerFlow
+  for SV export). Found while verifying: case14 has two non-transformer branches between 14 kV and 18 / 13.8 kV buses, which the validator flags
+  as lines across voltage levels (CGM-VOLT-001) — the exporter now writes any branch between different nominal voltages as a PowerTransformer.
+  Importer additions (also for 2.4.15): CurrentLimit and ApparentPowerLimit.normalValue ratings, PhaseTapChangerTabular, bus-branch sets without
+  ConnectivityNodes. 42 tests (`Integration/Cgmes3Tests`, hand-written minimal CGMES 3.0 sample + 20 deliberately broken variants).
+- **2026-11-15**: v1.4 Electrical.AI.Learning and Electrical.DigitalTwin.ThreeD (+ `.Avalonia`), 23 tests (`tests/.../Learning`, `ThreeD`),
+  ≈ 15 s. GraviLearn's `GradientBoostingRegressor` / `RandomForestRegressor` do not expose their trees, so boosting runs over GraviLearn
+  `DecisionTreeRegressor`s and fitted trees are exported to an own JSON format (`TreeEnsemble`, bit-identical predictions after reload);
+  GraviLearn has no MLP regressor (not used). Found while verifying: a plain linear-in-load correlation identifier reached only 63 % on
+  topology snapshots (per-load noise), replaced by the load-level-invariant voltage-drop signature (100 %); the RF classifier gains the
+  same signature as features (90 → 100 %). ThreeNet off-screen rendering works on the dev GPU; the test returns early without an adapter.
+- **2026-11-15**: v1.4 Electrical.Pmu (C37.118.2 codec/transport, simulator, C37.118.1 P/M estimator, linear PMU SE, PDC alignment) and
+  DNP3 outstation/master + full IEC 104 client/server in Electrical.SCADA with tag bridges and RTU exposure. Found while verifying: the
+  unpaced PMU stream ran inline on the command loop when socket writes completed synchronously, so DATA OFF was never read (stream now on
+  the thread pool, stopped between frames instead of cancelling a pending write). 37 new tests (PMU 24, DNP3 7, IEC 104 6), ~2 s.
+- **2026-11-15**: v1.4 CLI `pmu`, `dnp3`, `iec104`, `cgmes`, `learn`, `twin3d`. Fixed while wiring the CLI: PMU demo sampling rate must be an
+  integer multiple of the nominal frequency (60 Hz systems: 1.2 kHz); RTU→DNP3 bridge must be attached before the first tag update.
+  Version 1.4.0.

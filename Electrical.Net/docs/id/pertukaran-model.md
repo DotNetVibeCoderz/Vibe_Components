@@ -13,13 +13,15 @@ perangkat perencanaan transmisi dan mengubahnya menjadi `PowerNetwork` bus-caban
 | IEEE Common Data Format (gaya `ieee14cdf.txt`) | `IeeeCdf.Read/Parse` | — | `NetworkFormat.IeeeCdf` |
 | MATPOWER `.m` (versi 2) | `Matpower.Parse` (Core) | `Matpower.Write` | `NetworkFormat.Matpower` |
 | JSON jaringan Electrical.Cloud | `NetworkFormats.ParseCloudJson` | `NetworkJson.Serialize` (Cloud) | `NetworkFormat.CloudJson` |
-| CIM / CGMES RDF/XML | `CimImporter` (CIM) | `CimExporter` | (Electrical.CIM) |
+| RDF/XML CIM / CGMES 2.4.15 dan 3.0, berkas tunggal atau set `.zip` (v1.4) | `CgmesImporter`, `CimImporter` (CIM) | `Cgmes3Exporter`, `CimExporter` | `NetworkFormat.Cgmes` |
 
 ## Deteksi format dan pemuatan
 
 `NetworkFormats.Detect` memeriksa isi, bukan nama berkas: `mpc.bus` berarti MATPOWER, `BUS DATA FOLLOWS` berarti IEEE CDF, rekaman pertama
-`IC, SBASE, REV, …` dengan REV antara 20 dan 40 (atau penanda `END OF BUS DATA`) berarti PSS/E RAW, dan `{"buses": …}` berarti kontrak JSON
-Cloud. `NetworkFormats.Load(path)` baru memakai ekstensi (`.m`, `.raw`, `.cdf`/`.txt`, `.json`) bila isinya meragukan. Setiap pembaca
+`IC, SBASE, REV, …` dengan REV antara 20 dan 40 (atau penanda `END OF BUS DATA`) berarti PSS/E RAW, `{"buses": …}` berarti kontrak JSON
+Cloud, dan dokumen XML yang mendeklarasikan namespace RDF (`22-rdf-syntax-ns#`) dan namespace CIM `iec.ch/TC57/` berarti CGMES (v1.4,
+CIM16 maupun CIM100). `NetworkFormats.Load(path)` memperlakukan `.zip` sebagai set CGMES (setiap profil di dalamnya dibaca dan digabung
+oleh `CgmesImporter`) dan baru memakai ekstensi (`.m`, `.raw`, `.cdf`/`.txt`, `.json`, `.xml`) bila isinya meragukan. Setiap pembaca
 mengembalikan `ImportResult(Network, Format, Warnings)`; daftar peringatan memuat setiap pendekatan yang diambil saat memetakan berkas ke model.
 
 ```csharp
@@ -48,6 +50,17 @@ losses 13.393 MW
 `InteropSamples` menyertakan sistem IEEE 14 bus sebagai `Ieee14RawV33` (trafo dua belitan, seperti MATPOWER), `Ieee14RawV35` (trafo 4-7-8-9
 sebagai unit tiga belitan sungguhan, shunt terswitch di bus 9, baris header `@!`, dan nama berkutip yang memuat koma dan garis miring) serta
 `Ieee14Cdf`. Ketiganya menghasilkan titik operasi MATPOWER case14 (rugi 13,393 MW); berguna sebagai data uji dan contoh format.
+
+### CGMES (v1.4)
+
+```csharp
+var r = NetworkFormats.Load("case14.zip");                        // .zip → CGMES; .xml detected from the content
+Console.WriteLine($"{r.Format}: {r.Network.BusCount} buses");     // Cgmes: 14 buses
+```
+
+Satu dokumen RDF/XML gabungan (misalnya `CimExporter.ExportString`) dideteksi dan diurai dari teks; profil terpisah memerlukan semua
+dokumen, jadi muat sebagai zip atau melalui `CgmesImporter.Load(directory)`. Profil, opsi ekspor, dan 22 aturan validasi dijelaskan di
+[SCADA, IEC 61850 & CIM](scada-iec61850-cim.md#profil-dan-validasi-cgmes-30-v14).
 
 ## PSS/E RAW
 

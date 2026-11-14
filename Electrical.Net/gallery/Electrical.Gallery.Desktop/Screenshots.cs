@@ -1,4 +1,5 @@
 using Avalonia.Headless;
+using Avalonia.VisualTree;
 using Electrical.Gallery.Shared;
 
 namespace Electrical.Gallery.Desktop;
@@ -18,6 +19,16 @@ internal static class Screenshots
         {
             window.Navigate(id);
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            // ThreeNet views render on their own loop; force a frame so the 3D view is in the capture
+            var views3d = window.GetVisualDescendants().OfType<ThreeNet.Avalonia.ThreeNetView>().ToList();
+            if (views3d.Count > 0)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    foreach (var v in views3d) v.RenderFrame();
+                    Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                }
+            }
             var frame = window.CaptureRenderedFrame();
             var file = Path.Combine(outDir, $"desktop-{id}{suffix}.png");
 #pragma warning disable CS0618 // default PNG encoder options are what we want

@@ -3,7 +3,9 @@
 > Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil · [English](../en/ai-digital-twin.md)
 
 Paket: `Electrical.DigitalTwin` (bergantung pada PowerFlow, StateEstimation, SCADA, Forecasting) dan `Electrical.AI` (bergantung pada PowerFlow,
-ShortCircuit, Optimization, Stability, Renewable, Forecasting, dan DigitalTwin).
+ShortCircuit, Optimization, Stability, Renewable, Forecasting, dan DigitalTwin). Dua paket v1.4 dibangun di atasnya dan memiliki panduan
+tersendiri: [Pembelajaran mesin untuk jaringan](pembelajaran-mesin.md) (`Electrical.AI.Learning`: peramalan beban ML, pembelajaran gangguan
+dan topologi, Volt/VAR deep-RL dengan Gravicode.RLNet) dan [digital twin 3D](digital-twin-3d.md) (`Electrical.DigitalTwin.ThreeD`).
 
 ## Agen operator jaringan (`GridAgent`)
 
@@ -181,9 +183,16 @@ var learned = VoltVarPolicies.Evaluate(env, q.Policy);
 Pelatihan deterministik untuk sebuah seed. `VoltVarEnvironmentOptions` mengubah jaringan, perangkat, panjang episode, profil, skala beban,
 derau, dan bobot reward; `Reset`/`Step` memungkinkan Anda memasang agen sendiri (misalnya Gravicode.RLNet).
 
+Sejak v1.4, `Electrical.AI.Learning` membungkus lingkungan ini untuk Gravicode.RLNet (`VoltVarRlEnvironment`) dan melatih agen DQN, PPO,
+atau A2C: DQN yang dilatih 6 000 langkah (≈ 4 s) mencapai −14,5 dibanding −25,2 untuk aturan tegangan; dengan 48 000 langkah DQN dan PPO
+mencapai −13,8. (`VoltVarAgentTrainer.Compare` melatih agen tabular dengan seed 1, yang berakhir di −36,5; eksekusi seed 7 di atas kebetulan
+mencapai −14,5, yang menunjukkan betapa pekanya pembelajaran tabular terhadap eksplorasi.) Lihat
+[Pembelajaran mesin untuk jaringan](pembelajaran-mesin.md#reinforcement-learning-untuk-kendali-voltvar).
+
 ## Digital twin (`GridTwin`)
 
-`GridTwin` menjaga estimasi langsung sebuah jaringan. Setiap siklus `Update`:
+`GridTwin` menjaga estimasi langsung sebuah jaringan (ditampilkan dalam 3D oleh `GridScene3D.ApplyTwinState`, lihat
+[digital twin 3D](digital-twin-3d.md#twin-langsung)). Setiap siklus `Update`:
 
 1. mengambil pengukuran yang masuk sejak siklus sebelumnya (`Ingest(...)`, atau `IngestTags(tagDatabase)` yang memetakan tag SCADA seperti
    `BUS4.VM`, `BR3.PF`, `GEN0.P` ke pengukuran dan menerapkan status pemutus `BRk.CLOSED` ke topologi);
@@ -276,8 +285,8 @@ memperbaiki penyulang 33-bus, dan membuka penyulang gardu induk dilaporkan tidak
   tetap di tangan operator.
 - Model berbasis aturan memahami kosakata dwibahasa yang terbatas dan hanya mengekstrak argumen sederhana.
 - Twin memakai model bus-cabang seimbang dan WLS statis (tanpa estimasi dinamis); penuaan aset bersifat tunak per siklus.
-- Q-learning tabular cocok untuk ruang aksi default yang kecil; masalah yang lebih besar memerlukan aproksimasi fungsi (misalnya
-  Gravicode.RLNet atau TorchSharp).
+- Q-learning tabular cocok untuk ruang aksi default yang kecil; masalah yang lebih besar memerlukan aproksimasi fungsi: gunakan agen RLNet
+  dari [Electrical.AI.Learning](pembelajaran-mesin.md).
 
 ---
 *Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil · [English](../en/ai-digital-twin.md)*

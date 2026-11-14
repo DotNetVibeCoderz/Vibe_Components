@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>SCADA: Modbus TCP client/server and codec, tag database, alarm management (ISA-18.2 states), historian with deadband compression, RTU simulator, IEC 60870-5-104 APDU codec.</Description>
+    <Description>SCADA: Modbus TCP client/server and codec, DNP3 (IEEE 1815) outstation and master over TCP, IEC 60870-5-104 client and server with the full APCI state machine, tag database, alarm management (ISA-18.2 states), historian with deadband compression, RTU simulator.</Description>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />

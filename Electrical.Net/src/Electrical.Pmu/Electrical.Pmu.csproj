@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Synchrophasors for Electrical.Net: IEEE C37.118.2 data/configuration/header/command frame codec, TCP/UDP PMU and PDC clients/servers, PMU simulator from power-flow or dynamic results, phasor estimation (C37.118.1 P/M class), frequency/ROCOF and linear PMU-based state estimation.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+  </ItemGroup>
+</Project>

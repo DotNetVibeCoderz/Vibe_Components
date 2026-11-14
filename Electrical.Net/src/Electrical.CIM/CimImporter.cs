@@ -159,6 +159,9 @@ public static class CimImporter
             if (_rank[ra] < _rank[rb]) _parent[rb] = ra; else _parent[ra] = rb;
         }
 
+        /// <summary>Electrical.Net bus extension attribute on a ConnectivityNode (or a TopologicalNode in bus-branch sets).</summary>
+        private static double? ExtD(Obj o, string attr) => o.D("ConnectivityNode." + attr) ?? o.D("TopologicalNode." + attr);
+
         private static string? TerminalNode(Obj t) => t.S("Terminal.ConnectivityNode") ?? t.S("Terminal.TopologicalNode");
         private static bool Connected(Obj t) => t.B("ACDCTerminal.connected") ?? t.B("Terminal.connected") ?? true;
 
@@ -227,8 +230,8 @@ public static class CimImporter
                 Obj? vl = null;
                 foreach (var o in objs)
                 {
-                    vl ??= g.Get(o.S("ConnectivityNode.ConnectivityNodeContainer")) is { Class: "VoltageLevel" } v ? v : null;
-                    kv ??= ext ? o.D("ConnectivityNode.baseKv") : null;
+                    vl ??= g.Get(o.S("ConnectivityNode.ConnectivityNodeContainer") ?? o.S("TopologicalNode.ConnectivityNodeContainer")) is { Class: "VoltageLevel" } v ? v : null;
+                    kv ??= ext ? ExtD(o, "baseKv") : null;
                 }
                 kv ??= g.Get(vl?.S("VoltageLevel.BaseVoltage"))?.D("BaseVoltage.nominalVoltage");
                 foreach (var o in objs) kv ??= g.Get(o.S("TopologicalNode.BaseVoltage"))?.D("BaseVoltage.nominalVoltage");
@@ -237,12 +240,12 @@ public static class CimImporter
                 if (vl?.D("VoltageLevel.lowVoltageLimit") is double lv && lv > 0) bus.Vmin = lv / bus.BaseKv;
                 if (ext && cn is not null)
                 {
-                    if (cn.I("ConnectivityNode.busId") is int id) bus.Id = id;
-                    if (Enum.TryParse<BusType>(cn.S("ConnectivityNode.busType"), out var bt)) bus.Type = bt;
-                    if (cn.I("ConnectivityNode.area") is int area) bus.Area = area;
-                    if (cn.I("ConnectivityNode.zone") is int zone) bus.Zone = zone;
-                    if (cn.D("ConnectivityNode.vmax") is double vmax) bus.Vmax = vmax;
-                    if (cn.D("ConnectivityNode.vmin") is double vmin) bus.Vmin = vmin;
+                    if (ExtD(cn, "busId") is double id) bus.Id = (int)Math.Round(id);
+                    if (Enum.TryParse<BusType>(cn.S("ConnectivityNode.busType") ?? cn.S("TopologicalNode.busType"), out var bt)) bus.Type = bt;
+                    if (ExtD(cn, "area") is double area) bus.Area = (int)Math.Round(area);
+                    if (ExtD(cn, "zone") is double zone) bus.Zone = (int)Math.Round(zone);
+                    if (ExtD(cn, "vmax") is double vmax) bus.Vmax = vmax;
+                    if (ExtD(cn, "vmin") is double vmin) bus.Vmin = vmin;
                 }
                 var ss = g.Get(vl?.S("VoltageLevel.Substation"));
                 if (ss?.S("PowerSystemResource.Location") is string loc && locations.TryGetValue(loc, out var gp)) bus.Location = gp;
@@ -255,13 +258,14 @@ public static class CimImporter
                 _net.Buses.Add(buses[i].Bus);
                 foreach (var n in buses[i].Nodes) _nodeBus[n] = buses[i].Bus.Id;
             }
-            bool typesFromExt = ext && g.OfClass("ConnectivityNode").Any(c => c.S("ConnectivityNode.busType") is not null);
+            bool typesFromExt = ext && g.OfClass("ConnectivityNode", "TopologicalNode")
+                .Any(c => c.S("ConnectivityNode.busType") is not null || c.S("TopologicalNode.busType") is not null);
 
             // 4. Equipment.
             var limits = Limits();
             var ends = g.OfClass("PowerTransformerEnd").GroupBy(e => e.S("PowerTransformerEnd.PowerTransformer") ?? "")
                 .ToDictionary(x => x.Key, x => x.OrderBy(e => e.I("TransformerEnd.endNumber") ?? 0).ToList(), StringComparer.Ordinal);
-            var tapChangers = g.All.Where(o => o.Class is "RatioTapChanger" or "PhaseTapChangerLinear" or "PhaseTapChangerSymmetrical")
+            var tapChangers = g.All.Where(o => o.Class is "RatioTapChanger" or "PhaseTapChangerLinear" or "PhaseTapChangerSymmetrical" or "PhaseTapChangerTabular")
                 .ToLookup(o => o.S("RatioTapChanger.TransformerEnd") ?? o.S("PhaseTapChanger.TransformerEnd") ?? "", StringComparer.Ordinal);
             var slackCandidates = new List<(int Bus, int Priority)>();
             var regulating = new HashSet<int>();
@@ -320,10 +324,23 @@ public static class CimImporter
                 if (s.S("OperationalLimitSet.Terminal") is string t && termEq.TryGetValue(t, out var eq)) setEq[s.Id] = eq;
                 else if (s.S("OperationalLimitSet.Equipment") is string e) setEq[s.Id] = e;
             }
+            var setTerminal = g.OfClass("OperationalLimitSet").Where(s => s.S("OperationalLimitSet.Terminal") is not null)
+                .ToDictionary(s => s.Id, s => s.S("OperationalLimitSet.Terminal")!, StringComparer.Ordinal);
             var d = new Dictionary<string, double>(StringComparer.Ordinal);
-            foreach (var l in g.OfClass("ApparentPowerLimit"))
-                if (l.S("OperationalLimit.OperationalLimitSet") is string set && setEq.TryGetValue(set, out var eq) && l.D("ApparentPowerLimit.value") is double v)
-                    d[eq] = d.TryGetValue(eq, out var old) ? Math.Min(old, v) : v;
+            foreach (var l in g.OfClass("ApparentPowerLimit", "CurrentLimit"))
+            {
+                if (l.S("OperationalLimit.OperationalLimitSet") is not string set || !setEq.TryGetValue(set, out var eq)) continue;
+                // CGMES 2.4.15: value (EQ); CGMES 3.0: normalValue (EQ) and value (SSH).
+                if ((l.D(l.Class + ".value") ?? l.D(l.Class + ".normalValue")) is not double mva) continue;
+                if (l.Class == "CurrentLimit")
+                {
+                    // A -> MVA at the nominal voltage of the limited terminal: S = sqrt(3) * U * I.
+                    var term = setTerminal.TryGetValue(set, out var tid) ? g.Get(tid) : _terminals.GetValueOrDefault(eq)?.FirstOrDefault();
+                    if (BusOf(term) is not int bus) continue;
+                    mva = Math.Sqrt(3) * _net.GetBus(bus).BaseKv * mva / 1000;
+                }
+                d[eq] = d.TryGetValue(eq, out var old) ? Math.Min(old, mva) : mva;
+            }
             return d;
         }
 
@@ -376,8 +393,20 @@ public static class CimImporter
             return 1 + (step - neutral) * (tc.D("RatioTapChanger.stepVoltageIncrement") ?? 0) / 100;
         }
 
-        private static double PhaseShift(Obj? tc)
+        /// <summary>Current table point of a PhaseTapChangerTabular (step from SSH, else normalStep).</summary>
+        private Obj? TablePoint(Obj? tc)
         {
+            if (tc is null || tc.Class != "PhaseTapChangerTabular" || tc.S("PhaseTapChangerTabular.PhaseTapChangerTable") is not string table) return null;
+            double step = tc.D("TapChanger.step") ?? tc.D("TapChanger.normalStep") ?? tc.D("TapChanger.neutralStep") ?? 0;
+            _tablePoints ??= g.OfClass("PhaseTapChangerTablePoint").ToLookup(p => p.S("PhaseTapChangerTablePoint.PhaseTapChangerTable") ?? "", StringComparer.Ordinal);
+            return _tablePoints[table].FirstOrDefault(p => Math.Abs((p.D("TapChangerTablePoint.step") ?? double.NaN) - Math.Round(step)) < 1e-9);
+        }
+
+        private ILookup<string, Obj>? _tablePoints;
+
+        private double PhaseShift(Obj? tc)
+        {
+            if (tc?.Class == "PhaseTapChangerTabular") return TablePoint(tc)?.D("PhaseTapChangerTablePoint.angle") ?? 0;
             if (tc is null || tc.Class is not ("PhaseTapChangerLinear" or "PhaseTapChangerSymmetrical")) return 0;
             double neutral = tc.D("TapChanger.neutralStep") ?? 0;
             double step = tc.D("TapChanger.step") ?? tc.D("TapChanger.normalStep") ?? neutral;
@@ -408,13 +437,15 @@ public static class CimImporter
             // Ω referred to end 1 at ratedU1 → Ω at the to-side base → pu on the system base.
             double zbTo = bt * bt / _net.BaseMva, toSide = (u2 / u1) * (u2 / u1);
             Obj? Tc(Obj end, bool ratio) => tcs[end.Id].FirstOrDefault(c => ratio ? c.Class == "RatioTapChanger" : c.Class != "RatioTapChanger");
-            double tap = (u1 / u2) / (bf / bt) * TapRatio(Tc(e1, true)) / TapRatio(Tc(e2, true));
+            double tap = (u1 / u2) / (bf / bt) * TapRatio(Tc(e1, true)) / TapRatio(Tc(e2, true))
+                         * (TablePoint(Tc(e1, false))?.D("TapChangerTablePoint.ratio") ?? 1) / (TablePoint(Tc(e2, false))?.D("TapChangerTablePoint.ratio") ?? 1);
             double shift = PhaseShift(Tc(e1, false)) - PhaseShift(Tc(e2, false));
             var br = new Branch
             {
                 From = f, To = t, Name = o.S("IdentifiedObject.name"), Kind = BranchKind.Transformer,
                 R = r * toSide / zbTo, X = x * toSide / zbTo, B = b / toSide * zbTo, Tap = tap, ShiftDeg = shift,
-                RateA = limits.TryGetValue(o.Id, out var lim) ? lim : e1.D("PowerTransformerEnd.ratedS") ?? 0,
+                RateA = opt.UseExtensions && o.D("PowerTransformer.rateA") is double rate ? rate
+                    : limits.TryGetValue(o.Id, out var lim) ? lim : e1.D("PowerTransformerEnd.ratedS") ?? 0,
                 InService = (o.B("Equipment.inService") ?? true) && Terminals(o).All(Connected),
                 Connection = (e1.S("PowerTransformerEnd.connectionKind"), e2.S("PowerTransformerEnd.connectionKind")) switch
                 {
@@ -427,6 +458,7 @@ public static class CimImporter
                     _ => WindingConnection.Dyn,
                 },
             };
+            if (opt.UseExtensions && Enum.TryParse<BranchKind>(o.S("PowerTransformer.kind"), out var kind)) br.Kind = kind;
             if (e1.D("PowerTransformerEnd.r0") is double r0) br.R0 = r0 * toSide / zbTo;
             if (e1.D("PowerTransformerEnd.x0") is double x0) br.X0 = x0 * toSide / zbTo;
             _net.Branches.Add(br);
@@ -469,11 +501,13 @@ public static class CimImporter
             if (opt.UseExtensions)
             {
                 if (Enum.TryParse<GeneratorKind>(gu?.S("GeneratingUnit.kind"), out var k)) gen.Kind = k;
-                if (gu?.D("GeneratingUnit.costC1") is double c1)
-                    gen.Cost = new PolynomialCost(gu.D("GeneratingUnit.costC2") ?? 0, c1, gu.D("GeneratingUnit.costC0") ?? 0);
+                var costSrc = eni ? o : gu;
+                string costPre = eni ? "ExternalNetworkInjection." : "GeneratingUnit.";
+                if (costSrc?.D(costPre + "costC1") is double c1)
+                    gen.Cost = new PolynomialCost(costSrc.D(costPre + "costC2") ?? 0, c1, costSrc.D(costPre + "costC0") ?? 0);
                 if (gu?.D("GeneratingUnit.rampRate") is double rr) gen.RampRate = rr;
-                if (o.D("SynchronousMachine.inertia") is double h) gen.H = h;
-                if (o.D("SynchronousMachine.damping") is double dmp) gen.D = dmp;
+                if ((o.D("SynchronousMachine.inertia") ?? o.D("ExternalNetworkInjection.inertia")) is double h) gen.H = h;
+                if ((o.D("SynchronousMachine.damping") ?? o.D("ExternalNetworkInjection.damping")) is double dmp) gen.D = dmp;
             }
             bool controls = (o.B("RegulatingCondEq.controlEnabled") ?? o.B("ExternalNetworkInjection.regulationStatus") ?? rc is not null)
                             && (rc?.B("RegulatingControl.enabled") ?? true);

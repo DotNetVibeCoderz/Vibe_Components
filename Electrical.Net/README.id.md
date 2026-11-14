@@ -11,8 +11,9 @@
 
 Electrical.Net menyediakan blok bangunan perangkat lunak sistem tenaga untuk pengembang .NET: aliran daya (seimbang dan tiga fasa tak
 seimbang), hubung singkat, proteksi, stabilitas dan dinamika rinci, transien elektromagnetik, harmonik, energi terbarukan, kendali smart grid, optimasi (aliran daya optimal DC
-dan AC, LP/MILP), pasar listrik, estimasi keadaan, SCADA dan
-protokol gardu induk, pertukaran model (CIM, PSS/E RAW, IEEE CDF, MATPOWER, OpenDSS), GIS, simulasi, API cloud, dan digital twin. Framework ini
+dan AC, LP/MILP), pasar listrik, estimasi keadaan, SCADA, DNP3, IEC 104, dan
+protokol gardu induk, sinkrofasor (IEEE C37.118), pertukaran model (CGMES 3.0, PSS/E RAW, IEEE CDF, MATPOWER, OpenDSS), GIS, simulasi,
+API cloud, pembelajaran mesin, dan digital twin 2D dan 3D. Framework ini
 dirancang sebagai fondasi aplikasi EMS, DMS, ADMS, DERMS, VPP, SCADA, dan digital twin. Algoritmanya diuji terhadap nilai acuan yang telah
 dipublikasikan (MATPOWER, penyulang uji IEEE PES, Kersting, IEC 60909, IEEE 1584, Anderson & Fouad, Kundur, Greenwood, Baran & Wu, Billinton & Allan, Wood &
 Wollenberg, dan lainnya); lihat [Validasi](#validasi).
@@ -25,6 +26,31 @@ var pf = PowerFlowSolver.Solve(TestCases.Case14());   // Newton–Raphson sparse
 Console.WriteLine(pf);
 // NewtonRaphson: converged in 3 it, mismatch 3.44E-009, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
 ```
+
+## Yang baru di 1.4
+
+Data dan AI.
+
+- **Sinkrofasor** (`Electrical.Pmu`, baru): codec IEEE C37.118.2-2011 (data, CFG-1/2/3, header, perintah; CRC-CCITT), server PMU TCP dan
+  klien PDC, transport UDP, simulator PMU yang digerakkan aliran daya (frekuensi di luar nominal, ROCOF, derau) atau simulasi dinamik,
+  estimator kelas P/M C37.118.1 Annex C (TVE kelas P 0,043 % pada ±2 Hz, kelas M 0,066 % pada ±5 Hz, respons step 0,72/f₀), estimasi keadaan
+  PMU linear (IEEE 14 bus dalam 0,0016 pu dengan derau), dan penyelarasan waktu PDC. [Panduan](docs/id/sinkrofasor.md)
+- **DNP3 dan IEC 60870-5-104 lengkap** (`Electrical.SCADA`): outstation dan master DNP3 (CRC link, transport, aplikasi, event dengan
+  konfirmasi, CROB SBO/langsung dan output analog, unsolicited, sinkronisasi waktu) serta klien dan server IEC 104 (STARTDT/STOPDT/TESTFR,
+  k/w, t0–t3, interogasi umum, sinkronisasi jam, perintah select-before-operate), keduanya terhubung ke basis data tag dan simulator RTU.
+  [Panduan](docs/id/protokol.md)
+- **CGMES 3.0** (`Electrical.CIM`): `Cgmes3Exporter` (EQ/TP/SSH/SV CIM100 dengan header dan DependentOn, mRID UUID v5, gaya node-breaker /
+  connectivity-node / bus-branch, zip), `CgmesImporter` (2.4.15 dan 3.0), dan `CgmesValidator` dengan 22 aturan; round trip case9/14/33bw
+  identik; `NetworkFormats` mendeteksi berkas dan zip CGMES. [Panduan](docs/id/scada-iec61850-cim.md#profil-dan-validasi-cgmes-30-v14)
+- **Pembelajaran mesin** (`Electrical.AI.Learning`, baru; GraviLearn 2.0.0, ML.NET 6.0.0, Gravicode.RLNet 0.3.0): peramalan beban ML (MAPE
+  FastTree 1,41 % / gradient boosting 1,43 % vs Holt–Winters 8,39 %), klasifikasi dan lokasi gangguan (jenis 100 %, ±1 bus 95 %),
+  identifikasi topologi (100 %), dan agen Volt/VAR deep-RL (DQN −14,5 vs aturan tegangan −25,2). [Panduan](docs/id/pembelajaran-mesin.md)
+- **Digital twin 3D** (`Electrical.DigitalTwin.ThreeD` + `.Avalonia`, baru; ThreeNet 0.12.2): adegan gardu induk dan penyulang prosedural
+  yang diwarnai aliran daya atau keadaan twin, alarm berkedip, ekspor glTF 2.0, rendering di luar layar, dan kontrol `GridTwin3DView`.
+  [Panduan](docs/id/digital-twin-3d.md)
+- **Galeri**: lima demo baru: Sinkrofasor (C37.118), Protokol utilitas (DNP3 & IEC 104), Profil & validasi CGMES 3.0, Pembelajaran mesin
+  untuk jaringan, Kembaran digital 3D (tampilan ThreeNet langsung di desktop, render di luar layar dan unduhan GLB di web).
+- **CLI**: `eln pmu`, `eln dnp3`, `eln iec104`, `eln cgmes`, `eln learn`, dan `eln twin3d`. [Referensi](docs/id/cli.md#baru-di-14)
 
 ## Yang baru di 1.3
 
@@ -108,20 +134,23 @@ Console.WriteLine(pf);
 | **Electrical.Optimization.OrTools** (1.2) | Adapter Google OR-Tools (`OrToolsSolver`, `AddOrTools()`): SCIP, CBC, GLOP, PDLP |
 | **Electrical.Markets** (1.2) | Unit commitment dengan kendala keamanan (MILP, N-1), kliring pasar day-ahead dan real-time dengan penawaran jual dan beli, LMP dengan komponen energi/kongesti, penyelesaian, hak transmisi finansial |
 | **Electrical.StateEstimation** | Estimator AC WLS (matriks gain sparse), pengukuran V/P/Q/aliran/PMU, observabilitas, uji χ², penghapusan bad data dengan largest normalized residual |
-| **Electrical.SCADA** | Klien/server Modbus TCP dan codec PDU, basis data tag dengan penskalaan dan kualitas, alarm ISA-18.2, historian swinging-door, simulator RTU, codec APDU IEC 60870-5-104 |
+| **Electrical.SCADA** | Klien/server Modbus TCP dan codec PDU, basis data tag dengan penskalaan dan kualitas, alarm ISA-18.2, historian swinging-door, simulator RTU, outstation dan master DNP3 (1.4), codec, klien, dan server IEC 60870-5-104 (1.4) |
+| **Electrical.Pmu** (1.4) | Frame IEEE C37.118.2, server PMU dan klien PDC TCP/UDP, simulator PMU (aliran daya atau dinamika), estimasi fasor kelas P/M C37.118.1 dengan TVE, estimasi keadaan PMU linear, penyelarasan PDC |
 | **Electrical.IEC61850** | Parser SCL (ICD/CID/SCD), object reference dan katalog logical node, data MMS, ASN.1 BER, frame GOOSE dan Sampled Values (9-2LE), retransmisi GOOSE |
-| **Electrical.CIM** | Ekspor RDF/XML IEC 61970 CIM / gaya CGMES (EQ, TP, SSH, SV) dan impor dengan pemrosesan topologi |
-| **Electrical.Interop** (1.1) | Baca dan tulis PSS/E RAW v33/v35, pembaca IEEE Common Data Format, deteksi format berbasis isi (RAW, CDF, MATPOWER, JSON Cloud) dengan peringatan konversi, sampel IEEE 14 bus tertanam |
+| **Electrical.CIM** | Ekspor RDF/XML IEC 61970 CIM / CGMES (EQ, TP, SSH, SV) dan impor dengan pemrosesan topologi; eksporter CGMES 3.0 (node-breaker, header, mRID UUID v5, zip), importer 2.4.15/3.0, dan validator 22 aturan (1.4) |
+| **Electrical.Interop** (1.1) | Baca dan tulis PSS/E RAW v33/v35, pembaca IEEE Common Data Format, deteksi format berbasis isi (RAW, CDF, MATPOWER, JSON Cloud, CGMES di 1.4) dengan peringatan konversi, sampel IEEE 14 bus tertanam |
 | **Electrical.DigitalTwin** | Kembaran jaringan langsung: tag SCADA → estimasi keadaan WLS dengan penghapusan bad data → KPI, alarm yang dijelaskan, deviasi prakiraan; simulasi what-if; penuaan aset IEEE C57.91; simulator twin loop tertutup |
+| **Electrical.DigitalTwin.ThreeD** (+ **.Avalonia**) (1.4) | Adegan gardu induk/penyulang 3D dari jaringan (ThreeNet), diwarnai aliran daya atau keadaan twin dengan alarm berkedip, ekspor glTF 2.0, render PNG di luar layar, `GridTwin3DView` untuk Avalonia |
 | **Electrical.Forecasting** | Holt–Winters (musiman tunggal/ganda), regresi dengan fitur cuaca, k-NN hari serupa, ensemble, prakiraan daya surya dan angin, metrik galat, profil sintetis |
 | **Electrical.AI** | Agen operator jaringan LLM dwibahasa dengan 10 tool yang membumi (OpenAI, Azure OpenAI, Hugging Face, Ollama, atau aturan offline), deteksi anomali (robust z, EWMA, CUSUM), klasifikasi dan lokasi gangguan, klasterisasi profil beban, lingkungan RL Volt/VAR dengan Q-learning |
+| **Electrical.AI.Learning** (1.4) | Peramalan beban ML (gradient boosting GraviLearn, FastTree ML.NET), klasifikasi dan lokasi gangguan, identifikasi topologi, agen Volt/VAR deep-RL (DQN/PPO/A2C Gravicode.RLNet), persistensi JSON / zip / checkpoint |
 | **Electrical.GIS** | Ekspor/impor GeoJSON, Web Mercator, panjang saluran haversine, tata letak geografis force-directed, indeks spasial, peta SVG, area padam |
 | **Electrical.Visualization** (+ **.Blazor**) | Tata letak dan render SVG diagram segaris otomatis dengan overlay aliran daya, grafik SVG (garis, batang, heatmap, gauge, fasor, TCC), encoder PNG, variabel tema terang/gelap; komponen Blazor |
 | **Electrical.Simulation** | Simulasi deret waktu kuasi-statis (QSTS) dengan profil beban/PV, kejadian, dan loop kendali (OLTC, regulator tegangan LDC, kapasitor terswitch), manajer skenario, kecukupan pembangkitan (analitis dan Monte-Carlo sekuensial) |
 | **Electrical.Cloud** | Runner job studi, kontrak JSON jaringan, minimal API ASP.NET Core (`MapElectricalApi`), penyimpanan skenario multi-tenant |
 | **Electrical.HPC** | Aliran daya batch paralel, sapuan beban, aliran daya probabilistik Monte-Carlo, benchmark skalabilitas |
 | **Electrical.Native** | Kernel Rust (FFT, harmonik Goertzel, THD/RMS, injeksi daya kompleks sparse, sampling normal deterministik, pembaruan cabang EMT dan solve LU sparse) dengan fallback managed yang identik |
-| **Electrical.Cli** | Dotnet tool `eln` dengan 38 perintah (termasuk `eln ask`, `eln twin`, `eln dist`, `eln dss`, `eln acopf`, `eln scuc`, `eln market`, `eln dyn`, dan `eln emt`); membaca berkas MATPOWER, PSS/E RAW, IEEE CDF, JSON, dan CIM |
+| **Electrical.Cli** | Dotnet tool `eln` dengan 44 perintah (termasuk `eln ask`, `eln twin`, `eln dist`, `eln acopf`, `eln scuc`, `eln dyn`, `eln emt`, `eln pmu`, `eln dnp3`, `eln iec104`, `eln cgmes`, `eln learn`, dan `eln twin3d`); membaca berkas MATPOWER, PSS/E RAW, IEEE CDF, JSON, CIM, dan CGMES |
 | **Electrical.Templates** | `dotnet new eln-console / eln-blazor / eln-avalonia / eln-scada / eln-webapi / eln-distribution` |
 
 ## Mulai cepat
@@ -234,6 +263,16 @@ Setiap baris di bawah ini diuji oleh suite xUnit di `tests/Electrical.Tests` (si
 | Tabel probabilitas kapasitas keluar | Billinton & Allan §2.2 | 0,9604 / 0,0392 / 0,0004 | identik |
 | Estimasi keadaan WLS tanpa derau | Solusi aliran daya | keadaan eksak | diperoleh kembali secara eksak; aliran buruk dihapus oleh uji LNR |
 | Round trip CIM | Jaringan asli | aliran daya identik | identik (case14 13,393 MW, case33 202,7 kW) |
+| Round trip CGMES 3.0, case9/14/33bw, semua gaya topologi | Jaringan asli | aliran daya identik | Δrugi ≤ 5e-14 MW; set yang diekspor lolos ke-22 aturan validator |
+| CRC-CCITT (C37.118) / CRC-16/DNP dari "123456789" | Katalog CRC | 0x29B1 / 0xEA82 | 0x29B1 / 0xEA82 |
+| Frame reset-link DNP3, APDU interogasi umum IEC 104 | Contoh IEEE 1815, IEC 60870-5-104 | `056405C001000004E921`, `680E…0014` | identik byte |
+| Estimator PMU, kelas P ±2 Hz / kelas M ±5 Hz | IEEE C37.118.1 TVE ≤ 1 % | | TVE maks 0,043 % / 0,066 % |
+| Step magnitudo PMU 5 %, kelas P | IEEE C37.118.1 waktu respons ≤ 1,7/f₀ | ≤ 34 ms pada 50 Hz | 0,72/f₀ (14,4 ms), tanpa overshoot |
+| Estimasi keadaan PMU linear, case14, PMU 2/6/7/9 | Keadaan aliran daya | tepat tanpa derau | 1e-9; maks 0,0016 pu / 0,08° dengan derau |
+| Peramalan beban ML sehari ke depan, 7 hari uji | Acuan Holt–Winters | MAPE 8,39 % | FastTree 1,41 %, gradient boosting 1,43 % |
+| Klasifikasi / lokasi gangguan, Case33, data IEC 60909 | Gangguan simulasi uji | | jenis 100 %, bus terdekat ±1 95 % |
+| Identifikasi topologi, Case33 + 5 penghubung (8 konfigurasi) | Snapshot uji | | 100 % (klasifikasi dan korelasi) |
+| Volt/VAR deep-RL, 33 bus, 24 jam | Aturan tegangan / tanpa aksi | −25,2 / −56,4 | DQN −14,5 (6 000 langkah); DQN / PPO −13,8 (48 000) |
 | Aliran daya tak seimbang, IEEE 13 node | Hasil penyulang uji IEEE PES (node 675: 0,9835 / 1,0553 / 0,9758 pu) | galat terbesar thd tegangan terbitan | 0,9831 / 1,0559 / 0,9772 pu; terbesar 0,148 % |
 | Aliran daya tak seimbang, IEEE 4 node (GrY–GrY, Δ–GrY) | Hasil penyulang uji IEEE PES | galat terbesar | 0,026 % |
 | Konstanta saluran udara | Kersting Contoh 4.1 | z<sub>aa</sub> = 0,4576 + j1,0780 Ω/mil | 0,4576 + j1,0781 Ω/mil |
@@ -246,7 +285,7 @@ Setiap baris di bawah ini diuji oleh suite xUnit di `tests/Electrical.Tests` (si
 
 ## Galeri
 
-Dua puluh sembilan demo langsung yang mencakup semua modul dengan UI profesional, sebagai aplikasi web **Blazor** dan aplikasi desktop **Avalonia** yang berbagi kode skenario
+Tiga puluh empat demo langsung yang mencakup semua modul dengan UI profesional, sebagai aplikasi web **Blazor** dan aplikasi desktop **Avalonia** yang berbagi kode skenario
 (`gallery/Electrical.Gallery.Shared`). Setiap angka dihitung oleh pustaka saat aplikasi berjalan, di samping kode C# yang menghasilkannya.
 
 ```bash
@@ -267,6 +306,9 @@ dotnet run --project gallery/Electrical.Gallery.Desktop
 | ![Kliring pasar listrik](docs/images/web-market.png) | ![Aliran daya optimal AC](docs/images/desktop-acopf.png) |
 | ![Dinamika sistem tenaga](docs/images/web-dynamics.png) | ![Transien elektromagnetik](docs/images/desktop-emt.png) |
 | ![Transien elektromagnetik](docs/images/web-emt.png) | ![Sumber berbasis inverter](docs/images/desktop-ibr.png) |
+| ![Sinkrofasor](docs/images/web-pmu.png) | ![Kembaran digital 3D](docs/images/desktop-twin3d.png) |
+| ![Pembelajaran mesin](docs/images/web-learning.png) | ![Protokol utilitas](docs/images/desktop-protocols.png) |
+| ![CGMES 3.0](docs/images/web-cgmes.png) | ![Sinkrofasor](docs/images/desktop-pmu.png) |
 
 Tema gelap: ![Tema gelap](docs/images/web-home-dark.png)
 
@@ -306,6 +348,10 @@ graph TD
     Stability --> AI
     Renewable --> AI
     Visualization --> VizBlazor[Visualization.Blazor]
+    PF --> Pmu
+    Forecasting & ShortCircuit & AI --> Learning[AI.Learning]
+    DigitalTwin & Visualization --> ThreeD[DigitalTwin.ThreeD]
+    ThreeD --> ThreeDAva[DigitalTwin.ThreeD.Avalonia]
     Cloud & HPC & Visualization & SCADA --> Apps[CLI · Templat · Galeri]
 ```
 
@@ -316,7 +362,7 @@ memakai satuan teknik di permukaan API (MW, Mvar, kV, kA, Ω, pu, derajat, detik
 ## Struktur repositori
 
 ```
-src/              29 paket pustaka (+ Electrical.Visualization.Blazor)
+src/              34 paket pustaka (+ Electrical.Visualization.Blazor)
 native/           Crate Rust electrical-native (C ABI, fungsi eln_*)
 tools/            Electrical.Cli (dotnet tool "eln")
 templates/        Electrical.Templates (paket dotnet new)
@@ -343,8 +389,8 @@ memublikasikan paket ke NuGet.
 ## Dokumentasi
 
 - Bahasa Indonesia: [docs/id](docs/id/README.md): memulai, arsitektur, panduan modul, aliran daya, distribusi tak seimbang, hubung singkat &
-  proteksi, stabilitas, dinamika sistem tenaga, transien elektromagnetik, harmonik, energi terbarukan & smart grid, optimasi, pasar listrik, solver LP/MILP, estimasi keadaan, SCADA / IEC 61850 / CIM, pertukaran model,
-  GIS & visualisasi, simulasi / HPC / native, API cloud, AI & digital twin, CLI, templat, galeri.
+  proteksi, stabilitas, dinamika sistem tenaga, transien elektromagnetik, harmonik, energi terbarukan & smart grid, optimasi, pasar listrik, solver LP/MILP, estimasi keadaan, sinkrofasor, SCADA / IEC 61850 / CIM, protokol utilitas (DNP3, IEC 104), pertukaran model,
+  GIS & visualisasi, simulasi / HPC / native, API cloud, AI & digital twin, pembelajaran mesin, digital twin 3D, CLI, templat, galeri.
 - English: [docs/en](docs/en/README.md).
 - Peta jalan: [PLAN.md](PLAN.md).
 

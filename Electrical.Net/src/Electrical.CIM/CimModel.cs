@@ -60,41 +60,57 @@ internal sealed class CimObject(string cls, string id, CimProfile home)
 
 internal static class CimXmlWriter
 {
+    private static readonly IReadOnlyList<(string Prefix, string Uri)> Cim16Namespaces =
+        [("cim", CimNamespaces.Cim), ("md", CimNamespaces.Md), ("eln", CimNamespaces.Eln)];
+
     public static void Write(XmlWriter w, IEnumerable<CimObject> objects, Func<CimProfile, bool> include, IReadOnlyList<CimObject> header, bool aboutForForeign)
+        => Write(w, objects, include, header, aboutForForeign, Cim16Namespaces);
+
+    /// <summary>Writes an RDF/XML document; <paramref name="namespaces"/> maps the prefixes used in class/property names to URIs (first is declared first).</summary>
+    public static void Write(XmlWriter w, IEnumerable<CimObject> objects, Func<CimProfile, bool> include, IReadOnlyList<CimObject> header, bool aboutForForeign,
+        IReadOnlyList<(string Prefix, string Uri)> namespaces)
     {
+        var map = namespaces.ToDictionary(n => n.Prefix, n => n.Uri, StringComparer.Ordinal);
+        map["rdf"] = CimNamespaces.Rdf;
         w.WriteStartDocument();
         w.WriteStartElement("rdf", "RDF", CimNamespaces.Rdf);
-        w.WriteAttributeString("xmlns", "cim", null, CimNamespaces.Cim);
-        w.WriteAttributeString("xmlns", "md", null, CimNamespaces.Md);
-        w.WriteAttributeString("xmlns", "eln", null, CimNamespaces.Eln);
-        foreach (var h in header) WriteObject(w, h, h.Properties, about: false, urn: true);
+        foreach (var (prefix, uri) in namespaces) w.WriteAttributeString("xmlns", prefix, null, uri);
+        foreach (var h in header) WriteObject(w, h, h.Properties, about: false, urn: true, map);
         foreach (var o in objects)
         {
             var props = o.Properties.Where(p => include(p.Profile)).ToList();
             bool home = include(o.Home);
             if (!home && props.Count == 0) continue;
-            WriteObject(w, o, props, about: !home && aboutForForeign, urn: false);
+            WriteObject(w, o, props, about: !home && aboutForForeign, urn: false, map);
         }
         w.WriteEndElement();
         w.WriteEndDocument();
     }
 
-    private static void WriteObject(XmlWriter w, CimObject o, List<CimProperty> props, bool about, bool urn)
+    private static string Ns(Dictionary<string, string> map, string prefix) =>
+        map.TryGetValue(prefix, out var uri) ? uri : throw new ArgumentException($"Unknown prefix '{prefix}'.");
+
+    private static void WriteObject(XmlWriter w, CimObject o, List<CimProperty> props, bool about, bool urn, Dictionary<string, string> map)
     {
         var (prefix, local) = Split(o.Class);
-        w.WriteStartElement(prefix, local, CimNamespaces.For(prefix));
+        w.WriteStartElement(prefix, local, Ns(map, prefix));
         if (urn) w.WriteAttributeString("rdf", "about", CimNamespaces.Rdf, o.Id);
         else if (about) w.WriteAttributeString("rdf", "about", CimNamespaces.Rdf, "#" + o.Id);
         else w.WriteAttributeString("rdf", "ID", CimNamespaces.Rdf, o.Id);
         foreach (var p in props)
         {
             var (pp, pl) = Split(p.Name);
-            w.WriteStartElement(pp, pl, CimNamespaces.For(pp));
+            w.WriteStartElement(pp, pl, Ns(map, pp));
             switch (p.Kind)
             {
                 case CimValueKind.Literal: w.WriteString(p.Value); break;
-                case CimValueKind.Reference: w.WriteAttributeString("rdf", "resource", CimNamespaces.Rdf, "#" + p.Value); break;
-                case CimValueKind.Enum: w.WriteAttributeString("rdf", "resource", CimNamespaces.Rdf, CimNamespaces.Cim + p.Value); break;
+                case CimValueKind.Reference:
+                    // local ids get a fragment marker, absolute references (urn:uuid:..., http://...) are written as given
+                    w.WriteAttributeString("rdf", "resource", CimNamespaces.Rdf, p.Value.Contains(':') ? p.Value : "#" + p.Value); break;
+                case CimValueKind.Enum:
+                    // "eu:LimitKind.patl" → European extension namespace, otherwise the cim namespace
+                    var (ep, el) = p.Value.Contains(':') ? Split(p.Value) : ("cim", p.Value);
+                    w.WriteAttributeString("rdf", "resource", CimNamespaces.Rdf, Ns(map, ep) + el); break;
             }
             w.WriteEndElement();
         }

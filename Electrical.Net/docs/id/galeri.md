@@ -2,7 +2,7 @@
 
 > Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil · [English](../en/gallery.md)
 
-Galeri Electrical.Net memperlihatkan pustaka bekerja dalam 29 demo langsung, masing-masing di samping kode C# yang menghasilkannya. Galeri
+Galeri Electrical.Net memperlihatkan pustaka bekerja dalam 34 demo langsung, masing-masing di samping kode C# yang menghasilkannya. Galeri
 tersedia sebagai aplikasi web **Blazor** dan aplikasi desktop **Avalonia** yang berbagi kode skenario (`gallery/Electrical.Gallery.Shared`).
 Keduanya dwibahasa (EN/ID) serta punya tema terang dan gelap. Setiap angka dihitung oleh pustaka saat berjalan; tidak ada yang dirender lebih dulu.
 
@@ -40,11 +40,16 @@ dotnet run --project gallery/Electrical.Gallery.Desktop
 | | Kendali tegangan dalam deret waktu (`voltagecontrol`) | Simulation |
 | Kembaran digital & AI | Kembaran digital langsung (`digitaltwin`) | DigitalTwin |
 | | Agen AI operator jaringan (`agent`) | AI |
+| | Pembelajaran mesin untuk jaringan (`learning`) (v1.4) | AI.Learning, Forecasting, ShortCircuit, AI |
+| | Kembaran digital 3D (`twin3d`) (v1.4) | DigitalTwin.ThreeD, DigitalTwin, PowerFlow |
 | Komputasi kinerja tinggi | Aliran daya probabilistik (`plf`) | HPC, Native |
 | Operasi & protokol | SCADA: RTU, alarm & historian (`scada`) | SCADA |
 | | IEC 61850: GOOSE, SV & SCL (`iec61850`) | IEC61850 |
+| | Sinkrofasor (C37.118) (`pmu`) (v1.4) | Pmu, PowerFlow |
+| | Protokol utilitas (DNP3 & IEC 104) (`protocols`) (v1.4) | SCADA |
 | Pertukaran data & geografi | Pertukaran model (PSS/E RAW, IEEE CDF, MATPOWER, CIM) (`interop`) | Interop, CIM |
 | | Ekspor CIM / CGMES (`cim`) | CIM |
+| | Profil & validasi CGMES 3.0 (`cgmes`) (v1.4) | CIM, Interop, PowerFlow |
 | | Peta jaringan GIS (`gis`) | GIS |
 
 ## Tangkapan layar
@@ -67,6 +72,11 @@ Semua tangkapan layar ada di [docs/images](../images). Penamaan: `web-home.png`,
 | ![Dinamika sistem tenaga](../images/web-dynamics.png) | ![Dinamika sistem tenaga](../images/desktop-dynamics.png) |
 | ![Sumber berbasis inverter](../images/web-ibr.png) | ![Sumber berbasis inverter](../images/desktop-ibr.png) |
 | ![Transien elektromagnetik](../images/web-emt.png) | ![Transien elektromagnetik](../images/desktop-emt.png) |
+| ![Sinkrofasor](../images/web-pmu.png) | ![Sinkrofasor](../images/desktop-pmu.png) |
+| ![Protokol utilitas](../images/web-protocols.png) | ![Protokol utilitas](../images/desktop-protocols.png) |
+| ![CGMES 3.0](../images/web-cgmes.png) | ![CGMES 3.0](../images/desktop-cgmes.png) |
+| ![Pembelajaran mesin](../images/web-learning.png) | ![Pembelajaran mesin](../images/desktop-learning.png) |
+| ![Kembaran digital 3D](../images/web-twin3d.png) | ![Kembaran digital 3D](../images/desktop-twin3d.png) |
 
 Tema gelap: ![Gelap](../images/web-home-dark.png)
 
@@ -85,8 +95,13 @@ Hentikan server galeri yang sedang berjalan sebelum `dotnet build`, karena DLL y
    `gallery/Electrical.Gallery.Shared/GalleryCatalog.cs`. `id` menjadi slug URL dan nama tangkapan layar.
 2. Tambahkan kelas skenario di `gallery/Electrical.Gallery.Shared/Scenarios/`. Jalur yang biasa adalah deklaratif: implementasikan
    `IInteractiveScenario` (kontrol berupa `ChoiceParam`/`RangeParam`, hasil berupa `Kpi` serta `ChartBlock`, `TableBlock`, `ListingBlock`, dan
-   `NoteBlock`) lalu daftarkan di `InteractiveScenarios.All`. Kedua aplikasi menampilkannya dengan tampilan generik (`InteractiveView.razor`,
-   `Views.Interactive`) sehingga langkah 3–4 tidak diperlukan; `distribution`, `interop`, `voltagecontrol`, `acopf`, `scuc`, `market`, `dynamics`, `ibr`, dan `emt` dibuat dengan cara ini.
+   `NoteBlock`, ditambah `ImageBlock` untuk byte PNG dan `DownloadBlock` untuk berkas yang dapat disimpan) lalu daftarkan di `InteractiveScenarios.All`. Kedua aplikasi menampilkannya dengan tampilan generik (`InteractiveView.razor`,
+   `Views.Interactive`) sehingga langkah 3–4 tidak diperlukan; `distribution`, `interop`, `voltagecontrol`, `acopf`, `scuc`, `market`, `dynamics`, `ibr`, `emt`, `pmu`, `protocols`, `cgmes`, `learning`, dan `twin3d` dibuat dengan cara ini. Aplikasi web menyajikan
+   byte gambar dan unduhan melalui penyimpanan kecil di memori pada `/blob/{key}/{name}` (`BlobStore`), sehingga array besar tidak melewati
+   sirkuit Blazor; aplikasi desktop menampilkan gambar langsung dan menyimpan unduhan melalui dialog simpan platform. `twin3d` juga memiliki
+   case desktop di `Views.Build` yang menampung `GridTwin3DView` langsung, dan mode tangkapan layar memanggil `RenderFrame()` pada tampilan
+   ThreeNet sebelum menangkap. Studi yang mahal menyimpan hasilnya per proses (`learning` dilatih sekali; aplikasi web memanaskannya dan
+   adegan 3D saat dijalankan).
 3. Hanya untuk UI khusus: web `Components/Demos/<Nama>View.razor` dan sebuah case di `DemoHost.razor`.
 4. Hanya untuk UI khusus: case desktop di `Views.Build`.
 5. Jaga agar teks dwibahasa dan data deterministik (ber-seed).

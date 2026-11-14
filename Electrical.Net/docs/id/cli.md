@@ -10,7 +10,7 @@ eln help
 Dari sumber: `dotnet run --project tools/Electrical.Cli -- <perintah> [opsi]`.
 
 **Input jaringan** (sebagian besar perintah): `--case case9 | case14 | case33bw | synthetic<N>` atau `--file grid.m | grid.raw | grid.cdf |
-grid.json | grid.xml` (MATPOWER, PSS/E RAW v33–35, IEEE CDF, JSON Electrical.Net, CIM RDF/XML). Berkas RAW dan CDF dideteksi dari isinya oleh
+grid.json | grid.xml | grid.zip` (MATPOWER, PSS/E RAW v33–35, IEEE CDF, JSON Electrical.Net, RDF/XML CIM / CGMES, atau zip CGMES). Berkas dideteksi dari isinya oleh
 [`Electrical.Interop`](pertukaran-model.md) dan peringatan konversi ditulis ke stderr. Kasus default adalah `case14` kecuali disebutkan lain
 oleh perintahnya.
 
@@ -56,6 +56,12 @@ oleh perintahnya.
 | `market` | `--limit 8-9:60` (MW) | Kliring pasar satu periode dari penawaran jual dan beli: LMP, penyelesaian, sewa kongesti, pembayaran FTR (v1.2) |
 | `dyn` | `--case kundur\|case9`, `--exc const\|st\|pss`, `--fault 8`, `--clear 0.1`, `--trip 7-8`, `--end 10`, `--modes` | Dinamika rinci (GENROU, eksiter, PSS): simulasi gangguan dan mode elektromekanis (v1.3) |
 | `emt` | `--case line\|capbank`, `--km 150`, `--kv 230`, `--dt 50e-6` | Transien elektromagnetik: tegangan lebih energisasi saluran atau inrush bank kapasitor (v1.3) |
+| `pmu` | `--buses 2,6,7,9`, `--offnominal 1.5` | Frame IEEE C37.118 dari simulator PMU, estimasi fasor kelas P/M (TVE), dan estimasi keadaan PMU linear (v1.4) |
+| `dnp3` | | Outstation DNP3 (RTU aliran daya) ↔ master melalui loopback: poll integritas dan CROB (v1.4) |
+| `iec104` | | Server ↔ klien IEC 60870-5-104 melalui loopback: interogasi umum dan perintah tunggal (v1.4) |
+| `cgmes` | `--out dir\|file.zip`, `--validate file.zip` | Ekspor CGMES 3.0 (EQ/TP/SSH/SV) dengan validasi dan round trip, atau validasi set yang ada (v1.4) |
+| `learn` | `forecast\|faults\|topology\|voltvar` | Pembelajaran mesin: benchmark peramalan beban, klasifikasi gangguan, identifikasi topologi, Volt/VAR RL (v1.4) |
+| `twin3d` | `--out grid.glb`, `--png view.png`, `--scale 1.2` | Adegan twin digital 3D diwarnai aliran daya: ekspor GLB dan render di luar layar (v1.4) |
 
 ## Contoh keluaran
 
@@ -398,6 +404,63 @@ Three-phase fault at bus 7 (t = 1 s), cleared after 83 ms by tripping 8-9: STABL
 ```
 
 Panduan: [Dinamika sistem tenaga](dinamika.md#cli), [Transien elektromagnetik](transien-elektromagnetik.md#cli).
+
+### Baru di 1.4
+
+`pmu` menerbitkan aliran daya melalui simulator PMU (`--buses`, bawaan 2,6,7,9; `--offnominal` Δf dalam Hz), mengestimasi fasor gelombang
+sintetis dengan kedua kelas, dan menyelesaikan estimasi keadaan PMU linear ([Sinkrofasor](sinkrofasor.md)). `dnp3` dan `iec104` menjalankan
+stasiun terkendali untuk RTU case14 pada port loopback bebas dan menanyainya dengan master/klien yang sesuai ([Protokol utilitas](protokol.md)).
+`cgmes --out` mengekspor set CGMES 3.0 (`.zip`, atau satu XML per profil dalam direktori) dan melaporkan validasi serta round trip aliran
+daya; `cgmes --validate` memeriksa set yang ada ([SCADA, IEC 61850 & CIM](scada-iec61850-cim.md#profil-dan-validasi-cgmes-30-v14)). `learn`
+menjalankan salah satu dari empat studi pembelajaran mesin ([Pembelajaran mesin](pembelajaran-mesin.md)); `twin3d` membangun adegan 3D,
+menulis GLB, dan dengan `--png` render di luar layar (memerlukan adaptor GPU) ([Digital twin 3D](digital-twin-3d.md)). Keluaran nyata:
+
+```
+$ eln pmu --case case14 --buses 2,6,7,9 --offnominal 1.5
+IEEE C37.118.2 data frame from 4 PMUs on case14: 208 bytes, CRC-CCITT 0xFFDC
+  AA0200D000016AF9668000000000000047A29DD7BDB21971441B364FC04324D8…
+Phasor estimation at 61.5 Hz (+1.5 Hz off-nominal), 1200 Hz sampling:
+  P class: |V| 1.0000, f 61.4999 Hz, TVE 0.016 %
+  M class: |V| 0.9997, f 61.5010 Hz, TVE 0.039 %
+Linear PMU state estimation (19 phasor measurements): max |ΔV| 0.0010 pu, J 6.96 (10 dof)
+$ eln dnp3
+DNP3 outstation (RTU for case14) on 127.0.0.1:63036: integrity poll → 152 analog inputs, 20 binary inputs, 2 fragment(s), IIN DeviceRestart
+  AI    0: 1.0599
+  AI    1: 0.0447
+  AI    2: 146.2630
+  AI    3: 1.0470
+  AI    4: -4.9644
+  AI    5: 144.4830
+$ eln iec104
+IEC 60870-5-104 server (RTU for case14) on 127.0.0.1:63038: general interrogation → 172 information objects
+  M_ME_NC_1    IOA   1000: 1.0599 (Good)
+  M_ME_NC_1    IOA   1001: 0.0447 (Good)
+  M_ME_NC_1    IOA   1002: 146.2630 (Good)
+  M_ME_NC_1    IOA   1003: 1.0470 (Good)
+  M_ME_NC_1    IOA   1004: -4.9644 (Good)
+  M_ME_NC_1    IOA   1005: 144.4830 (Good)
+$ eln cgmes --case case14 --out case14.zip
+CGMES 3.0 export of case14: case14_EQ.xml, case14_TP.xml, case14_SSH.xml, case14_SV.xml → case14.zip
+  Validation: valid, 0 error(s), 0 warning(s), 22 rules
+  Round trip: losses 13.393272 MW → 13.393272 MW
+$ eln cgmes --validate case14.zip
+CGMES validation of case14.zip: valid, 0 error(s), 0 warning(s)
+$ eln learn forecast
+Day-ahead load forecast benchmark (temperature-driven residential load, 7 test days), MAPE:
+  ML.NET FastTree                  1.41 %
+  GraviLearn gradient boosting     1.43 %
+  Regression                       2.45 %
+  Holt-Winters                     8.39 %
+$ eln learn faults
+Fault classification / location on case33bw (random forest): code 100.0 %, type 100.0 %, location 53.0 % (±1 bus 95.0 %), train 1200, test 400
+$ eln learn topology
+Topology identification on case33bw with 5 tie switches: classifier 100.0 %, correlation 100.0 % over 8 configurations (280 train / 120 test)
+$ eln learn voltvar
+Volt/VAR control on case33bw, average reward (higher is better): do-nothing -56.40, voltage rule -25.20, tabular Q -36.51, Dueling DQN -14.49 (trained in 3.4 s)
+$ eln twin3d --case case14 --out grid.glb --png view.png --scale 1.3
+3D twin of case14 (load ×1.30): 120 scene objects → grid.glb (993.3 KiB GLB)
+Rendered view.png
+```
 
 Keluaran lain (`pf`, `n1`, pemindaian `sc`, `modes`, `harmonic`, `ed`, `forecast`, `plf`, `qsts`, `ask`, `twin`) ada di panduan topik:
 [aliran daya](aliran-daya.md), [hubung singkat](hubung-singkat-proteksi.md), [stabilitas](stabilitas.md), [harmonik](harmonik.md),

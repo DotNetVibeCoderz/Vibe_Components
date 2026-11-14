@@ -23,5 +23,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../Electrical.Gallery.Shared/Electrical.Gallery.Shared.csproj" />
+    <ProjectReference Include="../../src/Electrical.DigitalTwin.ThreeD.Avalonia/Electrical.DigitalTwin.ThreeD.Avalonia.csproj" />
   </ItemGroup>
 </Project>

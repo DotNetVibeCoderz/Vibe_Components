@@ -1,6 +1,7 @@
 using System.Xml.Linq;
 using Electrical.Core.Hosting;
 using Electrical.Core.Network;
+using Electrical.PowerFlow;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Electrical.CIM;
@@ -23,13 +24,35 @@ internal sealed class CimService : ICimService
     public CimImportResult Import(IEnumerable<XDocument> documents, CimImportOptions? options = null) => CimImporter.ImportDetailed(documents, options);
 }
 
+/// <summary>CGMES 3.0 export, CGMES 2.4.15/3.0 import and validation, registered by <see cref="CimBuilderExtensions.AddCim"/>.</summary>
+public interface ICgmesService
+{
+    /// <summary>Exports EQ/TP/SSH(/SV) CGMES 3.0 documents (see <see cref="Cgmes3Exporter.Export"/>).</summary>
+    CgmesDocumentSet Export(PowerNetwork network, PowerFlowResult? result = null, Cgmes3ExportOptions? options = null);
+    /// <summary>Imports a CGMES set (version auto-detected).</summary>
+    CgmesImportResult Import(IEnumerable<XDocument> documents, CimImportOptions? options = null);
+    /// <summary>Validates a CGMES set against the <see cref="CgmesValidator.Rules"/>.</summary>
+    CgmesValidationReport Validate(IEnumerable<XDocument> documents, CgmesValidationOptions? options = null);
+}
+
+internal sealed class CgmesService : ICgmesService
+{
+    public CgmesDocumentSet Export(PowerNetwork network, PowerFlowResult? result = null, Cgmes3ExportOptions? options = null) => Cgmes3Exporter.Export(network, result, options);
+    public CgmesImportResult Import(IEnumerable<XDocument> documents, CimImportOptions? options = null) => CgmesImporter.Import(documents, options);
+    public CgmesValidationReport Validate(IEnumerable<XDocument> documents, CgmesValidationOptions? options = null) => CgmesValidator.Validate(documents, options);
+}
+
 /// <summary>DI registration for the CIM module.</summary>
 public static class CimBuilderExtensions
 {
-    /// <summary>Registers <see cref="ICimService"/>.</summary>
+    /// <summary>Registers <see cref="ICimService"/> and <see cref="ICgmesService"/>.</summary>
     public static ElectricalBuilder AddCim(this ElectricalBuilder b)
     {
-        if (b.TryAddModule("CIM")) b.Services.TryAddSingleton<ICimService, CimService>();
+        if (b.TryAddModule("CIM"))
+        {
+            b.Services.TryAddSingleton<ICimService, CimService>();
+            b.Services.TryAddSingleton<ICgmesService, CgmesService>();
+        }
         return b;
     }
 }

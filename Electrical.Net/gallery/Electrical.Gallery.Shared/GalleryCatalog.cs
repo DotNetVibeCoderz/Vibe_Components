@@ -50,11 +50,11 @@ public static class GalleryCatalog
         new("planning", new("Markets, forecasting & planning", "Pasar, peramalan & perencanaan"),
             new("Optimal dispatch, forecasts and time-series studies.", "Dispatch optimal, peramalan, dan studi deret waktu.")),
         new("twin", new("Digital twin & AI", "Kembaran digital & AI"),
-            new("A live grid model and an operator assistant.", "Model jaringan hidup dan asisten operator.")),
+            new("A live grid model in 2D and 3D, machine learning and an operator assistant.", "Model jaringan hidup 2D dan 3D, pembelajaran mesin, dan asisten operator.")),
         new("hpc", new("High-performance computing", "Komputasi kinerja tinggi"),
             new("Thousands of power flows in parallel, with Rust kernels.", "Ribuan aliran daya paralel dengan kernel Rust.")),
         new("ops", new("Operations & protocols", "Operasi & protokol"),
-            new("Telemetry, alarms and substation messaging.", "Telemetri, alarm, dan pesan gardu induk.")),
+            new("Telemetry, synchrophasors, utility protocols and substation messaging.", "Telemetri, sinkrofasor, protokol utilitas, dan pesan gardu induk.")),
         new("data", new("Data exchange & geography", "Pertukaran data & geografi"),
             new("Standard model exchange and maps.", "Pertukaran model standar dan peta.")),
     ];
@@ -411,6 +411,39 @@ public static class GalleryCatalog
             Console.WriteLine(answer.Text);
             Console.WriteLine($"tools: {string.Join(", ", answer.ToolsUsed)} · model {answer.Model} · {answer.Language}");
             """),
+        new("learning", "twin",
+            new("Machine learning for grids", "Pembelajaran mesin untuk jaringan"),
+            new("Benchmark ML load forecasters against Holt–Winters, classify and locate faults from simulated measurements, identify the switching topology of a feeder, and compare an RLNet deep-RL Volt/VAR agent with rule-based control.",
+                "Bandingkan peramal beban ML dengan Holt–Winters, klasifikasikan dan lokalisasi gangguan dari pengukuran simulasi, identifikasi topologi pensaklaran penyulang, dan bandingkan agen Volt/VAR deep-RL RLNet dengan kendali berbasis aturan."),
+            ["AI.Learning", "Forecasting", "ShortCircuit", "AI"], """
+            using Electrical.AI.Learning;
+
+            var bench = LoadForecastBenchmark.Run(load, temperature, new LoadForecastBenchmarkOptions { TestDays = 7 });
+            Console.WriteLine(bench);       // GraviLearn gradient boosting 1.43 %, ML.NET FastTree 1.41 %, Holt-Winters 8.39 % …
+
+            var faults = FaultDatasetGenerator.Generate(new FaultDatasetOptions { Samples = 1600 });   // IEC 60909 on Case33BW
+            var (model, report) = FaultLearning.Train(faults);
+            var (code, type, bus) = model.Predict(faults.Samples[0].Features);
+
+            var cmp = VoltVarAgentTrainer.Compare(options: new VoltVarRlOptions { Steps = 6_000 });     // RLNet DQN
+            Console.WriteLine(cmp);         // do-nothing −56.4, voltage rule −25.2, tabular Q −36.5, DQN −14.5
+            """),
+        new("twin3d", "twin",
+            new("3D digital twin", "Kembaran digital 3D"),
+            new("Turn a network into a procedural 3D substation and feeder scene, colour it live from a power flow, render it off-screen and export it as glTF; the desktop app shows it in an interactive view.",
+                "Ubah jaringan menjadi adegan gardu induk dan penyulang 3D prosedural, warnai langsung dari aliran daya, render di luar layar, dan ekspor sebagai glTF; aplikasi desktop menampilkannya dalam tampilan interaktif."),
+            ["DigitalTwin.ThreeD", "DigitalTwin", "PowerFlow"], """
+            using Electrical.DigitalTwin.ThreeD;
+
+            var scene = GridSceneBuilder.Build(net);              // busbars, breakers, transformers, towers, conductors …
+            scene.ApplyPowerFlow(PowerFlowSolver.Solve(net));     // voltage / loading colour ramps
+            File.WriteAllBytes("grid.glb", GlbExporter.Export(scene));
+
+            using var three = ThreeNetGridScene.Create(scene);    // needs a GPU adapter (wgpu)
+            File.WriteAllBytes("grid.png", three.RenderPng(1280, 720));
+
+            // Avalonia: new GridTwin3DView { Model = scene } (Electrical.DigitalTwin.ThreeD.Avalonia)
+            """),
         new("plf", "hpc",
             new("Probabilistic load flow", "Aliran daya probabilistik"),
             new("Run a Monte-Carlo power flow over correlated load uncertainty and look at the distribution of losses and minimum voltage.",
@@ -469,6 +502,47 @@ public static class GalleryCatalog
             var scl = SclParser.Parse(File.ReadAllText("bay.icd"));
             foreach (var ld in scl.Ieds[0].LDevices) Console.WriteLine(ld.Inst);
             """),
+        new("pmu", "ops",
+            new("Synchrophasors (C37.118)", "Sinkrofasor (C37.118)"),
+            new("Stream IEEE 14-bus phasors from a PMU simulator as C37.118.2 frames, test the P/M-class phasor estimator at off-nominal frequency, and estimate the state linearly from the PMU measurements.",
+                "Alirkan fasor IEEE 14 bus dari simulator PMU sebagai frame C37.118.2, uji estimator fasor kelas P/M pada frekuensi di luar nominal, dan estimasi keadaan secara linear dari pengukuran PMU."),
+            ["Pmu", "PowerFlow"], """
+            using Electrical.Pmu;
+            using Electrical.Pmu.C37118;
+
+            var pf = PowerFlowSolver.Solve(TestCases.Case14());
+            var sim = new PmuSimulator(pf, [2, 6, 7, 9], new PmuSimulatorOptions { FrequencyOffsetHz = 1.5 });
+            byte[] frame = C37Codec.Encode(sim.CreateFrame(DateTimeOffset.UtcNow), sim.Configuration);
+            var data = C37Codec.DecodeData(frame, sim.Configuration);
+
+            var z = LinearStateEstimator.FromFrame(pf.Network, data, sim.Bindings);
+            var se = LinearStateEstimator.Estimate(pf.Network, z);             // one complex WLS solve
+
+            var est = new PhasorEstimator(new PhasorEstimatorOptions { Class = PmuClass.P });
+            var phasors = est.Estimate(samples, t0S: 0);                       // TVE 0.043 % at ±2 Hz
+            """),
+        new("protocols", "ops",
+            new("Utility protocols (DNP3 & IEC 104)", "Protokol utilitas (DNP3 & IEC 104)"),
+            new("Run a DNP3 outstation and master and an IEC 60870-5-104 server and client on loopback, read the integrity poll / general interrogation, send a breaker command and inspect every frame layer by layer.",
+                "Jalankan outstation dan master DNP3 serta server dan klien IEC 60870-5-104 pada loopback, baca poll integritas / interogasi umum, kirim perintah pemutus, dan periksa setiap frame lapis demi lapis."),
+            ["SCADA"], """
+            using Electrical.SCADA.Dnp3;
+            using Electrical.SCADA.Iec104;
+
+            var db = rtu.CreateDnp3Map().CreateDatabase(tags);
+            await using var os = new Dnp3Outstation(db, port: 20000);
+            os.Start();
+            await using var master = new Dnp3Master(1, 1024);
+            await master.ConnectAsync("127.0.0.1", 20000);
+            var poll = await master.IntegrityPollAsync();
+            var status = await master.OperateBinaryAsync(0, Crob.LatchOn(), selectBeforeOperate: true);
+
+            await using var client = new Iec104Client();
+            await client.ConnectAsync("127.0.0.1", 2404);
+            await client.StartDataTransferAsync();
+            var gi = await client.GeneralInterrogationAsync();
+            var cmd = await client.SingleCommandAsync(5001, true, selectBeforeOperate: true);
+            """),
         new("interop", "data",
             new("Model exchange (PSS/E RAW, IEEE CDF, MATPOWER, CIM)", "Pertukaran model (PSS/E RAW, IEEE CDF, MATPOWER, CIM)"),
             new("Read the IEEE 14-bus system from PSS/E RAW v33/v35, IEEE CDF, MATPOWER and CIM, let the format be detected from the content, review the conversion warnings, and check that every route gives the same power flow; then write a case back to RAW.",
@@ -501,6 +575,22 @@ public static class GalleryCatalog
 
             var back = CimImporter.Import(rdf, new CimImportOptions { BaseMva = net.BaseMva });
             double dLoss = PowerFlowSolver.Solve(back).LossesMw - PowerFlowSolver.Solve(net).LossesMw;
+            """),
+        new("cgmes", "data",
+            new("CGMES 3.0 profiles & validation", "Profil & validasi CGMES 3.0"),
+            new("Export a test system as CGMES 3.0 EQ, TP, SSH and SV profiles, check the set with 22 validation rules, break it on purpose to see the findings, and prove the round trip with a power flow.",
+                "Ekspor sistem uji sebagai profil CGMES 3.0 EQ, TP, SSH, dan SV, periksa set dengan 22 aturan validasi, rusak secara sengaja untuk melihat temuannya, dan buktikan bolak-baliknya dengan aliran daya."),
+            ["CIM", "Interop", "PowerFlow"], """
+            using Electrical.CIM;
+
+            var net = TestCases.Case14();
+            var set = Cgmes3Exporter.Export(net, PowerFlowSolver.Solve(net));   // EQ, TP, SSH, SV (CIM100)
+            File.WriteAllBytes("case14.zip", set.ToZip());
+
+            var report = CgmesValidator.Validate(set);                          // 22 rules CGM-HDR/ID/REF/MAND/TOPO/VOLT/PAR/SV
+            Console.WriteLine(report);                                          // CGMES Cgmes3_0: 0 error(s), 0 warning(s)
+
+            var back = CgmesImporter.ImportZip(File.OpenRead("case14.zip")).Network;
             """),
         new("gis", "data",
             new("GIS grid map", "Peta jaringan GIS"),
@@ -547,9 +637,9 @@ public static class GalleryCatalog
         "Optimization" => new("Economic dispatch, DC/AC-OPF with LMPs, LP/MILP solvers, unit commitment", "Dispatch ekonomis, DC/AC-OPF dengan LMP, solver LP/MILP, unit commitment"),
         "Markets" => new("Security-constrained unit commitment, market clearing, settlement, FTRs", "Unit commitment dengan kendala keamanan, kliring pasar, penyelesaian, FTR"),
         "StateEstimation" => new("Weighted least-squares state estimation", "Estimasi keadaan kuadrat terkecil berbobot"),
-        "SCADA" => new("Modbus TCP, tags, ISA-18.2 alarms, historian, IEC 104", "Modbus TCP, tag, alarm ISA-18.2, historian, IEC 104"),
+        "SCADA" => new("Modbus TCP, DNP3, IEC 104, tags, ISA-18.2 alarms, historian", "Modbus TCP, DNP3, IEC 104, tag, alarm ISA-18.2, historian"),
         "IEC61850" => new("SCL parsing, GOOSE and Sampled Values codecs", "Parsing SCL, codec GOOSE dan Sampled Values"),
-        "CIM" => new("CGMES RDF/XML export and import", "Ekspor dan impor RDF/XML CGMES"),
+        "CIM" => new("CGMES 2.4.15 / 3.0 export, import and validation", "Ekspor, impor, dan validasi CGMES 2.4.15 / 3.0"),
         "DigitalTwin" => new("Live grid twin fed by telemetry", "Kembaran digital jaringan dari telemetri"),
         "Forecasting" => new("Load and renewable forecasting", "Peramalan beban dan energi terbarukan"),
         "AI" => new("LLM grid-operator agent with tools", "Agen operator jaringan berbasis LLM"),
@@ -560,7 +650,10 @@ public static class GalleryCatalog
         "HPC" => new("Parallel batch and probabilistic load flow", "Aliran daya batch paralel dan probabilistik"),
         "Native" => new("Rust kernels with managed fallback", "Kernel Rust dengan cadangan managed"),
         "Distribution" => new("Unbalanced three-phase feeders, Carson line constants, OpenDSS", "Penyulang tiga fasa tak seimbang, konstanta saluran Carson, OpenDSS"),
-        "Interop" => new("PSS/E RAW, IEEE CDF and format auto-detection", "PSS/E RAW, IEEE CDF, dan deteksi format otomatis"),
+        "Interop" => new("PSS/E RAW, IEEE CDF, CGMES and format auto-detection", "PSS/E RAW, IEEE CDF, CGMES, dan deteksi format otomatis"),
+        "Pmu" => new("IEEE C37.118 synchrophasors, P/M-class estimation, linear PMU state estimation", "Sinkrofasor IEEE C37.118, estimasi kelas P/M, estimasi keadaan PMU linear"),
+        "AI.Learning" => new("ML load forecasting, fault and topology learning, deep-RL Volt/VAR", "Peramalan beban ML, pembelajaran gangguan dan topologi, Volt/VAR deep-RL"),
+        "DigitalTwin.ThreeD" => new("3D substation and feeder scenes, glTF export, Avalonia view", "Adegan gardu induk dan penyulang 3D, ekspor glTF, tampilan Avalonia"),
         _ => new(m, m),
     };
 }

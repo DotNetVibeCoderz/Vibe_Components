@@ -413,3 +413,7 @@ code.hex { display: block; padding: 10px 12px; background: var(--code-bg); color
 .tool-list { margin: 0; padding: 0; list-style: none; font-size: 12.5px; display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow: auto; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 @media (max-width: 1180px) { .agent { grid-template-columns: 1fr; } }
+
+/* declarative image / download blocks */
+img.render { display: block; width: 100%; height: auto; border-radius: 6px; }
+.download-text { font-size: 13px; color: var(--ink-2); margin: 0 0 12px; }

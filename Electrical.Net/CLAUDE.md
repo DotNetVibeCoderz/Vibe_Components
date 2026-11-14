@@ -60,6 +60,12 @@ A running gallery server locks DLLs and makes `dotnet build` fail with MSB3027, 
   names, `.dyr` via `DyrReader`. Reference case `DynamicTestCases.KundurTwoArea`. `Electrical.Emt`: Dommel nodal method, matrix factorised
   only on topology changes, CDA after switching; hot loops in Rust (`EmtKernels`, `eln_emt_*`, `eln_version` 10300) with bit-identical
   managed fallbacks — keep them identical (tests compare every sample).
+- v1.4: `Electrical.Pmu` (C37.118 codec/transport, `PhasorEstimator` — sample rate must be an integer multiple of the nominal frequency,
+  `LinearStateEstimator`), DNP3 (`Electrical.SCADA.Dnp3`) and IEC 104 client/server (`Electrical.SCADA.Iec104`) with tag bridges from
+  `RtuSimulator` (attach maps before updating tags). CGMES 3.0 in `Electrical.CIM` (`Cgmes3Exporter`, `CgmesImporter`, `CgmesValidator`;
+  deterministic UUID v5 mRIDs). `Electrical.AI.Learning` (GraviLearn / ML.NET / RLNet; GraviLearn ensembles are re-implemented over its
+  trees so they can be saved as JSON) and `Electrical.DigitalTwin.ThreeD` (+ `.Avalonia`; own GLB writer — ThreeNet has no glTF export).
+  These two packages are not AOT-compatible.
 - `Electrical.DigitalTwin.GridTwin` ingests SCADA tags (`RtuSimulator` naming `BUSn.VM`, `BRk.PF`, …), runs WLS state estimation with bad-data removal
   each cycle and produces explained alarms (EN `Message` / ID `MessageId`). `TwinSimulator` is a deterministic closed loop used by tests, CLI and gallery.
 - `Electrical.AI.GridAgent` answers through tool calling (`GridTools`, 10 tools). `LlmOptions.FromEnvironment()` reads `ELECTRICAL_LLM_PROVIDER`

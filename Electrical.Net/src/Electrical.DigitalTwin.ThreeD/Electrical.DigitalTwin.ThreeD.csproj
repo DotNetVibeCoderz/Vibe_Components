@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>3D digital twin for Electrical.Net: procedural substation and feeder scenes (busbars, transformers, breakers, towers, lines) built with ThreeNet, coloured live from power-flow / twin state, exportable to glTF and viewable in Avalonia.</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+    <ProjectReference Include="../Electrical.DigitalTwin/Electrical.DigitalTwin.csproj" />
+    <ProjectReference Include="../Electrical.Visualization/Electrical.Visualization.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="ThreeNet" Version="0.12.2" />
+  </ItemGroup>
+</Project>

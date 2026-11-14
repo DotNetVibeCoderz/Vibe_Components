@@ -5,6 +5,7 @@
     <Project Path="gallery/Electrical.Gallery.Web/Electrical.Gallery.Web.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Electrical.AI.Learning/Electrical.AI.Learning.csproj" />
     <Project Path="src/Electrical.AI/Electrical.AI.csproj" />
     <Project Path="src/Electrical.CIM/Electrical.CIM.csproj" />
     <Project Path="src/Electrical.Circuit/Electrical.Circuit.csproj" />
@@ -13,6 +14,8 @@
     <Project Path="src/Electrical.Distribution/Electrical.Distribution.csproj" />
     <Project Path="src/Electrical.Dynamics/Electrical.Dynamics.csproj" />
     <Project Path="src/Electrical.Emt/Electrical.Emt.csproj" />
+    <Project Path="src/Electrical.DigitalTwin.ThreeD/Electrical.DigitalTwin.ThreeD.csproj" />
+    <Project Path="src/Electrical.DigitalTwin.ThreeD.Avalonia/Electrical.DigitalTwin.ThreeD.Avalonia.csproj" />
     <Project Path="src/Electrical.DigitalTwin/Electrical.DigitalTwin.csproj" />
     <Project Path="src/Electrical.Forecasting/Electrical.Forecasting.csproj" />
     <Project Path="src/Electrical.GIS/Electrical.GIS.csproj" />
@@ -25,6 +28,7 @@
     <Project Path="src/Electrical.Optimization.Highs/Electrical.Optimization.Highs.csproj" />
     <Project Path="src/Electrical.Optimization.OrTools/Electrical.Optimization.OrTools.csproj" />
     <Project Path="src/Electrical.Optimization/Electrical.Optimization.csproj" />
+    <Project Path="src/Electrical.Pmu/Electrical.Pmu.csproj" />
     <Project Path="src/Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
     <Project Path="src/Electrical.Protection/Electrical.Protection.csproj" />
     <Project Path="src/Electrical.Renewable/Electrical.Renewable.csproj" />

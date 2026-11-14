@@ -31,5 +31,8 @@
     <ProjectReference Include="../../src/Electrical.Simulation/Electrical.Simulation.csproj" />
     <ProjectReference Include="../../src/Electrical.DigitalTwin/Electrical.DigitalTwin.csproj" />
     <ProjectReference Include="../../src/Electrical.AI/Electrical.AI.csproj" />
+    <ProjectReference Include="../../src/Electrical.Pmu/Electrical.Pmu.csproj" />
+    <ProjectReference Include="../../src/Electrical.AI.Learning/Electrical.AI.Learning.csproj" />
+    <ProjectReference Include="../../src/Electrical.DigitalTwin.ThreeD/Electrical.DigitalTwin.ThreeD.csproj" />
   </ItemGroup>
 </Project>

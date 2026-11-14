@@ -16,6 +16,8 @@ public enum NetworkFormat
     IeeeCdf,
     /// <summary>Electrical.Cloud network JSON (<c>{"buses": [...], "branches": [...]}</c>).</summary>
     CloudJson,
+    /// <summary>IEC CIM / CGMES RDF/XML (2.4.15 or 3.0; one merged document as text, or a <c>.zip</c> / <c>.xml</c> file set).</summary>
+    Cgmes,
 }
 
 /// <summary>Result of importing a network file: the model, the detected format and conversion warnings.</summary>

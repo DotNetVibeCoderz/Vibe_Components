@@ -1,5 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Xml;
+using System.Xml.Linq;
+using Electrical.CIM;
 using Electrical.Core.Hosting;
 using Electrical.Core.Network;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -8,7 +11,7 @@ namespace Electrical.Interop;
 
 /// <summary>
 /// Format auto-detection and loading of network files into <see cref="PowerNetwork"/>: MATPOWER (<c>.m</c>), PSS/E RAW (<c>.raw</c>),
-/// IEEE Common Data Format and the Electrical.Cloud network JSON. Detection is content based; the file extension only breaks ties.
+/// IEEE Common Data Format, the Electrical.Cloud network JSON and IEC CIM / CGMES RDF/XML (2.4.15 and 3.0, also as <c>.zip</c>). Detection is content based; the file extension only breaks ties.
 /// </summary>
 public static class NetworkFormats
 {
@@ -18,6 +21,7 @@ public static class NetworkFormats
         ArgumentNullException.ThrowIfNull(text);
         var t = text.TrimStart('﻿', ' ', '\t', '\r', '\n');
         if (t.StartsWith('{') && t.Contains("\"buses\"", StringComparison.Ordinal)) return NetworkFormat.CloudJson;
+        if (t.StartsWith('<') && t.Contains("22-rdf-syntax-ns#", StringComparison.Ordinal) && t.Contains("iec.ch/TC57/", StringComparison.Ordinal)) return NetworkFormat.Cgmes;
         if (t.Contains("mpc.bus", StringComparison.Ordinal) || t.StartsWith("function mpc", StringComparison.Ordinal)) return NetworkFormat.Matpower;
         if (t.Contains("BUS DATA FOLLOWS", StringComparison.OrdinalIgnoreCase)) return NetworkFormat.IeeeCdf;
         if (LooksLikeRaw(t)) return NetworkFormat.PsseRaw;
@@ -50,9 +54,10 @@ public static class NetworkFormats
             NetworkFormat.PsseRaw => PsseRaw.Parse(text, warnings),
             NetworkFormat.IeeeCdf => IeeeCdf.Parse(text, warnings),
             NetworkFormat.CloudJson => ParseCloudJson(text),
-            _ => throw new FormatException("Unrecognised network format (expected MATPOWER .m, PSS/E .raw, IEEE CDF or Electrical.Cloud JSON)."),
+            NetworkFormat.Cgmes => ParseCgmes(text, warnings),
+            _ => throw new FormatException("Unrecognised network format (expected MATPOWER .m, PSS/E .raw, IEEE CDF, Electrical.Cloud JSON or CGMES RDF/XML)."),
         };
-        if (name is not null && net.Name is "psse" or "ieee_cdf" or "network") net.Name = name;
+        if (name is not null && net.Name is "psse" or "ieee_cdf" or "network" or "cim") net.Name = name;
         return new ImportResult(net, format, warnings);
     }
 
@@ -61,21 +66,38 @@ public static class NetworkFormats
     public static ImportResult Load(string path)
     {
         if (!File.Exists(path)) throw new FileNotFoundException("Network file not found.", path);
+        if (path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            var r = CgmesImporter.Load(path);
+            if (r.Network.Name == "cim") r.Network.Name = Path.GetFileNameWithoutExtension(path);
+            return new ImportResult(r.Network, NetworkFormat.Cgmes, r.Warnings);
+        }
         var text = File.ReadAllText(path);
         var format = Detect(text);
         if (format == NetworkFormat.Unknown) format = FromExtension(path);
         return Parse(text, format, Path.GetFileNameWithoutExtension(path));
     }
 
-    /// <summary>Format implied by a file extension (<c>.m</c>, <c>.raw</c>, <c>.cdf</c>/<c>.txt</c>, <c>.json</c>).</summary>
+    /// <summary>Format implied by a file extension (<c>.m</c>, <c>.raw</c>, <c>.cdf</c>/<c>.txt</c>, <c>.json</c>, <c>.xml</c>/<c>.zip</c>).</summary>
     public static NetworkFormat FromExtension(string path) => Path.GetExtension(path).ToLowerInvariant() switch
     {
         ".m" => NetworkFormat.Matpower,
         ".raw" => NetworkFormat.PsseRaw,
         ".cdf" or ".txt" => NetworkFormat.IeeeCdf,
         ".json" => NetworkFormat.CloudJson,
+        ".xml" or ".zip" => NetworkFormat.Cgmes,
         _ => NetworkFormat.Unknown,
     };
+
+    private static PowerNetwork ParseCgmes(string text, List<string> warnings)
+    {
+        XDocument doc;
+        try { doc = XDocument.Parse(text); }
+        catch (XmlException e) { throw new FormatException($"Invalid CGMES RDF/XML: {e.Message}", e); }
+        var r = CgmesImporter.Import([doc]);
+        warnings.AddRange(r.Warnings);
+        return r.Network;
+    }
 
     /// <summary>Reads the Electrical.Cloud network JSON contract (same fields as <c>Electrical.Cloud.NetworkJson</c>) without reflection.</summary>
     public static PowerNetwork ParseCloudJson(string json)

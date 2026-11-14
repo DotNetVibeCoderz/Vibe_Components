@@ -12,14 +12,15 @@ in [`Electrical.CIM`](scada-iec61850-cim.md#cim--cgmes), and OpenDSS feeders in 
 | IEEE Common Data Format (`ieee14cdf.txt` style) | `IeeeCdf.Read/Parse` | — | `NetworkFormat.IeeeCdf` |
 | MATPOWER `.m` (version 2) | `Matpower.Parse` (Core) | `Matpower.Write` | `NetworkFormat.Matpower` |
 | Electrical.Cloud network JSON | `NetworkFormats.ParseCloudJson` | `NetworkJson.Serialize` (Cloud) | `NetworkFormat.CloudJson` |
-| CIM / CGMES RDF/XML | `CimImporter` (CIM) | `CimExporter` | (Electrical.CIM) |
+| CIM / CGMES 2.4.15 and 3.0 RDF/XML, single files or `.zip` sets (v1.4) | `CgmesImporter`, `CimImporter` (CIM) | `Cgmes3Exporter`, `CimExporter` | `NetworkFormat.Cgmes` |
 
 ## Format detection and loading
 
 `NetworkFormats.Detect` looks at the content, not the file name: `mpc.bus` means MATPOWER, `BUS DATA FOLLOWS` means IEEE CDF, a first record
-`IC, SBASE, REV, …` with REV between 20 and 40 (or an `END OF BUS DATA` marker) means PSS/E RAW, and `{"buses": …}` means the Cloud JSON
-contract. `NetworkFormats.Load(path)` falls back to the extension (`.m`, `.raw`, `.cdf`/`.txt`, `.json`) only when the content is
-ambiguous. Every reader returns an `ImportResult(Network, Format, Warnings)`; the warnings list each approximation made while mapping the
+`IC, SBASE, REV, …` with REV between 20 and 40 (or an `END OF BUS DATA` marker) means PSS/E RAW, `{"buses": …}` means the Cloud JSON
+contract, and an XML document declaring the RDF namespace (`22-rdf-syntax-ns#`) and an `iec.ch/TC57/` CIM namespace means CGMES (v1.4,
+both CIM16 and CIM100). `NetworkFormats.Load(path)` treats a `.zip` as a CGMES set (every profile inside is read and merged by
+`CgmesImporter`) and falls back to the extension (`.m`, `.raw`, `.cdf`/`.txt`, `.json`, `.xml`) only when the content is ambiguous. Every reader returns an `ImportResult(Network, Format, Warnings)`; the warnings list each approximation made while mapping the
 file onto the model.
 
 ```csharp
@@ -49,6 +50,17 @@ losses 13.393 MW
 4-7-8-9 transformers as a real three-winding unit, a switched shunt at bus 9, `@!` header lines and quoted names containing commas and
 slashes) and `Ieee14Cdf`. All three solve to the MATPOWER case14 operating point (13.393 MW losses); they are handy as test data and as
 format examples.
+
+### CGMES (v1.4)
+
+```csharp
+var r = NetworkFormats.Load("case14.zip");                        // .zip → CGMES; .xml detected from the content
+Console.WriteLine($"{r.Format}: {r.Network.BusCount} buses");     // Cgmes: 14 buses
+```
+
+A single merged RDF/XML document (e.g. `CimExporter.ExportString`) is detected and parsed from text; split profiles need all documents,
+so load them as a zip or through `CgmesImporter.Load(directory)`. Profiles, export options and the 22 validation rules are described in
+[SCADA, IEC 61850 & CIM](scada-iec61850-cim.md#cgmes-30-profiles-and-validation-v14).
 
 ## PSS/E RAW
 

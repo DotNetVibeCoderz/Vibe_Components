@@ -126,6 +126,53 @@ public sealed class RtuSimulator
                 tags.Add(prefix + p.Name, p.Unit, new TagAddress(Options.UnitId, p.Table, p.Address, p.DataType), description: $"RTU {Options.UnitId} {p.Name}");
     }
 
+    /// <summary>Measured (noisy) value of a point as currently published in the register map [engineering units; statuses 0/1].</summary>
+    public double MeasuredValue(RtuPoint p) => p.DataType == TagDataType.Bool
+        ? (Map.GetBit(p.Table, p.Address) ? 1 : 0)
+        : Map.GetFloat(p.Table, p.Address);
+
+    /// <summary>
+    /// Writes the measured values of all points into a tag database (registering missing tags), e.g. to serve them through
+    /// <see cref="Iec104.Iec104Server"/> or a <see cref="Dnp3.Dnp3PointMap"/>-bound outstation. Call after each <see cref="Publish"/>/<see cref="Refresh"/>.
+    /// </summary>
+    public void UpdateTags(TagDatabase tags, string prefix = "", DateTimeOffset? timestamp = null)
+    {
+        RegisterTags(tags, prefix);
+        foreach (var p in _points) tags.UpdateValue(prefix + p.Name, MeasuredValue(p), timestamp);
+    }
+
+    /// <summary>
+    /// DNP3 point map of the RTU: analog points → analog inputs 0, 1, … (point order, event class 2), branch statuses
+    /// <c>BRk.CLOSED</c> → binary inputs k (event class 1).
+    /// </summary>
+    public Dnp3.Dnp3PointMap CreateDnp3Map(string prefix = "", double analogDeadband = 0)
+    {
+        var map = new Dnp3.Dnp3PointMap();
+        ushort ai = 0;
+        foreach (var p in _points)
+        {
+            if (p.DataType == TagDataType.Bool) map.Add(prefix + p.Name, Dnp3.Dnp3PointType.BinaryInput, p.Address, Dnp3.Dnp3PointClass.Class1);
+            else map.Add(prefix + p.Name, Dnp3.Dnp3PointType.AnalogInput, ai++, Dnp3.Dnp3PointClass.Class2, analogDeadband);
+        }
+        return map;
+    }
+
+    /// <summary>
+    /// IEC 104 point map of the RTU: analog points → M_ME_NC_1 at <paramref name="analogBase"/> + i (point order, interrogation group 1),
+    /// branch statuses → M_SP_NA_1 at <paramref name="statusBase"/> + k (group 2).
+    /// </summary>
+    public Iec104.Iec104PointMap CreateIec104Map(string prefix = "", uint analogBase = 1000, uint statusBase = 1)
+    {
+        var map = new Iec104.Iec104PointMap();
+        uint ai = 0;
+        foreach (var p in _points)
+        {
+            if (p.DataType == TagDataType.Bool) map.Add(statusBase + p.Address, prefix + p.Name, Iec104.TypeId.M_SP_NA_1, group: 2);
+            else map.Add(analogBase + ai++, prefix + p.Name, Iec104.TypeId.M_ME_NC_1, group: 1);
+        }
+        return map;
+    }
+
     private void Analog(string name, ushort address, string unit, double trueValue, double measured)
     {
         Map.SetFloat(ModbusTable.InputRegister, address, (float)measured);

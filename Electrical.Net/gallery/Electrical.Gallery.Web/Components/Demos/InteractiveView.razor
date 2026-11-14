@@ -109,6 +109,11 @@ else if (_r is not null)
             </div>
         </Panel>,
         ListingBlock l => @<CodeBlock Code="@l.Text" Language="@l.Language" Caption="@($"{T(l.Title)}{(l.Meta is { } m ? " · " + T(m) : "")}")" />,
+        ImageBlock i => @<Panel Title="@T(i.Title)" Meta="@(i.Meta is { } m ? T(m) : null)"><img class="render" src="@BlobStore.Put(i.Png, "image/png", "render.png")" alt="@T(i.Alt)" /></Panel>,
+        DownloadBlock d => @<Panel Title="@T(d.Title)" Meta="@(d.Meta is { } m ? T(m) : null)">
+            <p class="download-text">@T(d.Description)</p>
+            <a class="btn primary" href="@BlobStore.Put(d.Data, d.MediaType, d.FileName)" download="@d.FileName">@T("Download", "Unduh") @d.FileName · @((d.Data.Length / 1024.0).ToString("0", CultureInfo.InvariantCulture)) kB</a>
+        </Panel>,
         NoteBlock n => @<p class="notice">@T(n.Text)</p>,
         _ => @<span></span>,
     };

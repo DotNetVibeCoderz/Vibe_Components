@@ -32,7 +32,7 @@ DERMS, VPP, SCADA, digital twins and smart grids on .NET.
 - Still open from this theme: AC-SCOPF, piecewise-linear costs and angle-difference limits in AC-OPF, uplift / make-whole payments,
   cutting planes and presolve in the built-in MILP
 
-## v1.3: Dynamics (current) ✅
+## v1.3: Dynamics ✅
 - Electrical.Dynamics: RMS DAE engine (implicit trapezoidal + modified Euler) with events; GENCLS/GENROU/GENSAL, SEXS/IEEET1/ESST1A/ESAC4A,
   TGOV1/HYGOV/GAST/IEEEG1, IEEEST/PSS2B; REGC_A/REEC_A/REPC_A and a grid-forming inverter (droop / VSM); PSS/E `.dyr` reader;
   small-signal analysis of the detailed model. Kundur two-area: inter-area mode 0.542 Hz (book 0.545 Hz), PSS raises damping to 18.6 %
@@ -41,11 +41,15 @@ DERMS, VPP, SCADA, digital twins and smart grids on .NET.
 - Still open from this theme: WECC REGFM / PLL-based IBR detail, stator transients, frequency-dependent lines, VSC switching models,
   co-simulation RMS↔EMT
 
-## v1.4: Data and AI
-- PMU / IEEE C37.118 stream reader; DNP3 outstation codec; full IEC 60870-5-104 client
-- CGMES 3.0 profile coverage (EQ/TP/SSH/SV) and validation
-- ML models (GravicodeScience / ML.NET / TorchSharp) for load forecasting, fault location and topology identification; RL Volt/VAR agents (Gravicode.RLNet)
-- 3D substation digital twin with ThreeNet
+## v1.4: Data and AI (current) ✅
+- Electrical.Pmu: IEEE C37.118.2 codec + TCP/UDP transport, PMU simulator, C37.118.1 P/M-class phasor estimation (TVE), linear PMU state
+  estimation, PDC alignment; DNP3 outstation/master and full IEC 60870-5-104 client/server in Electrical.SCADA
+- CGMES 3.0 (EQ/TP/SSH/SV) export/import and a 22-rule validator in Electrical.CIM; CGMES detection in Interop
+- Electrical.AI.Learning (GraviLearn 2.0, ML.NET 6.0, Gravicode.RLNet 0.3): ML load forecasting (MAPE 1.4 % vs Holt-Winters 8.4 % on
+  temperature-driven load), fault classification/location, topology identification, deep-RL Volt/VAR (DQN/PPO)
+- Electrical.DigitalTwin.ThreeD (ThreeNet 0.12): procedural 3D grid scenes coloured by power flow, GLB export, off-screen render,
+  Avalonia view
+- Not done from this theme: TorchSharp models (libtorch size), DNP3 secure authentication / serial, CGMES boundary-set merging
 
 ## Platform
 - Native binaries for win-x64, linux-x64/arm64 and osx-x64/arm64 through CI (in the workflow)

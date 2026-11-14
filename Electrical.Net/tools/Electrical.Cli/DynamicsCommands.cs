@@ -11,7 +11,10 @@ public static partial class Extra
             "dyn" => DynamicsCommands.Run(cli),
             _ => null,
         };
+        DispatchDataAi(cli, ref result);
     }
+
+    static partial void DispatchDataAi(Args cli, ref Task<int>? result);
 }
 
 public static partial class Commands
@@ -23,7 +26,10 @@ public static partial class Commands
               dyn [--case kundur|case9] [--exc const|st|pss] [--fault 8] [--clear 0.1] [--trip 7-8] [--end 10] [--modes]
                                                       Detailed dynamics (GENROU, exciters, PSS): fault simulation and electromechanical modes
             """;
+        MoreHelpDataAi(ref text);
     }
+
+    static partial void MoreHelpDataAi(ref string text);
 }
 
 internal static class DynamicsCommands

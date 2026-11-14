@@ -5,7 +5,10 @@ using Avalonia.Controls.Documents;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
 using Electrical.Core.Network;
+using Electrical.DigitalTwin.ThreeD.Avalonia;
 using Electrical.Gallery.Shared;
 using Electrical.PowerFlow;
 using Electrical.SCADA;
@@ -28,6 +31,7 @@ internal static class Views
         "cim" => Cim(),
         "gis" => Gis(),
         "agent" => Agent(),
+        "twin3d" => Twin3D(),
         _ when InteractiveScenarios.Find(id) is { } scenario => Interactive(scenario),
         _ => Text(T("This demo has no desktop view yet.", "Demo ini belum memiliki tampilan desktop."), 14, Pal.Ink3),
     };
@@ -518,11 +522,84 @@ internal static class Views
                 return Panel(T(t.Title), Table(t.Headers.Select(h => T(h)).ToArray(), rows, numeric, 16), meta);
             case ListingBlock l:
                 return Code(l.Text, T(l.Title) + (meta is null ? "" : " · " + meta), l.Language == "text" ? "csharp" : l.Language, 360);
+            case ImageBlock i:
+                using (var ms = new MemoryStream(i.Png))
+                    return Panel(T(i.Title), new Image { Source = new Bitmap(ms), Stretch = Stretch.Uniform, MaxHeight = 560 }, meta);
+            case DownloadBlock d:
+                return Panel(T(d.Title), Stack(10, Text(T(d.Description), 13, Pal.Ink2), SaveButton(d)), meta);
             case NoteBlock n:
                 return Notice(T(n.Text));
             default:
                 return new Border();
         }
+    }
+
+    /// <summary>Button that saves a <see cref="DownloadBlock"/> through the platform save dialog.</summary>
+    private static Control SaveButton(DownloadBlock d)
+    {
+        var b = new Button
+        {
+            Content = $"{T("Save", "Simpan")} {d.FileName} · {d.Data.Length / 1024} kB…", Background = Pal.Ink, Foreground = Pal.Bg, Padding = new Thickness(14, 7),
+            CornerRadius = new CornerRadius(6), HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        b.Click += async (_, _) =>
+        {
+            if (TopLevel.GetTopLevel(b)?.StorageProvider is not { CanSave: true } sp) return;
+            var file = await sp.SaveFilePickerAsync(new FilePickerSaveOptions { SuggestedFileName = d.FileName, Title = T(d.Title) });
+            if (file is null) return;
+            await using var s = await file.OpenWriteAsync();
+            await s.WriteAsync(d.Data);
+        };
+        return b;
+    }
+
+    // ------------------------------------------------------------------ 3D digital twin
+
+    /// <summary>
+    /// The 3D twin with the live ThreeNet view (<see cref="GridTwin3DView"/>, orbit with the mouse) instead of the web app's off-screen
+    /// PNG; KPIs, loading table and GLB export come from the shared <see cref="Twin3DDemo"/>.
+    /// </summary>
+    private static Control Twin3D()
+    {
+        var demo = new Twin3DDemo();
+        var values = InteractiveScenarios.Defaults(demo);
+        var view = new GridTwin3DView { Height = 500, ShowLabels = true };
+        string shown = "";
+        string? failure = null;
+        view.RenderFailed += (_, e) => failure = e?.ToString();
+        void Sync()
+        {
+            string k = values.Get("case", "case14");
+            double scale = values.D("scale");
+            if (k != shown) { view.Model = Twin3DDemo.CreateScene(k, scale); shown = k; }
+            else view.Model!.ApplyPowerFlow(Twin3DDemo.Solve(Twin3DDemo.Network(k), scale));
+        }
+        var live = new Live(() =>
+        {
+            InteractiveResult r;
+            try { r = demo.Run(values, Lang, renderPng: false); Sync(); }
+            catch (Exception e) when (e is InvalidOperationException or ArgumentException or ArithmeticException)
+            {
+                return Notice(T("The study did not finish with these settings: ", "Studi tidak selesai dengan pengaturan ini: ") + e.Message);
+            }
+            var blocks = r.Blocks.Where(b => b is not NoteBlock).Select(RenderBlock).ToArray();
+            var notes = r.Blocks.OfType<NoteBlock>().Select(RenderBlock).ToArray();
+            return Stack(16, [Annunciator(r.Kpis), Columns("*,*", blocks), .. notes]);
+        });
+        ContentControl host = new();
+        Control Bar() => Ui.Controls(
+            Seg(T("Network", "Jaringan"), new[] { ("case14", "IEEE 14"), ("case9", "WSCC 9"), ("case33bw", "Baran–Wu 33") }.Select(o => (o.Item1, o.Item2, true)), values["case"], x =>
+            {
+                values["case"] = x; host.Content = Bar(); live.Refresh();
+            }),
+            Slider(T("Load scale", "Skala beban"), 0.6, 1.6, values.D("scale"), 0.05, x =>
+            {
+                values["scale"] = x.ToString(CultureInfo.InvariantCulture); live.Refresh();
+            }, "0.00", "×"));
+        host.Content = Bar();
+        var viewPanel = Panel(T("Live 3D view (ThreeNet)", "Tampilan 3D langsung (ThreeNet)"), view,
+            T("drag to orbit · right-drag to pan · wheel to zoom", "seret untuk memutar · seret kanan untuk menggeser · roda untuk zoom"));
+        return Stack(16, host, viewPanel, live);
     }
 
     // ------------------------------------------------------------------ AI agent

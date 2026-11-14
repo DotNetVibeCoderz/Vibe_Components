@@ -316,14 +316,37 @@ estimators); numerical observability check, no measurement-placement optimizatio
 
 ## Electrical.SCADA
 
-**Purpose.** Telemetry, alarming and historization. Guide: [SCADA, IEC 61850 & CIM](scada-iec61850-cim.md).
+**Purpose.** Telemetry, alarming, historization and utility protocols. Guides: [SCADA, IEC 61850 & CIM](scada-iec61850-cim.md),
+[Utility protocols](protocols.md) (DNP3, IEC 104).
 
 **Key types.** `ModbusTcpServer`, `ModbusTcpClient`, `ModbusRegisterMap`, `ModbusPdu`, `ModbusTcpAdu` (`Electrical.SCADA.Modbus`); `TagDatabase`,
 `Tag`, `TagAddress`, `TagScaling`, `TagQuality`; `AlarmManager`, `AlarmDefinition`, `AlarmEvent`; `Historian`, `CompressionMode`;
-`RtuSimulator`; `Iec104Codec`, `Apdu`, `Asdu`, `Cp56Time2a` (`Electrical.SCADA.Iec104`).
+`RtuSimulator`; `Iec104Codec`, `Apdu`, `Asdu`, `Cp56Time2a`, `Iec104Client`, `Iec104Server`, `Iec104PointMap`, `Iec104Parameters`
+(`Electrical.SCADA.Iec104`); `Dnp3Outstation`, `Dnp3Master`, `Dnp3Database`, `Dnp3PointMap`, `Crob`, `Dnp3LinkFrame`, `Dnp3Crc`
+(`Electrical.SCADA.Dnp3`); `AddScada()`, `AddDnp3()`, `AddIec104()`.
 
 **References / limitations.** Modbus Application Protocol v1.1b3 examples, ISA-18.2 alarm states, swinging-door trending (Bristol 1990),
-IEC 60870-5-104 frame bytes. Modbus TCP only (no serial RTU); IEC 104 is a codec (APDU/ASDU encode/decode), not a full client/server session.
+IEC 60870-5-104 frame bytes and the GI APDU, CRC-16/DNP 0xEA82 and the IEEE 1815 reset-link frame (v1.4). TCP only (no serial Modbus RTU,
+DNP3 serial or IEC 101); no DNP3 Secure Authentication or IEC 62351 TLS.
+
+## Electrical.Pmu
+
+**Purpose.** Synchrophasors (v1.4): IEEE C37.118.2 frames and transport, PMU simulation, P/M-class phasor estimation, linear PMU state
+estimation and PDC alignment. Guide: [Synchrophasors](pmu.md).
+
+**Key types.** `C37Codec`, `C37DataFrame`, `C37ConfigFrame`, `C37HeaderFrame`, `C37CommandFrame`, `PmuConfiguration`, `PhasorChannel`,
+`C37Time`, `CrcCcitt` (`Electrical.Pmu.C37118`); `PmuServer`, `PdcClient`, `PmuUdpPublisher`, `PdcUdpReceiver`; `PmuSimulator`,
+`PmuTimeSeriesSource`, `PmuChannelBinding`; `PhasorEstimator`, `PmuClass`, `PhasorEstimate`; `LinearStateEstimator`, `PhasorMeasurement`;
+`PdcAlignmentBuffer`; `AddPmu()`.
+
+```csharp
+var sim = new PmuSimulator(PowerFlowSolver.Solve(TestCases.Case14()), [2, 6, 7, 9], new PmuSimulatorOptions { FrequencyOffsetHz = 1.5 });
+byte[] frame = C37Codec.Encode(sim.CreateFrame(DateTimeOffset.UtcNow), sim.Configuration);
+```
+
+**References / limitations.** IEEE C37.118.2-2011 (frames, CRC-CCITT check value 0x29B1), C37.118.1-2011/-2014 Annex C (P class TVE
+0.043 % at ±2 Hz, M class 0.066 % at ±5 Hz, step response 0.72/f₀); linear SE on case14 within 0.0016 pu with noise. Reference estimator
+only (no adaptive algorithms); no C37.118 security or IEC 61850-90-5.
 
 ## Electrical.IEC61850
 
@@ -337,25 +360,29 @@ decoding only: there is no raw-socket publisher/subscriber or MMS client/server.
 
 ## Electrical.CIM
 
-**Purpose.** CIM / CGMES model exchange. Guide: [SCADA, IEC 61850 & CIM](scada-iec61850-cim.md#cim--cgmes).
+**Purpose.** CIM / CGMES model exchange and validation. Guide: [SCADA, IEC 61850 & CIM](scada-iec61850-cim.md#cim--cgmes).
 
 **Key types.** `CimExporter` (`Export`, `ExportString`, `Write`, `ExportProfiles`), `CimProfiles`, `CimImporter` (`Import`, `Load`,
-`ImportDetailed`), `CimImportOptions`, `CimImportResult`.
+`ImportDetailed`), `CimImportOptions`, `CimImportResult`; v1.4: `Cgmes3Exporter`, `Cgmes3ExportOptions`, `CgmesTopologyStyle`,
+`CgmesDocumentSet`, `CgmesImporter`, `CgmesImportResult`, `CgmesValidator` (22 rules), `CgmesValidationReport`, `CgmesModelHeader`,
+`Cgmes3Namespaces`, `CgmesIds`.
 
 **References / limitations.** IEC 61970-301, CGMES 2.4.15-style profiles (EQ, TP, SSH, SV). Two-winding transformers only; supported
 classes are ACLineSegment, PowerTransformer, SynchronousMachine, ExternalNetworkInjection, EnergyConsumer, LinearShuntCompensator, switches
-(for topology processing) and SvVoltage. Full CGMES 3.0 coverage and validation are on the roadmap (v1.4).
+(for topology processing) and SvVoltage; CGMES 3.0 adds node-breaker export, PhaseTapChangerTabular, SvPowerFlow/SvStatus/SvTapStep and
+headers with DependentOn. Round trips of case9/14/33bw are identical (Δlosses ≤ 5e-14 MW). No DL/GL/boundary export and no SHACL engine
+(the validator implements its 22 rules in code).
 
 ## Electrical.Interop
 
 **Purpose.** Model exchange with planning tools (v1.1). Guide: [Model exchange](interop.md).
 
 **Key types.** `NetworkFormats` (`Detect`, `Load`, `Parse`, `FromExtension`), `ImportResult` (`Network`, `Format`, `Warnings`),
-`NetworkFormat`, `PsseRaw` (`Read`, `Parse`, `Load`, `Write`, `Save`; revisions 33 and 35), `IeeeCdf` (`Read`, `Parse`), `InteropSamples`
+`NetworkFormat` (incl. `Cgmes`, v1.4), `PsseRaw` (`Read`, `Parse`, `Load`, `Write`, `Save`; revisions 33 and 35), `IeeeCdf` (`Read`, `Parse`), `InteropSamples`
 (IEEE 14-bus as RAW v33, RAW v35 and CDF), `INetworkImporter`, `AddInterop`.
 
 ```csharp
-var import = NetworkFormats.Load("grid.raw");           // PSS/E RAW, IEEE CDF, MATPOWER or Cloud JSON, detected from the content
+var import = NetworkFormats.Load("grid.raw");           // PSS/E RAW, IEEE CDF, MATPOWER, Cloud JSON or CGMES (.xml/.zip), detected from the content
 string raw35 = PsseRaw.Write(import.Network, version: 35);
 ```
 
@@ -381,6 +408,24 @@ var w = sim.Twin.WhatIf(new OpenBranch(6), new ScaleLoad(1.1));
 
 **References / limitations.** IEEE C57.91 hot-spot and aging acceleration factor; Abur & Expósito WLS. Balanced bus-branch model, static
 estimation per cycle, steady-state thermal model.
+
+## Electrical.DigitalTwin.ThreeD and Electrical.DigitalTwin.ThreeD.Avalonia
+
+**Purpose.** 3D digital twin (v1.4): procedural substation/feeder scenes coloured by power flow or twin state, glTF export, off-screen
+rendering and an Avalonia view, built on ThreeNet 0.12.2. Guide: [3D digital twin](digital-twin-3d.md).
+
+**Key types.** `GridSceneBuilder`, `GridSceneOptions`, `GridScene3D` (`ApplyPowerFlow`, `ApplyTwinState`, `UpdateAlarmFlash`), `SceneObject`,
+`GridElementKind`, `MeshData`, `Catenary`, `GlbExporter`, `ThreeNetGridScene` (`Create`, `Sync`, `UpdateLabels`, `RenderPng`);
+`GridTwin3DView` (Avalonia).
+
+```csharp
+var scene = GridSceneBuilder.Build(net);
+scene.ApplyPowerFlow(PowerFlowSolver.Solve(net));
+File.WriteAllBytes("grid.glb", GlbExporter.Export(scene));
+```
+
+**References / limitations.** glTF 2.0 (validated header, chunk and accessor layout), catenary sag (a·(cosh(L/2a) − 1)). Schematic geometry;
+rendering needs the ThreeNet native core and a GPU adapter; not AOT-compatible.
 
 ## Electrical.Forecasting
 
@@ -415,6 +460,23 @@ AgentAnswer a = await agent.AskAsync("What is the 3-phase short-circuit current 
 **References / limitations.** Blackburn (fault classification), Arthur & Vassilvitskii (k-means++), tabular
 Q-learning (Watkins) on the Baran–Wu feeder; live test passed on Azure OpenAI `gpt-5-mini`. Answers are only as complete as the tools; the offline model
 has a limited bilingual vocabulary.
+
+## Electrical.AI.Learning
+
+**Purpose.** Machine learning for grids (v1.4): ML load forecasting, fault classification/location, topology identification and deep-RL
+Volt/VAR control, on GraviLearn 2.0.0, ML.NET 6.0.0 and Gravicode.RLNet 0.3.0. Guide: [Machine learning for grids](machine-learning.md).
+
+**Key types.** `LoadFeatureBuilder`, `MlLoadForecaster`, `LoadForecastBenchmark`; `FaultDatasetGenerator`, `FaultLearning`,
+`FaultLearningModel`; `ReconfigurableFeeders`, `TopologyIdentification`, `CorrelationTopologyIdentifier`; `VoltVarRlEnvironment`,
+`VoltVarAgentTrainer`, `VoltVarRlAgent`; `ModelTrainer`, `TreeEnsembleRegressor`, `MlNetRegressor`, `MlNetClassifier`; `AddLearning()`
+(`ILearningService`).
+
+```csharp
+var cmp = VoltVarAgentTrainer.Compare(options: new VoltVarRlOptions { Steps = 6_000 });   // DQN −14.5 vs rule −25.2
+```
+
+**References / limitations.** Temperature-driven load: FastTree 1.41 % / GraviLearn 1.43 % MAPE vs Holt–Winters 8.39 %; Case33 faults:
+type 100 %, ±1 bus 95 %; topology 100 %; minimum-loss configuration 139.5 kW (Goswami & Basu). Synthetic training data; not AOT-compatible.
 
 ## Electrical.GIS
 

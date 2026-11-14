@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Avalonia control for the Electrical.Net 3D digital twin: hosts a ThreeNet scene of a substation / feeder with orbit camera, live colours, alarm flashing and labels (ThreeNet.Avalonia).</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.DigitalTwin.ThreeD/Electrical.DigitalTwin.ThreeD.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="ThreeNet.Avalonia" Version="0.12.2" />
+  </ItemGroup>
+</Project>

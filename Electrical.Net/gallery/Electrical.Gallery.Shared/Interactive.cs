@@ -27,6 +27,12 @@ public sealed record TableBlock(L Title, L[] Headers, IReadOnlyList<Cell[]> Rows
 /// <summary>Code or data listing ("csharp", "xml", "json", "text").</summary>
 public sealed record ListingBlock(L Title, string Text, string Language = "text", L? Meta = null, bool Wide = false) : Block(Title, Meta, Wide);
 
+/// <summary>Raster image (PNG bytes), e.g. an off-screen 3D render. <see cref="Alt"/> is the accessible description.</summary>
+public sealed record ImageBlock(L Title, byte[] Png, L Alt, L? Meta = null, bool Wide = true) : Block(Title, Meta, Wide);
+
+/// <summary>A file the viewer can save (web: download link, desktop: save dialog). <see cref="Description"/> explains the content.</summary>
+public sealed record DownloadBlock(L Title, string FileName, string MediaType, byte[] Data, L Description, L? Meta = null, bool Wide = false) : Block(Title, Meta, Wide);
+
 /// <summary>Explanatory note (full width).</summary>
 public sealed record NoteBlock(L Text) : Block(new("", ""), null, true);
 
@@ -77,6 +83,7 @@ public static class InteractiveScenarios
         new RenewableDemo(), new SmartGridDemo(), new OptimizationDemo(), new StateEstimationDemo(), new ForecastingDemo(), new SimulationDemo(), new VoltageControlDemo(), new DigitalTwinDemo(), new InteropDemo(), new DistributionDemo(),
         new AcOpfDemo(), new ScucDemo(), new MarketDemo(),
         new DynamicsDemo(), new IbrDemo(), new EmtDemo(),
+        new PmuDemo(), new ProtocolsDemo(), new CgmesDemo(), new LearningDemo(), new Twin3DDemo(),
     }.ToDictionary(s => s.Id);
 
     public static IInteractiveScenario? Find(string id) => All.TryGetValue(id, out var s) ? s : null;

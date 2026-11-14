@@ -44,6 +44,14 @@ graph LR
     Optimization --> Markets
     Optimization --> Highs[Optimization.Highs] & OrTools[Optimization.OrTools]
     Visualization --> VizBlazor[Visualization.Blazor]
+    PowerFlow --> Pmu
+    PowerFlow --> Learning[AI.Learning]
+    Forecasting --> Learning
+    ShortCircuit --> Learning
+    AI --> Learning
+    DigitalTwin --> ThreeD[DigitalTwin.ThreeD]
+    Visualization --> ThreeD
+    ThreeD --> ThreeDAva[DigitalTwin.ThreeD.Avalonia]
 ```
 
 (Every module also references `Electrical.Core`; only the extra edges are drawn.) The graph is acyclic and layered:
@@ -56,8 +64,8 @@ Applications sit on top: the `eln` CLI, the `dotnet new` templates and the galle
 | Steady state | PowerFlow, Circuit |
 | Analysis | ShortCircuit, Protection, Stability, Dynamics, Emt, Harmonic, StateEstimation, Optimization (+ .Highs, .OrTools adapters), Markets |
 | Resources & grid edge | Renewable, SmartGrid, Forecasting |
-| Data & protocols | SCADA, IEC61850, CIM, GIS, Visualization(.Blazor) |
-| Platform | Simulation, HPC, Cloud, DigitalTwin, AI |
+| Data & protocols | SCADA (Modbus, DNP3, IEC 104), Pmu, IEC61850, CIM (CGMES 3.0), Interop, GIS, Visualization(.Blazor) |
+| Platform | Simulation, HPC, Cloud, DigitalTwin, DigitalTwin.ThreeD (+ .Avalonia), AI, AI.Learning |
 
 ## Core building blocks
 
@@ -109,6 +117,10 @@ idempotent. `IGridEventBus` (in-memory, synchronous, thread-safe) carries `IGrid
 
 ## Design rules
 
+The v1.4 packages `Electrical.AI.Learning` (ML.NET), `Electrical.DigitalTwin.ThreeD` and `.ThreeD.Avalonia` (ThreeNet, native wgpu core)
+are the only libraries that are not AOT-compatible; every other package keeps `IsAotCompatible`. `Electrical.Pmu` and the DNP3 / IEC 104
+stacks in `Electrical.SCADA` have no third-party dependencies and stay AOT-compatible.
+
 - **Dependency-light and AOT-compatible.** Libraries set `IsAotCompatible`; no reflection-based JSON (`JsonNode`, `JsonDocument`,
   `Utf8JsonWriter` instead), no `dynamic`. Core depends only on `Microsoft.Extensions.DependencyInjection.Abstractions` and
   `System.Numerics.Tensors`; Cloud uses the ASP.NET Core shared framework.
@@ -151,7 +163,7 @@ native/electrical-native   Rust crate (cdylib)
 tools/Electrical.Cli       eln tool
 templates/                 dotnet new templates
 gallery/                   Shared scenarios + Blazor web + Avalonia desktop
-tests/Electrical.Tests     xUnit tests (Analysis/, Operations/, Integration/, Intelligence/, Platform/)
+tests/Electrical.Tests     xUnit tests (Analysis/, Operations/, Integration/, Intelligence/, Platform/, Pmu/, Learning/, ThreeD/, …)
 build/                     build-native.ps1, pack.ps1, publish-nuget.ps1, ci/electrical-net.yml
 ```
 

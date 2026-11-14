@@ -10,7 +10,7 @@ eln help
 From source: `dotnet run --project tools/Electrical.Cli -- <command> [options]`.
 
 **Network input** (most commands): `--case case9 | case14 | case33bw | synthetic<N>` or `--file grid.m | grid.raw | grid.cdf | grid.json |
-grid.xml` (MATPOWER, PSS/E RAW v33–35, IEEE CDF, Electrical.Net JSON, CIM RDF/XML). RAW and CDF files are detected from their content by
+grid.xml | grid.zip` (MATPOWER, PSS/E RAW v33–35, IEEE CDF, Electrical.Net JSON, CIM / CGMES RDF/XML or a CGMES zip). Files are detected from their content by
 [`Electrical.Interop`](interop.md) and conversion warnings go to stderr. The default case is `case14` unless a command states otherwise.
 
 ## Commands
@@ -55,6 +55,12 @@ grid.xml` (MATPOWER, PSS/E RAW v33–35, IEEE CDF, Electrical.Net JSON, CIM RDF/
 | `market` | `--limit 8-9:60` (MW) | Single-period market clearing from offers and bids: LMPs, settlement, congestion rent, FTR payout (v1.2) |
 | `dyn` | `--case kundur\|case9`, `--exc const\|st\|pss`, `--fault 8`, `--clear 0.1`, `--trip 7-8`, `--end 10`, `--modes` | Detailed dynamics (GENROU, exciters, PSS): fault simulation and electromechanical modes (v1.3) |
 | `emt` | `--case line\|capbank`, `--km 150`, `--kv 230`, `--dt 50e-6` | Electromagnetic transients: line energization overvoltage or capacitor-bank inrush (v1.3) |
+| `pmu` | `--buses 2,6,7,9`, `--offnominal 1.5` | IEEE C37.118 frame from a PMU simulator, P/M-class phasor estimation (TVE) and linear PMU state estimation (v1.4) |
+| `dnp3` | | DNP3 outstation (power-flow RTU) ↔ master over loopback: integrity poll and CROB (v1.4) |
+| `iec104` | | IEC 60870-5-104 server ↔ client over loopback: general interrogation and single command (v1.4) |
+| `cgmes` | `--out dir\|file.zip`, `--validate file.zip` | CGMES 3.0 export (EQ/TP/SSH/SV) with validation and round trip, or validation of an existing set (v1.4) |
+| `learn` | `forecast\|faults\|topology\|voltvar` | Machine learning: load-forecast benchmark, fault classification, topology identification, RL Volt/VAR (v1.4) |
+| `twin3d` | `--out grid.glb`, `--png view.png`, `--scale 1.2` | 3D digital twin scene coloured by power flow: GLB export and off-screen render (v1.4) |
 
 ## Sample output
 
@@ -396,6 +402,63 @@ Three-phase fault at bus 7 (t = 1 s), cleared after 83 ms by tripping 8-9: STABL
 ```
 
 Guides: [Power system dynamics](dynamics.md#cli), [Electromagnetic transients](emt.md#cli).
+
+### New in 1.4
+
+`pmu` publishes a power flow through the PMU simulator (`--buses`, default 2,6,7,9; `--offnominal` Δf in Hz), estimates the phasor of a
+synthetic waveform with both classes and solves the linear PMU state estimate ([Synchrophasors](pmu.md)). `dnp3` and `iec104` start a
+controlled station for the case14 RTU on a free loopback port and query it with the matching master/client ([Utility protocols](protocols.md)).
+`cgmes --out` exports a CGMES 3.0 set (a `.zip`, or one XML per profile in a directory) and reports validation and the power-flow round trip;
+`cgmes --validate` checks an existing set ([SCADA, IEC 61850 & CIM](scada-iec61850-cim.md#cgmes-30-profiles-and-validation-v14)). `learn`
+runs one of the four machine-learning studies ([Machine learning](machine-learning.md)); `twin3d` builds the 3D scene, writes a GLB and,
+with `--png`, an off-screen render (needs a GPU adapter) ([3D digital twin](digital-twin-3d.md)). Real output:
+
+```
+$ eln pmu --case case14 --buses 2,6,7,9 --offnominal 1.5
+IEEE C37.118.2 data frame from 4 PMUs on case14: 208 bytes, CRC-CCITT 0xFFDC
+  AA0200D000016AF9668000000000000047A29DD7BDB21971441B364FC04324D8…
+Phasor estimation at 61.5 Hz (+1.5 Hz off-nominal), 1200 Hz sampling:
+  P class: |V| 1.0000, f 61.4999 Hz, TVE 0.016 %
+  M class: |V| 0.9997, f 61.5010 Hz, TVE 0.039 %
+Linear PMU state estimation (19 phasor measurements): max |ΔV| 0.0010 pu, J 6.96 (10 dof)
+$ eln dnp3
+DNP3 outstation (RTU for case14) on 127.0.0.1:63036: integrity poll → 152 analog inputs, 20 binary inputs, 2 fragment(s), IIN DeviceRestart
+  AI    0: 1.0599
+  AI    1: 0.0447
+  AI    2: 146.2630
+  AI    3: 1.0470
+  AI    4: -4.9644
+  AI    5: 144.4830
+$ eln iec104
+IEC 60870-5-104 server (RTU for case14) on 127.0.0.1:63038: general interrogation → 172 information objects
+  M_ME_NC_1    IOA   1000: 1.0599 (Good)
+  M_ME_NC_1    IOA   1001: 0.0447 (Good)
+  M_ME_NC_1    IOA   1002: 146.2630 (Good)
+  M_ME_NC_1    IOA   1003: 1.0470 (Good)
+  M_ME_NC_1    IOA   1004: -4.9644 (Good)
+  M_ME_NC_1    IOA   1005: 144.4830 (Good)
+$ eln cgmes --case case14 --out case14.zip
+CGMES 3.0 export of case14: case14_EQ.xml, case14_TP.xml, case14_SSH.xml, case14_SV.xml → case14.zip
+  Validation: valid, 0 error(s), 0 warning(s), 22 rules
+  Round trip: losses 13.393272 MW → 13.393272 MW
+$ eln cgmes --validate case14.zip
+CGMES validation of case14.zip: valid, 0 error(s), 0 warning(s)
+$ eln learn forecast
+Day-ahead load forecast benchmark (temperature-driven residential load, 7 test days), MAPE:
+  ML.NET FastTree                  1.41 %
+  GraviLearn gradient boosting     1.43 %
+  Regression                       2.45 %
+  Holt-Winters                     8.39 %
+$ eln learn faults
+Fault classification / location on case33bw (random forest): code 100.0 %, type 100.0 %, location 53.0 % (±1 bus 95.0 %), train 1200, test 400
+$ eln learn topology
+Topology identification on case33bw with 5 tie switches: classifier 100.0 %, correlation 100.0 % over 8 configurations (280 train / 120 test)
+$ eln learn voltvar
+Volt/VAR control on case33bw, average reward (higher is better): do-nothing -56.40, voltage rule -25.20, tabular Q -36.51, Dueling DQN -14.49 (trained in 3.4 s)
+$ eln twin3d --case case14 --out grid.glb --png view.png --scale 1.3
+3D twin of case14 (load ×1.30): 120 scene objects → grid.glb (993.3 KiB GLB)
+Rendered view.png
+```
 
 More output (`pf`, `n1`, `sc` scan, `modes`, `harmonic`, `ed`, `forecast`, `plf`, `qsts`, `ask`, `twin`) is shown in the topic guides:
 [power flow](power-flow.md), [short circuit](short-circuit-protection.md), [stability](stability.md), [harmonics](harmonics.md),

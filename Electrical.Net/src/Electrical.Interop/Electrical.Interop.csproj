@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Model exchange for Electrical.Net: PSS/E RAW (v33/v35) reader and writer, IEEE Common Data Format reader, and format auto-detection into the PowerNetwork model.</Description>
+    <Description>Model exchange for Electrical.Net: PSS/E RAW (v33/v35) reader and writer, IEEE Common Data Format reader, CGMES detection (via Electrical.CIM), and format auto-detection into the PowerNetwork model.</Description>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.CIM/Electrical.CIM.csproj" />
   </ItemGroup>
 </Project>

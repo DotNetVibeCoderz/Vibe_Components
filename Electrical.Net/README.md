@@ -10,8 +10,9 @@
 ![Electrical.Net Gallery](docs/images/web-home.png)
 
 Electrical.Net gives .NET developers the building blocks of power-system software: power flow (balanced and unbalanced three-phase),
-short circuit, protection, stability and detailed dynamics, electromagnetic transients, harmonics, renewables, smart-grid control, optimization (DC and AC optimal power flow, LP/MILP), electricity markets, state estimation, SCADA and substation
-protocols, model exchange (CIM, PSS/E RAW, IEEE CDF, MATPOWER, OpenDSS), GIS, simulation, cloud APIs and a digital twin. It is meant as a
+short circuit, protection, stability and detailed dynamics, electromagnetic transients, harmonics, renewables, smart-grid control, optimization (DC and AC optimal power flow, LP/MILP), electricity markets, state estimation, SCADA, DNP3, IEC 104 and substation
+protocols, synchrophasors (IEEE C37.118), model exchange (CGMES 3.0, PSS/E RAW, IEEE CDF, MATPOWER, OpenDSS), GIS, simulation, cloud APIs,
+machine learning and a digital twin in 2D and 3D. It is meant as a
 base for EMS, DMS, ADMS, DERMS, VPP, SCADA and digital-twin applications. The algorithms are checked against published reference values
 (MATPOWER, IEEE PES test feeders, Kersting, IEC 60909, IEEE 1584, Anderson & Fouad, Kundur, Greenwood, Baran & Wu, Billinton & Allan, Wood & Wollenberg and
 others); see [Validation](#validation).
@@ -24,6 +25,31 @@ var pf = PowerFlowSolver.Solve(TestCases.Case14());   // sparse Newton–Raphson
 Console.WriteLine(pf);
 // NewtonRaphson: converged in 3 it, mismatch 3.44E-009, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
 ```
+
+## What's new in 1.4
+
+Data and AI.
+
+- **Synchrophasors** (`Electrical.Pmu`, new): IEEE C37.118.2-2011 codec (data, CFG-1/2/3, header, command; CRC-CCITT), TCP PMU server and
+  PDC client, UDP transport, a PMU simulator driven by a power flow (off-nominal frequency, ROCOF, noise) or a dynamic simulation, the
+  C37.118.1 Annex C P/M-class estimator (P class TVE 0.043 % at ±2 Hz, M class 0.066 % at ±5 Hz, step response 0.72/f₀), linear PMU state
+  estimation (IEEE 14-bus within 0.0016 pu with noise) and PDC time alignment. [Guide](docs/en/pmu.md)
+- **DNP3 and full IEC 60870-5-104** (`Electrical.SCADA`): DNP3 outstation and master (link CRC, transport, application, events with
+  confirmation, SBO/direct CROB and analog outputs, unsolicited, time sync) and an IEC 104 client and server (STARTDT/STOPDT/TESTFR, k/w,
+  t0–t3, general interrogation, clock sync, select-before-operate commands), both bridged to the tag database and the RTU simulator.
+  [Guide](docs/en/protocols.md)
+- **CGMES 3.0** (`Electrical.CIM`): `Cgmes3Exporter` (CIM100 EQ/TP/SSH/SV with headers and DependentOn, UUID v5 mRIDs, node-breaker /
+  connectivity-node / bus-branch styles, zip), `CgmesImporter` (2.4.15 and 3.0) and `CgmesValidator` with 22 rules; case9/14/33bw round
+  trips identical; `NetworkFormats` detects CGMES files and zips. [Guide](docs/en/scada-iec61850-cim.md#cgmes-30-profiles-and-validation-v14)
+- **Machine learning** (`Electrical.AI.Learning`, new; GraviLearn 2.0.0, ML.NET 6.0.0, Gravicode.RLNet 0.3.0): ML load forecasting
+  (FastTree 1.41 % / gradient boosting 1.43 % MAPE vs Holt–Winters 8.39 %), fault classification and location (type 100 %, ±1 bus 95 %),
+  topology identification (100 %) and a deep-RL Volt/VAR agent (DQN −14.5 vs voltage rule −25.2). [Guide](docs/en/machine-learning.md)
+- **3D digital twin** (`Electrical.DigitalTwin.ThreeD` + `.Avalonia`, new; ThreeNet 0.12.2): procedural substation and feeder scenes
+  coloured by power flow or twin state, flashing alarms, glTF 2.0 export, off-screen rendering and the `GridTwin3DView` control.
+  [Guide](docs/en/digital-twin-3d.md)
+- **Gallery**: five new demos: Synchrophasors (C37.118), Utility protocols (DNP3 & IEC 104), CGMES 3.0 profiles & validation, Machine
+  learning for grids, 3D digital twin (live ThreeNet view on the desktop, off-screen render and GLB download on the web).
+- **CLI**: `eln pmu`, `eln dnp3`, `eln iec104`, `eln cgmes`, `eln learn` and `eln twin3d`. [Reference](docs/en/cli.md#new-in-14)
 
 ## What's new in 1.3
 
@@ -105,20 +131,23 @@ Console.WriteLine(pf);
 | **Electrical.Optimization.OrTools** (1.2) | Google OR-Tools adapter (`OrToolsSolver`, `AddOrTools()`): SCIP, CBC, GLOP, PDLP |
 | **Electrical.Markets** (1.2) | Security-constrained unit commitment (MILP, N-1), day-ahead and real-time market clearing with offers and bids, LMPs with energy/congestion components, settlement, financial transmission rights |
 | **Electrical.StateEstimation** | WLS AC estimator (sparse gain matrix), V/P/Q/flow/PMU measurements, observability, χ² test, largest-normalized-residual bad-data removal |
-| **Electrical.SCADA** | Modbus TCP client/server and PDU codec, tag database with scaling and quality, ISA-18.2 alarms, swinging-door historian, RTU simulator, IEC 60870-5-104 APDU codec |
+| **Electrical.SCADA** | Modbus TCP client/server and PDU codec, tag database with scaling and quality, ISA-18.2 alarms, swinging-door historian, RTU simulator, DNP3 outstation and master (1.4), IEC 60870-5-104 codec, client and server (1.4) |
+| **Electrical.Pmu** (1.4) | IEEE C37.118.2 frames, TCP/UDP PMU server and PDC client, PMU simulator (power flow or dynamics), C37.118.1 P/M-class phasor estimation with TVE, linear PMU state estimation, PDC alignment |
 | **Electrical.IEC61850** | SCL (ICD/CID/SCD) parser, object references and logical-node catalog, MMS data, ASN.1 BER, GOOSE and Sampled Values (9-2LE) frames, GOOSE retransmission |
-| **Electrical.CIM** | IEC 61970 CIM / CGMES-style RDF/XML export (EQ, TP, SSH, SV) and import with topology processing |
-| **Electrical.Interop** (1.1) | PSS/E RAW v33/v35 read and write, IEEE Common Data Format reader, content-based format detection (RAW, CDF, MATPOWER, Cloud JSON) with conversion warnings, embedded IEEE 14-bus samples |
+| **Electrical.CIM** | IEC 61970 CIM / CGMES RDF/XML export (EQ, TP, SSH, SV) and import with topology processing; CGMES 3.0 exporter (node-breaker, headers, UUID v5 mRIDs, zip), 2.4.15/3.0 importer and a 22-rule validator (1.4) |
+| **Electrical.Interop** (1.1) | PSS/E RAW v33/v35 read and write, IEEE Common Data Format reader, content-based format detection (RAW, CDF, MATPOWER, Cloud JSON, CGMES in 1.4) with conversion warnings, embedded IEEE 14-bus samples |
 | **Electrical.DigitalTwin** | Live grid twin: SCADA tags → WLS state estimation with bad-data removal → KPIs, explained alarms, forecast deviation; what-if simulation; IEEE C57.91 asset ageing; closed-loop twin simulator |
+| **Electrical.DigitalTwin.ThreeD** (+ **.Avalonia**) (1.4) | 3D substation/feeder scenes from the network (ThreeNet), coloured by power flow or twin state with flashing alarms, glTF 2.0 export, off-screen PNG render, `GridTwin3DView` for Avalonia |
 | **Electrical.Forecasting** | Holt–Winters (single/double season), regression with weather features, similar-day k-NN, ensembles, solar and wind power forecasts, error metrics, synthetic profiles |
 | **Electrical.AI** | Bilingual LLM grid-operator agent with 10 grounded tools (OpenAI, Azure OpenAI, Hugging Face, Ollama or offline rules), anomaly detection (robust z, EWMA, CUSUM), fault classification and location, load-profile clustering, Volt/VAR RL environment with Q-learning |
+| **Electrical.AI.Learning** (1.4) | ML load forecasting (GraviLearn gradient boosting, ML.NET FastTree), fault classification and location, topology identification, deep-RL Volt/VAR agents (Gravicode.RLNet DQN/PPO/A2C), JSON / zip / checkpoint persistence |
 | **Electrical.GIS** | GeoJSON export/import, Web Mercator, haversine line lengths, force-directed geographic layout, spatial index, SVG maps, outage areas |
 | **Electrical.Visualization** (+ **.Blazor**) | Automatic single-line diagram layout and SVG rendering with power-flow overlay, SVG charts (line, bar, heatmap, gauge, phasor, TCC), PNG encoder, light/dark theme variables; Blazor components |
 | **Electrical.Simulation** | Quasi-static time series (QSTS) with load/PV profiles, events and control loops (OLTC, LDC voltage regulator, switched capacitor), scenario manager, generation adequacy (analytical and sequential Monte-Carlo) |
 | **Electrical.Cloud** | Study job runner, JSON network contract, ASP.NET Core minimal API (`MapElectricalApi`), multi-tenant scenario stores |
 | **Electrical.HPC** | Parallel batch power flow, load sweeps, Monte-Carlo probabilistic load flow, scaling benchmark |
 | **Electrical.Native** | Rust kernels (FFT, Goertzel harmonics, THD/RMS, sparse complex power injections, deterministic normal sampling, EMT branch update and sparse LU solve) with identical managed fallbacks |
-| **Electrical.Cli** | `eln` dotnet tool with 38 commands (incl. `eln ask`, `eln twin`, `eln dist`, `eln dss`, `eln acopf`, `eln scuc`, `eln market`, `eln dyn` and `eln emt`); reads MATPOWER, PSS/E RAW, IEEE CDF, JSON and CIM files |
+| **Electrical.Cli** | `eln` dotnet tool with 44 commands (incl. `eln ask`, `eln twin`, `eln dist`, `eln acopf`, `eln scuc`, `eln dyn`, `eln emt`, `eln pmu`, `eln dnp3`, `eln iec104`, `eln cgmes`, `eln learn` and `eln twin3d`); reads MATPOWER, PSS/E RAW, IEEE CDF, JSON, CIM and CGMES files |
 | **Electrical.Templates** | `dotnet new eln-console / eln-blazor / eln-avalonia / eln-scada / eln-webapi / eln-distribution` |
 
 ## Quick start
@@ -231,6 +260,16 @@ Every row below is asserted by the xUnit suite in `tests/Electrical.Tests` (the 
 | Capacity outage probability table | Billinton & Allan §2.2 | 0.9604 / 0.0392 / 0.0004 | identical |
 | WLS state estimation, noise-free | Power-flow solution | exact state | recovered exactly; bad flow removed by LNR test |
 | CIM round trip | Original network | identical power flow | identical (case14 13.393 MW, case33 202.7 kW) |
+| CGMES 3.0 round trip, case9/14/33bw, all topology styles | Original network | identical power flow | Δlosses ≤ 5e-14 MW; exported sets pass all 22 validator rules |
+| CRC-CCITT (C37.118) / CRC-16/DNP of "123456789" | CRC catalogue | 0x29B1 / 0xEA82 | 0x29B1 / 0xEA82 |
+| DNP3 reset-link frame, IEC 104 general interrogation APDU | IEEE 1815 example, IEC 60870-5-104 | `056405C001000004E921`, `680E…0014` | byte-identical |
+| PMU estimator, P class ±2 Hz / M class ±5 Hz | IEEE C37.118.1 TVE ≤ 1 % | | max TVE 0.043 % / 0.066 % |
+| PMU 5 % magnitude step, P class | IEEE C37.118.1 response time ≤ 1.7/f₀ | ≤ 34 ms at 50 Hz | 0.72/f₀ (14.4 ms), no overshoot |
+| Linear PMU state estimation, case14, PMUs 2/6/7/9 | Power-flow state | exact without noise | 1e-9; max 0.0016 pu / 0.08° with noise |
+| ML day-ahead load forecast, 7 test days | Holt–Winters baseline | MAPE 8.39 % | FastTree 1.41 %, gradient boosting 1.43 % |
+| Fault classification / location, Case33, IEC 60909 data | Held-out simulated faults | | type 100 %, nearest bus ±1 95 % |
+| Topology identification, Case33 + 5 ties (8 configurations) | Held-out snapshots | | 100 % (classifier and correlation) |
+| Deep-RL Volt/VAR, 33-bus, 24 h | Voltage rule / do nothing | −25.2 / −56.4 | DQN −14.5 (6 000 steps); DQN / PPO −13.8 (48 000) |
 | Unbalanced power flow, IEEE 13-node | IEEE PES test feeder results (node 675: 0.9835 / 1.0553 / 0.9758 pu) | worst error vs published voltages | 0.9831 / 1.0559 / 0.9772 pu; worst 0.148 % |
 | Unbalanced power flow, IEEE 4-node (GrY–GrY, Δ–GrY) | IEEE PES test feeder results | worst error | 0.026 % |
 | Overhead line constants | Kersting Example 4.1 | z<sub>aa</sub> = 0.4576 + j1.0780 Ω/mile | 0.4576 + j1.0781 Ω/mile |
@@ -243,7 +282,7 @@ Every row below is asserted by the xUnit suite in `tests/Electrical.Tests` (the 
 
 ## Gallery
 
-Twenty-nine live demos covering all modules with a professional UI, as a **Blazor** web app and an **Avalonia** desktop app that share their scenario code
+Thirty-four live demos covering all modules with a professional UI, as a **Blazor** web app and an **Avalonia** desktop app that share their scenario code
 (`gallery/Electrical.Gallery.Shared`). Every figure is computed by the library at run time, next to the C# that produced it.
 
 ```bash
@@ -264,6 +303,9 @@ dotnet run --project gallery/Electrical.Gallery.Desktop
 | ![Electricity market clearing](docs/images/web-market.png) | ![AC optimal power flow](docs/images/desktop-acopf.png) |
 | ![Power system dynamics](docs/images/web-dynamics.png) | ![Electromagnetic transients](docs/images/desktop-emt.png) |
 | ![Electromagnetic transients](docs/images/web-emt.png) | ![Inverter-based resources](docs/images/desktop-ibr.png) |
+| ![Synchrophasors](docs/images/web-pmu.png) | ![3D digital twin](docs/images/desktop-twin3d.png) |
+| ![Machine learning for grids](docs/images/web-learning.png) | ![Utility protocols](docs/images/desktop-protocols.png) |
+| ![CGMES 3.0](docs/images/web-cgmes.png) | ![Synchrophasors](docs/images/desktop-pmu.png) |
 
 Dark theme: ![Dark theme](docs/images/web-home-dark.png)
 
@@ -303,6 +345,10 @@ graph TD
     Stability --> AI
     Renewable --> AI
     Visualization --> VizBlazor[Visualization.Blazor]
+    PF --> Pmu
+    Forecasting & ShortCircuit & AI --> Learning[AI.Learning]
+    DigitalTwin & Visualization --> ThreeD[DigitalTwin.ThreeD]
+    ThreeD --> ThreeDAva[DigitalTwin.ThreeD.Avalonia]
     Cloud & HPC & Visualization & SCADA --> Apps[CLI · Templates · Gallery]
 ```
 
@@ -313,7 +359,7 @@ AOT-compatible, use SI/engineering units at the API surface (MW, Mvar, kV, kA, �
 ## Repository layout
 
 ```
-src/              29 library packages (+ Electrical.Visualization.Blazor)
+src/              34 library packages (+ Electrical.Visualization.Blazor)
 native/           Rust crate electrical-native (C ABI, eln_* functions)
 tools/            Electrical.Cli (dotnet tool "eln")
 templates/        Electrical.Templates (dotnet new pack)
@@ -340,8 +386,8 @@ publishes the packages to NuGet.
 ## Documentation
 
 - English: [docs/en](docs/en/README.md): getting started, architecture, module guide, power flow, unbalanced distribution, short circuit &
-  protection, stability, power system dynamics, electromagnetic transients, harmonics, renewables & smart grid, optimization, electricity markets, LP/MILP solvers, state estimation, SCADA / IEC 61850 / CIM, model exchange,
-  GIS & visualization, simulation / HPC / native, cloud API, AI & digital twin, CLI, templates, gallery.
+  protection, stability, power system dynamics, electromagnetic transients, harmonics, renewables & smart grid, optimization, electricity markets, LP/MILP solvers, state estimation, synchrophasors, SCADA / IEC 61850 / CIM, utility protocols (DNP3, IEC 104), model exchange,
+  GIS & visualization, simulation / HPC / native, cloud API, AI & digital twin, machine learning, 3D digital twin, CLI, templates, gallery.
 - Bahasa Indonesia: [docs/id](docs/id/README.md).
 - Roadmap: [PLAN.md](PLAN.md).
 

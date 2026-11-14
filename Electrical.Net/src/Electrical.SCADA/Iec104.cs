@@ -29,16 +29,40 @@ public enum TypeId : byte
 {
     /// <summary>Single-point information (SIQ).</summary>
     M_SP_NA_1 = 1,
+    /// <summary>Double-point information (DIQ; value 0 indeterminate, 1 off, 2 on, 3 indeterminate).</summary>
+    M_DP_NA_1 = 3,
+    /// <summary>Measured value, normalized (NVA, −1 … 1 − 2⁻¹⁵) + QDS.</summary>
+    M_ME_NA_1 = 9,
+    /// <summary>Measured value, scaled (SVA, int16) + QDS.</summary>
+    M_ME_NB_1 = 11,
     /// <summary>Measured value, short floating point (IEEE 754 + QDS).</summary>
     M_ME_NC_1 = 13,
     /// <summary>Single-point information with CP56Time2a time tag.</summary>
     M_SP_TB_1 = 30,
+    /// <summary>Double-point information with CP56Time2a time tag.</summary>
+    M_DP_TB_1 = 31,
+    /// <summary>Measured value, normalized, with CP56Time2a time tag.</summary>
+    M_ME_TD_1 = 34,
+    /// <summary>Measured value, scaled, with CP56Time2a time tag.</summary>
+    M_ME_TE_1 = 35,
     /// <summary>Measured value, short floating point, with CP56Time2a time tag.</summary>
     M_ME_TF_1 = 36,
     /// <summary>Single command (SCO).</summary>
     C_SC_NA_1 = 45,
+    /// <summary>Double command (DCO; value 1 off, 2 on).</summary>
+    C_DC_NA_1 = 46,
+    /// <summary>Set-point command, short floating point (+ QOS).</summary>
+    C_SE_NC_1 = 50,
     /// <summary>Single command with CP56Time2a time tag.</summary>
     C_SC_TA_1 = 58,
+    /// <summary>Double command with CP56Time2a time tag.</summary>
+    C_DC_TA_1 = 59,
+    /// <summary>End of initialization (COI).</summary>
+    M_EI_NA_1 = 70,
+    /// <summary>Interrogation command (QOI; 20 = station interrogation).</summary>
+    C_IC_NA_1 = 100,
+    /// <summary>Clock synchronization command (CP56Time2a).</summary>
+    C_CS_NA_1 = 103,
 }
 
 /// <summary>Cause of transmission (6 bits).</summary>
@@ -75,8 +99,9 @@ public enum Iec104Quality : byte
 }
 
 /// <summary>
-/// Information object. <see cref="Value"/> holds the measured value (M_ME_*) or the state 0/1 (M_SP_*, C_SC_*).
-/// For commands, <see cref="Select"/> is the S/E bit and <see cref="Qualifier"/> the QU field (0–31).
+/// Information object. <see cref="Value"/> holds the measured value (M_ME_*; normalized values in −1 … 1), the state 0/1 (M_SP_*, C_SC_*),
+/// the double-point state 0–3 (M_DP_*, C_DC_*), the QOI (C_IC_NA_1) or the COI (M_EI_NA_1). For commands, <see cref="Select"/> is the S/E bit
+/// and <see cref="Qualifier"/> the QU field (0–31) or the QL of a set-point (0–127). C_CS_NA_1 carries its clock in <see cref="Time"/>.
 /// </summary>
 /// <param name="Address">Information object address (24 bit).</param>
 public sealed record InformationObject(uint Address, double Value, Iec104Quality Quality = Iec104Quality.Good, DateTimeOffset? Time = null,
@@ -89,17 +114,25 @@ public sealed record InformationObject(uint Address, double Value, Iec104Quality
 public sealed record Asdu(TypeId Type, CauseOfTransmission Cause, ushort CommonAddress, IReadOnlyList<InformationObject> Objects,
     bool Negative = false, bool Test = false, byte OriginatorAddress = 0)
 {
-    public static bool HasTime(TypeId t) => t is TypeId.M_SP_TB_1 or TypeId.M_ME_TF_1 or TypeId.C_SC_TA_1;
+    /// <summary>True when the element is followed by a CP56Time2a time tag.</summary>
+    public static bool HasTime(TypeId t) => t is TypeId.M_SP_TB_1 or TypeId.M_DP_TB_1 or TypeId.M_ME_TD_1 or TypeId.M_ME_TE_1 or TypeId.M_ME_TF_1
+        or TypeId.C_SC_TA_1 or TypeId.C_DC_TA_1;
 
-    /// <summary>Size of one information element (without IOA) [bytes].</summary>
-    public static int ElementSize(TypeId t) => t switch
+    private static int ValueSize(TypeId t) => t switch
     {
-        TypeId.M_SP_NA_1 or TypeId.C_SC_NA_1 => 1,
-        TypeId.M_SP_TB_1 or TypeId.C_SC_TA_1 => 1 + 7,
-        TypeId.M_ME_NC_1 => 5,
-        TypeId.M_ME_TF_1 => 5 + 7,
+        TypeId.M_SP_NA_1 or TypeId.M_SP_TB_1 or TypeId.M_DP_NA_1 or TypeId.M_DP_TB_1 or TypeId.C_SC_NA_1 or TypeId.C_SC_TA_1
+            or TypeId.C_DC_NA_1 or TypeId.C_DC_TA_1 or TypeId.M_EI_NA_1 or TypeId.C_IC_NA_1 => 1,
+        TypeId.M_ME_NA_1 or TypeId.M_ME_TD_1 or TypeId.M_ME_NB_1 or TypeId.M_ME_TE_1 => 3,
+        TypeId.M_ME_NC_1 or TypeId.M_ME_TF_1 or TypeId.C_SE_NC_1 => 5,
+        TypeId.C_CS_NA_1 => 7,
         _ => throw new NotSupportedException($"Type id {(byte)t} not supported."),
     };
+
+    /// <summary>Size of one information element (without IOA) [bytes].</summary>
+    public static int ElementSize(TypeId t) => ValueSize(t) + (HasTime(t) ? 7 : 0);
+
+    /// <summary>True for monitor-direction (process information) types.</summary>
+    public static bool IsMonitor(TypeId t) => (byte)t < 45;
 }
 
 /// <summary>Application protocol data unit: APCI (start 0x68, length, 4 control octets) plus optional ASDU.</summary>
@@ -218,10 +251,38 @@ public static class Iec104Codec
                 case TypeId.M_SP_NA_1 or TypeId.M_SP_TB_1:
                     b[p++] = (byte)((o.State ? 1 : 0) | ((byte)o.Quality & 0xF0));
                     break;
+                case TypeId.M_DP_NA_1 or TypeId.M_DP_TB_1:
+                    b[p++] = (byte)(((int)o.Value & 0x03) | ((byte)o.Quality & 0xF0));
+                    break;
+                case TypeId.M_ME_NA_1 or TypeId.M_ME_TD_1:
+                    BinaryPrimitives.WriteInt16LittleEndian(b.AsSpan(p), (short)Math.Clamp(Math.Round(o.Value * 32768), short.MinValue, short.MaxValue));
+                    b[p + 2] = (byte)((byte)o.Quality & 0xF1);
+                    p += 3;
+                    break;
+                case TypeId.M_ME_NB_1 or TypeId.M_ME_TE_1:
+                    BinaryPrimitives.WriteInt16LittleEndian(b.AsSpan(p), (short)Math.Clamp(Math.Round(o.Value), short.MinValue, short.MaxValue));
+                    b[p + 2] = (byte)((byte)o.Quality & 0xF1);
+                    p += 3;
+                    break;
                 case TypeId.M_ME_NC_1 or TypeId.M_ME_TF_1:
                     BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(p), (float)o.Value);
                     b[p + 4] = (byte)((byte)o.Quality & 0xF1);
                     p += 5;
+                    break;
+                case TypeId.C_SE_NC_1:
+                    BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(p), (float)o.Value);
+                    b[p + 4] = (byte)((o.Qualifier & 0x7F) | (o.Select ? 0x80 : 0));
+                    p += 5;
+                    break;
+                case TypeId.C_DC_NA_1 or TypeId.C_DC_TA_1:
+                    b[p++] = (byte)(((int)o.Value & 0x03) | ((o.Qualifier & 0x1F) << 2) | (o.Select ? 0x80 : 0));
+                    break;
+                case TypeId.M_EI_NA_1 or TypeId.C_IC_NA_1:
+                    b[p++] = (byte)o.Value;
+                    break;
+                case TypeId.C_CS_NA_1:
+                    Cp56Time2a.Encode(o.Time ?? DateTimeOffset.UnixEpoch.AddYears(30), b.AsSpan(p), invalid: o.Time is null);
+                    p += 7;
                     break;
                 default: // C_SC_NA_1 / C_SC_TA_1
                     b[p++] = (byte)((o.State ? 1 : 0) | ((o.Qualifier & 0x1F) << 2) | (o.Select ? 0x80 : 0));
@@ -272,9 +333,37 @@ public static class Iec104Codec
                     o = new(ioa, b[p] & 0x01, (Iec104Quality)(b[p] & 0xF0));
                     p += 1;
                     break;
+                case TypeId.M_DP_NA_1 or TypeId.M_DP_TB_1:
+                    o = new(ioa, b[p] & 0x03, (Iec104Quality)(b[p] & 0xF0));
+                    p += 1;
+                    break;
+                case TypeId.M_ME_NA_1 or TypeId.M_ME_TD_1:
+                    o = new(ioa, BinaryPrimitives.ReadInt16LittleEndian(b[p..]) / 32768.0, (Iec104Quality)(b[p + 2] & 0xF1));
+                    p += 3;
+                    break;
+                case TypeId.M_ME_NB_1 or TypeId.M_ME_TE_1:
+                    o = new(ioa, BinaryPrimitives.ReadInt16LittleEndian(b[p..]), (Iec104Quality)(b[p + 2] & 0xF1));
+                    p += 3;
+                    break;
                 case TypeId.M_ME_NC_1 or TypeId.M_ME_TF_1:
                     o = new(ioa, BinaryPrimitives.ReadSingleLittleEndian(b[p..]), (Iec104Quality)(b[p + 4] & 0xF1));
                     p += 5;
+                    break;
+                case TypeId.C_SE_NC_1:
+                    o = new(ioa, BinaryPrimitives.ReadSingleLittleEndian(b[p..]), Select: (b[p + 4] & 0x80) != 0, Qualifier: (byte)(b[p + 4] & 0x7F));
+                    p += 5;
+                    break;
+                case TypeId.C_DC_NA_1 or TypeId.C_DC_TA_1:
+                    o = new(ioa, b[p] & 0x03, Select: (b[p] & 0x80) != 0, Qualifier: (byte)((b[p] >> 2) & 0x1F));
+                    p += 1;
+                    break;
+                case TypeId.M_EI_NA_1 or TypeId.C_IC_NA_1:
+                    o = new(ioa, b[p]);
+                    p += 1;
+                    break;
+                case TypeId.C_CS_NA_1:
+                    o = new(ioa, 0, Time: Cp56Time2a.Decode(b.Slice(p, 7)));
+                    p += 7;
                     break;
                 default:
                     o = new(ioa, b[p] & 0x01, Select: (b[p] & 0x80) != 0, Qualifier: (byte)((b[p] >> 2) & 0x1F));

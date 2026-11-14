@@ -3,7 +3,9 @@
 > Made by Gravicode Studios, led by Kang Fadhil · [Bahasa Indonesia](../id/ai-digital-twin.md)
 
 Packages: `Electrical.DigitalTwin` (depends on PowerFlow, StateEstimation, SCADA, Forecasting) and `Electrical.AI` (depends on PowerFlow,
-ShortCircuit, Optimization, Stability, Renewable, Forecasting and DigitalTwin).
+ShortCircuit, Optimization, Stability, Renewable, Forecasting and DigitalTwin). Two v1.4 packages build on them and have their own guides:
+[Machine learning for grids](machine-learning.md) (`Electrical.AI.Learning`: ML load forecasting, fault and topology learning, deep-RL
+Volt/VAR with Gravicode.RLNet) and the [3D digital twin](digital-twin-3d.md) (`Electrical.DigitalTwin.ThreeD`).
 
 ## Grid-operator agent (`GridAgent`)
 
@@ -180,9 +182,14 @@ var learned = VoltVarPolicies.Evaluate(env, q.Policy);
 Training is deterministic for a seed. `VoltVarEnvironmentOptions` changes the network, devices, episode length, profile, load scale, noise
 and reward weights; `Reset`/`Step` let you plug in your own agent (for example Gravicode.RLNet).
 
+Since v1.4, `Electrical.AI.Learning` wraps this environment for Gravicode.RLNet (`VoltVarRlEnvironment`) and trains DQN, PPO or A2C
+agents: a DQN trained for 6 000 steps (≈ 4 s) reaches −14.5 against −25.2 for the voltage rule; with 48 000 steps DQN and PPO reach −13.8.
+(`VoltVarAgentTrainer.Compare` trains the tabular agent with seed 1, where it ends at −36.5; the seed-7 run above happens to reach −14.5,
+which shows how sensitive tabular learning is to exploration.) See [Machine learning for grids](machine-learning.md#reinforcement-learning-for-voltvar-control).
+
 ## Digital twin (`GridTwin`)
 
-`GridTwin` keeps a live estimate of a network. Each `Update` cycle:
+`GridTwin` keeps a live estimate of a network (shown in 3D by `GridScene3D.ApplyTwinState`, see [3D digital twin](digital-twin-3d.md#live-twin)). Each `Update` cycle:
 
 1. takes the measurements ingested since the last cycle (`Ingest(...)`, or `IngestTags(tagDatabase)` which maps SCADA tags such as
    `BUS4.VM`, `BR3.PF`, `GEN0.P` to measurements and applies breaker statuses `BRk.CLOSED` to the topology);
@@ -277,8 +284,8 @@ substation feeder is reported as non-converged (islanded).
   operating decisions with operators.
 - The rule-based model understands a limited bilingual vocabulary and extracts simple arguments only.
 - The twin uses the balanced bus-branch model and static WLS (no dynamic estimation); asset ageing is steady-state per cycle.
-- Tabular Q-learning suits the small default action space; larger problems need function approximation (for example Gravicode.RLNet or
-  TorchSharp).
+- Tabular Q-learning suits the small default action space; larger problems need function approximation: use the RLNet agents of
+  [Electrical.AI.Learning](machine-learning.md).
 
 ---
 *Made by Gravicode Studios, led by Kang Fadhil · [Bahasa Indonesia](../id/ai-digital-twin.md)*

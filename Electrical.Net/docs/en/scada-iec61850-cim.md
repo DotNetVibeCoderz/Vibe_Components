@@ -2,8 +2,8 @@
 
 > Made by Gravicode Studios, led by Kang Fadhil · [Bahasa Indonesia](../id/scada-iec61850-cim.md)
 
-Packages: `Electrical.SCADA` (namespaces `Electrical.SCADA`, `Electrical.SCADA.Modbus`, `Electrical.SCADA.Iec104`), `Electrical.IEC61850` and
-`Electrical.CIM`.
+Packages: `Electrical.SCADA` (namespaces `Electrical.SCADA`, `Electrical.SCADA.Modbus`, `Electrical.SCADA.Dnp3`, `Electrical.SCADA.Iec104`),
+`Electrical.IEC61850` and `Electrical.CIM`. DNP3 and the IEC 104 client/server have their own guide: [Utility protocols](protocols.md).
 
 ## SCADA
 
@@ -78,8 +78,10 @@ byte[] startDt = Iec104Codec.Encode(Apdu.U(UFunction.StartDtAct));
 ```
 
 I-, S- and U-format APDUs, common measured/command type ids (single point, measured float with/without CP56Time2a, single command),
-`Cp56Time2a` timestamps and `Iec104Sequence` counters. The tests compare control frames and a measured-float frame byte by byte. This is a
-codec: TCP session handling (t1–t3 timers, k/w windows) is left to the application; a full client is planned for v1.4.
+`Cp56Time2a` timestamps and `Iec104Sequence` counters. The tests compare control frames and a measured-float frame byte by byte. Since v1.4 the
+package also has a complete IEC 104 controlling station (`Iec104Client`) and controlled station (`Iec104Server`) with STARTDT/STOPDT/TESTFR,
+k/w windows, t0–t3 timers, general interrogation, clock synchronisation and select-before-operate commands, plus a DNP3 outstation and
+master; see [Utility protocols](protocols.md).
 
 ## IEC 61850
 
@@ -150,6 +152,68 @@ types are derived. Export is deterministic (`ScenarioTime` default 2026-01-01). 
 
 Validated: case14 and case9 round trips give identical power flows; case33bw without extensions still gives 202.7 kW losses; branch 1-2 of
 case14 exports r = 3.6907 Ω and bch = 2.77253e-4 S; topology processing merges closed breakers and separates open disconnectors.
+
+### CGMES 3.0 profiles and validation (v1.4)
+
+`Cgmes3Exporter` writes a CGMES 3.0 instance set (IEC 61970-600-1/-2 Ed.2, CIM100 namespace): separate EQ, TP, SSH and SV documents, each
+with an `md:FullModel` header (profile URI, scenarioTime, created, modelingAuthoritySet, DependentOn chain TP→EQ, SSH→EQ, SV→TP+SSH).
+mRIDs are name-based UUID v5 (RFC 4122 §4.3), so the same network always produces the same bytes. `CgmesTopologyStyle` chooses one
+ConnectivityNode per bus (default), node-breaker (every branch end in its own bay node joined to the busbar by a closed Breaker) or
+bus-branch (TopologicalNodes only). With a power-flow result the SV profile also carries SvPowerFlow per terminal, SvStatus, SvTapStep and
+SvShuntCompensatorSections. `CgmesImporter` detects 2.4.15 (CIM16) or 3.0 and reads SV voltages as initial values; `CgmesDocumentSet`
+reads and writes zip archives (nested zips too).
+
+```csharp
+var net = TestCases.Case14();
+var pf = PowerFlowSolver.Solve(net);
+var set = Cgmes3Exporter.Export(net, pf, new Cgmes3ExportOptions { Topology = CgmesTopologyStyle.NodeBreaker });
+foreach (var (file, doc) in set.Files()) Console.WriteLine(file);   // case14_EQ.xml, _TP, _SSH, _SV
+File.WriteAllBytes("case14.zip", set.ToZip());                    // reproducible archive
+set.Save("case14-cgmes");                                         // or one XML file per profile
+
+var report = CgmesValidator.Validate(set);
+Console.WriteLine(report);                                        // CGMES Cgmes3_0: 0 error(s), 0 warning(s)
+foreach (var issue in report.Issues) Console.WriteLine($"{issue.RuleId} {issue.Severity} {issue.Profile}: {issue.Message}");
+
+var back = CgmesImporter.ImportZip(File.OpenRead("case14.zip"));  // 2.4.15 and 3.0 are detected
+Console.WriteLine($"{back.Version}: {back.Network.BusCount} buses, {back.Warnings.Count} warnings");
+```
+
+`CgmesValidator` checks any CGMES 2.4.15 or 3.0 set (also from other tools) in the spirit of the ENTSO-E QoCDC rules and the CGMES SHACL
+constraints; `CgmesValidationOptions` sets the KCL tolerance (default 0.01 MW/Mvar), the ratedU tolerance (20 %) and the voltage
+comparison tolerance. Each finding reports rule id, severity, profile, message and the offending object.
+
+| Rule | Severity | Checks |
+|---|---|---|
+| `CGM-HDR-001` | error | Every document has exactly one model header (md:FullModel or dcat:Dataset). |
+| `CGM-HDR-002` | error | Model header has Model.profile, Model.scenarioTime, Model.created and Model.modelingAuthoritySet. |
+| `CGM-HDR-003` | error | Every Model.DependentOn target is a model of the set. |
+| `CGM-HDR-004` | error | All models (except boundaries) share the same Model.scenarioTime. |
+| `CGM-HDR-005` | warning | Profile dependencies: TP and SSH depend on EQ, SV depends on TP and SSH. |
+| `CGM-HDR-006` | error | The set does not mix CIM versions (CIM16 vs CIM100). |
+| `CGM-ID-001` | error | rdf:ID values are unique across the set. |
+| `CGM-ID-002` | error | CGMES 3.0: IdentifiedObject.mRID is present and equals rdf:ID without the leading underscore. |
+| `CGM-REF-001` | error | Every rdf:resource reference resolves to an object of the set. |
+| `CGM-REF-002` | error | Terminal.ConductingEquipment is present and refers to equipment. |
+| `CGM-REF-003` | error | A Terminal refers to a ConnectivityNode (EQ) or a TopologicalNode (TP), and the node exists. |
+| `CGM-REF-004` | error | VoltageLevel.BaseVoltage is present and refers to a BaseVoltage. |
+| `CGM-REF-005` | error | Objects described with rdf:about are declared (rdf:ID) in some model. |
+| `CGM-MAND-001` | error | Mandatory attributes are present in their profile (EQ, TP, SSH, SV). |
+| `CGM-TOPO-001` | error | Terminal count matches the equipment class (2 for lines/switches, 1 for injections, ends for transformers). |
+| `CGM-TOPO-002` | error | Terminal sequence numbers / transformer end numbers are unique per equipment, and transformers have 2 or 3 ends. |
+| `CGM-VOLT-001` | error | Both terminals of an ACLineSegment are at its BaseVoltage. |
+| `CGM-VOLT-002` | warning | PowerTransformerEnd.ratedU is within the tolerance of the end's nominal voltage. |
+| `CGM-PAR-001` | error | Impedances and voltages are physical (r, x, r0, x0 ≥ 0 for lines; r ≥ 0 for transformer ends; nominalVoltage, ratedU > 0). |
+| `CGM-PAR-002` | warning | Lines have a non-zero impedance and non-negative charging susceptance. |
+| `CGM-SV-001` | error | SV power flows satisfy Kirchhoff's current law at every TopologicalNode within the tolerance. |
+| `CGM-SV-002` | warning | Every TopologicalNode has an SvVoltage with v ≥ 0 when an SV model is present. |
+
+Validated: case9, case14 and case33bw round trips in every topology style, with and without `eln:` extensions, give identical power flows
+(Δlosses ≤ 5e-14 MW); every exported set with a power flow passes all 22 rules with a KCL tolerance of 1e-6 MW; one hand-broken sample per
+rule triggers exactly that rule (42 tests). `NetworkFormats` in [Electrical.Interop](interop.md) detects CGMES documents and zips.
+CLI: `eln cgmes --out case14.zip`, `eln cgmes --validate case14.zip`. Gallery: **CGMES 3.0 profiles & validation**.
+
+![CGMES demo](../images/web-cgmes.png)
 
 ---
 *Made by Gravicode Studios, led by Kang Fadhil · [Bahasa Indonesia](../id/scada-iec61850-cim.md)*
