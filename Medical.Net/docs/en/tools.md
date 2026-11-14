@@ -31,6 +31,7 @@ medical help
 | HIS (v2.0) | `medical his seed [--db his.db] [--patients 40]` · `medical his dashboard [--db his.db] [--tenant rs-nusantara]` · `medical his patient <mrn> [--db his.db] [--tenant rs-nusantara] [--fhir summary.json]` |
 | Monitoring (v2.0) | `medical monitor [--minutes 120] [--step 5]` (simulated ICU monitors → HL7 / MLLP → NEWS2 alerts; exit code 3 on a high alert) |
 | Sync (v2.0) | `medical sync demo` (offline ward rounds: two tablets, conflicts, convergence) |
+| Worklist (v2.1) | `medical worklist serve [--port 11112] [--date 20261116]` (demo DICOM Modality Worklist SCP) · `medical worklist query <host> <port> [--modality CT] [--date 20261116[-20261120]] [--aet MEDICALNET-MWL] [--name "RAHAYU*"]` (C-FIND) |
 
 Add `--lang id` for Bahasa Indonesia output.
 
@@ -70,7 +71,7 @@ dotnet run --project gallery/Medical.Gallery.Desktop -- --screenshot docs/images
 
 Web screenshots are produced with headless Chrome (`--screenshot`, `--blink-settings=preferredColorScheme=1` for light mode, `--force-prefers-reduced-motion` so the ECG draw-on animation is complete). The 3D page needs WebGL (`--use-angle=swiftshader --enable-unsafe-swiftshader`) and is captured at `/demo/volume3d?still=1`: virtual time would drop the Blazor circuit, so still mode builds the scene from the prerendered markup and swaps the canvas for an image. The desktop 3D view renders offscreen with ThreeNet in `--screenshot` mode.
 
-## Hospital apps (v2.0)
+## Hospital apps (v2.0 – 2.1)
 
 ```bash
 ASPNETCORE_ENVIRONMENT=Development dotnet run --project apps/Medical.His --urls http://localhost:5300

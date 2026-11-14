@@ -54,7 +54,8 @@ public sealed class RoundsApp : INotifyPropertyChanged, IDisposable
     public static ISyncTransport HttpTransport(RoundsSettings s, HttpMessageHandler? inner = null)
     {
         var http = new HttpClient(new WardScopeHandler(s.Ward) { InnerHandler = inner ?? new HttpClientHandler() }) { Timeout = TimeSpan.FromSeconds(15) };
-        http.DefaultRequestHeaders.Add("X-Device-Key", s.DeviceKey);
+        // Per-device tokens ("mdn_…", enrolled in HIS → Devices) are bound to one ward; anything else is the legacy shared key.
+        http.DefaultRequestHeaders.Add(s.DeviceKey.StartsWith("mdn_", StringComparison.Ordinal) ? "X-Device-Token" : "X-Device-Key", s.DeviceKey);
         http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         return new HttpSyncTransport(http, $"{s.ServerUrl.TrimEnd('/')}/api/{s.Tenant}/sync");
     }

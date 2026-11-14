@@ -5,11 +5,14 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="$(MsExtVersion)" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="$(MsExtVersion)" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="$(MsExtVersion)" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="$(MsExtVersion)" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Medical.Rules/Medical.Rules.csproj" />
     <ProjectReference Include="../Medical.Bpjs/Medical.Bpjs.csproj" />
     <ProjectReference Include="../Medical.Hl7/Medical.Hl7.csproj" />
+    <ProjectReference Include="../Medical.Fhir/Medical.Fhir.csproj" />
     <ProjectReference Include="../Medical.Sync/Medical.Sync.csproj" />
   </ItemGroup>
 </Project>

@@ -1,6 +1,7 @@
 @page "/{Tenant}/outpatient"
 @inherits HisPage
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IServiceProvider Services
 <header class="head"><p class="eyebrow">@S.TenantName</p><h1>@T("Outpatient clinic", "Poliklinik rawat jalan")</h1></header>
 @if (Error is { } err) { <div class="alert critical">@err</div> }
 @if (Info is { } info) { <div class="alert info">@info</div> }
@@ -95,7 +96,7 @@
             var mine = await db.Staff.FirstOrDefaultAsync(s => s.Id == S.StaffId);
             _dept = _depts.FirstOrDefault(d => d.Id == mine?.DepartmentId)?.Id ?? _depts.First().Id;
         }
-        _queue = await new RegistrationService(db, S.Clock).QueueAsync(_dept);
+        _queue = await new RegistrationService(db, S.Clock, S.Bus).QueueAsync(_dept);
         if (_visit is null && _queue.FirstOrDefault(q => q.Item1.Status == VisitStatus.InConsultation) is { Item1: { } current }) await OpenAsync(current.Id);
         else if (_visit is not null) await OpenAsync(_visit.Id);
     }
@@ -116,17 +117,17 @@
     private Task CallNextAsync() => Run(async () =>
     {
         await using var db = S.Db();
-        var v = await new ClinicalService(db, S.Clock).CallNextAsync(_dept, S.StaffId) ?? throw new InvalidOperationException(T("The queue is empty.", "Antrean kosong."));
+        var v = await new ClinicalService(db, S.Clock, S.Bus).CallNextAsync(_dept, S.StaffId) ?? throw new InvalidOperationException(T("The queue is empty.", "Antrean kosong."));
         _visit = v;
     });
 
-    private Task SaveSoapAsync() => Run(async () => { await using var db = S.Db(); await new ClinicalService(db, S.Clock).SaveSoapAsync(_visit!.Id, _s, _o, _a, _p); }, T("Saved.", "Tersimpan."));
-    private Task AddDxAsync() => Run(async () => { await using var db = S.Db(); await new ClinicalService(db, S.Clock).AddDiagnosisAsync(_visit!.Id, _icd ?? ""); _icd = null; });
+    private Task SaveSoapAsync() => Run(async () => { await using var db = S.Db(); await new ClinicalService(db, S.Clock, S.Bus).SaveSoapAsync(_visit!.Id, _s, _o, _a, _p); }, T("Saved.", "Tersimpan."));
+    private Task AddDxAsync() => Run(async () => { await using var db = S.Db(); await new ClinicalService(db, S.Clock, S.Bus).AddDiagnosisAsync(_visit!.Id, _icd ?? ""); _icd = null; });
 
     private Task VitalsAsync() => Run(async () =>
     {
         await using var db = S.Db();
-        var e = await new ClinicalService(db, S.Clock).RecordVitalsAsync(_patient!.Id, _visit!.Id, new VitalSigns
+        var e = await new ClinicalService(db, S.Clock, S.Bus).RecordVitalsAsync(_patient!.Id, _visit!.Id, new VitalSigns
         {
             Timestamp = S.Clock.GetUtcNow(), RespiratoryRate = _vs.Rr, SpO2 = _vs.Spo2, SystolicBp = _vs.Sbp, DiastolicBp = _vs.Dbp, HeartRate = _vs.Hr, TemperatureC = _vs.T, OnSupplementalOxygen = _vs.O2,
         });
@@ -136,12 +137,12 @@
     private Task LabAsync(string[] codes) => Run(async () => { await using var db = S.Db(); var o = await new LabService(db, S.Clock).OrderAsync(_visit!.Id, codes); Info = $"{T("Lab order", "Order lab")} {o.PlacerNumber}"; });
     private Task ChestXrayAsync() => Run(async () => { await using var db = S.Db(); var o = await new RadiologyService(db, S.Clock).OrderAsync(_visit!.Id, "87.44", "Foto toraks PA", "CR", clinicalInfo: _a); Info = $"{T("Radiology order", "Order radiologi")} {o.AccessionNumber}"; });
     private Task PrescribeAsync() => Run(async () => { await using var db = S.Db(); await new PharmacyService(db, S.Clock).PrescribeAsync(_visit!.Id, [new(_drug, _dose, _freq, _days)]); }, T("Sent to pharmacy.", "Dikirim ke farmasi."));
-    private Task FinishAsync() => Run(async () => { await using var db = S.Db(); await new ClinicalService(db, S.Clock).FinishVisitAsync(_visit!.Id); _visit = null; _patient = null; }, T("Visit finished.", "Kunjungan selesai."));
+    private Task FinishAsync() => Run(async () => { await using var db = S.Db(); await new ClinicalService(db, S.Clock, S.Bus).FinishVisitAsync(_visit!.Id); await Services.SendToSatuSehatAsync(db, S.Clock, _visit.Id); _visit = null; _patient = null; }, T("Visit finished.", "Kunjungan selesai."));
 
     private Task AdmitAsync() => Run(async () =>
     {
         await using var db = S.Db();
-        var stay = await new ClinicalService(db, S.Clock).AdmitAsync(_visit!.Id, _ward);
+        var stay = await new ClinicalService(db, S.Clock, S.Bus).AdmitAsync(_visit!.Id, _ward);
         var bed = await db.Beds.FirstAsync(b => b.Id == stay.BedId);
         Info = T($"Admitted to bed {bed.Code}.", $"Dirawat di tempat tidur {bed.Code}.");
         _visit = null; _patient = null;

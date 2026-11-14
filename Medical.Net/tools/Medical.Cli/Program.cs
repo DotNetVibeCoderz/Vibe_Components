@@ -63,6 +63,7 @@ try
         "his" => await PlatformCommands.His(a, lang),
         "monitor" => await PlatformCommands.Monitor(a, lang),
         "sync" => await PlatformCommands.Sync(a, lang),
+        "worklist" => await InterfaceCommands.Worklist(a, lang),
         _ => Fail($"Unknown command '{a.Command}'. Run 'medical help'."),
     };
 }
@@ -138,6 +139,9 @@ int Help()
           his patient <mrn> [--db his.db] [--tenant rs-nusantara] [--fhir summary.json]
           monitor [--minutes 120] [--step 5]   (simulated ICU monitors → HL7/MLLP → NEWS2 alerts; exit 3 on a high alert)
           sync demo                            (offline-first ward rounds: two tablets, conflicts, convergence)
+        Interfaces (v2.1)
+          worklist query <host> <port> [--modality CT] [--date 20261116[-20261120]] [--aet MEDICALNET-MWL] [--name "RAHAYU*"]   (DICOM MWL C-FIND)
+          worklist serve [--port 11112] [--date 20261116]   (demo Modality Worklist SCP)
         """);
     return 0;
 }

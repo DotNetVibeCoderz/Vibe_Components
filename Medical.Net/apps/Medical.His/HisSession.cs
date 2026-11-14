@@ -9,7 +9,7 @@ namespace Medical.His;
 /// The signed-in user of a Blazor circuit: tenant, role and language from the cookie claims. Pages open a short-lived
 /// <see cref="HospitalDbContext"/> per operation through <see cref="Db"/>, which is filtered to the user's tenant.
 /// </summary>
-public sealed class HisSession(DbContextOptions<HospitalDbContext> options, AuthenticationStateProvider auth, TimeProvider clock) : ITenantContext
+public sealed class HisSession(DbContextOptions<HospitalDbContext> options, AuthenticationStateProvider auth, TimeProvider clock, Medical.Core.IMedicalEventBus? bus = null) : ITenantContext
 {
     public string TenantId { get; private set; } = "";
     public string UserName { get; private set; } = "";
@@ -20,6 +20,8 @@ public sealed class HisSession(DbContextOptions<HospitalDbContext> options, Auth
     public string TenantName { get; private set; } = "";
     public bool SignedIn => TenantId.Length > 0;
     public TimeProvider Clock => clock;
+    /// <summary>The hospital event bus (feeds the HL7 ADT interface); pass it to services that raise events.</summary>
+    public Medical.Core.IMedicalEventBus? Bus => bus;
 
     public event Action? Changed;
 
@@ -56,6 +58,7 @@ public sealed class HisSession(DbContextOptions<HospitalDbContext> options, Auth
         "lab" => Role is StaffRole.LabAnalyst or StaffRole.Doctor,
         "radiology" => Role is StaffRole.Radiographer or StaffRole.Radiologist or StaffRole.Doctor,
         "billing" => Role is StaffRole.Cashier or StaffRole.Coder,
+        "devices" => Role is StaffRole.Nurse,
         _ => false,
     };
 }

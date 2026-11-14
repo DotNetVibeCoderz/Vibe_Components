@@ -22,6 +22,13 @@ public sealed class MonitoringHub(DbContextOptions<HospitalDbContext> options, I
     private readonly ConcurrentDictionary<string, InfusionPumpStatus> _pumps = new();
     private DateTimeOffset _simNow = DateTimeOffset.UtcNow;
     private readonly ConcurrentDictionary<string, bool> _occupied = new();
+    // (tenant, patient) → bound monitor, and the last nurse assessment per (tenant, patient) so a rebind / transfer keeps it.
+    private readonly ConcurrentDictionary<(string Tenant, string PatientId), string> _patientDevice = new();
+    private readonly ConcurrentDictionary<(string Tenant, string DeviceId), string> _devicePatient = new();
+    private readonly ConcurrentDictionary<(string Tenant, string PatientId), ManualAssessment> _assessments = new();
+
+    /// <summary>Nurse-entered NEWS2 parameters the monitor cannot measure (ACVPU consciousness, supplemental oxygen).</summary>
+    public sealed record ManualAssessment(Consciousness Consciousness, bool OnOxygen, DateTimeOffset At);
 
     public event Action<string, BedSnapshot>? Updated;
     public event Action<string, EarlyWarningAlert>? Alerted;
@@ -39,6 +46,24 @@ public sealed class MonitoringHub(DbContextOptions<HospitalDbContext> options, I
 
     public IReadOnlyList<InfusionPumpStatus> Pumps(string tenant) => _pumps.Values.Where(p => _deviceTenant.GetValueOrDefault(p.DeviceId) == tenant).OrderBy(p => p.DeviceId).ToList();
 
+    /// <summary>
+    /// Applies a nurse assessment (ACVPU, supplemental oxygen) to the monitor bound to the patient, so live NEWS2 stops
+    /// assuming Alert on room air. The assessment is remembered per patient and re-applied when the patient is bound to a
+    /// monitor later (admission to a monitored bed, transfer). Returns the device it was applied to, or null if the patient
+    /// has no monitor right now.
+    /// </summary>
+    public string? ApplyNurseAssessment(string tenant, string patientId, Consciousness c, bool onOxygen)
+    {
+        _assessments[(tenant, patientId)] = new ManualAssessment(c, onOxygen, DateTimeOffset.UtcNow);
+        if (!_patientDevice.TryGetValue((tenant, patientId), out var device)) return null;
+        Engine(tenant).SetManual(device, c, onOxygen);
+        return device;
+    }
+
+    /// <summary>The nurse assessment in force for the patient currently on this monitor (null = none; NEWS2 assumes Alert, room air).</summary>
+    public ManualAssessment? NurseAssessment(string tenant, string deviceId) =>
+        _devicePatient.TryGetValue((tenant, deviceId), out var pid) ? _assessments.GetValueOrDefault((tenant, pid)) : null;
+
     /// <summary>Re-reads bed assignments (after admissions, transfers and discharges).</summary>
     public async Task RebindAsync(string tenant, CancellationToken ct = default)
     {
@@ -47,11 +72,22 @@ public sealed class MonitoringHub(DbContextOptions<HospitalDbContext> options, I
         var pids = beds.Where(b => b.PatientId != null).Select(b => b.PatientId!).ToList();
         var names = await db.Patients.Where(p => pids.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Given + " " + p.Family, ct);
         var engine = Engine(tenant);
+        foreach (var key in _patientDevice.Keys.Where(k => k.Tenant == tenant).ToList()) _patientDevice.TryRemove(key, out _);
         foreach (var b in beds)
         {
-            if (b.PatientId is not null) _occupied[b.MonitorId!] = true; else _occupied.TryRemove(b.MonitorId!, out _);
-            _deviceTenant[b.MonitorId!] = tenant;
-            engine.Bind(b.MonitorId!, b.Code, b.PatientId, b.PatientId is { } pid ? names.GetValueOrDefault(pid) : null, b.VisitId);
+            string device = b.MonitorId!;
+            if (b.PatientId is not null) _occupied[device] = true; else _occupied.TryRemove(device, out _);
+            _deviceTenant[device] = tenant;
+            string? previous = _devicePatient.GetValueOrDefault((tenant, device));
+            engine.Bind(device, b.Code, b.PatientId, b.PatientId is { } pid ? names.GetValueOrDefault(pid) : null, b.VisitId);
+            if (b.PatientId is { } patient)
+            {
+                _patientDevice[(tenant, patient)] = device;
+                _devicePatient[(tenant, device)] = patient;
+                // A new patient on this monitor (Bind cleared its state): carry over the nurse's last assessment.
+                if (previous != patient && _assessments.TryGetValue((tenant, patient), out var a)) engine.SetManual(device, a.Consciousness, a.OnOxygen);
+            }
+            else _devicePatient.TryRemove((tenant, device), out _);
         }
     }
 

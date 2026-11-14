@@ -22,7 +22,7 @@ public sealed class TenantViolationException(string message) : InvalidOperationE
 /// hide other tenants' rows, and <c>SaveChanges</c> stamps new rows and refuses cross-tenant writes. Works on
 /// SQLite and SQL Server (dates are stored as UTC <see cref="DateTime"/>, money as <see cref="decimal"/>).
 /// </summary>
-public sealed class HospitalDbContext(DbContextOptions<HospitalDbContext> options, ITenantContext tenant) : DbContext(options)
+public class HospitalDbContext(DbContextOptions<HospitalDbContext> options, ITenantContext tenant) : DbContext(options)
 {
     public ITenantContext Tenant => tenant;
     /// <summary>Used by the query filters (EF re-reads it per context instance).</summary>
@@ -60,6 +60,11 @@ public sealed class HospitalDbContext(DbContextOptions<HospitalDbContext> option
         Filter<VitalsEntry>(b); Filter<LabOrder>(b); Filter<LabResult>(b); Filter<RadiologyOrder>(b); Filter<Prescription>(b);
         Filter<PrescriptionItem>(b); Filter<StockBatch>(b); Filter<Tariff>(b); Filter<Charge>(b); Filter<Invoice>(b); Filter<Payment>(b);
         Filter<WardTask>(b); Filter<NursingNote>(b); Filter<Counter>(b);
+        // Integration entities (outboxes, claim records, device registrations…) declared anywhere in this assembly get the
+        // same key + tenant filter without editing this file.
+        var filter = typeof(HospitalDbContext).GetMethod(nameof(Filter), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        foreach (var t in typeof(TenantEntity).Assembly.GetTypes().Where(t => t.IsSubclassOf(typeof(TenantEntity)) && !t.IsAbstract && b.Model.FindEntityType(t) is null))
+            filter.MakeGenericMethod(t).Invoke(this, [b]);
 
         b.Entity<HisPatient>().HasIndex(p => new { p.TenantId, p.Mrn }).IsUnique();
         b.Entity<HisPatient>().HasIndex(p => new { p.TenantId, p.Nik });

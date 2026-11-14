@@ -153,7 +153,8 @@ public sealed class SyncServer(ISyncServerStore store, IReadOnlyDictionary<strin
                 if (policy == ConflictPolicy.ReadOnly) reason = "Read-only on clients.";
                 if (reason == "duplicate") { accepted.Add(ch.Id); continue; }     // idempotent retry
                 if (reason is not null) { rejected.Add(new(ch, reason, cur)); continue; }
-                store.Put(ch with { NodeId = ch.NodeId.Length == 0 ? req.NodeId : ch.NodeId });
+                try { store.Put(ch with { NodeId = ch.NodeId.Length == 0 ? req.NodeId : ch.NodeId }); }
+                catch (InvalidOperationException e) { rejected.Add(new(ch, e.Message, cur)); continue; }   // refused by the store (authorisation, integrity)
                 accepted.Add(ch.Id);
             }
         }

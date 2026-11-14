@@ -74,13 +74,13 @@ To verify templates, install the packed `Medical.Templates` into a custom hive (
     context (`RegistrationService`, `ClinicalService`, `PharmacyService`, `LabService`, `RadiologyService`, `BillingService`, `DashboardService`), with no DI extension.
     `ITenantContext` comes from the caller (`FixedTenantContext`, `HisSession`). `Monitoring.cs` has `MonitoringEngine` (plausibility, median, NEWS2, RCP levels, 2-evaluation
     confirmation, 3-evaluation clear, `ChartDue` every 15 min, no alerts for unbound devices). `RoundsSync.cs` is the outbox (`SyncLog`) plus `HospitalSyncStore`.
-    `HospitalSeeder` creates the schema with `EnsureCreated` (no migrations) and two fictional tenants, `rs-nusantara` and `rs-bahari`.
+    `HospitalSeeder` calls `HospitalDatabase.MigrateAsync` and creates two fictional tenants, `rs-nusantara` and `rs-bahari`.
   - `Medical.Sync`: `HybridLogicalClock`, `ConflictPolicy` (AppendOnly / LastWriterWins / ServerWins / ReadOnly) and `SyncServer`. Pull cursors are the server `Seq`, never the HLC,
     so late offline pushes are not skipped. The package also holds `SqliteSyncStore` / `SyncClient` and the ward-round contracts in `Rounds.cs` (`RoundsTypes.Policies`).
   - `Medical.Devices` is a preview (`<VersionSuffix>preview</VersionSuffix>`) because IoTCom.Net 0.22.0-preview.1 is prerelease. `pack.ps1` and CI pass `-p:VersionPrefix`
     (not `Version`), so the suffix survives. Keep the `System.Formats.Cbor` 10.0.15 pin (CVE-2026-118747; IoTCom brings 10.0.12).
   - `apps/Medical.His` (Blazor Server, not packed):
-    - Demo cookie sign-in via `/account/demo`, to be replaced by OpenID Connect. Config: `His:Provider=SqlServer` + `ConnectionStrings:His`, `His:DeviceKeys:{tenant}`,
+    - Demo cookie sign-in via `/account/demo` (off with `His:DemoLogin=false`), OpenID Connect via `His:Oidc:*`. Config: `His:Provider=SqlServer` + `ConnectionStrings:His`, `His:DeviceKeys:{tenant}`,
       `His:SimulateDevices`, `His:MllpPort`, `His:TickSeconds`.
     - The sync API is `/api/{tenant}/sync/push|pull?ward=`. `MonitoringHub` simulates monitors at occupied ICU beds, and `HisSession.Can` maps roles to modules.
     - Run it in Development (or published): static web assets don't resolve when the `bin` exe runs in Production.
@@ -88,7 +88,17 @@ To verify templates, install the packed `Medical.Templates` into a custom hive (
     - Not in `Medical.Net.slnx` (CI has no MAUI workloads); build with `Medical.Rounds.slnx`. The csproj clears the `TargetFramework` that `Directory.Build.props` sets
       and uses platform `TargetFrameworks`; Android only with `-p:IncludeAndroid=true`.
     - `RoundsApp` (Core) holds all logic so tests run without MAUI. The emulator default server is `http://10.0.2.2:5300`.
-  - Tests (`V20*Tests.cs`) need no opt-in: SQLite in memory, an in-process MLLP feed, and `WebApplicationFactory` with `His:SimulateDevices=false`.
+- v2.1 integrations (docs: `docs/en/platform.md#what-changed-in-21`):
+  - Migrations: `SqliteHospitalDbContext` / `SqlServerHospitalDbContext` (Database.cs) own `Migrations/Sqlite|SqlServer`; the first is `V20Baseline`, and
+    `MigrateAsync` baselines EnsureCreated (2.0) databases. Any new `TenantEntity` in the Medical.Hospital assembly is auto-registered with a tenant filter, so
+    add a migration for BOTH providers (`dotnet ef migrations add X -p src/Medical.Hospital -s src/Medical.Hospital -c <Ctx> -o Migrations/<P> --namespace
+    Medical.Hospital.Migrations.<P>`); otherwise `PendingModelChangesWarning` fails every seeded test. Database-per-tenant = `TenantDatabaseInterceptor`.
+  - `DeviceRegistry` (hashed `mdn_` tokens, ward-bound); `HospitalSyncStore(db, deviceWardId)` rejects other-ward writes (InvalidOperationException → per-change rejection).
+  - `Integration/`: `BpjsWorkflowService`, `SatuSehatPublisher` (outbox `SatuSehatSubmissionRecord`), `AdtFeed` + `Hl7OutboxSender` (`Hl7OutboxMessage`).
+    `Medical.Dicom/ModalityWorklist.cs` is the MWL SCP. The HIS registers them in `PayerIntegration.cs` / `Interfaces.cs`, only when configured.
+  - HIS: `HisAuth.cs` (OIDC + `PrincipalAsync`, staff record is authoritative for the role); pages pass `S.Bus` to services so ADT events flow.
+  - Rounds: iOS is added only on macOS; Android local builds need `-p:AndroidSdkDirectory=...`. Never `TrimStart(';')` the `TargetFrameworks` value.
+  - Tests (`V20*Tests.cs`, `V21*Tests.cs`) need no opt-in: SQLite in memory, an in-process MLLP feed, and `WebApplicationFactory` with `His:SimulateDevices=false`.
     The existing opt-ins remain (`MEDNET_HF_TESTS`, `MEDNET_LLM_TESTS`, `MEDNET_QTDB_SPLIT`).
 
 ## Conventions

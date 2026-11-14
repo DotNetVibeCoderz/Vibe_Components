@@ -1,0 +1,69 @@
+@page "/{Tenant}/devices"
+@inherits HisPage
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+<header class="head"><p class="eyebrow">@S.TenantName</p><h1>@T("Ward-round devices", "Perangkat visite")</h1>
+    <p class="lede">@T("Each tablet gets its own token, bound to one ward. The server stores only a hash; revoke a lost tablet here without affecting the others.",
+                       "Setiap tablet mendapat token sendiri yang terikat pada satu bangsal. Server hanya menyimpan hash-nya; cabut tablet yang hilang di sini tanpa memengaruhi tablet lain.")</p></header>
+@if (Error is { } err) { <div class="alert critical">@err</div> }
+@if (Ready)
+{
+    <div class="grid-2 wide-left">
+        <section class="panel">
+            <h3>@T("Enrolled devices", "Perangkat terdaftar")</h3>
+            <table class="data">
+                <tr><th>@T("Device", "Perangkat")</th><th>@T("Ward", "Bangsal")</th><th>@T("Last seen", "Terakhir aktif")</th><th></th></tr>
+                @foreach (var (d, ward) in _devices)
+                {
+                    <tr class="@(d.Active ? "" : "flag")">
+                        <td><strong>@d.Name</strong><br /><small class="muted mono">@d.DeviceId · @d.TokenPrefix…</small></td>
+                        <td class="mono">@ward</td>
+                        <td class="mono">@(d.LastSeenAt is { } t ? Local(t) : "—")</td>
+                        <td>@if (d.Active) { <button class="warn" @onclick="() => RevokeAsync(d.Id)">@T("Revoke", "Cabut")</button> } else { <span class="tag">@T("revoked", "dicabut")</span> }</td>
+                    </tr>
+                }
+            </table>
+        </section>
+        <section class="panel">
+            <h3>@T("Enrol a tablet", "Daftarkan tablet")</h3>
+            <div class="form">
+                <label>@T("Device id", "ID perangkat")<input @bind="_deviceId" placeholder="tablet-melati-02" /></label>
+                <label>@T("Name", "Nama")<input @bind="_name" placeholder="Tablet Melati 2" /></label>
+                <label>@T("Ward", "Bangsal")<select @bind="_ward">@foreach (var w in _wards) { <option value="@w.Code">@w.NameId</option> }</select></label>
+            </div>
+            <button class="primary" @onclick="EnrollAsync">@T("Create token", "Buat token")</button>
+            @if (_token is { } tok)
+            {
+                <div class="alert warning">
+                    <strong>@T("Copy this token into the tablet now — it is shown only once.", "Salin token ini ke tablet sekarang — hanya ditampilkan sekali.")</strong>
+                    <code class="mono">@tok</code>
+                    <span>@T("Rounds app → Settings → Device token; server", "Aplikasi Rounds → Pengaturan → Token perangkat; server") <span class="mono">@Nav.BaseUri.TrimEnd('/')</span>, tenant <span class="mono">@Tenant</span>, @T("ward", "bangsal") <span class="mono">@_ward</span>.</span>
+                </div>
+            }
+        </section>
+    </div>
+}
+@code {
+    protected override string Module => "devices";
+    private IReadOnlyList<(DeviceRegistration, string)> _devices = [];
+    private List<Department> _wards = [];
+    private string _deviceId = "", _name = "", _ward = "";
+    private string? _token;
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = S.Db();
+        _devices = await new DeviceRegistry(db, S.Clock).ListAsync();
+        _wards = await db.Departments.Where(d => d.Kind == DepartmentKind.Ward || d.Kind == DepartmentKind.Icu).OrderBy(d => d.Code).ToListAsync();
+        if (_ward.Length == 0) _ward = _wards.FirstOrDefault()?.Code ?? "";
+    }
+
+    private Task EnrollAsync() => Run(async () =>
+    {
+        await using var db = S.Db();
+        var e = await new DeviceRegistry(db, S.Clock).EnrollAsync(_deviceId, _name.Length > 0 ? _name : _deviceId, _ward);
+        _token = e.Token;
+        _deviceId = _name = "";
+    });
+
+    private Task RevokeAsync(string id) => Run(async () => { await using var db = S.Db(); await new DeviceRegistry(db, S.Clock).RevokeAsync(id); _token = null; });
+}

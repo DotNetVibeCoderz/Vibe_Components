@@ -1,8 +1,11 @@
-# Platform rumah sakit (v2.0)
+# Platform rumah sakit (v2.0 – 2.1)
 
 Medical.Net 2.0 menambahkan inti sistem informasi manajemen rumah sakit (SIMRS) multi-tenant, NEWS2 waktu nyata dari
 perangkat di samping tempat tidur, dan sinkronisasi offline-first untuk visite bangsal. Di atasnya dibangun dua aplikasi
-referensi: SIMRS berbasis Blazor Server dan aplikasi visite MAUI. · [English](../en/platform.md)
+referensi: SIMRS berbasis Blazor Server dan aplikasi visite MAUI. Versi 2.1 menghubungkannya ke dunia luar: login
+OpenID Connect, token sinkronisasi per perangkat, migrasi EF Core dengan opsi satu basis data per tenant, alur BPJS
+(SEP VClaim, E-Klaim) dan SATUSEHAT secara langsung, worklist modalitas DICOM, feed HL7 ADT, serta AVPU / oksigen yang
+diisi perawat di mesin pemantauan ([perubahan di 2.1](#perubahan-di-21)). · [English](../en/platform.md)
 
 > SIMRS ini adalah implementasi referensi untuk membangun sistem Anda sendiri, bukan produk bersertifikat. Peringatan
 > pemantauan membantu — bukan menggantikan — observasi klinis. Semua rumah sakit, staf dan pasien demo bersifat fiktif.
@@ -265,7 +268,7 @@ ASPNETCORE_ENVIRONMENT=Development dotnet run --project apps/Medical.His --urls 
 Buka `http://localhost:5300`, lalu pilih rumah sakit dan pengguna demo. Jalankan dalam lingkungan Development, atau
 publish aplikasinya (`dotnet publish apps/Medical.His -c Release`). Aset web statis tidak ditemukan bila file
 executable di `bin` dijalankan dalam lingkungan Production. Saat pertama dijalankan, aplikasi membuat
-`App_Data/his.db` dan mengisi data kedua rumah sakit.
+`App_Data/his.db` (migrasi EF Core) dan mengisi data kedua rumah sakit.
 
 | Rumah sakit (id tenant) | Kota | Kelas |
 |---|---|---|
@@ -280,8 +283,17 @@ tidur (4 tempat tidur ICU dengan monitor), 14 akun staf, serta tarif dan stok ob
 | `His:Provider` | `Sqlite` | `SqlServer` untuk memakai SQL Server |
 | `ConnectionStrings:His` | `Data Source=App_Data/his.db` | koneksi basis data |
 | `His:SeedPatients` | `40` | pasien sintetis per rumah sakit saat pertama dijalankan |
-| `His:DemoLogin` | `true` | mengaktifkan `/account/demo` |
-| `His:DeviceKeys:{tenant}` | — (`demo-device-key` hanya selama `His:DemoLogin` aktif) | kunci yang dikirim klien sinkronisasi di header `X-Device-Key` |
+| `His:Tenants:{tenant}:ConnectionString` | (kosong) | satu basis data per tenant: basis data milik rumah sakit itu; `ConnectionStrings:His` lalu menjadi katalog |
+| `His:DemoLogin` | `true` | mengaktifkan `/account/demo` dan formulir login demo |
+| `His:Oidc:Authority`, `ClientId`, `ClientSecret` | (kosong) | login OpenID Connect (authorization code + PKCE); lihat [Login](#login-openid-connect) |
+| `His:Oidc:TenantClaim` · `UserClaim` · `Scopes` · `RequireHttpsMetadata` | `tenant` · `preferred_username` · `openid profile` · `true` | pemetaan klaim |
+| `His:DeviceKeys:{tenant}` | — (`demo-device-key` hanya selama `His:DemoLogin` aktif) | kunci bersama lama di `X-Device-Key`; utamakan token perangkat terdaftar |
+| `His:Bpjs:VClaim:{ConsId,Secret,UserKey,Environment,PpkCode}` | (kosong) | SEP VClaim dari pendaftaran |
+| `His:Bpjs:EKlaim:{Url,Key}` | (kosong) | pengiriman E-Klaim dan hasil grouper dari kasir |
+| `His:SatuSehat:{ClientId,ClientSecret,OrganizationId,Environment}` | (kosong) | bundel SATUSEHAT saat kunjungan selesai atau pasien pulang |
+| `His:SatuSehat:Locations:{kodeDept}` · `DefaultLocationId` · `MaxAttempts` · `AutoSubmit` | — · — · `5` · `false` | id Location SATUSEHAT; `AutoSubmit` menjalankan pengulang di latar belakang |
+| `His:Worklist:Port` · `His:Worklist:{AeTitle}` · `Stations:{Modality}` · `TimeZone` | (kosong) | SCP worklist modalitas DICOM; AE title → id tenant |
+| `His:Adt:Host` · `Port` · `ReceivingApplication` · `ReceivingFacility` | (kosong) | feed HL7 ADT (A01/A02/A03/A04) lewat MLLP |
 | `His:SimulateDevices` | `true` | monitor ICU dan pompa tersimulasi |
 | `His:MllpPort` | (kosong) | juga menerima ORU^R01 dari monitor sungguhan di port TCP ini; MSH-3 harus sama dengan id monitor tempat tidur (mis. `RSMN-MON-01`) |
 | `His:TickSeconds` | `2` | detik nyata antar-detak simulasi |
@@ -292,7 +304,7 @@ tidur (4 tempat tidur ICU dengan monitor), 14 akun staf, serta tarif dan stok ob
 | Admin (`admin`) | semua |
 | Pendaftaran (`pendaftaran`) | dasbor, pendaftaran |
 | Dokter (`dr.andi`, `dr.sari`, `dr.budi`, `dr.igd`) | dasbor, pendaftaran, rawat jalan, bangsal, monitor, farmasi, lab, radiologi |
-| Perawat (`ns.dewi`, `ns.eko`) | dasbor, pendaftaran, rawat jalan, bangsal, monitor |
+| Perawat (`ns.dewi`, `ns.eko`) | dasbor, pendaftaran, rawat jalan, bangsal, monitor, perangkat |
 | Apoteker (`apt.fitri`) | dasbor, farmasi |
 | Analis lab (`analis`) | dasbor, lab |
 | Radiografer / radiolog (`radiografer`, `dr.rad`) | dasbor, radiologi |
@@ -300,25 +312,26 @@ tidur (4 tempat tidur ICU dengan monitor), 14 akun staf, serta tarif dan stok ob
 
 | Endpoint | Akses |
 |---|---|
+| `GET /account/sso?tenant=&lang=&returnUrl=` | tantangan OpenID Connect (bila dikonfigurasi) |
 | `GET /account/demo?tenant=&user=&lang=&returnUrl=` · `POST /account/login` · `GET /account/logout` | login demo (tanpa kata sandi); keduanya mengembalikan 404 bila `His:DemoLogin=false` |
-| `POST /api/{tenant}/sync/push` · `POST /api/{tenant}/sync/pull?ward=MELATI` | header `X-Device-Key` |
-| `GET /api/{tenant}/sync/wards` | header `X-Device-Key` (kode dan nama bangsal untuk pengaturan perangkat) |
+| `POST /api/{tenant}/devices` `{deviceId, ward, name}` | perawat atau admin tenant yang sedang masuk; token perangkat dikembalikan sekali |
+| `POST /api/{tenant}/sync/push` · `POST /api/{tenant}/sync/pull?ward=MELATI` | `X-Device-Token` (perangkat terdaftar, terikat pada bangsalnya) atau `X-Device-Key` lama |
+| `GET /api/{tenant}/sync/wards` | token atau kunci perangkat (kode dan nama bangsal untuk pengaturan perangkat) |
 | `GET /api/{tenant}/fhir/Patient/{id}/$summary` | pengguna yang masuk di tenant yang sama; FHIR IPS, diaudit |
 | `GET /api/{tenant}/dashboard` | pengguna yang masuk di tenant yang sama; JSON `HospitalDashboard` |
 | `GET /health` | anonim |
 
 Halaman: `/login`, `/{tenant}` (dasbor), `/{tenant}/registration`, `outpatient`, `wards`, `monitoring`, `pharmacy`, `lab`,
-`radiology`, `billing`. Antarmuka mengikuti bahasa pengguna (bawaan bahasa Indonesia, bahasa Inggris dapat dipilih saat
+`radiology`, `billing`, `devices`. Antarmuka mengikuti bahasa pengguna (bawaan bahasa Indonesia, bahasa Inggris dapat dipilih saat
 masuk).
 
 **Catatan keamanan:**
 
-- **Login:** `/account/demo` dan `/account/login` hanya memakai nama pengguna, untuk demo. `His:DemoLogin=false` mematikan keduanya; tambahkan OpenID Connect (penyedia identitas Anda) yang menerbitkan klaim `tenant` dan peran. `returnUrl` hanya menerima path lokal (tanpa pengalihan `//host`).
-- **Kunci perangkat:**
-  - Isi `His:DeviceKeys:{tenant}` dengan rahasia acak yang panjang per tenant dari penyimpan rahasia.
-  - Bila kunci ini kosong, aplikasi menerima `demo-device-key` hanya dalam mode demo; dengan `His:DemoLogin=false` tenant tanpa kunci menolak semua perangkat. Kunci dibandingkan dalam waktu konstan.
-  - Kunci dipakai bersama oleh semua perangkat satu tenant. Rotasi kunci secara berkala, atau gunakan kredensial per perangkat (mutual TLS atau token) di produksi.
-- **Cakupan bangsal:** setiap tarikan wajib menyebut bangsal (`?ward=MELATI`); kode yang kosong atau tidak dikenal ditolak dengan 400, sehingga perangkat tidak pernah menerima pasien bangsal lain.
+- **Login:** di produksi atur `His:DemoLogin=false` dan konfigurasikan OpenID Connect. `/account/demo` dan `/account/login` hanya memakai nama pengguna, untuk demo. `returnUrl` hanya menerima path lokal (tanpa pengalihan `//host`).
+- **Token perangkat:** daftarkan setiap tablet di halaman Perangkat. Token hanya ditampilkan sekali dan server hanya menyimpan hash SHA-256-nya; tablet yang hilang dicabut tanpa memengaruhi tablet lain. Lihat [Token sinkronisasi per perangkat](#token-sinkronisasi-per-perangkat).
+- **Kunci perangkat lama:** `His:DeviceKeys:{tenant}` adalah satu rahasia untuk semua perangkat satu tenant dan tidak terikat bangsal. Bila kosong, `demo-device-key` hanya berlaku dalam mode demo. Kunci dibandingkan dalam waktu konstan.
+- **Cakupan bangsal:** setiap tarikan dengan kunci lama wajib menyebut bangsal (`?ward=MELATI`); kode yang kosong atau tidak dikenal ditolak dengan 400. Perangkat terdaftar selalu hanya menerima bangsalnya sendiri, dan penulisannya untuk pasien bangsal lain ditolak.
+- **Kredensial integrasi:** rahasia BPJS, E-Klaim dan SATUSEHAT disimpan di user secrets, variabel lingkungan atau vault — jangan di `appsettings.json`.
 - **HTTPS:** di luar Development aplikasi mengalihkan ke HTTPS dan mengirim HSTS. Siapkan sertifikat (atau akhiri TLS di reverse proxy dengan forwarded headers), dan lindungi basis data serta `App_Data`.
 
 ## Aplikasi visite (`apps/Medical.Rounds`)
@@ -337,11 +350,117 @@ dotnet workload install maui-windows            # maui-android untuk Android
 dotnet build Medical.Rounds.slnx                # Windows
 dotnet run --project apps/Medical.Rounds -f net10.0-windows10.0.19041.0
 dotnet build apps/Medical.Rounds -f net10.0-android -p:IncludeAndroid=true   # perlu Android SDK
+# pertama kali: -t:InstallAndroidDependencies -p:AndroidSdkDirectory=<folder sdk> -p:AcceptAndroidSdkLicenses=true mengunduh SDK
 ```
 
+- **CI:** job `rounds-android` mem-build APK Release (ditandatangani kunci debug, untuk pengujian) dan mengunggahnya sebagai artefak `medical-rounds-android`. Job ini tidak menghalangi publikasi NuGet.
+- **iOS:** `net10.0-ios` ditambahkan saat build di macOS (perlu Xcode). `Info.plist` hanya mengizinkan HTTP biasa ke host jaringan lokal.
+
 - **Solusi:** aplikasi ini tidak termasuk `Medical.Net.slnx` karena runner CI tidak punya workload MAUI. Build dengan `Medical.Rounds.slnx`.
-- **Pengaturan:** URL server, tenant, bangsal, perawat, kunci perangkat dan id perangkat. Server bawaan `http://localhost:5300`, atau `http://10.0.2.2:5300` di emulator Android.
+- **Pengaturan:** URL server, tenant, bangsal, perawat, token perangkat dan id perangkat. Token berawalan `mdn_` dikirim sebagai `X-Device-Token`; nilai lain sebagai `X-Device-Key` lama. Server bawaan `http://localhost:5300`, atau `http://10.0.2.2:5300` di emulator Android.
 - **Tangkapan layar:** dengan SIMRS berjalan, `Medical.Rounds.exe --capture docs/images en|id` melakukan sinkronisasi, merender halaman daftar pasien, pasien, tanda vital dan menunggu-sinkron ke PNG, lalu keluar.
+
+## Perubahan di 2.1
+
+### Login (OpenID Connect)
+
+Isi `His:Oidc:Authority`, `ClientId` dan `ClientSecret` (Keycloak, Microsoft Entra ID atau penyedia OpenID Connect lain),
+dan halaman login menampilkan **Masuk dengan SSO**. Alurnya authorization code dengan PKCE. Penyedia identitas membuktikan
+siapa penggunanya; SIMRS menentukan apa yang boleh dilakukannya:
+
+- Rumah sakit yang dipilih di halaman login harus ada di klaim `tenant` pengguna (satu nilai, daftar dipisah spasi atau koma, atau klaim berulang).
+- Harus ada data staf aktif dengan nama pengguna yang sama (bawaan `preferred_username`) di rumah sakit itu. Peran diambil dari data staf tersebut, bukan dari token.
+- Selain itu ditolak (`/login?error=sso`). Setiap login diaudit beserta metodenya (`oidc` atau `demo`).
+
+```json
+"His": { "DemoLogin": false,
+         "Oidc": { "Authority": "https://sso.example.id/realms/rs", "ClientId": "medical-his", "TenantClaim": "tenant" } }
+```
+
+Simpan `ClientSecret` di user secrets atau variabel lingkungan (`His__Oidc__ClientSecret`).
+
+### Token sinkronisasi per perangkat
+
+Perawat dan admin mendaftarkan tablet bangsal di **Perangkat** (`/{tenant}/devices`) atau lewat `POST /api/{tenant}/devices`:
+
+- **Token:** `mdn_` + 32 byte acak (base64url). Token hanya ditampilkan sekali; server menyimpan hash SHA-256 dan prefiks 12 karakter untuk pencarian, lalu membandingkan hash dalam waktu konstan.
+- **Ikatan bangsal:** token terikat pada satu bangsal. Tarikan hanya mengembalikan bangsal itu (`?ward=` lain menghasilkan 403). Tanda vital, catatan dan pembaruan tugas untuk rawat inap di bangsal lain — atau yang menyebut pasien berbeda dari pasien rawat inapnya — ditolak per perubahan.
+- **Identitas:** push dengan `nodeId` yang berbeda dari id perangkat terdaftar ditolak dengan 403.
+- **Siklus hidup:** mendaftarkan ulang id perangkat mengganti tokennya; pencabutan berlaku pada permintaan berikutnya. Waktu terakhir aktif ditampilkan.
+
+```csharp
+var e = await new DeviceRegistry(db, clock).EnrollAsync("tablet-melati-02", "Tablet Melati 2", "MELATI");
+// e.Token → masukkan sekali di aplikasi Rounds (Pengaturan → Token perangkat)
+```
+
+### Basis data: migrasi dan satu basis data per tenant
+
+`Medical.Hospital` kini menyertakan migrasi EF Core untuk SQLite dan SQL Server (`SqliteHospitalDbContext`,
+`SqlServerHospitalDbContext`). `HospitalDatabase.MigrateAsync` (dipanggil oleh seeder) menerapkannya. Basis data buatan
+2.0 dengan `EnsureCreated` dikenali dan diberi baseline `V20Baseline`, sehingga hanya tabel 2.1 yang ditambahkan dan tidak
+ada data yang hilang.
+
+```csharp
+var options = HospitalDatabase.Options(HospitalProvider.SqlServer, koneksiKatalog,
+    perTenant: new Dictionary<string, string> { ["rs-nusantara"] = dbNusantara, ["rs-bahari"] = dbBahari });
+await HospitalDatabase.MigrateAsync(options);   // katalog dan semua basis data tenant
+```
+
+Dengan `perTenant`, `TenantDatabaseInterceptor` mengalihkan setiap koneksi ke basis data tenant yang sedang aktif; tenant
+yang tidak tercantum tetap di basis data bersama. Filter tenant dan pengaman penulisan lintas tenant tetap aktif. Di SIMRS,
+isi `His:Tenants:{tenant}:ConnectionString`. Untuk menambah migrasi:
+
+```bash
+dotnet ef migrations add <Nama> -p src/Medical.Hospital -s src/Medical.Hospital -c SqliteHospitalDbContext -o Migrations/Sqlite --namespace Medical.Hospital.Migrations.Sqlite
+dotnet ef migrations add <Nama> -p src/Medical.Hospital -s src/Medical.Hospital -c SqlServerHospitalDbContext -o Migrations/SqlServer --namespace Medical.Hospital.Migrations.SqlServer
+```
+
+### Alur BPJS dan SATUSEHAT
+
+`BpjsWorkflowService` (namespace `Medical.Hospital.Integration`) menjalankan klien `Medical.Bpjs` dari data SIMRS:
+
+- **SEP (VClaim):** bila penjamin BPJS, halaman pendaftaran mengisi poli, ICD-10, DPJP dan rujukan lalu memanggil **Buka kunjungan & buat SEP via VClaim**. Layanan ini memeriksa kartu dan hak kelas, menyusun `t_sep` dari kunjungan, menyimpan nomor SEP di kunjungan dan mengauditnya. Tersedia juga `CheckEligibilityAsync` dan `DeleteSepAsync`.
+- **Klaim (E-Klaim):** tombol **Kirim klaim E-Klaim** di halaman kasir muncul bila pemeriksaan pra-grouping tidak menemukan galat. Lima langkah E-Klaim dijalankan berurutan, dan pengulangan dilanjutkan setelah langkah terakhir yang berhasil. Hasil grouper (kode CBG, deskripsi, tarif) disimpan di `BpjsClaimRecord`; jumlah penjamin pada tagihan menjadi tarif CBG sementara totalnya tetap tarif rumah sakit, dan **selisih** (tarif rumah sakit − INA-CBG) dilaporkan.
+- **Kegagalan:** langkah yang ditolak atau gagal membuat klaim berstatus `Failed` dengan `langkah: pesan`; kode CBG berawalan `X` berarti galat grouper.
+
+`SatuSehatPublisher` mengirim satu kunjungan yang sudah selesai setiap kali (encounter, diagnosis, tanda vital dan obat yang
+diserahkan, hanya untuk kunjungan itu):
+
+- Pengiriman berjalan saat dokter menyelesaikan kunjungan rawat jalan atau bangsal memulangkan pasien, dengan nomor IHS pasien dan tenaga kesehatan dicari berdasarkan NIK.
+- Setiap percobaan dicatat di `SatuSehatSubmissionRecord`. Kegagalan tidak pernah menghalangi tindakan klinis; dengan `His:SatuSehat:AutoSubmit=true` pengulang di latar belakang mengantrekan kunjungan selesai di semua tenant dan mengulangi kegagalan hingga `MaxAttempts`.
+
+Tanpa konfigurasi, halaman menampilkan "belum dikonfigurasi" dan alur manual 2.0 tetap tersedia.
+
+### Worklist modalitas DICOM
+
+`ModalityWorklistScp` (namespace `Medical.Dicom`) menjawab kueri C-FIND Modality Worklist dari sebuah `IWorklistSource`:
+
+- **Pencocokan:** modalitas, scheduled station AE, tanggal dan jam (nilai tunggal dan rentang), nomor akses, id pasien dan wildcard nama tanpa membedakan huruf besar-kecil, sesuai PS3.4.
+- **Respons:** hanya atribut yang diminta yang dikembalikan, dan setiap respons lolos validasi fo-dicom.
+- **Sumber SIMRS:** `His:Worklist:Port` menjalankan SCP di SIMRS. SCP melayani order radiologi terjadwal, dan AE title dipetakan ke rumah sakit (`His:Worklist:RSMN-MWL=rs-nusantara`). Begitu ada pemetaan, AE title yang tidak dikenal menerima daftar kosong. Study Instance UID dibuat dan disimpan untuk setiap order yang dikembalikan kueri, sehingga modalitas dan PACS sepakat.
+- **Diverifikasi:** dengan pynetdicom 3.0.4 (`C-ECHO`, `C-FIND` menurut modalitas, rentang tanggal dan wildcard nama).
+
+```bash
+medical worklist serve --port 11112                       # SCP demo
+medical worklist query localhost 11112 --modality CT --date 20261116
+```
+
+### Feed HL7 ADT
+
+`AdtFeed` mengubah pendaftaran, rawat inap dan kepulangan di event bus menjadi pesan ADT^A04 / A01 / A03, dan halaman pindah
+bangsal menambahkan A02. Pesan masuk ke tabel `Hl7OutboxMessage` dan `Hl7OutboxSender` mengirimnya lewat MLLP:
+
+- **Urutan:** pesan dikirim dari yang tertua per tujuan; pesan yang gagal menahan pesan sesudahnya.
+- **Pengiriman:** hanya ACK `AA` / `CA` yang menggemakan control id yang dianggap terkirim.
+- **Pengulangan:** selain itu diulang dengan jeda berlipat dua, hingga 10 percobaan, lalu pesan berstatus `Failed`.
+
+Pesan dapat di-parse oleh NHapi. Konfigurasikan `His:Adt:Host` dan `His:Adt:Port`.
+
+### Visite dan pemantauan
+
+- **Penilaian perawat:** tingkat kesadaran (AVPU) dan oksigen tambahan yang dicatat di tablet — atau lewat tombol A / C / V / P / U dan O₂ di layar monitor — kini masuk ke NEWS2 berbasis monitor untuk pasien itu. Sebelum 2.1 nilainya diasumsikan Alert dan udara ruangan. Penilaian ikut berpindah bila pasien pindah ke tempat tidur bermonitor lain.
+- **Daftar pasien:** kartu pasien menampilkan oksigen dan kesadaran yang tidak Alert.
+- **Build:** build Android berjalan di CI; iOS menjadi target di macOS.
 
 ## CLI
 
@@ -373,6 +492,7 @@ totalnya menjadi 32:
 | ![](../images/his-wards.png) | ![](../images/his-monitoring.png) |
 | ![](../images/his-pharmacy.png) | ![](../images/his-lab.png) |
 | ![](../images/his-radiology.png) | ![](../images/his-billing.png) |
+| ![](../images/his-devices.png) | |
 
 | Visite (MAUI) | | | |
 |---|---|---|---|
@@ -389,7 +509,7 @@ totalnya menjadi 32:
 - **Monitor tersimulasi:** monitor dan pompa pada demo disimulasikan, dan belum ada perangkat sungguhan yang disertifikasi atau diuji. Validasi keluaran HL7 / SenML dan perilaku alarm tiap vendor sebelum dipakai secara klinis.
 - **Grouping INA-CBG:** grouping dan tarif paket berasal dari E-Klaim. `BpjsClaimAsync` hanya menyiapkan dan memeriksa data klaim, tidak melakukan grouping.
 - **`Medical.Devices` masih pratinjau:** statusnya tetap pratinjau selama IoTCom.Net masih prarilis, dan API-nya dapat berubah.
-- **MAUI Android di CI:** build Android tidak dijalankan di CI (tidak ada workload MAUI). Windows dan Android di-build secara lokal, dan iOS belum disiapkan.
-- **Login demo:** lihat catatan keamanan. OpenID Connect belum disertakan.
-- **Satu basis data:** multi-tenancy memakai skema bersama dalam satu basis data. Opsi satu basis data per tenant belum tersedia.
-- **Skema basis data:** skema dibuat dengan `EnsureCreated`, bukan migrasi. Tambahkan migrasi EF Core sebelum mengembangkan basis data produksi.
+- **iOS:** target iOS hanya di-build di macOS dan belum dijalankan di perangkat. APK Android dari CI ditandatangani kunci debug; tandatangani dengan kunci Anda sendiri untuk distribusi.
+- **BPJS dan SATUSEHAT:** alurnya diuji terhadap layanan tersimulasi yang menerapkan tanda tangan dan enkripsi sesuai publikasi, bukan terhadap server BPJS atau SATUSEHAT sungguhan. Jalankan terhadap lingkungan development dengan kredensial Anda sendiri sebelum produksi.
+- **Worklist:** tanggal memakai zona waktu server kecuali `His:Worklist:TimeZone` diisi; pembatalan C-FIND tidak didukung. Modalitas yang menyaring menurut station AE perlu `His:Worklist:Stations:{Modality}`.
+- **Satu basis data per tenant:** daftar tenant ada di konfigurasi; menambah rumah sakit perlu restart (basis data dimigrasikan saat mulai).

@@ -110,6 +110,7 @@ Galeri v1.3 berisi dua puluh sembilan kasus, termasuk **Skor ICU & obstetri**, *
 | SIMRS | `medical his seed [--db his.db] [--patients 40]` · `medical his dashboard [--db his.db] [--tenant rs-bahari] --lang id` · `medical his patient <no-rm> [--db his.db] [--tenant rs-nusantara] [--fhir ringkasan.json]` |
 | Pemantauan | `medical monitor [--minutes 120] [--step 5] --lang id` (monitor ICU tersimulasi → HL7 / MLLP → peringatan NEWS2; kode keluar 3 bila ada peringatan High) |
 | Sinkronisasi | `medical sync demo --lang id` (visite luring: dua tablet, konflik, konvergensi) |
+| Worklist (v2.1) | `medical worklist serve [--port 11112] [--date 20261116]` (SCP Modality Worklist DICOM demo) · `medical worklist query <host> <port> [--modality CT] [--date 20261116[-20261120]] [--aet MEDICALNET-MWL] [--name "RAHAYU*"]` (C-FIND) |
 
 Galeri kini berisi tiga puluh dua kasus. Kelompok baru **Platform rumah sakit** memuat **SIMRS multi-tenant**,
 **Monitor pasien langsung** dan **Visite luring**. Templat memakai `--MedicalNetVersion` bawaan `2.0.0`.

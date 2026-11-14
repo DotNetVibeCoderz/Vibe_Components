@@ -2,6 +2,8 @@
 @inherits HisPage
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @inject MonitoringHub Hub
+@inject IServiceProvider Services
+@inject IConfiguration Config
 <header class="head"><p class="eyebrow">@S.TenantName</p><h1>@T("Wards & beds", "Bangsal & tempat tidur")</h1></header>
 @if (Error is { } err) { <div class="alert critical">@err</div> }
 @if (Info is { } info) { <div class="alert info">@info</div> }
@@ -102,14 +104,17 @@
         ], 0, 20, (0, 4), "NEWS2", 560, 150);
     }
 
-    private Task ValidateAsync(string id) => Run(async () => { await using var db = S.Db(); await new ClinicalService(db, S.Clock).ValidateVitalsAsync(id); });
+    private Task ValidateAsync(string id) => Run(async () => { await using var db = S.Db(); await new ClinicalService(db, S.Clock, S.Bus).ValidateVitalsAsync(id); });
     private Task AddTaskAsync() => Run(async () => { await using var db = S.Db(); var stay = await db.Visits.FirstAsync(v => v.Id == _stay!.Id); await RoundsSync.AddTaskAsync(db, stay, _task ?? "", Now.AddHours(4)); _task = null; });
-    private Task CleanAsync(string bedId) => Run(async () => { await using var db = S.Db(); await new ClinicalService(db, S.Clock).MarkBedCleanAsync(bedId); _bed = null; });
+    private Task CleanAsync(string bedId) => Run(async () => { await using var db = S.Db(); await new ClinicalService(db, S.Clock, S.Bus).MarkBedCleanAsync(bedId); _bed = null; });
 
     private Task TransferAsync() => Run(async () =>
     {
         await using var db = S.Db();
-        await new ClinicalService(db, S.Clock).TransferAsync(_stay!.Id, _to ?? throw new InvalidOperationException(T("No free bed.", "Tidak ada tempat tidur kosong.")));
+        string from = _stay!.BedId ?? "", to = _to ?? throw new InvalidOperationException(T("No free bed.", "Tidak ada tempat tidur kosong."));
+        await new ClinicalService(db, S.Clock, S.Bus).TransferAsync(_stay.Id, to);
+        if (HisInterfaces.AdtConfigured(Config))
+            await Medical.Hospital.Integration.AdtFeed.TransferAsync(db, _stay.Id, from, to, Services.GetService<Medical.Hospital.Integration.AdtFeedOptions>(), S.Clock);   // A02
         await Hub.RebindAsync(S.TenantId);
         _bed = null; _to = null;
     }, T("Transferred.", "Pasien dipindahkan."));
@@ -117,9 +122,10 @@
     private Task DischargeAsync() => Run(async () =>
     {
         await using var db = S.Db();
-        var doc = await new ClinicalService(db, S.Clock).DischargeAsync(_stay!.Id, DischargeType.Home, T("Follow-up in clinic in one week.", "Kontrol poli 1 minggu."));
+        var doc = await new ClinicalService(db, S.Clock, S.Bus).DischargeAsync(_stay!.Id, DischargeType.Home, T("Follow-up in clinic in one week.", "Kontrol poli 1 minggu."));
         await Hub.RebindAsync(S.TenantId);
         _summary = doc.Text;
+        await Services.SendToSatuSehatAsync(db, S.Clock, _stay.Id);
         _bed = null;
     }, T("Discharged — bill ready at the cashier.", "Pasien pulang — tagihan siap di kasir."));
 }

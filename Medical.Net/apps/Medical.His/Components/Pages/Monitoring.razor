@@ -22,7 +22,24 @@
                         <div class="param bp"><span class="k">@T("BP", "TD")</span><span class="v">@V(s, VitalParameter.SystolicBp)/@V(s, VitalParameter.DiastolicBp)</span><span class="u">mmHg</span></div>
                         @P(s, VitalParameter.TemperatureC, T("Temp", "Suhu"), "°C", "t", "0.0")
                     </div>
+                    @if (s.PatientId is not null && CanAssess)
+                    {
+                        var m = Hub.NurseAssessment(S.TenantId, s.DeviceId);
+                        var cur = m?.Consciousness ?? Consciousness.Alert;
+                        bool o2 = m?.OnOxygen ?? false;
+                        <div class="manual" role="group" aria-label="@T("Nurse assessment (ACVPU, oxygen)", "Penilaian perawat (ACVPU, oksigen)")">
+                            @foreach (var c in Enum.GetValues<Consciousness>())
+                            {
+                                <button class="@(m is not null && cur == c ? "on" : "")" title="@AcvpuName(c)" aria-pressed="@(m is not null && cur == c ? "true" : "false")"
+                                        @onclick="() => Assess(s, c, o2)">@Acvpu(c)</button>
+                            }
+                            <span class="mtext mono" title="@T("A / room air until a nurse records the assessment", "A / udara ruangan sampai perawat mencatat penilaian")">@ManualText(m)</span>
+                            <button class="o2 @(o2 ? "on" : "")" title="@T("Supplemental oxygen", "Oksigen tambahan")" aria-pressed="@(o2 ? "true" : "false")"
+                                    @onclick="() => Assess(s, cur, !o2)">O₂</button>
+                        </div>
+                    }
                     <div class="mfoot">
+                        @if (s.PatientId is not null && !CanAssess) { <span class="mono">@Summary(Hub.NurseAssessment(S.TenantId, s.DeviceId))</span> }
                         <span>@(s.Level == EscalationLevel.None ? T("no response needed", "tanpa respons khusus") : MonitoringEngine.Message(s.Level, s.News2?.Score ?? 0)[S.Lang])</span>
                         <span class="mono">@s.Updated.ToOffset(TimeSpan.FromHours(7)).ToString("HH:mm")</span>
                     </div>
@@ -60,6 +77,31 @@
     private IReadOnlyList<EarlyWarningAlert> _alerts = [];
     private IReadOnlyList<Medical.Devices.InfusionPumpStatus> _pumps = [];
     private DateTime _lastRender;
+
+    // Doctors see the assessment; nurses (and admins) enter it.
+    private bool CanAssess => S.Role is StaffRole.Nurse or StaffRole.Admin;
+    private static string Acvpu(Consciousness c) => c switch
+    {
+        Consciousness.Alert => "A", Consciousness.Confusion => "C", Consciousness.Voice => "V", Consciousness.Pain => "P", _ => "U",
+    };
+    private string AcvpuName(Consciousness c) => c switch
+    {
+        Consciousness.Alert => T("Alert", "Sadar penuh"), Consciousness.Confusion => T("New confusion", "Bingung (baru)"),
+        Consciousness.Voice => T("Responds to voice", "Respons terhadap suara"), Consciousness.Pain => T("Responds to pain", "Respons terhadap nyeri"),
+        _ => T("Unresponsive", "Tidak respons"),
+    };
+    // The highlighted buttons show the state; the text says whether a nurse set it (and when) or it is the A / air default.
+    private string Summary(MonitoringHub.ManualAssessment? m) =>
+        $"{Acvpu(m?.Consciousness ?? Consciousness.Alert)} · {((m?.OnOxygen ?? false) ? "O₂" : T("air", "udara"))}" + (m is null ? " " + T("(assumed)", "(asumsi)") : "");
+    private string ManualText(MonitoringHub.ManualAssessment? m) =>
+        m is null ? T("assumed", "asumsi") : m.At.ToOffset(TimeSpan.FromHours(7)).ToString("HH:mm");
+
+    private void Assess(BedSnapshot s, Consciousness c, bool onOxygen)
+    {
+        if (s.PatientId is null || !CanAssess) return;
+        Hub.ApplyNurseAssessment(S.TenantId, s.PatientId, c, onOxygen);
+        _beds = Hub.Engine(S.TenantId).Snapshots;
+    }
 
     private static string Lvl(EscalationLevel l) => l switch { EscalationLevel.High => "lv-high", EscalationLevel.Medium => "lv-med", EscalationLevel.LowMedium => "lv-lowmed", _ => "" };
     private static string V(BedSnapshot s, VitalParameter p, string fmt = "0") => s.Latest.TryGetValue(p, out var x) ? x.Value.ToString(fmt, CultureInfo.InvariantCulture) : "—";

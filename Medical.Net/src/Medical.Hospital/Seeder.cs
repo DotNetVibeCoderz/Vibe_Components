@@ -20,9 +20,9 @@ public static class HospitalSeeder
     public static async Task SeedAsync(DbContextOptions<HospitalDbContext> options, TimeProvider? clock = null, int patientsPerTenant = 40, CancellationToken ct = default)
     {
         clock ??= TimeProvider.System;
+        await HospitalDatabase.MigrateAsync(options, ct);   // creates or upgrades the schema (and every tenant database)
         await using (var boot = new HospitalDbContext(options, new FixedTenantContext("")))
         {
-            await boot.Database.EnsureCreatedAsync(ct);
             if (await boot.Tenants.AnyAsync(ct)) return;
             foreach (var t in DemoTenants)
                 boot.Tenants.Add(new Tenant { Id = t.Id, Code = t.Code, Name = t.Name, City = t.City, Class = t.Class, KodeTarif = t.Class == FacilityClass.B ? "BP" : "CP" });
@@ -32,12 +32,20 @@ public static class HospitalSeeder
         foreach (var t in DemoTenants)
         {
             await using var db = new HospitalDbContext(options, new FixedTenantContext(t.Id, "seed"));
-            await SeedTenantAsync(db, t.Code, clock, patientsPerTenant, index++ * 1000, ct);
+            await SeedTenantAsync(db, t, clock, patientsPerTenant, index++ * 1000, ct);
         }
     }
 
-    private static async Task SeedTenantAsync(HospitalDbContext db, string code, TimeProvider clock, int patients, int offset, CancellationToken ct)
+    private static async Task SeedTenantAsync(HospitalDbContext db, (string Id, string Code, string Name, string City, FacilityClass Class) t, TimeProvider clock,
+        int patients, int offset, CancellationToken ct)
     {
+        string code = t.Code;
+        // With database-per-tenant the tenant's own database needs its tenant row as well (shared schema: already there).
+        if (!await db.Tenants.AnyAsync(x => x.Id == t.Id, ct))
+        {
+            db.Tenants.Add(new Tenant { Id = t.Id, Code = t.Code, Name = t.Name, City = t.City, Class = t.Class, KodeTarif = t.Class == FacilityClass.B ? "BP" : "CP" });
+            await db.SaveChangesAsync(ct);
+        }
         var r = new SeededRandom(0xC0FFEE + (ulong)offset);
         Department D(string c, string en, string id, DepartmentKind k, string? q = null) { var d = new Department { Code = c, Name = en, NameId = id, Kind = k, QueuePrefix = q }; db.Departments.Add(d); return d; }
         var umum = D("POLI-UMUM", "General clinic", "Poli Umum", DepartmentKind.Outpatient, "A");

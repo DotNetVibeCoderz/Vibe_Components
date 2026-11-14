@@ -34,6 +34,16 @@ Made by **Gravicode Studios**, led by **Kang Fadhil**. · [Bahasa Indonesia](REA
 | `Medical.Cli` | `medical` .NET tool | — |
 | `Medical.Templates` | `dotnet new` templates | — |
 
+## What's new in 2.1
+
+- **Sign-in and device security:** OpenID Connect (Keycloak, Entra ID) with the tenant from the IdP and the role from the HIS staff record; per-device sync tokens, hashed and bound to one ward, with enrolment and revocation in the HIS.
+- **Database:** EF Core migrations for SQLite and SQL Server (2.0 databases are baselined automatically) and an optional database per hospital.
+- **BPJS and SATUSEHAT, live:** VClaim SEP at registration, E-Klaim submission with the grouper result and selisih back in billing, and the SATUSEHAT visit bundle when a visit finishes or a patient goes home — with an outbox and retries.
+- **Interfaces:** a DICOM Modality Worklist SCP over the radiology orders (checked with pynetdicom) and an HL7 ADT feed (A01 / A02 / A03 / A04) with ordered, acknowledged delivery.
+- **Ward rounds:** nurse-entered AVPU and oxygen feed the monitor NEWS2; the Android app is built in CI and iOS is a target.
+
+See [What changed in 2.1](docs/en/platform.md#what-changed-in-21).
+
 ## What's new in 2.0
 
 - **Hospital information system core** (`Medical.Hospital`): one database for many hospitals, with every row tenant-stamped, filtered and guarded against cross-tenant writes. It covers registration and queues, outpatient and inpatient care, pharmacy, laboratory, radiology, billing with BPJS INA-CBG claim data, and dashboards.

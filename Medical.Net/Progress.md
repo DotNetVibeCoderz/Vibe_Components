@@ -62,7 +62,29 @@ Bugs and pitfalls found and fixed during v1.3:
 - **HF.Net embeddings** return an `NdArray`; it is converted with `ToArray()`.
 - **pack.ps1** had a hard-coded default version; it now reads `VersionPrefix`.
 
-## v2.0.0 — Hospital platform: complete, not yet published
+## v2.1.0 — Integrations: complete, not yet published
+
+| Area | Status | Verified by |
+|---|---|---|
+| OpenID Connect sign-in (code + PKCE): tenant from the IdP claim, role from the HIS staff record, audited; demo login switchable | ✅ | principal mapping (role, tenant, method, language), unknown user / tenant refused, audit entry, local-only redirects |
+| Per-device sync tokens (`DeviceRegistry`): hashed, ward-bound, re-enrol / revoke; Devices page and enrolment API | ✅ | token hash only, forged / revoked / other-hospital token refused, pull of another ward 403, other-ward and wrong-patient writes rejected per change, node-id mismatch 403 |
+| EF Core migrations (SQLite + SQL Server, `V20Baseline` + `V21Platform`), baseline of 2.0 `EnsureCreated` databases, database-per-tenant interceptor | ✅ | a real v2.0 schema with data migrated without loss and idempotently; rows land only in the tenant's own file; the demo HIS database from 2.0 upgraded on start |
+| BPJS: VClaim SEP from registration, E-Klaim five-step submission with resumable retry, grouper result into the invoice, selisih report | ✅ | simulated VClaim / E-Klaim with the real signature and encryption: SEP stored, refusal surfaced, validation errors block submission, grouper error then resume |
+| SATUSEHAT visit bundle on finish / discharge with outbox and retries | ✅ | failure then retry, bundle limited to the visit, configuration-driven registration |
+| DICOM Modality Worklist SCP (`Medical.Dicom`) + HIS source per AE title; `medical worklist serve / query` | ✅ | matching (modality, station, dates, times, wildcards), only requested attributes, fo-dicom validation; **pynetdicom 3.0.4** C-ECHO / C-FIND |
+| HL7 ADT feed (A04 / A01 / A02 / A03) with ordered, ACK-checked MLLP outbox | ✅ | real services + event bus produce the sequence, NHapi parses each message, NAK retried in order, connection failures back off to Failed |
+| Ward rounds: nurse AVPU / O₂ into the monitor NEWS2 (tablet and monitoring wall), Android build in CI, iOS target | ✅ | O₂ +2 / C-V-P-U +3 on the engine, assessment follows a transferred patient, tenants isolated; Android Debug + Release APK built locally with the CI command |
+| Docs: platform.md "What changed in 2.1" (EN / ID), README / README.id, tools, PLAN, CLAUDE.md; Devices and monitoring screenshots | ✅ | screenshots reviewed |
+| Tests | ✅ 233/233 | `dotnet test`; Release build with 0 warnings |
+
+Bugs and pitfalls found and fixed during v2.1:
+- **`dotnet ef`** wrote the model snapshot under `Medical/Hospital/Migrations/...` when the namespace differed from the folder; pass `--namespace` with `-o`.
+- **Pending model changes:** every new `TenantEntity` must come with a migration for both providers, or every seeded test fails with `PendingModelChangesWarning`.
+- **MAUI `TargetFrameworks`:** trimming a leading `;` escaped the separators and the Android restore lost its runtime identifiers.
+- **Monitoring wall:** the nurse-assessment label was truncated on the tile; it now shows only "assumed" or the time it was set.
+- **Repository hygiene:** a stray unstyled screenshot (`docs/images$1.png`) committed in 2.0 was removed.
+
+## v2.0.0 — Hospital platform: published ✅
 
 | Area | Status | Verified by |
 |---|---|---|
@@ -90,7 +112,7 @@ Bugs and pitfalls found and fixed during v2.0:
 
 ## To publish
 1. Commit `Medical.Net/` and push to `main`.
-2. Tag `medical-net-v2.0.0` and push the tag. The workflow publishes the 21 packages (new: `Medical.Hospital`, `Medical.Sync`, and `Medical.Devices` as 2.0.0-preview) with the `NUGET_API_KEY` secret.
+2. Tag `medical-net-v2.1.0` and push the tag. The workflow publishes the 21 packages (`Medical.Devices` as 2.1.0-preview) with the `NUGET_API_KEY` secret.
 
 ## Known limitations
 - No public trained weights exist for intracranial haemorrhage. The MONAI path takes user weights (`MEDNET_MONAI_WEIGHTS`); the classical screener is a triage aid.
@@ -102,6 +124,7 @@ Bugs and pitfalls found and fixed during v2.0:
 - Licensed interaction databases (FDB, Medi-Span, Lexicomp) need an `IDrugInteractionSource` written against the vendor SDK; DrugBank XML has no severity grades, so they are inferred from the text.
 - The guideline sample corpus is short summaries; load the official PNPK / WHO documents. The ICD-10 coder suggests codes from the curated subset only.
 - Federated learning covers logistic models; deep-model federation and a real key-agreement protocol for the masks are not included.
-- The HIS reference app signs in demo users without passwords (switch off with `His:DemoLogin=false` and add OpenID Connect); monitors and pumps in the app are simulated unless `His:MllpPort` receives real devices; NEWS2 from monitors assumes Alert and room air until a nurse sets them.
+- The HIS demo login has no passwords (switch off with `His:DemoLogin=false` and use OpenID Connect); monitors and pumps in the app are simulated unless `His:MllpPort` receives real devices; real-device validation waits for bedside hardware.
+- BPJS, E-Klaim and SATUSEHAT workflows are tested against simulated services, not the live servers; run them in the development environments with the hospital's credentials first.
 - `Medical.Devices` stays preview until IoTCom.Net is stable; device integrations are not certified medical-device software.
-- The MAUI app is built and screenshotted on Windows; Android builds need the Android SDK and are not part of CI.
+- The MAUI app is screenshotted on Windows; Android is built in CI (debug-signed APK); iOS is built only on macOS and has not been run on a device.

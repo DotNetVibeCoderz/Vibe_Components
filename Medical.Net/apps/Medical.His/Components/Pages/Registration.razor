@@ -1,6 +1,9 @@
 @page "/{Tenant}/registration"
 @inherits HisPage
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Medical.Hospital.Integration
+@inject IServiceProvider Services
+@inject IConfiguration Config
 <header class="head"><p class="eyebrow">@S.TenantName</p><h1>@T("Registration", "Pendaftaran pasien")</h1></header>
 @if (Error is { } err) { <div class="alert critical">@err</div> }
 @if (Info is { } info) { <div class="alert info">@info</div> }
@@ -45,6 +48,32 @@
                 <label>@T("Complaint", "Keluhan")<input @bind="_complaint" /></label>
                 <button class="primary" @onclick="StartAsync">@T("Open visit & queue", "Buka kunjungan & antrean")</button>
             </div>
+            @if (_payer == PayerType.Bpjs)
+            {
+                @if (!_vclaimConfigured)
+                {
+                    <p class="muted">@T("VClaim is not configured (His:Bpjs:VClaim) — enter the SEP manually.", "VClaim belum dikonfigurasi (His:Bpjs:VClaim) — isi SEP secara manual.")</p>
+                }
+                else
+                {
+                    <p class="label">@T("SEP via VClaim", "SEP via VClaim") <small>@T("leave the SEP field empty", "kosongkan isian SEP")</small></p>
+                    <div class="controls">
+                        <label>@T("BPJS poli code", "Kode poli BPJS")<input @bind="_sepForm.Poli" placeholder="INT" maxlength="3" /></label>
+                        <label>@T("Initial diagnosis (ICD-10)", "Diagnosis awal (ICD-10)")<input @bind="_sepForm.Diagnosis" placeholder="I10" /></label>
+                        <label>@T("DPJP code", "Kode DPJP")<input @bind="_sepForm.Dpjp" /></label>
+                        <label>@T("Referral from", "Asal rujukan")<select @bind="_sepForm.Asal"><option value="1">@T("Primary care (FKTP)", "Faskes 1 (FKTP)")</option><option value="2">@T("Hospital (FKRTL)", "Rumah sakit (FKRTL)")</option></select></label>
+                        <label>@T("Referral no.", "No. rujukan")<input @bind="_sepForm.NoRujukan" /></label>
+                        <label>@T("Referral date", "Tgl rujukan")<input type="date" @bind="_sepForm.TglRujukan" /></label>
+                        <label>@T("Referring PPK", "PPK perujuk")<input @bind="_sepForm.PpkRujukan" maxlength="8" /></label>
+                        <button @onclick="StartWithSepAsync">@T("Open visit & create SEP via VClaim", "Buka kunjungan & buat SEP via VClaim")</button>
+                    </div>
+                    @foreach (var v in _withoutSep)
+                    {
+                        <div class="alert warning"><span>@T($"Visit {v.QueueNumber} has no SEP yet.", $"Kunjungan {v.QueueNumber} belum memiliki SEP.")</span>
+                            <button @onclick="() => CreateSepAsync(v.Id)">@T("Create SEP via VClaim", "Buat SEP via VClaim")</button></div>
+                    }
+                }
+            }
         </section>
     }
 }
@@ -59,12 +88,20 @@
     private string _dept = "";
     private PayerType _payer = PayerType.Bpjs;
     private string? _sep, _complaint;
+    private sealed class SepForm { public string Poli = "", Diagnosis = "", Dpjp = "", Asal = "1", NoRujukan = "", PpkRujukan = ""; public DateOnly TglRujukan = DateOnly.FromDateTime(DateTime.Today); }
+    private SepForm _sepForm = new();
+    private bool _vclaimConfigured;
+    private List<Visit> _withoutSep = [];
 
     protected override async Task LoadAsync()
     {
         await using var db = S.Db();
         _depts = await db.Departments.Where(d => d.QueuePrefix != null).OrderBy(d => d.QueuePrefix).ToListAsync();
         if (_dept.Length == 0) _dept = _depts.FirstOrDefault()?.Id ?? "";
+        _vclaimConfigured = Services.BpjsWorkflow(db, S.Clock).VClaimConfigured;
+        _withoutSep = _selected is { } sel && _vclaimConfigured
+            ? await db.Visits.Where(v => v.PatientId == sel.Id && v.Payer == PayerType.Bpjs && v.SepNumber == null && (v.Status == VisitStatus.Waiting || v.Status == VisitStatus.InConsultation)).ToListAsync()
+            : [];
         await SearchAsync();
     }
 
@@ -73,13 +110,13 @@
         await using var db = S.Db();
         _found = _q.Trim().Length == 0
             ? (await db.Patients.ToListAsync()).OrderByDescending(p => p.RegisteredAt).ThenByDescending(p => p.Mrn).Take(12).ToList()
-            : (await new RegistrationService(db, S.Clock).SearchAsync(_q, 12)).ToList();
+            : (await new RegistrationService(db, S.Clock, S.Bus).SearchAsync(_q, 12)).ToList();
     }
 
     private Task RegisterAsync() => Run(async () =>
     {
         await using var db = S.Db();
-        var p = await new RegistrationService(db, S.Clock).RegisterAsync(new NewPatient(_n.Given, _n.Family, _n.Gender, _n.Birth,
+        var p = await new RegistrationService(db, S.Clock, S.Bus).RegisterAsync(new NewPatient(_n.Given, _n.Family, _n.Gender, _n.Birth,
             string.IsNullOrWhiteSpace(_n.Nik) ? null : _n.Nik.Trim(), string.IsNullOrWhiteSpace(_n.Bpjs) ? null : _n.Bpjs.Trim(), _n.Phone, Allergies: _n.Allergies));
         _selected = p;
         _q = p.Mrn;
@@ -90,8 +127,53 @@
     {
         await using var db = S.Db();
         var dept = _depts.First(d => d.Id == _dept);
-        var v = await new RegistrationService(db, S.Clock).StartVisitAsync(_selected!.Id, _dept, dept.Kind == DepartmentKind.Emergency ? VisitKind.Emergency : VisitKind.Outpatient,
+        var v = await new RegistrationService(db, S.Clock, S.Bus).StartVisitAsync(_selected!.Id, _dept, dept.Kind == DepartmentKind.Emergency ? VisitKind.Emergency : VisitKind.Outpatient,
             _payer, _payer == PayerType.Bpjs ? _sep : null, complaint: _complaint);
         Info = T($"Queue number {v.QueueNumber} — {dept.Name}", $"Nomor antrean {v.QueueNumber} — {dept.NameId}");
+    });
+
+    private SepRequest SepRequestFromForm() => new()
+    {
+        PpkPelayanan = Config["His:Bpjs:VClaim:PpkCode"] ?? "",
+        DiagnosaAwal = _sepForm.Diagnosis, PoliTujuan = _sepForm.Poli.Trim().ToUpperInvariant(), KodeDpjp = _sepForm.Dpjp.Trim(),
+        Rujukan = _sepForm.NoRujukan.Trim().Length == 0 ? null : new SepReferral(_sepForm.Asal, _sepForm.NoRujukan.Trim(), _sepForm.TglRujukan, _sepForm.PpkRujukan.Trim()),
+        Catatan = _complaint,
+    };
+
+    /// <summary>Runs a VClaim action: bilingual payer errors, then a reload (the message is set after the reload so it is not cleared).</summary>
+    private async Task RunPayer(Func<Task<string>> action)
+    {
+        Error = null; Info = null;
+        string? done = null;
+        try { done = await action(); }
+        catch (PayerIntegrationException e) { Error = e.Text[S.Lang]; }
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException or KeyNotFoundException) { Error = e.Message; }
+        await LoadAsync();
+        Info = done;
+    }
+
+    /// <summary>Opens the visit, then asks VClaim for the SEP; if VClaim refuses, the visit stays open and the SEP can be retried below.</summary>
+    private Task StartWithSepAsync() => RunPayer(async () =>
+    {
+        await using var db = S.Db();
+        var dept = _depts.First(d => d.Id == _dept);
+        var v = await new RegistrationService(db, S.Clock, S.Bus).StartVisitAsync(_selected!.Id, _dept, dept.Kind == DepartmentKind.Emergency ? VisitKind.Emergency : VisitKind.Outpatient,
+            PayerType.Bpjs, null, complaint: _complaint);
+        try
+        {
+            string sep = await Services.BpjsWorkflow(db, S.Clock).CreateSepAsync(v.Id, SepRequestFromForm());
+            return T($"Queue number {v.QueueNumber} — SEP {sep}", $"Nomor antrean {v.QueueNumber} — SEP {sep}");
+        }
+        catch (PayerIntegrationException e)
+        {
+            throw new PayerIntegrationException(new($"Queue number {v.QueueNumber}, but no SEP yet: {e.Text.En}", $"Nomor antrean {v.QueueNumber}, SEP belum terbit: {e.Text.Id}"), e);
+        }
+    });
+
+    private Task CreateSepAsync(string visitId) => RunPayer(async () =>
+    {
+        await using var db = S.Db();
+        string sep = await Services.BpjsWorkflow(db, S.Clock).CreateSepAsync(visitId, SepRequestFromForm());
+        return T($"SEP {sep} created.", $"SEP {sep} berhasil dibuat.");
     });
 }

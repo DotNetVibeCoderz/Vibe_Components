@@ -106,6 +106,7 @@ public sealed class WardPage : ContentPage
                             Ui.L(p.Name, 17, font: "BodyBold"),
                             Ui.L($"{p.Age} {T("y", "th")} · {p.Sex} · RM {p.Mrn}", 13, Ui.Muted),
                             Ui.L(p.Diagnosis ?? "—", 13),
+                            Flags(Model.Chart(p.Id)?.Vitals.FirstOrDefault()),
                             Ui.L((r.OpenTasks > 0 ? $"{r.OpenTasks} {T("open task(s)", "tugas terbuka")}" : T("no open tasks", "tidak ada tugas")) + (r.PendingSync ? " · ⟳ " + T("not yet synced", "belum tersinkron") : ""), 12.5, r.PendingSync ? Ui.Amber : Ui.Muted),
                         },
                     }.Also(v => Grid.SetColumn(v, 1)),
@@ -118,6 +119,27 @@ public sealed class WardPage : ContentPage
             card.GestureRecognizers.Add(tap);
             _list.Children.Add(card);
         }
+    }
+
+    /// <summary>
+    /// Supplemental oxygen and a consciousness other than Alert from the latest vital signs — the NEWS2 parameters a
+    /// bedside monitor cannot measure (each scores +2 / +3), so they are easy to miss on a ward list.
+    /// </summary>
+    private static Label Flags(RoundsVitals? v)
+    {
+        var parts = new List<string>();
+        if (v is { OnOxygen: true }) parts.Add("O₂");
+        if (v is not null && Enum.TryParse<Consciousness>(v.Avpu, out var c) && c != Consciousness.Alert)
+            parts.Add(c switch
+            {
+                Consciousness.Confusion => T("C · new confusion", "C · bingung baru"),
+                Consciousness.Voice => T("V · responds to voice", "V · respons suara"),
+                Consciousness.Pain => T("P · responds to pain", "P · respons nyeri"),
+                _ => T("U · unresponsive", "U · tidak respons"),
+            });
+        var label = Ui.L(string.Join(" · ", parts), 12.5, Ui.Red, "BodyBold");
+        label.IsVisible = parts.Count > 0;
+        return label;
     }
 }
 
@@ -271,7 +293,7 @@ public sealed class SettingsPage : ContentPage
                 Children =
                 {
                     Ui.Card(new VerticalStackLayout { Spacing = 8, Children = { Row(T("HIS server", "Server SIMRS"), server), Row(T("Hospital (tenant)", "Rumah sakit (tenant)"), tenant),
-                        Row(T("Ward code", "Kode bangsal"), ward), Row(T("Nurse", "Perawat"), nurse), Row(T("Device key", "Kunci perangkat"), key), Row(T("Language", "Bahasa"), lang) } }),
+                        Row(T("Ward code", "Kode bangsal"), ward), Row(T("Nurse", "Perawat"), nurse), Row(T("Device token", "Token perangkat"), key), Row(T("Language", "Bahasa"), lang) } }),
                     Ui.L(T($"Device {s.DeviceId}. Data is stored on the device and synchronised with the HIS; vital signs and notes are append-only, the ward list is read-only.",
                            $"Perangkat {s.DeviceId}. Data disimpan di perangkat dan disinkronkan dengan SIMRS; tanda vital dan catatan tidak bisa diubah, daftar pasien hanya-baca."), 13, Ui.Muted),
                     Ui.Primary(T("Save", "Simpan"), async () =>

@@ -1,11 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
-	<!-- Medical.Net ward rounds (MAUI). Windows always; Android when the Android SDK is installed (-p:IncludeAndroid=true).
+	<!-- Medical.Net ward rounds (MAUI). Windows always; Android when the Android SDK is installed (-p:IncludeAndroid=true);
+	     iOS only when building on macOS (needs Xcode and the maui-ios workload).
 	     Not part of Medical.Net.slnx because CI runners have no MAUI workloads; build with Medical.Rounds.slnx. -->
 	<PropertyGroup>
 		<!-- The repo-wide Directory.Build.props sets TargetFramework=net10.0; MAUI needs platform frameworks only. -->
 		<TargetFramework></TargetFramework>
 		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net10.0-windows10.0.19041.0</TargetFrameworks>
 		<TargetFrameworks Condition="'$(IncludeAndroid)' == 'true'">$(TargetFrameworks);net10.0-android</TargetFrameworks>
+		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(TargetFrameworks);net10.0-ios</TargetFrameworks>
 		<OutputType>Exe</OutputType>
 		<RootNamespace>Medical.Rounds</RootNamespace>
 		<UseMaui>true</UseMaui>
@@ -17,6 +19,7 @@
 		<ApplicationVersion>2</ApplicationVersion>
 		<WindowsPackageType>None</WindowsPackageType>
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
 		<TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
 		<GenerateDocumentationFile>false</GenerateDocumentationFile>

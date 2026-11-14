@@ -5,10 +5,22 @@
 @inject DbContextOptions<HospitalDbContext> Options
 @inject HisSession S
 @inject NavigationManager Nav
+@inject IConfiguration Config
 <div class="login">
     <h1>Medical.Net HIS</h1>
     <p class="lede">@S.T("Hospital information system reference app — one installation, many hospitals.", "Aplikasi referensi SIMRS — satu instalasi, banyak rumah sakit.")</p>
-    @if (Error) { <div class="alert critical"><strong>@S.T("Unknown hospital or user.", "Rumah sakit atau pengguna tidak dikenal.")</strong></div> }
+    @if (Error) { <div class="alert critical"><strong>@(ErrorQuery == "sso" ? S.T("Single sign-on failed or your account has no access to this hospital.", "SSO gagal atau akun Anda tidak punya akses ke rumah sakit ini.") : S.T("Unknown hospital or user.", "Rumah sakit atau pengguna tidak dikenal."))</strong></div> }
+    @if (HisAuth.OidcConfigured(Config))
+    {
+        <div class="panel">
+            <label>@S.T("Hospital", "Rumah sakit")
+                <select @bind="_ssoTenant">@foreach (var t in _tenants) { <option value="@t.Id">@t.Name — @t.City</option> }</select>
+            </label>
+            <a class="button primary" href="@($"/account/sso?tenant={Uri.EscapeDataString(_ssoTenant)}&lang={S.Lang}&returnUrl={Uri.EscapeDataString(ReturnUrl ?? "")}")">@S.T("Sign in with SSO", "Masuk dengan SSO")</a>
+        </div>
+    }
+    @if (Config.GetValue("His:DemoLogin", true))
+    {
     <form method="post" action="/account/login" class="panel">
         <label>@S.T("Hospital", "Rumah sakit")
             <select name="tenant" @bind="_tenant">@foreach (var t in _tenants) { <option value="@t.Id">@t.Name — @t.City (kelas @t.Class)</option> }</select>
@@ -22,6 +34,7 @@
         <p class="note">@S.T("Demo sign-in without passwords. Connect your identity provider (OpenID Connect) before real use.",
                              "Masuk demo tanpa kata sandi. Hubungkan penyedia identitas (OpenID Connect) sebelum dipakai sungguhan.")</p>
     </form>
+    }
 </div>
 @code {
     [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
@@ -31,6 +44,7 @@
     private List<Tenant> _tenants = [];
     private List<Staff> _staff = [];
     private string _tenantValue = "";
+    private string _ssoTenant = "";
 
     private string _tenant
     {
@@ -46,6 +60,7 @@
         await using var db = new HospitalDbContext(Options, new FixedTenantContext(""));
         _tenants = await db.Tenants.Where(t => t.Active).OrderBy(t => t.Name).ToListAsync();
         _tenantValue = _tenants.FirstOrDefault()?.Id ?? "";
+        _ssoTenant = _tenantValue;
         await LoadStaffAsync();
     }
 

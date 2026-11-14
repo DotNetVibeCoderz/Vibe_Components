@@ -1,6 +1,8 @@
 @page "/{Tenant}/billing"
 @inherits HisPage
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Medical.Hospital.Integration
+@inject IServiceProvider Services
 <header class="head"><p class="eyebrow">@S.TenantName</p><h1>@T("Billing & claims", "Kasir & klaim")</h1></header>
 @if (Error is { } err) { <div class="alert critical">@err</div> }
 @if (Info is { } info) { <div class="alert info">@info</div> }
@@ -18,6 +20,20 @@
             <p class="label">@T("Recent invoices", "Invoice terakhir")</p>
             <table class="data">@foreach (var i in _invoices) { <tr><td class="mono">@i.Number</td><td><span class="tag">@i.Payer</span></td><td class="mono num">@Rp(i.Total)</td><td><span class="tag @(i.State == InvoiceState.Paid ? "teal" : "warn")">@i.State</span></td>
                 <td>@if (i.State == InvoiceState.Issued) { <button @onclick="() => PayAsync(i)">@T("Pay", "Bayar") @Rp(i.PatientAmount - i.Paid)</button> }</td></tr> }</table>
+            <p class="label">@T("INA-CBG claims · difference vs hospital tariff", "Klaim INA-CBG · selisih terhadap tarif RS")</p>
+            @if (_claims.Count == 0) { <p class="empty">@T("No claims sent to E-Klaim yet.", "Belum ada klaim yang dikirim ke E-Klaim.")</p> }
+            else
+            {
+                <table class="data">
+                    <tr><th>SEP</th><th>INA-CBG</th><th>@T("Hospital", "Tarif RS")</th><th>INA-CBG</th><th>@T("Difference", "Selisih")</th><th></th></tr>
+                    @foreach (var c in _claims)
+                    {
+                        <tr><td class="mono">@c.SepNumber</td><td class="mono">@(c.CbgCode ?? "—")</td><td class="mono num">@Rp(c.HospitalTariff)</td><td class="mono num">@Rp(c.CbgTariff)</td>
+                            <td class="mono num">@Rp(-c.Selisih)</td><td><span class="tag @StatusTag(c.Status)">@c.Status</span></td></tr>
+                    }
+                    <tr class="total"><td colspan="2"><strong>@T("Total", "Total")</strong></td><td class="mono num">@Rp(_claims.Sum(c => c.HospitalTariff))</td><td class="mono num">@Rp(_claims.Sum(c => c.CbgTariff))</td><td class="mono num"><strong>@Rp(-_claims.Sum(c => c.Selisih))</strong></td><td></td></tr>
+                </table>
+            }
         </section>
         <section class="panel">
             @if (_sum is { } s)
@@ -35,6 +51,26 @@
                     <p>@T("Diagnoses", "Diagnosis"): @string.Join(", ", cl.Claim.Diagnoses) · @T("hospital tariff", "tarif RS") <strong>@Rp(cl.Claim.Tariff.Total)</strong></p>
                     @if (cl.Issues.Count == 0) { <div class="alert info"><strong>@T("Ready to send to E-Klaim.", "Siap dikirim ke E-Klaim.")</strong></div> }
                     @foreach (var i in cl.Issues) { <div class="alert @(i.Severity == Medical.Bpjs.InaCbg.ClaimIssueSeverity.Error ? "critical" : "warning")"><span class="tag">@i.Field</span><span>@i.Message[S.Lang]</span></div> }
+                    @if (!_eklaimConfigured) { <div class="alert warning">@T("E-Klaim is not configured (His:Bpjs:EKlaim) — send the claim from the E-Klaim application.", "E-Klaim belum dikonfigurasi (His:Bpjs:EKlaim) — kirim klaim melalui aplikasi E-Klaim.")</div> }
+                    else if (Medical.Bpjs.InaCbg.InaCbgClaimBuilder.IsValid(cl.Issues) && _record?.Status != BpjsClaimStatus.Sent)
+                    {
+                        <div class="controls end"><button class="primary" @onclick="SendClaimAsync">@T("Send claim to E-Klaim", "Kirim klaim E-Klaim")</button></div>
+                    }
+                }
+                @if (_record is { } rec)
+                {
+                    <p class="label">@T("E-Klaim result", "Hasil E-Klaim") · <span class="tag @StatusTag(rec.Status)">@rec.Status</span></p>
+                    @if (rec.CbgCode is { } cbg)
+                    {
+                        <table class="data">
+                            <tr><td>@T("INA-CBG group", "Grup INA-CBG")</td><td class="mono">@cbg</td><td>@rec.CbgDescription</td></tr>
+                            <tr><td>@T("INA-CBG tariff", "Tarif INA-CBG")</td><td class="mono num" colspan="2">@Rp(rec.CbgTariff)</td></tr>
+                            <tr><td>@T("Hospital tariff", "Tarif RS")</td><td class="mono num" colspan="2">@Rp(rec.HospitalTariff)</td></tr>
+                            <tr class="total"><td><strong>@T("Difference (INA-CBG − hospital)", "Selisih (INA-CBG − tarif RS)")</strong></td><td class="mono num" colspan="2"><strong>@Rp(-rec.Selisih)</strong></td></tr>
+                        </table>
+                    }
+                    @if (rec.LastError is { Length: > 0 } le) { <div class="alert critical"><span class="mono">@le</span></div> }
+                    @if (rec.SubmittedAt is { } at) { <p class="muted">@T("Sent", "Terkirim") @Local(at)</p> }
                 }
             }
             else { <p class="empty">@T("Pick a visit.", "Pilih kunjungan.")</p> }
@@ -49,6 +85,12 @@
     private string? _visit;
     private BillSummary? _sum;
     private (Medical.Bpjs.InaCbg.InaCbgClaim Claim, IReadOnlyList<Medical.Bpjs.InaCbg.ClaimIssue> Issues)? _claim;
+    private BpjsClaimRecord? _record;
+    private List<BpjsClaimRecord> _claims = [];
+    private bool _eklaimConfigured;
+    private string _coderNik = "3171000000000001";
+
+    private static string StatusTag(BpjsClaimStatus s) => s switch { BpjsClaimStatus.Sent => "teal", BpjsClaimStatus.Failed or BpjsClaimStatus.ValidationFailed => "warn", _ => "" };
 
     protected override async Task LoadAsync()
     {
@@ -63,15 +105,20 @@
             .Select(v => new Row(v.Id, names.GetValueOrDefault(v.PatientId, "?"), v.Kind, v.Status, v.Payer, charges.Where(c => c.VisitId == v.Id).Sum(c => c.Amount)))
             .OrderByDescending(r => r.Status == VisitStatus.Discharged).ThenByDescending(r => r.Total).Take(15).ToList();
         _invoices = (await db.Invoices.ToListAsync()).OrderByDescending(i => i.IssuedAt).Take(8).ToList();
+        _claims = (await db.Set<BpjsClaimRecord>().ToListAsync()).OrderByDescending(c => c.UpdatedAt).Take(8).ToList();
+        _eklaimConfigured = Services.BpjsWorkflow(db, S.Clock).EKlaimConfigured;
+        // The coder's own NIK goes into claim_final; demo staff without one fall back to a sample NIK.
+        if (await db.Staff.FirstOrDefaultAsync(s => s.Id == S.StaffId) is { Nik: { Length: 16 } nik }) _coderNik = nik;
         if (_visit is not null) await OpenAsync(_visit);
         else if (_open.FirstOrDefault(r => r.Payer == PayerType.Bpjs && r.Status == VisitStatus.Admitted) is { } first) await OpenAsync(first.VisitId);
     }
 
     private async Task OpenAsync(string visitId)
     {
+        if (visitId != _visit) _claim = null;   // keep the claim check of the open visit across reloads
         _visit = visitId;
-        _claim = null;
         await using var db = S.Db();
+        _record = await db.Set<BpjsClaimRecord>().FirstOrDefaultAsync(c => c.VisitId == visitId);
         var bill = new BillingService(db, S.Clock);
         var sum = await bill.SummaryAsync(visitId);
         _sum = sum.Charges.Count == 0 ? null : sum;
@@ -81,11 +128,33 @@
     {
         await using var db = S.Db();
         var inv = await new BillingService(db, S.Clock).IssueAsync(_visit!);
+        // A claim grouped before the invoice was issued: the payer amount is the INA-CBG rate, not the hospital tariff.
+        if (inv.Payer == PayerType.Bpjs) inv = await Services.BpjsWorkflow(db, S.Clock).ApplyCbgToInvoiceAsync(inv.VisitId) ?? inv;
         _visit = null; _sum = null;
         Info = T($"Invoice {inv.Number}: patient pays {Rp(inv.PatientAmount)}, payer {Rp(inv.PayerAmount)}.", $"Invoice {inv.Number}: pasien membayar {Rp(inv.PatientAmount)}, penjamin {Rp(inv.PayerAmount)}.");
     });
 
     private Task PayAsync(Invoice i) => Run(async () => { await using var db = S.Db(); await new BillingService(db, S.Clock).PayAsync(i.Id, i.PatientAmount - i.Paid); }, T("Payment received.", "Pembayaran diterima."));
 
-    private Task ClaimAsync() => Run(async () => { await using var db = S.Db(); _claim = await new BillingService(db, S.Clock).BpjsClaimAsync(_visit!, "3171000000000001"); });
+    private Task ClaimAsync() => Run(async () => { await using var db = S.Db(); _claim = await new BillingService(db, S.Clock).BpjsClaimAsync(_visit!, _coderNik); });
+
+    private async Task SendClaimAsync()
+    {
+        Error = null; Info = null;
+        try
+        {
+            await using (var db = S.Db())
+            {
+                var outcome = await Services.BpjsWorkflow(db, S.Clock).SubmitClaimAsync(_visit!, _coderNik);
+                if (_claim is { } cl) _claim = (cl.Claim, outcome.Issues);
+                if (outcome.Sent)
+                    Info = T($"Claim sent: INA-CBG {outcome.Record.CbgCode} {Rp(outcome.Record.CbgTariff)} (hospital tariff {Rp(outcome.Record.HospitalTariff)}).",
+                             $"Klaim terkirim: INA-CBG {outcome.Record.CbgCode} {Rp(outcome.Record.CbgTariff)} (tarif RS {Rp(outcome.Record.HospitalTariff)}).");
+                else Error = T("E-Klaim did not accept the claim — see the result below.", "E-Klaim belum menerima klaim — lihat hasil di bawah.");
+            }
+            await LoadAsync();
+        }
+        catch (PayerIntegrationException e) { Error = e.Text[S.Lang]; }
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException or KeyNotFoundException) { Error = e.Message; }
+    }
 }

@@ -41,11 +41,14 @@ Made by Gravicode Studios, led by Kang Fadhil. Status details: [Progress.md](Pro
 - Mobile companion (MAUI) for ward rounds; offline-first sync
 - Delivered in 2.0.0 — see [docs/en/platform.md](docs/en/platform.md). `Medical.Hospital` (shared-schema multi-tenant HIS core, real-time NEWS2 engine), `Medical.Sync` (HLC, conflict policies, server-sequence cursors) and `Medical.Devices` (HL7 / MLLP monitors, MQTT / SenML sensors and pumps on IoTCom.Net; `2.0.0-preview` while IoTCom.Net is prerelease); the Blazor HIS reference app (`apps/Medical.His`) and the MAUI ward-round app (`apps/Medical.Rounds`, Windows + Android). Monitors in the demo are simulated. Carried forward: certification against real bedside devices, OpenID Connect sign-in in place of the demo login, an Android build in CI, a database-per-tenant option, iOS.
 
-## v2.1 — Next
-- Real-device validation: monitor / pump vendors' HL7 and SenML output, IEEE 11073 MDC code mapping, alarm pass-through
+## v2.1 — Integrations ✅
 - OpenID Connect (Keycloak / Entra ID) with tenant and role claims; per-device sync credentials and ward-scope enforcement on the server
 - EF Core migrations for `Medical.Hospital`; database-per-tenant as an option next to the shared schema
 - BPJS live workflow from the HIS: VClaim SEP creation, E-Klaim submission and grouper result back into billing; SATUSEHAT visit bundle on discharge
 - DICOM modality worklist (C-FIND SCP) from the radiology worklist; HL7 ADT feed out of the HIS
 - Ward rounds: Android build in CI, iOS target, nurse-entered AVPU / oxygen feeding the monitoring engine
+- Delivered in 2.1.0 — see [docs/en/platform.md](docs/en/platform.md#what-changed-in-21). Integrations are tested against simulated BPJS / SATUSEHAT services and pynetdicom; live-environment runs need the hospital's own credentials.
+
+## v2.2 — Next
+- Real-device validation: monitor / pump vendors' HL7 and SenML output, IEEE 11073 MDC code mapping, alarm pass-through (waiting for bedside devices)
 - `Medical.Devices` to stable once IoTCom.Net is released

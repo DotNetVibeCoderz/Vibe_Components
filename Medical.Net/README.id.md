@@ -28,6 +28,16 @@ Dibuat oleh **Gravicode Studios** dipimpin oleh **Kang Fadhil**. · [English](RE
 | `Medical.Devices` *(pratinjau)* | **Perangkat samping tempat tidur**: monitor pasien HL7 v2 / MLLP, sensor dan pompa infus MQTT + SenML, simulator monitor dan pompa, gateway ke mesin NEWS2. Versi `2.0.0-preview` karena IoTCom.Net masih prarilis | IoTCom.Net 0.22 (pratinjau) |
 | `Medical.Cli` · `Medical.Templates` | Perintah `medical` dan templat `dotnet new` | — |
 
+## Yang baru di 2.1
+
+- **Login dan keamanan perangkat:** OpenID Connect (Keycloak, Entra ID) dengan tenant dari penyedia identitas dan peran dari data staf SIMRS; token sinkronisasi per perangkat yang di-hash dan terikat pada satu bangsal, dengan pendaftaran dan pencabutan di SIMRS.
+- **Basis data:** migrasi EF Core untuk SQLite dan SQL Server (basis data 2.0 otomatis diberi baseline) dan opsi satu basis data per rumah sakit.
+- **BPJS dan SATUSEHAT langsung:** SEP VClaim saat pendaftaran, pengiriman E-Klaim dengan hasil grouper dan selisih kembali ke kasir, serta bundel kunjungan SATUSEHAT saat kunjungan selesai atau pasien pulang — dengan outbox dan pengulangan.
+- **Antarmuka:** SCP Modality Worklist DICOM dari order radiologi (diuji dengan pynetdicom) dan feed HL7 ADT (A01 / A02 / A03 / A04) dengan pengiriman berurutan dan ber-ACK.
+- **Visite:** AVPU dan oksigen yang diisi perawat masuk ke NEWS2 monitor; aplikasi Android di-build di CI dan iOS menjadi target.
+
+Lihat [Perubahan di 2.1](docs/id/platform.md#perubahan-di-21).
+
 ## Yang baru di 2.0
 
 - **Inti SIMRS** (`Medical.Hospital`): satu basis data untuk banyak rumah sakit, dengan setiap baris diberi tenant, difilter dan dijaga dari penulisan lintas tenant. Cakupannya pendaftaran dan antrean, rawat jalan dan rawat inap, farmasi, laboratorium, radiologi, kasir dengan data klaim INA-CBG BPJS, serta dasbor.

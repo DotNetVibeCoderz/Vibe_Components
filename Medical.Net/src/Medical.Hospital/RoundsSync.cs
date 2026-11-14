@@ -63,11 +63,15 @@ public static class RoundsSync
     }
 
     /// <summary>A sync server for one tenant over its database.</summary>
-    public static SyncServer Server(HospitalDbContext db) => new(new HospitalSyncStore(db), RoundsTypes.Policies);
+    public static SyncServer Server(HospitalDbContext db, string? deviceWardId = null) => new(new HospitalSyncStore(db, deviceWardId), RoundsTypes.Policies);
 }
 
-/// <summary><see cref="ISyncServerStore"/> over the hospital database (tenant-filtered; scope = ward id).</summary>
-public sealed class HospitalSyncStore(HospitalDbContext db) : ISyncServerStore
+/// <summary>
+/// <see cref="ISyncServerStore"/> over the hospital database (tenant-filtered; scope = ward id). With
+/// <paramref name="deviceWardId"/> (an enrolled device), writes are accepted only for admissions on that ward, and vitals /
+/// notes must name the admission's own patient.
+/// </summary>
+public sealed class HospitalSyncStore(HospitalDbContext db, string? deviceWardId = null) : ISyncServerStore
 {
     public SyncChange? Get(string type, string id)
     {
@@ -84,6 +88,7 @@ public sealed class HospitalSyncStore(HospitalDbContext db) : ISyncServerStore
             case RoundsTypes.Vitals when data is not null:
             {
                 var v = data.Deserialize<RoundsVitals>(SyncJson.Options)!;
+                scope = Authorise(v.VisitId, v.PatientId);
                 var vs = new VitalSigns
                 {
                     Timestamp = new DateTimeOffset(DateTime.SpecifyKind(v.Time, DateTimeKind.Utc)), RespiratoryRate = v.RespiratoryRate, SpO2 = v.SpO2, OnSupplementalOxygen = v.OnOxygen,
@@ -97,20 +102,20 @@ public sealed class HospitalSyncStore(HospitalDbContext db) : ISyncServerStore
                     SystolicBp = vs.SystolicBp, DiastolicBp = vs.DiastolicBp, HeartRate = vs.HeartRate, TemperatureC = vs.TemperatureC, Consciousness = vs.Consciousness,
                     News2 = news, Source = VitalsSource.MobileApp, DeviceId = change.NodeId, RecordedBy = v.RecordedBy, Validated = true,
                 });
-                scope = WardOf(v.VisitId);
                 break;
             }
             case RoundsTypes.Note when data is not null:
             {
                 var n = data.Deserialize<RoundsNote>(SyncJson.Options)!;
+                scope = Authorise(n.VisitId, n.PatientId);
                 db.Notes.Add(new NursingNote { Id = n.Id, PatientId = n.PatientId, VisitId = n.VisitId, Time = n.Time, Author = n.Author, Text = n.Text });
-                scope = WardOf(n.VisitId);
                 break;
             }
             case RoundsTypes.Task when data is not null:
             {
                 var t = data.Deserialize<RoundsTask>(SyncJson.Options)!;
-                var task = db.Tasks.FirstOrDefault(x => x.Id == t.Id) ?? throw new KeyNotFoundException($"Task {t.Id} not found.");
+                var task = db.Tasks.FirstOrDefault(x => x.Id == t.Id) ?? throw new InvalidOperationException($"Task {t.Id} not found.");
+                if (deviceWardId is not null && task.WardId != deviceWardId) throw new InvalidOperationException("The task belongs to another ward.");
                 (task.State, task.DoneBy, task.DoneAt) = (t.Done ? WardTaskState.Done : WardTaskState.Open, t.DoneBy, t.DoneAt);
                 scope = task.WardId;
                 break;
@@ -134,6 +139,16 @@ public sealed class HospitalSyncStore(HospitalDbContext db) : ISyncServerStore
         if (scope is not null) q = q.Where(s => s.Scope == scope);
         if (types is not null) q = q.Where(s => types.Contains(s.Type));
         return q.OrderBy(s => s.Seq).Take(limit).ToList().Select(ToChange).ToList();
+    }
+
+    /// <summary>The ward of an admission, after checking the device may write to it and the patient matches.</summary>
+    private string? Authorise(string visitId, string patientId)
+    {
+        var stay = db.Visits.FirstOrDefault(v => v.Id == visitId) ?? throw new InvalidOperationException($"Admission {visitId} not found.");
+        if (stay.PatientId != patientId) throw new InvalidOperationException("The record names a different patient than the admission.");
+        string? ward = WardOf(visitId);
+        if (deviceWardId is not null && ward != deviceWardId) throw new InvalidOperationException("The admission is on another ward.");
+        return ward;
     }
 
     private string? WardOf(string visitId) =>

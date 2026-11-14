@@ -1,8 +1,11 @@
-# Hospital platform (v2.0)
+# Hospital platform (v2.0 – 2.1)
 
 Medical.Net 2.0 adds a multi-tenant hospital information system core, real-time NEWS2 from bedside devices, and
 offline-first sync for ward rounds, plus two reference apps built on them: a Blazor Server HIS and a MAUI ward-round
-app. · [Bahasa Indonesia](../id/platform.md)
+app. Version 2.1 connects them to the outside world: OpenID Connect sign-in, per-device sync tokens, EF Core
+migrations with a database-per-tenant option, the live BPJS (VClaim SEP, E-Klaim) and SATUSEHAT workflows, a DICOM
+modality worklist, an HL7 ADT feed, and nurse-entered AVPU / oxygen in the monitoring engine
+([what changed in 2.1](#what-changed-in-21)). · [Bahasa Indonesia](../id/platform.md)
 
 > The HIS is a reference implementation for building your own system, not a certified product. Monitoring alerts
 > support — never replace — clinical observation. All demo hospitals, staff and patients are fictional.
@@ -254,7 +257,7 @@ ASPNETCORE_ENVIRONMENT=Development dotnet run --project apps/Medical.His --urls 
 
 Open `http://localhost:5300` and choose a hospital and a demo user. Run it in Development, or publish it
 (`dotnet publish apps/Medical.His -c Release`). Static web assets don't resolve when the `bin` executable runs in Production.
-The first start creates `App_Data/his.db` and seeds both hospitals.
+The first start creates `App_Data/his.db` (EF Core migrations) and seeds both hospitals.
 
 | Hospital (tenant id) | City | Class |
 |---|---|---|
@@ -269,8 +272,17 @@ monitors), 14 staff accounts and its own tariffs and stock.
 | `His:Provider` | `Sqlite` | `SqlServer` to use SQL Server |
 | `ConnectionStrings:His` | `Data Source=App_Data/his.db` | database connection |
 | `His:SeedPatients` | `40` | synthetic patients per hospital on first start |
-| `His:DemoLogin` | `true` | enables `/account/demo` |
-| `His:DeviceKeys:{tenant}` | — (`demo-device-key` only while `His:DemoLogin` is on) | key that sync clients send in `X-Device-Key` |
+| `His:Tenants:{tenant}:ConnectionString` | (unset) | database-per-tenant: that hospital's own database; `ConnectionStrings:His` then holds the catalog |
+| `His:DemoLogin` | `true` | enables `/account/demo` and the demo sign-in form |
+| `His:Oidc:Authority`, `ClientId`, `ClientSecret` | (unset) | OpenID Connect sign-in (authorization code + PKCE); see [Sign-in](#sign-in-openid-connect) |
+| `His:Oidc:TenantClaim` · `UserClaim` · `Scopes` · `RequireHttpsMetadata` | `tenant` · `preferred_username` · `openid profile` · `true` | claim mapping |
+| `His:DeviceKeys:{tenant}` | — (`demo-device-key` only while `His:DemoLogin` is on) | legacy shared key in `X-Device-Key`; prefer enrolled device tokens |
+| `His:Bpjs:VClaim:{ConsId,Secret,UserKey,Environment,PpkCode}` | (unset) | VClaim SEP from registration |
+| `His:Bpjs:EKlaim:{Url,Key}` | (unset) | E-Klaim submission and grouper result from billing |
+| `His:SatuSehat:{ClientId,ClientSecret,OrganizationId,Environment}` | (unset) | SATUSEHAT bundle when a visit finishes or a patient is discharged |
+| `His:SatuSehat:Locations:{deptCode}` · `DefaultLocationId` · `MaxAttempts` · `AutoSubmit` | — · — · `5` · `false` | SATUSEHAT Location ids; `AutoSubmit` runs a background retry sweeper |
+| `His:Worklist:Port` · `His:Worklist:{AeTitle}` · `Stations:{Modality}` · `TimeZone` | (unset) | DICOM modality worklist SCP; AE title → tenant id |
+| `His:Adt:Host` · `Port` · `ReceivingApplication` · `ReceivingFacility` | (unset) | HL7 ADT feed (A01/A02/A03/A04) over MLLP |
 | `His:SimulateDevices` | `true` | simulated ICU monitors and pumps |
 | `His:MllpPort` | (unset) | also listen for real monitors' ORU^R01 on this TCP port; MSH-3 must equal the bed's monitor id (e.g. `RSMN-MON-01`) |
 | `His:TickSeconds` | `2` | real seconds between simulation ticks |
@@ -281,7 +293,7 @@ monitors), 14 staff accounts and its own tariffs and stock.
 | Admin (`admin`) | all |
 | Registration (`pendaftaran`) | dashboard, registration |
 | Doctor (`dr.andi`, `dr.sari`, `dr.budi`, `dr.igd`) | dashboard, registration, outpatient, wards, monitoring, pharmacy, lab, radiology |
-| Nurse (`ns.dewi`, `ns.eko`) | dashboard, registration, outpatient, wards, monitoring |
+| Nurse (`ns.dewi`, `ns.eko`) | dashboard, registration, outpatient, wards, monitoring, devices |
 | Pharmacist (`apt.fitri`) | dashboard, pharmacy |
 | Lab analyst (`analis`) | dashboard, lab |
 | Radiographer / radiologist (`radiografer`, `dr.rad`) | dashboard, radiology |
@@ -289,24 +301,25 @@ monitors), 14 staff accounts and its own tariffs and stock.
 
 | Endpoint | Access |
 |---|---|
+| `GET /account/sso?tenant=&lang=&returnUrl=` | OpenID Connect challenge (when configured) |
 | `GET /account/demo?tenant=&user=&lang=&returnUrl=` · `POST /account/login` · `GET /account/logout` | demo sign-in (no password); both return 404 when `His:DemoLogin=false` |
-| `POST /api/{tenant}/sync/push` · `POST /api/{tenant}/sync/pull?ward=MELATI` | `X-Device-Key` header |
-| `GET /api/{tenant}/sync/wards` | `X-Device-Key` header (ward codes and names for device setup) |
+| `POST /api/{tenant}/devices` `{deviceId, ward, name}` | signed-in nurse or admin of the tenant; returns the device token once |
+| `POST /api/{tenant}/sync/push` · `POST /api/{tenant}/sync/pull?ward=MELATI` | `X-Device-Token` (enrolled device, bound to its ward) or the legacy `X-Device-Key` |
+| `GET /api/{tenant}/sync/wards` | device token or key (ward codes and names for device setup) |
 | `GET /api/{tenant}/fhir/Patient/{id}/$summary` | signed-in user of the same tenant; FHIR IPS, audited |
 | `GET /api/{tenant}/dashboard` | signed-in user of the same tenant; `HospitalDashboard` JSON |
 | `GET /health` | anonymous |
 
 Pages: `/login`, `/{tenant}` (dashboard), `/{tenant}/registration`, `outpatient`, `wards`, `monitoring`, `pharmacy`, `lab`,
-`radiology`, `billing`. The UI follows the user's language (Indonesian by default, English selectable at sign-in).
+`radiology`, `billing`, `devices`. The UI follows the user's language (Indonesian by default, English selectable at sign-in).
 
 **Security notes:**
 
-- **Sign-in:** `/account/demo` and `/account/login` sign in by user name only, for demos. `His:DemoLogin=false` switches both off; add OpenID Connect (your identity provider) that issues the `tenant` and role claims. `returnUrl` accepts local paths only (no `//host` redirects).
-- **Device keys:**
-  - Set `His:DeviceKeys:{tenant}` to a long random secret per tenant, from a secret store.
-  - When the key is unset, the app accepts `demo-device-key` in demo mode only; with `His:DemoLogin=false` an unconfigured tenant refuses every device. Keys are compared in constant time.
-  - The key is shared by all devices of a tenant. Rotate it, or use per-device credentials (mutual TLS or tokens) in production.
-- **Ward scope:** every pull must name a ward (`?ward=MELATI`); a missing or unknown ward code is refused with 400, so a device never receives other wards' patients.
+- **Sign-in:** in production set `His:DemoLogin=false` and configure OpenID Connect. `/account/demo` and `/account/login` sign in by user name only, for demos. `returnUrl` accepts local paths only (no `//host` redirects).
+- **Device tokens:** enrol each tablet on the Devices page. The token is shown once and the server stores only its SHA-256 hash; a lost tablet is revoked without touching the others. See [Per-device sync tokens](#per-device-sync-tokens).
+- **Legacy device keys:** `His:DeviceKeys:{tenant}` is one secret shared by all devices of a tenant and is not ward-bound. When it is unset, `demo-device-key` works in demo mode only. Keys are compared in constant time.
+- **Ward scope:** every legacy-key pull must name a ward (`?ward=MELATI`); a missing or unknown ward code is refused with 400. An enrolled device always receives its own ward only, and its writes are refused for patients on other wards.
+- **Integration credentials:** BPJS, E-Klaim and SATUSEHAT secrets belong in user secrets, environment variables or a vault — never in `appsettings.json`.
 - **HTTPS:** outside Development the app redirects to HTTPS and sends HSTS. Configure a certificate (or terminate TLS at a reverse proxy with forwarded headers), and protect the database and `App_Data`.
 
 ## The ward-round app (`apps/Medical.Rounds`)
@@ -325,11 +338,115 @@ dotnet workload install maui-windows            # maui-android for Android
 dotnet build Medical.Rounds.slnx                # Windows
 dotnet run --project apps/Medical.Rounds -f net10.0-windows10.0.19041.0
 dotnet build apps/Medical.Rounds -f net10.0-android -p:IncludeAndroid=true   # needs the Android SDK
+# first time: -t:InstallAndroidDependencies -p:AndroidSdkDirectory=<sdk dir> -p:AcceptAndroidSdkLicenses=true downloads the SDK
 ```
 
+- **CI:** the `rounds-android` job builds a Release APK (debug-signed, for testing) and uploads it as the `medical-rounds-android` artifact. It does not gate the NuGet publish.
+- **iOS:** `net10.0-ios` is added when building on macOS (Xcode required). `Info.plist` allows plain HTTP to local-network hosts only.
+
 - **Solution:** the app is not in `Medical.Net.slnx` because CI runners have no MAUI workloads. Build it with `Medical.Rounds.slnx`.
-- **Settings:** server URL, tenant, ward, nurse, device key and device id. The default server is `http://localhost:5300`, or `http://10.0.2.2:5300` on the Android emulator.
+- **Settings:** server URL, tenant, ward, nurse, device token and device id. A token starting with `mdn_` is sent as `X-Device-Token`; any other value as the legacy `X-Device-Key`. The default server is `http://localhost:5300`, or `http://10.0.2.2:5300` on the Android emulator.
 - **Screenshots:** with the HIS running, `Medical.Rounds.exe --capture docs/images en|id` syncs, renders the ward list, patient, vital-signs and pending-sync pages to PNG, and exits.
+
+## What changed in 2.1
+
+### Sign-in (OpenID Connect)
+
+Set `His:Oidc:Authority`, `ClientId` and `ClientSecret` (Keycloak, Microsoft Entra ID or any OpenID Connect provider) and the
+login page shows **Sign in with SSO**. The flow is authorization code with PKCE. The identity provider proves who the user is;
+the HIS decides what they may do:
+
+- The hospital chosen on the login page must appear in the user's `tenant` claim (one value, a space- or comma-separated list, or a repeated claim).
+- An active staff record with the same user name (`preferred_username` by default) must exist in that hospital. The role comes from that record, not from the token.
+- Anything else is refused (`/login?error=sso`). Each sign-in is audited with its method (`oidc` or `demo`).
+
+```json
+"His": { "DemoLogin": false,
+         "Oidc": { "Authority": "https://sso.example.id/realms/rs", "ClientId": "medical-his", "TenantClaim": "tenant" } }
+```
+
+Keep `ClientSecret` in user secrets or an environment variable (`His__Oidc__ClientSecret`).
+
+### Per-device sync tokens
+
+Nurses and admins enrol ward tablets on **Devices** (`/{tenant}/devices`) or with `POST /api/{tenant}/devices`:
+
+- **Token:** `mdn_` + 32 random bytes (base64url). It is shown once; the server stores the SHA-256 hash and a 12-character prefix for lookup, and compares hashes in constant time.
+- **Ward binding:** the token is bound to one ward. Pulls return only that ward (a different `?ward=` is 403). Pushed vitals, notes and task updates for admissions on other wards — or naming a patient other than the admission's — are rejected per change.
+- **Identity:** a push whose `nodeId` differs from the enrolled device id is 403.
+- **Lifecycle:** re-enrolling a device id replaces its token; revoking takes effect on the next request. The last-seen time is shown.
+
+```csharp
+var e = await new DeviceRegistry(db, clock).EnrollAsync("tablet-melati-02", "Tablet Melati 2", "MELATI");
+// e.Token → enter it once in the Rounds app (Settings → Device token)
+```
+
+### Database: migrations and database-per-tenant
+
+`Medical.Hospital` now ships EF Core migrations for SQLite and SQL Server (`SqliteHospitalDbContext`,
+`SqlServerHospitalDbContext`). `HospitalDatabase.MigrateAsync` (called by the seeder) applies them. A database created by
+2.0 with `EnsureCreated` is detected and baselined at `V20Baseline`, so only the 2.1 tables are added and no data is lost.
+
+```csharp
+var options = HospitalDatabase.Options(HospitalProvider.SqlServer, catalogConnection,
+    perTenant: new Dictionary<string, string> { ["rs-nusantara"] = nusantaraDb, ["rs-bahari"] = bahariDb });
+await HospitalDatabase.MigrateAsync(options);   // the catalog and every tenant database
+```
+
+With `perTenant`, a `TenantDatabaseInterceptor` switches each connection to the current tenant's database; tenants not
+listed stay in the shared database. The tenant filters and the cross-tenant write guard remain active either way. In the
+HIS set `His:Tenants:{tenant}:ConnectionString`. To add a migration:
+
+```bash
+dotnet ef migrations add <Name> -p src/Medical.Hospital -s src/Medical.Hospital -c SqliteHospitalDbContext -o Migrations/Sqlite --namespace Medical.Hospital.Migrations.Sqlite
+dotnet ef migrations add <Name> -p src/Medical.Hospital -s src/Medical.Hospital -c SqlServerHospitalDbContext -o Migrations/SqlServer --namespace Medical.Hospital.Migrations.SqlServer
+```
+
+### BPJS and SATUSEHAT workflows
+
+`BpjsWorkflowService` (namespace `Medical.Hospital.Integration`) drives the `Medical.Bpjs` clients from the HIS records:
+
+- **SEP (VClaim):** when the payer is BPJS, the registration page collects poli, ICD-10, DPJP and referral and calls **Open visit & create SEP via VClaim**. The service checks the card and the entitled class, builds `t_sep` from the visit, stores the SEP number on the visit and audits it. `CheckEligibilityAsync` and `DeleteSepAsync` are also available.
+- **Claim (E-Klaim):** **Send claim to E-Klaim** on the billing page appears when the pre-grouping checks have no errors. The five E-Klaim steps run in order and a retry resumes after the last completed step. The grouper result (CBG code, description, tariff) is stored in `BpjsClaimRecord`; the invoice's payer amount becomes the CBG tariff while its total keeps the hospital tariff, and the **selisih** (hospital tariff − INA-CBG) is reported.
+- **Failures:** a refused or failed step sets the claim to `Failed` with `step: message`; a CBG code starting with `X` is a grouper error.
+
+`SatuSehatPublisher` sends one finished visit at a time (encounter, diagnoses, vitals and dispensed drugs of that visit only):
+
+- It runs when a doctor finishes an outpatient visit or a ward discharges a patient, and resolves the patient and practitioner IHS numbers by NIK.
+- Every attempt is recorded in `SatuSehatSubmissionRecord`. A failure never blocks the clinical action; with `His:SatuSehat:AutoSubmit=true` a background sweeper queues finished visits in every tenant and retries failures up to `MaxAttempts`.
+
+Without configuration the pages show "not configured" and the manual workflow of 2.0 stays available.
+
+### DICOM modality worklist
+
+`ModalityWorklistScp` (namespace `Medical.Dicom`) answers Modality Worklist C-FIND queries from an `IWorklistSource`:
+
+- **Matching:** modality, scheduled station AE, date and time (single values and ranges), accession number, patient id and case-insensitive name wildcards, following PS3.4.
+- **Responses:** only the requested attributes are returned, and every response passes fo-dicom validation.
+- **HIS source:** `His:Worklist:Port` starts the SCP in the HIS. It serves scheduled radiology orders, and AE titles map to hospitals (`His:Worklist:RSMN-MWL=rs-nusantara`). Once any mapping exists, an unknown AE title receives an empty list. A Study Instance UID is generated and saved for each order a query returns, so the modality and the PACS agree.
+- **Verified:** with pynetdicom 3.0.4 (`C-ECHO`, `C-FIND` by modality, date range and name wildcard).
+
+```bash
+medical worklist serve --port 11112                       # demo SCP
+medical worklist query localhost 11112 --modality CT --date 20261116
+```
+
+### HL7 ADT feed
+
+`AdtFeed` turns registrations, admissions and discharges on the event bus into ADT^A04 / A01 / A03 messages, and the transfer
+page adds A02. Messages go to an `Hl7OutboxMessage` table and `Hl7OutboxSender` delivers them over MLLP:
+
+- **Order:** messages go out oldest first per destination; a failed message holds back the ones after it.
+- **Delivery:** only an `AA` / `CA` acknowledgement echoing the control id counts as sent.
+- **Retries:** anything else retries with a doubling delay, up to 10 attempts, after which the message is `Failed`.
+
+The messages parse with NHapi. Configure `His:Adt:Host` and `His:Adt:Port`.
+
+### Ward rounds and monitoring
+
+- **Nurse assessment:** consciousness (AVPU) and supplemental oxygen recorded on the tablet — or with the A / C / V / P / U and O₂ buttons on the monitoring wall — now feed the monitor-based NEWS2 of that patient. Before 2.1 it assumed Alert and room air. The assessment follows the patient when they move to another monitored bed.
+- **Ward list:** tiles show oxygen and a non-Alert consciousness level.
+- **Builds:** the Android build runs in CI; iOS is a target on macOS.
 
 ## CLI
 
@@ -360,6 +477,7 @@ The **Hospital platform** group adds three demos, on web and desktop in English 
 | ![](../images/his-wards.png) | ![](../images/his-monitoring-en.png) |
 | ![](../images/his-pharmacy.png) | ![](../images/his-lab.png) |
 | ![](../images/his-radiology.png) | ![](../images/his-billing.png) |
+| ![](../images/his-devices-en.png) | |
 
 | Ward rounds (MAUI) | | | |
 |---|---|---|---|
@@ -376,7 +494,7 @@ The **Hospital platform** group adds three demos, on web and desktop in English 
 - **Simulated monitors:** the demo monitors and pumps are simulated, and no real device has been certified or tested. Validate each vendor's HL7 / SenML output and alarm behaviour before clinical use.
 - **INA-CBG grouping:** grouping and the package rate come from E-Klaim. `BpjsClaimAsync` prepares and checks the claim data, but doesn't group.
 - **`Medical.Devices` is a preview:** it stays a preview while IoTCom.Net is prerelease, and its API may change.
-- **MAUI Android in CI:** the Android build is not run in CI (no MAUI workloads). Windows and Android are built locally, and iOS is not set up.
-- **Demo sign-in:** see the security notes. OpenID Connect is not included.
-- **Single database:** multi-tenancy is a shared schema in one database. A database-per-tenant option is not included.
-- **Seeding:** the schema is created with `EnsureCreated`, not migrations. Add EF Core migrations before you evolve a production database.
+- **iOS:** the iOS target is built only on macOS and has not been run on a device. The Android APK from CI is debug-signed; sign it with your own key for distribution.
+- **BPJS and SATUSEHAT:** the workflows are tested against simulated services that implement the published signatures and encryption, not against the live BPJS or SATUSEHAT servers. Run them against the development environments with your own credentials before production.
+- **Worklist:** dates use the server time zone unless `His:Worklist:TimeZone` is set; C-FIND cancel is not supported. Modalities that filter by station AE need `His:Worklist:Stations:{Modality}`.
+- **Database-per-tenant:** tenants are listed in configuration; adding a hospital needs a restart (the database is migrated on start).
