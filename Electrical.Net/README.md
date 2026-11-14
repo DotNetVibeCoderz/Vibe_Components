@@ -10,10 +10,10 @@
 ![Electrical.Net Gallery](docs/images/web-home.png)
 
 Electrical.Net gives .NET developers the building blocks of power-system software: power flow (balanced and unbalanced three-phase),
-short circuit, protection, stability, harmonics, renewables, smart-grid control, optimization (DC and AC optimal power flow, LP/MILP), electricity markets, state estimation, SCADA and substation
+short circuit, protection, stability and detailed dynamics, electromagnetic transients, harmonics, renewables, smart-grid control, optimization (DC and AC optimal power flow, LP/MILP), electricity markets, state estimation, SCADA and substation
 protocols, model exchange (CIM, PSS/E RAW, IEEE CDF, MATPOWER, OpenDSS), GIS, simulation, cloud APIs and a digital twin. It is meant as a
 base for EMS, DMS, ADMS, DERMS, VPP, SCADA and digital-twin applications. The algorithms are checked against published reference values
-(MATPOWER, IEEE PES test feeders, Kersting, IEC 60909, IEEE 1584, Anderson & Fouad, Baran & Wu, Billinton & Allan, Wood & Wollenberg and
+(MATPOWER, IEEE PES test feeders, Kersting, IEC 60909, IEEE 1584, Anderson & Fouad, Kundur, Greenwood, Baran & Wu, Billinton & Allan, Wood & Wollenberg and
 others); see [Validation](#validation).
 
 ```csharp
@@ -24,6 +24,24 @@ var pf = PowerFlowSolver.Solve(TestCases.Case14());   // sparse Newton–Raphson
 Console.WriteLine(pf);
 // NewtonRaphson: converged in 3 it, mismatch 3.44E-009, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
 ```
+
+## What's new in 1.3
+
+- **Power system dynamics** (`Electrical.Dynamics`, new): RMS time-domain simulation with detailed machines (GENCLS, GENROU, GENSAL with
+  saturation), exciters (SEXS, IEEET1, ESST1A, ESAC4A), governors (TGOV1, HYGOV, GAST, IEEEG1), stabilizers (IEEEST, PSS2B), WECC generic
+  inverter-based resource models (REGC_A, REEC_A, REPC_A) and grid-forming inverters (droop and virtual synchronous machine). Simultaneous
+  implicit-trapezoidal DAE solver with a sparse Newton Jacobian, events (faults, branch/generator trips, load and reference steps), a PSS/E
+  `.dyr` reader and small-signal analysis of the full model with participation factors and mode shapes. Kundur's two-area system reproduces
+  the book (load flow Q 185/235/176/202 Mvar, inter-area mode 0.542 Hz vs 0.545 Hz; a KA = 200 exciter removes its damping, the PSS restores
+  ζ = 18.6 %); 10 s simulate in about 85 ms. [Guide](docs/en/dynamics.md)
+- **Electromagnetic transients** (`Electrical.Emt`, new): EMTP-type solver with R/L/C, switches that open at current zero, diodes and
+  thyristors, sources, transformers, π sections and transposed three-phase Bergeron lines, critical damping adjustment and the hot loops in
+  Rust (`eln_emt_*`, bit-identical managed fallback). Back-to-back capacitor inrush 3154 A vs 3162 A theory, travelling-wave reflections to
+  1e-5, 150 km line energization ≈ 2 pu, steady state within 0.0007 % of the phasor solution. [Guide](docs/en/emt.md)
+- **Stability**: the classical model stays the screening tool; [how it relates to the detailed models](docs/en/stability.md#classical-and-detailed-models).
+- **Native**: library version 10300 with the EMT kernels. [Guide](docs/en/simulation-hpc-native.md#emt-kernels-v13)
+- **Gallery**: three new demos: Power system dynamics (Kundur two-area), Inverter-based resources, Electromagnetic transients.
+- **CLI**: `eln dyn` and `eln emt`. [Reference](docs/en/cli.md#new-in-13)
 
 ## What's new in 1.2
 
@@ -77,6 +95,8 @@ Console.WriteLine(pf);
 | **Electrical.ShortCircuit** | IEC 60909: 3φ, SLG, LL, LLG faults via sequence networks; c factor, κ (methods A/B/C), I″k, ip, Ib, Ith, DC component; branch and source contributions; all-bus scan |
 | **Electrical.Protection** | IEC 60255 / IEEE C37.112 inverse-time relays, fuses, TCC curves, CTI grading, mho distance zones, percentage-differential relay, breaker duty, IEEE 1584-2002 arc flash |
 | **Electrical.Stability** | Classical multi-machine transient stability (RK4) with event lists, critical clearing time, SMIB equal-area criterion, small-signal eigen-analysis with participation factors, PV / QV curves, L-index, frequency response (ROCOF, nadir) |
+| **Electrical.Dynamics** (1.3) | RMS dynamics with GENROU/GENSAL machines, exciters (SEXS, IEEET1, ESST1A, ESAC4A), governors (TGOV1, HYGOV, GAST, IEEEG1), PSS (IEEEST, PSS2B), REGC/REEC/REPC inverter models, grid-forming droop/VSM inverters, PSS/E .dyr reader, implicit DAE simulation with events, small-signal analysis with participation factors, Kundur two-area test system |
+| **Electrical.Emt** (1.3) | Electromagnetic transients: R/L/C, switches (current-zero opening), diodes, thyristors, sources, transformers, π sections, transposed Bergeron lines, critical damping adjustment, Rust kernels with bit-identical managed fallback |
 | **Electrical.Harmonic** | FFT (radix-2 + Bluestein), spectra, THD/TDD/K-factor, IEEE 519 and IEC 61000 limits, harmonic load flow, frequency scan and resonance detection, single-tuned filter design, unbalance |
 | **Electrical.Renewable** | Solar position (SPA-grade), clear-sky and transposition models, cell temperature, single-diode PV (Villalva), PVWatts, inverter models, MPPT; wind turbines, Weibull AEP, shear; battery storage with degradation; IEEE 1547 volt-var / volt-watt / freq-watt; hosting capacity |
 | **Electrical.SmartGrid** | Price-based demand response, battery peak shaving, EV charging (valley filling), microgrid EMS (rules and dynamic programming), virtual power plant, Volt/VAR optimization, feeder reconfiguration, SAIFI/SAIDI/CAIDI/ENS |
@@ -97,8 +117,8 @@ Console.WriteLine(pf);
 | **Electrical.Simulation** | Quasi-static time series (QSTS) with load/PV profiles, events and control loops (OLTC, LDC voltage regulator, switched capacitor), scenario manager, generation adequacy (analytical and sequential Monte-Carlo) |
 | **Electrical.Cloud** | Study job runner, JSON network contract, ASP.NET Core minimal API (`MapElectricalApi`), multi-tenant scenario stores |
 | **Electrical.HPC** | Parallel batch power flow, load sweeps, Monte-Carlo probabilistic load flow, scaling benchmark |
-| **Electrical.Native** | Rust kernels (FFT, Goertzel harmonics, THD/RMS, sparse complex power injections, deterministic normal sampling) with identical managed fallbacks |
-| **Electrical.Cli** | `eln` dotnet tool with 36 commands (incl. `eln ask`, `eln twin`, `eln dist`, `eln dss`, `eln acopf`, `eln scuc` and `eln market`); reads MATPOWER, PSS/E RAW, IEEE CDF, JSON and CIM files |
+| **Electrical.Native** | Rust kernels (FFT, Goertzel harmonics, THD/RMS, sparse complex power injections, deterministic normal sampling, EMT branch update and sparse LU solve) with identical managed fallbacks |
+| **Electrical.Cli** | `eln` dotnet tool with 38 commands (incl. `eln ask`, `eln twin`, `eln dist`, `eln dss`, `eln acopf`, `eln scuc`, `eln market`, `eln dyn` and `eln emt`); reads MATPOWER, PSS/E RAW, IEEE CDF, JSON and CIM files |
 | **Electrical.Templates** | `dotnet new eln-console / eln-blazor / eln-avalonia / eln-scada / eln-webapi / eln-distribution` |
 
 ## Quick start
@@ -109,6 +129,8 @@ dotnet add package Electrical.ShortCircuit
 dotnet add package Electrical.Visualization
 dotnet add package Electrical.Markets         # v1.2: SCUC and market clearing (pulls Electrical.Optimization)
 dotnet add package Electrical.Optimization.Highs   # optional HiGHS solver (or Electrical.Optimization.OrTools)
+dotnet add package Electrical.Dynamics        # v1.3: detailed machines, controls, IBR (pulls Electrical.Stability)
+dotnet add package Electrical.Emt             # v1.3: electromagnetic transients (pulls Electrical.Native)
 ```
 
 Build a network in physical units, solve it and run a short-circuit study:
@@ -152,6 +174,8 @@ dotnet tool install -g Electrical.Cli
 eln pf --case case14
 eln sc --case case14 --bus 4 --type slg
 eln stability --case case9 --bus 8 --clear 0.083 --trip 8-9
+eln dyn --exc st --modes                                    # Kundur two-area modes, thyristor exciter without PSS
+eln emt --case capbank                                      # capacitor-bank inrush
 eln ask "What is the 3-phase short-circuit current at bus 4?"   # AI agent (LLM or offline)
 eln twin --steps 24                                         # digital twin demo
 
@@ -177,6 +201,16 @@ Every row below is asserted by the xUnit suite in `tests/Electrical.Tests` (the 
 | CCT, fault at A&F bus 7 cleared by line 5–7 | Classical-model literature ≈ 0.16–0.17 s | | 0.161–0.162 s |
 | Electromechanical modes, 9-bus classical | Sauer & Pai / Anderson & Fouad | ω ≈ 8.7 and 13.4 rad/s | 8.690 and 13.360 rad/s (1.383 / 2.126 Hz) |
 | SMIB bolted fault (H = 5 s, P<sub>m</sub> = 0.8, P<sub>max</sub> = 1.8) | Equal-area criterion (closed form) | t<sub>cr</sub> = 0.2600 s | 0.2599 s by simulation |
+| Kundur two-area load flow | Kundur Example 12.6 | Q<sub>G</sub> 185 / 235 / 176 / 202 Mvar, δ 20.2 / 10.5 / −6.8 / −17.0° | 185.0 / 234.6 / 176.0 / 202.1 Mvar, 20.27 / 10.51 / −6.80 / −16.99° |
+| Kundur inter-area mode, constant E<sub>fd</sub> | Kundur Example 12.6 | 0.545 Hz, ζ ≈ 3 %; local 1.09 / 1.12 Hz | 0.542 Hz, ζ 3.8 %; local 1.077 / 1.112 Hz |
+| Kundur, ESST1A KA = 200 without / with PSS | Kundur Example 12.6 | ζ ≈ −0.8 % / well damped | ζ ≈ 0.0 % / 18.6 % |
+| GENROU at the classical limit, 9-bus | Classical model first swing | | within 2.3° |
+| REGC/REEC fault ride-through at 0.45 pu | WECC REEC_A: I<sub>q</sub> = K<sub>qv</sub>(1 − V − 0.05) | 0.94 pu | 0.94 pu; P ramp 200 MW/s |
+| Grid-forming droop sharing | m<sub>p</sub> 0.05 : 0.025 | 1 : 2 | 1 : 2.00 |
+| Back-to-back capacitor switching (EMT) | Greenwood: V√(C<sub>eq</sub>/L), 1/(2π√(L·C<sub>eq</sub>)) | 3162 A, 10065.8 Hz | 3154 A, 10065.7 Hz |
+| Bergeron line reflections (EMT) | Γ = (R − Z<sub>c</sub>)/(R + Z<sub>c</sub>) | 0, 0.5, −1 | to 1e-5 |
+| 230 kV, 150 km open-line energization (EMT) | Greenwood ch. 9 | ≈ 2 pu | 1.7–2.3 pu |
+| EMT three-phase steady state | Long-line ABCD phasor solution | load voltage | within 0.0007 % |
 | Two-bus PV curve, X = 0.1 pu | Analytic maximum transfer V²/2X | λ<sub>max</sub> = 5.0 | 4.95–5.0 |
 | Frequency scan, 500 MVA / 20 Mvar | h<sub>r</sub> = √(S<sub>sc</sub>/Q<sub>c</sub>) | 5.0 (300 Hz) | 5.0 (300 Hz) |
 | Single-diode PV, Kyocera KC200GT | Villalva et al. 2009, Table II | R<sub>s</sub> 0.221 Ω, R<sub>p</sub> 415.4 Ω, I<sub>pv</sub> 8.214 A, I<sub>0</sub> 9.825e-8 A | 0.221 Ω, 416.3 Ω, 8.214 A, 9.825e-8 A; P<sub>mp</sub> 200.15 W |
@@ -209,7 +243,7 @@ Every row below is asserted by the xUnit suite in `tests/Electrical.Tests` (the 
 
 ## Gallery
 
-Twenty-six live demos covering all modules with a professional UI, as a **Blazor** web app and an **Avalonia** desktop app that share their scenario code
+Twenty-nine live demos covering all modules with a professional UI, as a **Blazor** web app and an **Avalonia** desktop app that share their scenario code
 (`gallery/Electrical.Gallery.Shared`). Every figure is computed by the library at run time, next to the C# that produced it.
 
 ```bash
@@ -228,6 +262,8 @@ dotnet run --project gallery/Electrical.Gallery.Desktop
 | ![Voltage control](docs/images/web-voltagecontrol.png) | ![Unbalanced distribution](docs/images/desktop-distribution.png) |
 | ![AC optimal power flow](docs/images/web-acopf.png) | ![Security-constrained unit commitment](docs/images/desktop-scuc.png) |
 | ![Electricity market clearing](docs/images/web-market.png) | ![AC optimal power flow](docs/images/desktop-acopf.png) |
+| ![Power system dynamics](docs/images/web-dynamics.png) | ![Electromagnetic transients](docs/images/desktop-emt.png) |
+| ![Electromagnetic transients](docs/images/web-emt.png) | ![Inverter-based resources](docs/images/desktop-ibr.png) |
 
 Dark theme: ![Dark theme](docs/images/web-home-dark.png)
 
@@ -244,6 +280,8 @@ graph TD
     Core --> PF
     Core --> Circuit & ShortCircuit & IEC61850 & CIM & Forecasting & Interop
     ShortCircuit --> Protection
+    Stability --> Dynamics
+    Native --> Emt
     PF --> Stability & Harmonic & Renewable & Optimization & StateEstimation & SCADA & GIS & Visualization & Distribution
     Renewable --> SmartGrid
     Renewable --> Simulation
@@ -275,7 +313,7 @@ AOT-compatible, use SI/engineering units at the API surface (MW, Mvar, kV, kA, �
 ## Repository layout
 
 ```
-src/              28 library packages (+ Electrical.Visualization.Blazor)
+src/              29 library packages (+ Electrical.Visualization.Blazor)
 native/           Rust crate electrical-native (C ABI, eln_* functions)
 tools/            Electrical.Cli (dotnet tool "eln")
 templates/        Electrical.Templates (dotnet new pack)
@@ -302,7 +340,7 @@ publishes the packages to NuGet.
 ## Documentation
 
 - English: [docs/en](docs/en/README.md): getting started, architecture, module guide, power flow, unbalanced distribution, short circuit &
-  protection, stability, harmonics, renewables & smart grid, optimization, electricity markets, LP/MILP solvers, state estimation, SCADA / IEC 61850 / CIM, model exchange,
+  protection, stability, power system dynamics, electromagnetic transients, harmonics, renewables & smart grid, optimization, electricity markets, LP/MILP solvers, state estimation, SCADA / IEC 61850 / CIM, model exchange,
   GIS & visualization, simulation / HPC / native, cloud API, AI & digital twin, CLI, templates, gallery.
 - Bahasa Indonesia: [docs/id](docs/id/README.md).
 - Roadmap: [PLAN.md](PLAN.md).

@@ -15,7 +15,10 @@ public static partial class Extra
             "market" => MarketCommands.Market(cli),
             _ => null,
         };
+        DispatchEmt(cli, ref result);
     }
+
+    static partial void DispatchEmt(Args cli, ref Task<int>? result);
 }
 
 public static partial class Commands
@@ -28,7 +31,10 @@ public static partial class Commands
               scuc [--limit 8-9:57.5] [--reserve 0.1] [--solver highs|builtin] [--gap 1e-4] [--time 30]   24 h SCUC (MILP), hourly LMPs
               market [--limit 8-9:60]                 Single-period market clearing from offers and bids: LMPs, settlement, FTR
             """;
+        MoreHelpEmt(ref text);
     }
+
+    static partial void MoreHelpEmt(ref string text);
 }
 
 internal static class MarketCommands

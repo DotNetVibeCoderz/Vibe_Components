@@ -3,20 +3,23 @@
 //!
 //! Every function returns 0 on success and a negative code on invalid input:
 //! -1 null pointer, -2 invalid length/argument.
+//! v1.3 adds the EMT kernels in [`emt`] (`eln_emt_branch_update`, `eln_emt_lu_solve`).
 //! Complex arrays are interleaved `[re0, im0, re1, im1, ...]`.
 //! Each kernel has a managed fallback in `Electrical.Native` with identical semantics.
 
 use std::f64::consts::PI;
 use std::slice;
 
-const OK: i32 = 0;
-const ERR_NULL: i32 = -1;
-const ERR_ARG: i32 = -2;
+pub(crate) const OK: i32 = 0;
+pub(crate) const ERR_NULL: i32 = -1;
+pub(crate) const ERR_ARG: i32 = -2;
+
+pub mod emt;
 
 /// Version encoded as major*10000 + minor*100 + patch.
 #[no_mangle]
 pub extern "C" fn eln_version() -> u32 {
-    10000
+    10300
 }
 
 // ---------------------------------------------------------------- FFT

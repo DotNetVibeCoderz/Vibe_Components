@@ -6,8 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Electrical.HPC" Version="1.2.0" />
-    <PackageReference Include="Electrical.ShortCircuit" Version="1.2.0" />
-    <PackageReference Include="Electrical.Visualization" Version="1.2.0" />
+    <PackageReference Include="Electrical.HPC" Version="1.3.0" />
+    <PackageReference Include="Electrical.ShortCircuit" Version="1.3.0" />
+    <PackageReference Include="Electrical.Visualization" Version="1.3.0" />
   </ItemGroup>
 </Project>

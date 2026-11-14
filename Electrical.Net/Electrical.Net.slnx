@@ -11,6 +11,8 @@
     <Project Path="src/Electrical.Cloud/Electrical.Cloud.csproj" />
     <Project Path="src/Electrical.Core/Electrical.Core.csproj" />
     <Project Path="src/Electrical.Distribution/Electrical.Distribution.csproj" />
+    <Project Path="src/Electrical.Dynamics/Electrical.Dynamics.csproj" />
+    <Project Path="src/Electrical.Emt/Electrical.Emt.csproj" />
     <Project Path="src/Electrical.DigitalTwin/Electrical.DigitalTwin.csproj" />
     <Project Path="src/Electrical.Forecasting/Electrical.Forecasting.csproj" />
     <Project Path="src/Electrical.GIS/Electrical.GIS.csproj" />

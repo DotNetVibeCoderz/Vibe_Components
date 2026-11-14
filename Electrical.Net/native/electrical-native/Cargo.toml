@@ -2,7 +2,7 @@
 name = "electrical-native"
 version = "1.0.0"
 edition = "2021"
-description = "High-performance native kernels for Electrical.Net (FFT, harmonic analysis, sparse complex power injections, deterministic Monte-Carlo sampling)."
+description = "High-performance native kernels for Electrical.Net (FFT, harmonic analysis, sparse complex power injections, deterministic Monte-Carlo sampling, EMT history and LU-substitution kernels)."
 license = "MIT"
 authors = ["Gravicode Studios (Kang Fadhil)"]
 

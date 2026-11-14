@@ -16,6 +16,8 @@ graph LR
     Core --> Interop
     ShortCircuit --> Protection
     PowerFlow --> Stability
+    Stability --> Dynamics
+    Native --> Emt
     PowerFlow --> Harmonic
     PowerFlow --> Renewable
     PowerFlow --> Optimization
@@ -52,7 +54,7 @@ Aplikasi berada di atasnya: CLI `eln`, templat `dotnet new`, dan galeri.
 |---|---|
 | Fondasi | Core, Native |
 | Kondisi tunak | PowerFlow, Circuit |
-| Analisis | ShortCircuit, Protection, Stability, Harmonic, StateEstimation, Optimization (+ adapter .Highs, .OrTools), Markets |
+| Analisis | ShortCircuit, Protection, Stability, Dynamics, Emt, Harmonic, StateEstimation, Optimization (+ adapter .Highs, .OrTools), Markets |
 | Sumber daya & tepi jaringan | Renewable, SmartGrid, Forecasting |
 | Data & protokol | SCADA, IEC61850, CIM, GIS, Visualization(.Blazor) |
 | Platform | Simulation, HPC, Cloud, DigitalTwin, AI |
@@ -138,7 +140,8 @@ SCADA, atau `TwinStateUpdated` dari digital twin.
 `Electrical.Native` memanggil crate Rust `native/electrical-native` (C ABI, fungsi `eln_*`) melalui `LibraryImport`. Sebuah `DllImportResolver`
 mencari di folder aplikasi dan `runtimes/<rid>/native`. Bila pustaka tidak ada atau pemanggilan gagal, fallback managed (dengan semantik
 identik, diverifikasi oleh tes) dipakai. `GridKernels.Backend` melaporkan `"native (Rust)"` atau `"managed"`; set
-`GridKernels.PreferNative = false` untuk memaksa kode managed. Detail di [Simulasi, HPC & native](simulasi-hpc-native.md).
+`GridKernels.PreferNative = false` untuk memaksa kode managed. Sejak 1.3 solver EMT memakai `EmtKernels` (`eln_emt_*`, aktif bila
+`eln_version` ≥ 10300) dengan kontrak yang sama: cadangan managed identik bit, `EmtKernels.Backend`, `EmtKernels.PreferNative`. Detail di [Simulasi, HPC & native](simulasi-hpc-native.md).
 
 ## Struktur repositori
 

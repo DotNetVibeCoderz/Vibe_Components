@@ -10,11 +10,11 @@
 ![Galeri Electrical.Net](docs/images/web-home.png)
 
 Electrical.Net menyediakan blok bangunan perangkat lunak sistem tenaga untuk pengembang .NET: aliran daya (seimbang dan tiga fasa tak
-seimbang), hubung singkat, proteksi, stabilitas, harmonik, energi terbarukan, kendali smart grid, optimasi (aliran daya optimal DC
+seimbang), hubung singkat, proteksi, stabilitas dan dinamika rinci, transien elektromagnetik, harmonik, energi terbarukan, kendali smart grid, optimasi (aliran daya optimal DC
 dan AC, LP/MILP), pasar listrik, estimasi keadaan, SCADA dan
 protokol gardu induk, pertukaran model (CIM, PSS/E RAW, IEEE CDF, MATPOWER, OpenDSS), GIS, simulasi, API cloud, dan digital twin. Framework ini
 dirancang sebagai fondasi aplikasi EMS, DMS, ADMS, DERMS, VPP, SCADA, dan digital twin. Algoritmanya diuji terhadap nilai acuan yang telah
-dipublikasikan (MATPOWER, penyulang uji IEEE PES, Kersting, IEC 60909, IEEE 1584, Anderson & Fouad, Baran & Wu, Billinton & Allan, Wood &
+dipublikasikan (MATPOWER, penyulang uji IEEE PES, Kersting, IEC 60909, IEEE 1584, Anderson & Fouad, Kundur, Greenwood, Baran & Wu, Billinton & Allan, Wood &
 Wollenberg, dan lainnya); lihat [Validasi](#validasi).
 
 ```csharp
@@ -25,6 +25,24 @@ var pf = PowerFlowSolver.Solve(TestCases.Case14());   // Newton–Raphson sparse
 Console.WriteLine(pf);
 // NewtonRaphson: converged in 3 it, mismatch 3.44E-009, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
 ```
+
+## Yang baru di 1.3
+
+- **Dinamika sistem tenaga** (`Electrical.Dynamics`, baru): simulasi domain waktu RMS dengan mesin rinci (GENCLS, GENROU, GENSAL dengan
+  saturasi), eksiter (SEXS, IEEET1, ESST1A, ESAC4A), governor (TGOV1, HYGOV, GAST, IEEEG1), stabilizer (IEEEST, PSS2B), model generik WECC
+  sumber berbasis inverter (REGC_A, REEC_A, REPC_A), dan inverter grid-forming (droop dan mesin sinkron virtual). Solver DAE trapesium
+  implisit simultan dengan Jacobian Newton sparse, kejadian (gangguan, lepas cabang/generator, langkah beban dan referensi), pembaca PSS/E
+  `.dyr`, serta analisis sinyal kecil model penuh dengan faktor partisipasi dan bentuk mode. Sistem dua area Kundur mereproduksi buku
+  (aliran daya Q 185/235/176/202 Mvar, mode antar-area 0,542 Hz vs 0,545 Hz; eksiter KA = 200 menghilangkan redamannya, PSS
+  mengembalikannya menjadi ζ = 18,6 %); simulasi 10 s selesai dalam sekitar 85 ms. [Panduan](docs/id/dinamika.md)
+- **Transien elektromagnetik** (`Electrical.Emt`, baru): solver tipe EMTP dengan R/L/C, sakelar yang membuka saat arus nol, dioda dan
+  tiristor, sumber, transformator, seksi π, dan saluran Bergeron tiga fasa tertransposisi, critical damping adjustment, serta loop inti di
+  Rust (`eln_emt_*`, cadangan managed identik bit). Inrush kapasitor back-to-back 3154 A vs teori 3162 A, pantulan gelombang berjalan hingga
+  1e-5, energisasi saluran 150 km ≈ 2 pu, keadaan tunak dalam 0,0007 % dari solusi fasor. [Panduan](docs/id/transien-elektromagnetik.md)
+- **Stabilitas**: model klasik tetap menjadi alat penyaringan; [hubungannya dengan model rinci](docs/id/stabilitas.md#model-klasik-dan-rinci).
+- **Native**: pustaka versi 10300 dengan kernel EMT. [Panduan](docs/id/simulasi-hpc-native.md#kernel-emt-v13)
+- **Galeri**: tiga demo baru: Dinamika sistem tenaga (Kundur dua area), Sumber berbasis inverter, Transien elektromagnetik.
+- **CLI**: `eln dyn` dan `eln emt`. [Referensi](docs/id/cli.md#baru-di-13)
 
 ## Yang baru di 1.2
 
@@ -80,6 +98,8 @@ Console.WriteLine(pf);
 | **Electrical.ShortCircuit** | IEC 60909: gangguan 3φ, SLG, LL, LLG melalui jaringan urutan; faktor c, κ (metode A/B/C), I″k, ip, Ib, Ith, komponen DC; kontribusi cabang dan sumber; pemindaian semua bus |
 | **Electrical.Protection** | Relai waktu-terbalik IEC 60255 / IEEE C37.112, fuse, kurva TCC, koordinasi CTI, zona jarak mho, relai diferensial persentase, kemampuan pemutus (breaker duty), arc flash IEEE 1584-2002 |
 | **Electrical.Stability** | Stabilitas transien multi-mesin model klasik (RK4) dengan daftar kejadian, waktu pemutusan kritis, kriteria luas sama SMIB, analisis eigen sinyal kecil dengan faktor partisipasi, kurva PV / QV, indeks-L, respons frekuensi (ROCOF, nadir) |
+| **Electrical.Dynamics** (1.3) | Dinamika RMS dengan mesin GENROU/GENSAL, eksiter (SEXS, IEEET1, ESST1A, ESAC4A), governor (TGOV1, HYGOV, GAST, IEEEG1), PSS (IEEEST, PSS2B), model inverter REGC/REEC/REPC, inverter grid-forming droop/VSM, pembaca PSS/E .dyr, simulasi DAE implisit dengan kejadian, analisis sinyal kecil dengan faktor partisipasi, sistem uji dua area Kundur |
+| **Electrical.Emt** (1.3) | Transien elektromagnetik: R/L/C, sakelar (membuka saat arus nol), dioda, tiristor, sumber, transformator, seksi π, saluran Bergeron tertransposisi, critical damping adjustment, kernel Rust dengan cadangan managed identik bit |
 | **Electrical.Harmonic** | FFT (radix-2 + Bluestein), spektrum, THD/TDD/faktor-K, batas IEEE 519 dan IEC 61000, aliran daya harmonik, frequency scan dan deteksi resonansi, desain filter single-tuned, ketidakseimbangan |
 | **Electrical.Renewable** | Posisi matahari (setara SPA), model clear-sky dan transposisi, suhu sel, PV single-diode (Villalva), PVWatts, model inverter, MPPT; turbin angin, AEP Weibull, wind shear; baterai dengan degradasi; volt-var / volt-watt / freq-watt IEEE 1547; hosting capacity |
 | **Electrical.SmartGrid** | Demand response berbasis harga, peak shaving baterai, penjadwalan pengisian EV (valley filling), EMS microgrid (aturan dan dynamic programming), virtual power plant, optimasi Volt/VAR, rekonfigurasi penyulang, SAIFI/SAIDI/CAIDI/ENS |
@@ -100,8 +120,8 @@ Console.WriteLine(pf);
 | **Electrical.Simulation** | Simulasi deret waktu kuasi-statis (QSTS) dengan profil beban/PV, kejadian, dan loop kendali (OLTC, regulator tegangan LDC, kapasitor terswitch), manajer skenario, kecukupan pembangkitan (analitis dan Monte-Carlo sekuensial) |
 | **Electrical.Cloud** | Runner job studi, kontrak JSON jaringan, minimal API ASP.NET Core (`MapElectricalApi`), penyimpanan skenario multi-tenant |
 | **Electrical.HPC** | Aliran daya batch paralel, sapuan beban, aliran daya probabilistik Monte-Carlo, benchmark skalabilitas |
-| **Electrical.Native** | Kernel Rust (FFT, harmonik Goertzel, THD/RMS, injeksi daya kompleks sparse, sampling normal deterministik) dengan fallback managed yang identik |
-| **Electrical.Cli** | Dotnet tool `eln` dengan 36 perintah (termasuk `eln ask`, `eln twin`, `eln dist`, `eln dss`, `eln acopf`, `eln scuc`, dan `eln market`); membaca berkas MATPOWER, PSS/E RAW, IEEE CDF, JSON, dan CIM |
+| **Electrical.Native** | Kernel Rust (FFT, harmonik Goertzel, THD/RMS, injeksi daya kompleks sparse, sampling normal deterministik, pembaruan cabang EMT dan solve LU sparse) dengan fallback managed yang identik |
+| **Electrical.Cli** | Dotnet tool `eln` dengan 38 perintah (termasuk `eln ask`, `eln twin`, `eln dist`, `eln dss`, `eln acopf`, `eln scuc`, `eln market`, `eln dyn`, dan `eln emt`); membaca berkas MATPOWER, PSS/E RAW, IEEE CDF, JSON, dan CIM |
 | **Electrical.Templates** | `dotnet new eln-console / eln-blazor / eln-avalonia / eln-scada / eln-webapi / eln-distribution` |
 
 ## Mulai cepat
@@ -111,6 +131,8 @@ dotnet add package Electrical.PowerFlow       # otomatis menarik Electrical.Core
 dotnet add package Electrical.ShortCircuit
 dotnet add package Electrical.Visualization
 dotnet add package Electrical.Markets         # v1.2: SCUC dan kliring pasar (menarik Electrical.Optimization)
+dotnet add package Electrical.Dynamics        # v1.3: mesin rinci, kendali, IBR (menarik Electrical.Stability)
+dotnet add package Electrical.Emt             # v1.3: transien elektromagnetik (menarik Electrical.Native)
 dotnet add package Electrical.Optimization.Highs   # solver HiGHS opsional (atau Electrical.Optimization.OrTools)
 ```
 
@@ -155,6 +177,8 @@ dotnet tool install -g Electrical.Cli
 eln pf --case case14
 eln sc --case case14 --bus 4 --type slg
 eln stability --case case9 --bus 8 --clear 0.083 --trip 8-9
+eln dyn --exc st --modes                                    # mode Kundur dua area, eksiter tiristor tanpa PSS
+eln emt --case capbank                                      # inrush bank kapasitor
 eln ask "Berapa arus hubung singkat 3 fasa di bus 4?"           # agen AI (LLM atau offline)
 eln twin --steps 24 --lang id                               # demo digital twin
 
@@ -180,6 +204,16 @@ Setiap baris di bawah ini diuji oleh suite xUnit di `tests/Electrical.Tests` (si
 | CCT, gangguan di bus 7 (A&F) dibuka oleh saluran 5–7 | Literatur model klasik ≈ 0,16–0,17 s | | 0,161–0,162 s |
 | Mode elektromekanis, 9-bus klasik | Sauer & Pai / Anderson & Fouad | ω ≈ 8,7 dan 13,4 rad/s | 8,690 dan 13,360 rad/s (1,383 / 2,126 Hz) |
 | Gangguan bolted SMIB (H = 5 s, P<sub>m</sub> = 0,8, P<sub>max</sub> = 1,8) | Kriteria luas sama (bentuk tertutup) | t<sub>cr</sub> = 0,2600 s | 0,2599 s lewat simulasi |
+| Aliran daya Kundur dua area | Kundur Contoh 12.6 | Q<sub>G</sub> 185 / 235 / 176 / 202 Mvar, δ 20,2 / 10,5 / −6,8 / −17,0° | 185,0 / 234,6 / 176,0 / 202,1 Mvar, 20,27 / 10,51 / −6,80 / −16,99° |
+| Mode antar-area Kundur, E<sub>fd</sub> konstan | Kundur Contoh 12.6 | 0,545 Hz, ζ ≈ 3 %; lokal 1,09 / 1,12 Hz | 0,542 Hz, ζ 3,8 %; lokal 1,077 / 1,112 Hz |
+| Kundur, ESST1A KA = 200 tanpa / dengan PSS | Kundur Contoh 12.6 | ζ ≈ −0,8 % / teredam baik | ζ ≈ 0,0 % / 18,6 % |
+| GENROU di batas klasik, 9 bus | Ayunan pertama model klasik | | dalam 2,3° |
+| Fault ride-through REGC/REEC pada 0,45 pu | WECC REEC_A: I<sub>q</sub> = K<sub>qv</sub>(1 − V − 0,05) | 0,94 pu | 0,94 pu; ramp P 200 MW/s |
+| Pembagian beban droop grid-forming | m<sub>p</sub> 0,05 : 0,025 | 1 : 2 | 1 : 2,00 |
+| Switching kapasitor back-to-back (EMT) | Greenwood: V√(C<sub>eq</sub>/L), 1/(2π√(L·C<sub>eq</sub>)) | 3162 A, 10065,8 Hz | 3154 A, 10065,7 Hz |
+| Pantulan saluran Bergeron (EMT) | Γ = (R − Z<sub>c</sub>)/(R + Z<sub>c</sub>) | 0; 0,5; −1 | hingga 1e-5 |
+| Energisasi saluran terbuka 230 kV 150 km (EMT) | Greenwood bab 9 | ≈ 2 pu | 1,7–2,3 pu |
+| Keadaan tunak tiga fasa EMT | Solusi fasor ABCD saluran panjang | tegangan beban | dalam 0,0007 % |
 | Kurva PV dua bus, X = 0,1 pu | Transfer maksimum analitis V²/2X | λ<sub>max</sub> = 5,0 | 4,95–5,0 |
 | Frequency scan, 500 MVA / 20 Mvar | h<sub>r</sub> = √(S<sub>sc</sub>/Q<sub>c</sub>) | 5,0 (300 Hz) | 5,0 (300 Hz) |
 | PV single-diode, Kyocera KC200GT | Villalva dkk. 2009, Tabel II | R<sub>s</sub> 0,221 Ω, R<sub>p</sub> 415,4 Ω, I<sub>pv</sub> 8,214 A, I<sub>0</sub> 9,825e-8 A | 0,221 Ω, 416,3 Ω, 8,214 A, 9,825e-8 A; P<sub>mp</sub> 200,15 W |
@@ -212,7 +246,7 @@ Setiap baris di bawah ini diuji oleh suite xUnit di `tests/Electrical.Tests` (si
 
 ## Galeri
 
-Dua puluh enam demo langsung yang mencakup semua modul dengan UI profesional, sebagai aplikasi web **Blazor** dan aplikasi desktop **Avalonia** yang berbagi kode skenario
+Dua puluh sembilan demo langsung yang mencakup semua modul dengan UI profesional, sebagai aplikasi web **Blazor** dan aplikasi desktop **Avalonia** yang berbagi kode skenario
 (`gallery/Electrical.Gallery.Shared`). Setiap angka dihitung oleh pustaka saat aplikasi berjalan, di samping kode C# yang menghasilkannya.
 
 ```bash
@@ -231,6 +265,8 @@ dotnet run --project gallery/Electrical.Gallery.Desktop
 | ![Kendali tegangan](docs/images/web-voltagecontrol.png) | ![Distribusi tak seimbang](docs/images/desktop-distribution.png) |
 | ![Aliran daya optimal AC](docs/images/web-acopf.png) | ![Unit commitment dengan kendala keamanan](docs/images/desktop-scuc.png) |
 | ![Kliring pasar listrik](docs/images/web-market.png) | ![Aliran daya optimal AC](docs/images/desktop-acopf.png) |
+| ![Dinamika sistem tenaga](docs/images/web-dynamics.png) | ![Transien elektromagnetik](docs/images/desktop-emt.png) |
+| ![Transien elektromagnetik](docs/images/web-emt.png) | ![Sumber berbasis inverter](docs/images/desktop-ibr.png) |
 
 Tema gelap: ![Tema gelap](docs/images/web-home-dark.png)
 
@@ -247,6 +283,8 @@ graph TD
     Core --> PF
     Core --> Circuit & ShortCircuit & IEC61850 & CIM & Forecasting & Interop
     ShortCircuit --> Protection
+    Stability --> Dynamics
+    Native --> Emt
     PF --> Stability & Harmonic & Renewable & Optimization & StateEstimation & SCADA & GIS & Visualization & Distribution
     Renewable --> SmartGrid
     Renewable --> Simulation
@@ -278,7 +316,7 @@ memakai satuan teknik di permukaan API (MW, Mvar, kV, kA, Ω, pu, derajat, detik
 ## Struktur repositori
 
 ```
-src/              28 paket pustaka (+ Electrical.Visualization.Blazor)
+src/              29 paket pustaka (+ Electrical.Visualization.Blazor)
 native/           Crate Rust electrical-native (C ABI, fungsi eln_*)
 tools/            Electrical.Cli (dotnet tool "eln")
 templates/        Electrical.Templates (paket dotnet new)
@@ -305,7 +343,7 @@ memublikasikan paket ke NuGet.
 ## Dokumentasi
 
 - Bahasa Indonesia: [docs/id](docs/id/README.md): memulai, arsitektur, panduan modul, aliran daya, distribusi tak seimbang, hubung singkat &
-  proteksi, stabilitas, harmonik, energi terbarukan & smart grid, optimasi, pasar listrik, solver LP/MILP, estimasi keadaan, SCADA / IEC 61850 / CIM, pertukaran model,
+  proteksi, stabilitas, dinamika sistem tenaga, transien elektromagnetik, harmonik, energi terbarukan & smart grid, optimasi, pasar listrik, solver LP/MILP, estimasi keadaan, SCADA / IEC 61850 / CIM, pertukaran model,
   GIS & visualisasi, simulasi / HPC / native, API cloud, AI & digital twin, CLI, templat, galeri.
 - English: [docs/en](docs/en/README.md).
 - Peta jalan: [PLAN.md](PLAN.md).

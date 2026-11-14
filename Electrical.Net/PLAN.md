@@ -22,7 +22,7 @@ DERMS, VPP, SCADA, digital twins and smart grids on .NET.
 - Still open from this theme: three-winding / centre-tap / open-delta transformers, PSS/E `.raw` writer for three-winding units, OpenDSS
   `XfmrCode`/energy meters, PSS/E `.dyr` dynamics
 
-## v1.2: Optimization and markets (current) ✅
+## v1.2: Optimization and markets ✅
 - AC optimal power flow: generic primal-dual interior-point NLP solver (MIPS-style) with exact Hessians; matches MATPOWER `runopf`
   (case9 5296.69 $/h, case14 8081.53 $/h); LMPs, reactive prices, shadow prices; LMP decomposition (energy, loss, congestion, voltage)
 - LP/MILP modelling (`LinearModel`) with built-in dual simplex and branch-and-bound, plus HiGHS and OR-Tools adapter packages
@@ -32,10 +32,14 @@ DERMS, VPP, SCADA, digital twins and smart grids on .NET.
 - Still open from this theme: AC-SCOPF, piecewise-linear costs and angle-difference limits in AC-OPF, uplift / make-whole payments,
   cutting planes and presolve in the built-in MILP
 
-## v1.3: Dynamics
-- Detailed generator models (GENROU/GENSAL), exciters (IEEE ST1A, AC4A), governors (TGOV1, HYGOV), PSS (PSS2B)
-- Inverter-based resource models (REGC/REEC/REPC) and grid-forming inverters
-- EMT kernel for switching transients (Rust)
+## v1.3: Dynamics (current) ✅
+- Electrical.Dynamics: RMS DAE engine (implicit trapezoidal + modified Euler) with events; GENCLS/GENROU/GENSAL, SEXS/IEEET1/ESST1A/ESAC4A,
+  TGOV1/HYGOV/GAST/IEEEG1, IEEEST/PSS2B; REGC_A/REEC_A/REPC_A and a grid-forming inverter (droop / VSM); PSS/E `.dyr` reader;
+  small-signal analysis of the detailed model. Kundur two-area: inter-area mode 0.542 Hz (book 0.545 Hz), PSS raises damping to 18.6 %
+- Electrical.Emt: Dommel nodal EMT with CDA, switches/diodes/thyristors, Bergeron lines, π sections, transformers; Rust kernels
+  (`eln_emt_*`) with bit-identical managed fallback
+- Still open from this theme: WECC REGFM / PLL-based IBR detail, stator transients, frequency-dependent lines, VSC switching models,
+  co-simulation RMS↔EMT
 
 ## v1.4: Data and AI
 - PMU / IEEE C37.118 stream reader; DNP3 outstation codec; full IEC 60870-5-104 client

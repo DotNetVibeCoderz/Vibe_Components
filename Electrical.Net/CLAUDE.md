@@ -55,6 +55,11 @@ A running gallery server locks DLLs and makes `dotnet build` fail with MSB3027, 
   weak on unit-commitment relaxations) and adapter packages `Electrical.Optimization.Highs` (re-ships HiGHS as `highs-native.*` to avoid a
   DLL-name clash with OR-Tools) and `.OrTools`. `Electrical.Markets` holds SCUC and market clearing; LP duals follow "objective change per
   unit RHS" in every solver.
+- v1.3: `Electrical.Dynamics` (RMS): `DynamicSystem.Build(net, DynamicModelSet)` → `DynamicSimulation.Run(system, events)`; devices are
+  Norton current injections initialised from the power flow; `DynamicSmallSignal` linearises the full DAE numerically. PSS/E parameter
+  names, `.dyr` via `DyrReader`. Reference case `DynamicTestCases.KundurTwoArea`. `Electrical.Emt`: Dommel nodal method, matrix factorised
+  only on topology changes, CDA after switching; hot loops in Rust (`EmtKernels`, `eln_emt_*`, `eln_version` 10300) with bit-identical
+  managed fallbacks — keep them identical (tests compare every sample).
 - `Electrical.DigitalTwin.GridTwin` ingests SCADA tags (`RtuSimulator` naming `BUSn.VM`, `BRk.PF`, …), runs WLS state estimation with bad-data removal
   each cycle and produces explained alarms (EN `Message` / ID `MessageId`). `TwinSimulator` is a deterministic closed loop used by tests, CLI and gallery.
 - `Electrical.AI.GridAgent` answers through tool calling (`GridTools`, 10 tools). `LlmOptions.FromEnvironment()` reads `ELECTRICAL_LLM_PROVIDER`

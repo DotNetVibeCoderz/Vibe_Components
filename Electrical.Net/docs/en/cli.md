@@ -53,6 +53,8 @@ grid.xml` (MATPOWER, PSS/E RAW v33–35, IEEE CDF, Electrical.Net JSON, CIM RDF/
 | `acopf` | `--limit 5-6:42` (MVA), `--no-limits` | AC optimal power flow (interior point): cost vs DC-OPF, P/Q dispatch, LMP decomposition, binding constraints (v1.2) |
 | `scuc` | `--limit 8-9:57.5` (MW), `--reserve 0.1`, `--solver highs\|builtin`, `--gap 1e-4`, `--time 30` | 24 h security-constrained unit commitment (MILP, HiGHS by default) with hourly LMPs (v1.2) |
 | `market` | `--limit 8-9:60` (MW) | Single-period market clearing from offers and bids: LMPs, settlement, congestion rent, FTR payout (v1.2) |
+| `dyn` | `--case kundur\|case9`, `--exc const\|st\|pss`, `--fault 8`, `--clear 0.1`, `--trip 7-8`, `--end 10`, `--modes` | Detailed dynamics (GENROU, exciters, PSS): fault simulation and electromechanical modes (v1.3) |
+| `emt` | `--case line\|capbank`, `--km 150`, `--kv 230`, `--dt 50e-6` | Electromagnetic transients: line energization overvoltage or capacitor-bank inrush (v1.3) |
 
 ## Sample output
 
@@ -332,6 +334,68 @@ Market clearing on case9: Optimal, system λ 32.50 $/MWh
 ```
 
 Guides: [Optimization](optimization.md#ac-optimal-power-flow-v12), [Electricity markets](markets.md).
+
+### New in 1.3
+
+`dyn` runs the detailed dynamic model ([Power system dynamics](dynamics.md)): `--case kundur` (default, Kundur two-area) or `case9`
+(GENSAL/GENROU + IEEET1), `--exc const|st|pss` picks the Kundur excitation (constant field voltage, ESST1A without PSS, ESST1A with PSS;
+default `pss`), `--fault <bus>` and `--clear <s>` set a three-phase fault at t = 1 s, `--trip f-t` opens a branch when the fault clears,
+`--end` is the simulated time and `--modes` prints only the small-signal modes. `emt` runs an electromagnetic-transients study
+([EMT](emt.md)): `--case line` (default; `--km`, `--kv`) energizes an open-ended line, `--case capbank` (`--kv 11`, `--mvar 5`) energizes a
+capacitor bank; `--dt` is the time step. Timings include JIT on the first run.
+
+```
+$ eln emt
+Line energization: 230 kV, 150 km open-ended line, breaker closes at 5 ms (Δt 50 µs, 1201 steps, native (Rust), 136 ms)
+  Open end phase a: peak 1.17 pu at 9.60 ms
+  Open end phase b: peak 2.23 pu at 6.60 ms
+  Open end phase c: peak 2.15 pu at 12.90 ms
+
+$ eln emt --case capbank
+Capacitor bank energization: 5 Mvar at 11 kV, S"k 250 MVA (Δt 50 µs, native (Rust))
+  Inrush peak 3043 A = 8.2 × rated peak; ring frequency ≈ 354 Hz
+  Bus overvoltage peak 1.97 pu
+
+$ eln dyn --exc const --modes
+kundur2area: Kundur two-area system, ConstantField
+Electromechanical modes (stable):
+   0.542 Hz  ζ =   3.8 %  λ = -0.1289 ± j3.4074  G3.GENROU.dw 0.24, G3.GENROU.delta 0.24, G4.GENROU.dw 0.16
+   1.077 Hz  ζ =   9.0 %  λ = -0.6116 ± j6.7639  G2.GENROU.dw 0.26, G2.GENROU.delta 0.25, G1.GENROU.dw 0.20
+   1.112 Hz  ζ =   8.8 %  λ = -0.6182 ± j6.9867  G4.GENROU.dw 0.27, G4.GENROU.delta 0.27, G3.GENROU.dw 0.18
+
+$ eln dyn --exc st --modes
+kundur2area: Kundur two-area system, StaticExciter
+Electromechanical modes (stable):
+   0.607 Hz  ζ =   0.0 %  λ = -0.0004 ± j3.8155  G3.GENROU.delta 0.17, G3.GENROU.dw 0.17, G4.GENROU.delta 0.13
+   1.130 Hz  ζ =   9.3 %  λ = -0.6644 ± j7.0981  G2.GENROU.dw 0.23, G2.GENROU.delta 0.23, G1.GENROU.dw 0.20
+   1.165 Hz  ζ =   9.1 %  λ = -0.6712 ± j7.3191  G4.GENROU.dw 0.24, G4.GENROU.delta 0.24, G3.GENROU.dw 0.19
+
+$ eln dyn
+kundur2area: Kundur two-area system, StaticExciterWithPss
+Electromechanical modes (stable):
+   0.609 Hz  ζ =  18.6 %  λ = -0.7257 ± j3.8257  G3.GENROU.dw 0.16, G3.GENROU.delta 0.16, G4.GENROU.dw 0.12
+   1.297 Hz  ζ =  24.3 %  λ = -2.0408 ± j8.1499  G2.GENROU.dw 0.22, G1.GENROU.dw 0.18, G2.GENROU.delta 0.17
+   1.351 Hz  ζ =  24.4 %  λ = -2.1323 ± j8.4860  G4.GENROU.dw 0.23, G4.GENROU.delta 0.17, G3.GENROU.dw 0.17
+Three-phase fault at bus 8 (t = 1 s), cleared after 100 ms: STABLE, 1200 steps in 127 ms
+  Unit   δ(COI) max swing   speed range [pu]        V term min [pu]   Efd max [pu]
+  G1             3.82°   1.00000–1.00342          0.939          9.000
+  G2             4.05°   1.00000–1.00424          0.855          9.000
+  G3             3.94°   0.99997–1.00274          0.919          9.000
+  G4             3.30°   0.99998–1.00312          0.828          9.000
+
+$ eln dyn --case case9 --fault 7 --clear 0.083 --trip 8-9
+case9: WSCC 9-bus, GENSAL/GENROU + IEEET1
+Electromechanical modes (stable):
+   1.331 Hz  ζ =   4.9 %  λ = -0.4100 ± j8.3598  G2.GENROU.dw 0.29, G2.GENROU.delta 0.29, G1.GENSAL.dw 0.14
+   2.098 Hz  ζ =   8.5 %  λ = -1.1198 ± j13.1812  G3.GENROU.dw 0.37, G3.GENROU.delta 0.37, G2.GENROU.dw 0.09
+Three-phase fault at bus 7 (t = 1 s), cleared after 83 ms by tripping 8-9: STABLE, 1201 steps in 185 ms
+  Unit   δ(COI) max swing   speed range [pu]        V term min [pu]   Efd max [pu]
+  G1            26.48°   1.00000–1.01674          0.874          1.723
+  G2            77.56°   1.00000–1.01792          0.516          3.182
+  G3            45.61°   1.00000–1.01627          0.483          3.136
+```
+
+Guides: [Power system dynamics](dynamics.md#cli), [Electromagnetic transients](emt.md#cli).
 
 More output (`pf`, `n1`, `sc` scan, `modes`, `harmonic`, `ed`, `forecast`, `plf`, `qsts`, `ask`, `twin`) is shown in the topic guides:
 [power flow](power-flow.md), [short circuit](short-circuit-protection.md), [stability](stability.md), [harmonics](harmonics.md),

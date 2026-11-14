@@ -47,4 +47,11 @@ internal static partial class NativeMethods
 
     [LibraryImport(Lib, EntryPoint = "eln_normal_samples")]
     internal static unsafe partial int NormalSamples(ulong seed, double mean, double std, double* output, nuint len);
+
+    [LibraryImport(Lib, EntryPoint = "eln_emt_branch_update")]
+    internal static unsafe partial int EmtBranchUpdate(nuint n, int* from, int* to, nuint nv, double* v, double* cur, double* nxt, double* state, double* rhs);
+
+    [LibraryImport(Lib, EntryPoint = "eln_emt_lu_solve")]
+    internal static unsafe partial int EmtLuSolve(nuint n, int* perm, int* lPtr, int* lIdx, double* lVal, nuint nnzL,
+        int* uPtr, int* uIdx, double* uVal, nuint nnzU, double* diag, double* b, double* x, double* work);
 }

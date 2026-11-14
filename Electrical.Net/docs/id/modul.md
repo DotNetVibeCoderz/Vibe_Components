@@ -142,8 +142,52 @@ foreach (var mode in ss.OscillatoryModes)
 ```
 
 **Acuan / batasan.** Anderson & Fouad 9-bus (sudut awal, CCT ≈ 0,16 s), Sauer & Pai (mode), kriteria luas sama bentuk tertutup, transfer
-maksimum dua bus analitis. Mesin memakai **model klasik** (E′ di belakang X′d, beban admitansi konstan); model generator, eksiter, governor,
-dan inverter yang detail ada di peta jalan (v1.3).
+maksimum dua bus analitis. Mesin memakai **model klasik** (E′ di belakang X′d, beban admitansi konstan); generator, eksiter, governor, PSS,
+dan inverter yang rinci ada di [Electrical.Dynamics](#electricaldynamics) (v1.3).
+
+## Electrical.Dynamics
+
+**Tujuan.** Dinamika sistem tenaga RMS dengan model rinci (v1.3). Panduan: [Dinamika sistem tenaga](dinamika.md).
+
+**Tipe utama.** `DynamicSystem` (`Build`, `InitializationResidual`, `Units`, `StateNames`), `DynamicModelSet` / `GeneratorDynamics`,
+`DynamicSimulation.Run` → `DynamicSimulationResult` (`AngleCoiDeg`, `SpeedPu`, `TerminalVoltagePu`, `FieldVoltagePu`, `ActivePowerMw`,
+`ReactiveCurrentPu`, `BusVoltagePu`, `Channel`, `At`), `SimulationOptions` (`IntegrationMethod.ImplicitTrapezoidal` / `ModifiedEuler`),
+`DynamicEvent` (`Fault`, `Clear`, `TripBranch`, `TripGenerator`, `LoadStep`, `ScaleLoad`, `ReferenceStep`), `DynamicSmallSignal.Analyze` →
+`DynamicSmallSignalResult` (`ElectromechanicalModes`, `ModeInfo` dengan partisipasi dan bentuk mode, `ModeTable`), model `Gencls`, `Genrou`,
+`Gensal`, `Sexs`, `Ieeet1`, `Esst1a`, `Esac4a`, `Tgov1`, `Hygov`, `Gast`, `Ieeeg1`, `Ieeest`, `Pss2b`, `Regca`, `Reeca`, `Repca`,
+`GridFormingInverter` (`GridFormingMode.Droop` / `VirtualSynchronousMachine`), `ExponentialRecoveryLoad`, `DyrReader`, `DynamicModelLibrary`,
+`DynamicTestCases` (`KundurTwoArea(KundurExcitation)`, `Case9`, `InverterBehindLine`, `GridFormingPair`), `AddDynamics()` / `IDynamicsService`.
+
+```csharp
+var ss = DynamicSmallSignal.Analyze(DynamicTestCases.KundurTwoArea(KundurExcitation.ConstantField).Build());
+var inter = ss.ElectromechanicalModes()[0];   // 0,542 Hz, ζ 3,8 % (Kundur: 0,545 Hz, ≈ 3 %)
+```
+
+**Acuan / batasan.** Kundur, *Power System Stability and Control*, Contoh 12.6 (aliran daya hingga 0,5 Mvar / 0,1°, mode antar-area dan
+lokal, efek PSS); Anderson & Fouad 9-bus; spesifikasi model generik terbarukan WECC (REGC_A, REEC_A, REPC_A). Hanya RMS urutan positif;
+model kustom adalah kelas C# yang didaftarkan di `DynamicModelLibrary`.
+
+## Electrical.Emt
+
+**Tujuan.** Transien elektromagnetik (v1.3). Panduan: [Transien elektromagnetik](transien-elektromagnetik.md).
+
+**Tipe utama.** `EmtNetwork` (R/L/C, `AddSwitch` dengan `openAtCurrentZero`, `AddDiode`, `AddThyristor`, sumber dengan `EmtWaveform`,
+`AddTransformer`, `AddBergeronLine`, `AddPiSection`, pembantu tiga fasa termasuk `AddThreePhaseLine`), `BergeronLine`, `EmtOptions`
+(`TimeStep`, `StopTime`, `CriticalDampingAdjustment`, `RecordEvery`, `PreferNative`), `EmtSimulation.Simulate` → `EmtResult` (`Voltage`,
+`Current`, `Backend`, `Steps`, `Factorizations`), `EmtChannel` (`Peak`, `TimeOfPeak`, `Rms`, `ZeroCrossings`, `At`), `AddEmt()` / `IEmtService`.
+
+```csharp
+var net = new EmtNetwork();
+net.AddThreePhaseSource("Grid", "S", 230e3, 50, l: 0.0423);
+net.AddThreePhaseSwitch("CB", "S", "A", closeTime: 0.005);
+net.AddThreePhaseLine("Line", "A", "B", 0.03, 0.93e-3, 12.3e-9, 0.30, 3.0e-3, 7.9e-9, 150);
+var r = EmtSimulation.Simulate(net, new EmtOptions { TimeStep = 20e-6, StopTime = 0.045 });   // ujung terbuka ≈ 2,3 pu
+```
+
+**Acuan / batasan.** Respons RL/RC/RLC bentuk tertutup, Greenwood (switching kapasitor, energisasi saluran), kisi Bewley dan koefisien
+pantul, Marti & Lin (CDA), keadaan tunak fasor saluran panjang. Saluran tertransposisi berparameter konstan, transformator linear, langkah
+waktu tetap.
+
 
 ## Electrical.Harmonic
 
@@ -428,7 +472,7 @@ penyulang tak seimbang ada di [Electrical.Distribution](#electricaldistribution)
 **Tujuan.** Kernel Rust dengan fallback managed. Panduan: [Simulasi, HPC & native](simulasi-hpc-native.md#kernel-native).
 
 **Tipe utama.** `GridKernels` (`Fft`, `Harmonics`, `Thd`, `Rms`, `PowerInjections`, `NormalSamples`, `Backend`, `IsNativeAvailable`,
-`PreferNative`).
+`PreferNative`), `EmtKernels` (`BranchUpdate`, `LuSolve`, `Backend`; v1.3, memerlukan `eln_version` ≥ 10300).
 
 **Batasan.** `Fft` membutuhkan panjang pangkat dua (gunakan `Electrical.Harmonic.Fft` untuk panjang sembarang, Bluestein).
 

@@ -201,7 +201,7 @@ Probabilistic load flow on case33bw: 500/500 samples converged, backend native (
 ## Kernel native
 
 Crate Rust `native/electrical-native` mengekspor C ABI (`eln_version`, `eln_fft`, `eln_harmonics`, `eln_thd`, `eln_rms`, `eln_power_injections`,
-`eln_normal_samples`). Setiap fungsi mengembalikan 0 bila berhasil atau kode negatif (−1 pointer null, −2 argumen tidak valid); array kompleks
+`eln_normal_samples`, serta sejak 1.3 `eln_emt_branch_update` dan `eln_emt_lu_solve`). Setiap fungsi mengembalikan 0 bila berhasil atau kode negatif (−1 pointer null, −2 argumen tidak valid); array kompleks
 disusun selang-seling `[re, im, …]`. `Electrical.Native.GridKernels` membungkusnya:
 
 ```csharp
@@ -226,6 +226,24 @@ GridKernels.PreferNative = false;                      // paksa jalur managed
 
 Pustaka dimuat dari folder aplikasi atau `runtimes/<rid>/native`. Tes memeriksa kesamaan native vs. managed (FFT hingga 1e-9, sampel normal
 identik, injeksi daya hingga 1e-12 terhadap `AdmittanceMatrix.Injections`).
+
+### Kernel EMT (v1.3)
+
+Pustaka versi 1.3 (`eln_version` = 10300) menambahkan dua loop dalam [solver EMT](transien-elektromagnetik.md): `eln_emt_branch_update`
+(rekursi arus riwayat semua cabang R-L-C seri, diakumulasikan ke ruas kanan) dan `eln_emt_lu_solve` (substitusi maju/mundur dengan LU
+sparse CSR yang difaktorkan sekali oleh `SparseLU` managed). `Electrical.Native.EmtKernels` hanya memakainya bila pustaka yang dimuat
+melaporkan `eln_version` ≥ 10300, sehingga biner lama kembali ke kode managed. Cadangan managed melakukan operasi floating-point yang sama
+dengan urutan yang sama, sehingga bentuk gelombang native dan managed **identik bit** (diuji pada jaringan tiga fasa dengan switching).
+
+```csharp
+Console.WriteLine(EmtKernels.Backend);                 // "native (Rust)" atau "managed"
+EmtKernels.PreferNative = false;                       // paksa kernel EMT managed (atau EmtOptions.PreferNative = false per simulasi)
+```
+
+| Kernel | Algoritma |
+|---|---|
+| `EmtKernels.BranchUpdate` (`eln_emt_branch_update`) | i = g·v<sub>b</sub> + i<sub>h</sub>; pembaruan v<sub>C</sub>; arus riwayat berikutnya; akumulasi ruas kanan |
+| `EmtKernels.LuSolve` (`eln_emt_lu_solve`) | Substitusi maju/mundur sparse terpermutasi dengan L berdiagonal satu |
 
 Membangun: `pwsh build/build-native.ps1` menjalankan `cargo build --release` dan `cargo test --release` lalu menyalin biner ke
 `src/Electrical.Native/runtimes/<rid>/native` (`-Target`/`-Rid` untuk cross build). CI membangun win-x64, linux-x64, linux-arm64, osx-x64, dan

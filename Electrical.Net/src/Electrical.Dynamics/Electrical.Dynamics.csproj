@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Power system dynamics (RMS) for Electrical.Net: detailed synchronous machines (GENROU, GENSAL), excitation systems, turbine-governors, power system stabilizers, inverter-based resources (REGC/REEC/REPC, grid-forming), PSS/E .dyr reader, time-domain simulation with events and small-signal analysis of the detailed model.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+    <ProjectReference Include="../Electrical.Stability/Electrical.Stability.csproj" />
+  </ItemGroup>
+</Project>

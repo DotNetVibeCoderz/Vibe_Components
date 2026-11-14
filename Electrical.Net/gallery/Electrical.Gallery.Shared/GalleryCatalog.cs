@@ -44,7 +44,7 @@ public static class GalleryCatalog
         new("faults", new("Faults & protection", "Gangguan & proteksi"),
             new("Short-circuit duty, relay grading and arc flash.", "Arus hubung singkat, penyetelan relai, dan arc flash.")),
         new("dynamics", new("Dynamics & power quality", "Dinamika & kualitas daya"),
-            new("Stability, harmonics and circuit transients.", "Stabilitas, harmonik, dan transien rangkaian.")),
+            new("Stability, machine and inverter dynamics, electromagnetic transients and harmonics.", "Stabilitas, dinamika mesin dan inverter, transien elektromagnetik, dan harmonik.")),
         new("der", new("Renewables & smart grid", "Energi terbarukan & smart grid"),
             new("PV, wind, storage, EVs and microgrids.", "PV, angin, penyimpanan, EV, dan mikrogrid.")),
         new("planning", new("Markets, forecasting & planning", "Pasar, peramalan & perencanaan"),
@@ -196,6 +196,56 @@ public static class GalleryCatalog
             var tr = c.Transient(stopTimeS: 0.02, stepS: 2e-5);           // trapezoidal integration
             double[] vc = tr.Voltage("b");
             var bode = c.AcSweep(10, 100_000).Bode("b", "in");
+            """),
+        new("dynamics", "dynamics",
+            new("Power system dynamics (Kundur two-area)", "Dinamika sistem tenaga (Kundur dua area)"),
+            new("Simulate a fault on Kundur's two-area system with GENROU machines, a thyristor exciter and a power system stabilizer; compare rotor angles, speeds, terminal and field voltages, and read the inter-area mode from the eigenvalues of the detailed model.",
+                "Simulasikan gangguan pada sistem dua area Kundur dengan mesin GENROU, eksiter tiristor, dan stabilizer sistem tenaga; bandingkan sudut rotor, kecepatan, tegangan terminal dan medan, lalu baca mode antar-area dari nilai eigen model rinci."),
+            ["Dynamics", "Stability", "PowerFlow"], """
+            using System.Numerics;
+            using Electrical.Dynamics;
+
+            var sys = DynamicTestCases.KundurTwoArea(KundurExcitation.StaticExciterWithPss).Build();   // GENROU + ESST1A + IEEEST
+            var sim = DynamicSimulation.Run(sys,
+                [DynamicEvent.Fault(0.5, 8, new Complex(0, 0.01)), DynamicEvent.Clear(0.6, 8)],
+                new SimulationOptions { EndTimeS = 10 });                                           // implicit trapezoidal, half-cycle step
+            Console.WriteLine($"stable {sim.Stable}, max swing {sim.MaxAngleDeviationDeg:0.0}°, {sim.Elapsed.TotalMilliseconds:0} ms");
+
+            var ss = DynamicSmallSignal.Analyze(sys);
+            foreach (var m in ss.ElectromechanicalModes()) Console.WriteLine(m);   // inter-area ≈ 0.61 Hz, ζ ≈ 18.6 % with PSS
+            """),
+        new("ibr", "dynamics",
+            new("Inverter-based resources", "Sumber berbasis inverter"),
+            new("Ride a grid-following REGC_A/REEC_A plant through a voltage dip (reactive-current injection, active-current ramp) and compare grid-forming droop and virtual-synchronous-machine control after a load step.",
+                "Lewatkan pembangkit grid-following REGC_A/REEC_A melalui dip tegangan (injeksi arus reaktif, ramp arus aktif) dan bandingkan kendali grid-forming droop dengan mesin sinkron virtual setelah langkah beban."),
+            ["Dynamics", "Renewable"], """
+            using System.Numerics;
+            using Electrical.Dynamics;
+
+            var ibr = DynamicTestCases.InverterBehindLine().Build();                 // 80 MW REGC_A + REEC_A behind a line
+            var frt = DynamicSimulation.Run(ibr, [DynamicEvent.Fault(0.1, 2, new Complex(0, 0.08)), DynamicEvent.Clear(0.25, 2)],
+                new SimulationOptions { EndTimeS = 1.5 });
+            int u = frt.UnitIndex("PV1");
+            Console.WriteLine($"Iq during the dip {frt.At(frt.ReactiveCurrentPu[u], 0.2):0.00} pu");   // ≈ 0.94 pu at V ≈ 0.45 pu
+
+            var gfm = DynamicTestCases.GridFormingPair(GridFormingMode.VirtualSynchronousMachine).Build();
+            var step = DynamicSimulation.Run(gfm, [DynamicEvent.LoadStep(1, 3, 10)], new SimulationOptions { EndTimeS = 6 });
+            """),
+        new("emt", "dynamics",
+            new("Electromagnetic transients", "Transien elektromagnetik"),
+            new("Energize an open-ended 230 kV transmission line and watch the travelling-wave overvoltage at the far end, or switch a capacitor bank and measure the inrush current and its ring frequency, in an EMT solver with Rust kernels.",
+                "Energisasi saluran transmisi 230 kV berujung terbuka dan amati tegangan lebih gelombang berjalan di ujung jauh, atau hubungkan bank kapasitor dan ukur arus inrush serta frekuensi osilasinya, dengan solver EMT berkernel Rust."),
+            ["Emt", "Native"], """
+            using Electrical.Emt;
+
+            var net = new EmtNetwork();
+            net.AddThreePhaseSource("Grid", "S", 230e3, 50, l: 0.0423);                    // 10 kA short-circuit level
+            net.AddThreePhaseSwitch("CB", "S", "A", closeTime: 0.005);
+            net.AddThreePhaseLine("Line", "A", "B", 0.03, 0.93e-3, 12.3e-9, 0.30, 3.0e-3, 7.9e-9, lengthKm: 150);   // transposed Bergeron
+
+            var r = EmtSimulation.Simulate(net, new EmtOptions { TimeStep = 20e-6, StopTime = 0.045 });
+            var vb = r.Voltage("B.a");
+            Console.WriteLine($"{vb.Peak() / (230e3 * Math.Sqrt(2.0 / 3)):0.00} pu at {vb.TimeOfPeak() * 1e3:0.00} ms ({r.Backend})");
             """),
         new("renewable", "der",
             new("Solar PV & wind energy", "Energi surya PV & angin"),
@@ -488,6 +538,8 @@ public static class GalleryCatalog
         "PowerFlow" => new("NR, fast-decoupled, Gauss–Seidel, DC, sweep, N-1, PTDF/LODF", "NR, fast-decoupled, Gauss–Seidel, DC, sweep, N-1, PTDF/LODF"),
         "ShortCircuit" => new("IEC 60909 balanced and unbalanced faults", "Gangguan seimbang dan tak seimbang IEC 60909"),
         "Stability" => new("Transient and voltage stability", "Stabilitas transien dan tegangan"),
+        "Dynamics" => new("Detailed machines, exciters, governors, PSS, IBR models, .dyr, small signal", "Mesin rinci, eksiter, governor, PSS, model IBR, .dyr, sinyal kecil"),
+        "Emt" => new("Electromagnetic transients: Bergeron lines, switches, Rust kernels", "Transien elektromagnetik: saluran Bergeron, sakelar, kernel Rust"),
         "Harmonic" => new("Harmonic penetration and power quality", "Penetrasi harmonik dan kualitas daya"),
         "Protection" => new("Relay coordination, TCC curves, arc flash", "Koordinasi relai, kurva TCC, arc flash"),
         "Renewable" => new("PV, wind, BESS and hosting capacity", "PV, angin, BESS, dan kapasitas hosting"),

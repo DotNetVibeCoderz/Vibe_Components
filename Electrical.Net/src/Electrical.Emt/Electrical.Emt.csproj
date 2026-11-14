@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Electromagnetic transients (EMT) for Electrical.Net: Dommel nodal method with trapezoidal companion models, R/L/C branches, ideal and time-controlled switches, Bergeron travelling-wave lines, sources, simple average-value converter models and a Rust kernel with managed fallback.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.Native/Electrical.Native.csproj" />
+  </ItemGroup>
+</Project>

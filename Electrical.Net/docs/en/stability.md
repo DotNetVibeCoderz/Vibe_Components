@@ -2,7 +2,9 @@
 
 > Made by Gravicode Studios, led by Kang Fadhil · [Bahasa Indonesia](../id/stabilitas.md)
 
-Package: `Electrical.Stability` (depends on PowerFlow). Covers rotor-angle (transient and small-signal), voltage and frequency stability.
+Package: `Electrical.Stability` (depends on PowerFlow). Covers rotor-angle (transient and small-signal), voltage and frequency stability with
+the classical machine model. Detailed machines with exciters, governors, PSS and inverter-based resources are in
+[Power system dynamics](dynamics.md) (v1.3), which builds on this package; see [Classical and detailed models](#classical-and-detailed-models).
 
 ## Transient stability (classical multi-machine model)
 
@@ -132,10 +134,27 @@ var fromGrid = FrequencyResponseParameters.FromNetwork(TestCases.Case9(), distur
 | Two-bus PV curve | V²/2X = 5 pu, V<sub>nose</sub> = 1/√2 | 4.95–5.0, 0.70–0.75 |
 | Frequency response | ROCOF and Δf<sub>ss</sub> formulas | exact |
 
+## Classical and detailed models
+
+`Electrical.Stability` keeps the classical model (E′ behind X′d, Kron-reduced network, RK4) because it is fast, needs no controller data
+and gives the critical clearing time by bisection in milliseconds. [`Electrical.Dynamics`](dynamics.md) (v1.3) adds the detailed models
+on top of the same power flow and eigenvalue solver:
+
+| Question | Use |
+|---|---|
+| Does the system survive this fault? What is the CCT? First-swing screening of many contingencies | `TransientStability` (classical) |
+| How do AVRs, PSS and governors shape the response? Inter-area damping, controller tuning | `DynamicSimulation`, `DynamicSmallSignal` |
+| Inverter-based resources (fault ride-through, grid-forming), PSS/E `.dyr` data | `Electrical.Dynamics` |
+
+The two agree where they should: a GENROU machine forced to the classical limit reproduces the classical first swing on case9 within 2.3°,
+and the detailed case9 modes (1.33 and 2.10 Hz, with IEEET1 exciters) sit next to the classical 1.38 and 2.13 Hz.
+`DynamicEvent.From(StabilityEvent)` converts event lists, and `DynamicSystem.Build(net)` without models represents every generator as GENCLS
+from the same `Generator.H`, `D` and `XdPrime`.
+
 ## Limitations
 
-Classical generator model only (no AVR, governor or PSS in the transient simulation; the frequency-response model is aggregated). Detailed
-machine models (GENROU/GENSAL), exciters, governors, PSS and inverter-based resource models are planned for v1.3.
+Classical generator model only in this package (no AVR, governor or PSS in `TransientStability`; the frequency-response model is
+aggregated). For detailed machines, controls and inverter-based resources use [Electrical.Dynamics](dynamics.md).
 
 ---
 *Made by Gravicode Studios, led by Kang Fadhil · [Bahasa Indonesia](../id/stabilitas.md)*

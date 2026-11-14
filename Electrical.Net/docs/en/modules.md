@@ -142,8 +142,52 @@ foreach (var mode in ss.OscillatoryModes)
 ```
 
 **References / limitations.** Anderson & Fouad 9-bus (initial angles, CCT ≈ 0.16 s), Sauer & Pai (modes), closed-form equal-area criterion,
-analytic two-bus maximum transfer. Machines use the **classical model** (E′ behind X′d, constant-admittance loads); detailed generator,
-exciter, governor and inverter models are on the roadmap (v1.3).
+analytic two-bus maximum transfer. Machines use the **classical model** (E′ behind X′d, constant-admittance loads); detailed generators,
+exciters, governors, PSS and inverter models are in [Electrical.Dynamics](#electricaldynamics) (v1.3).
+
+## Electrical.Dynamics
+
+**Purpose.** RMS power system dynamics with detailed models (v1.3). Guide: [Power system dynamics](dynamics.md).
+
+**Key types.** `DynamicSystem` (`Build`, `InitializationResidual`, `Units`, `StateNames`), `DynamicModelSet` / `GeneratorDynamics`,
+`DynamicSimulation.Run` → `DynamicSimulationResult` (`AngleCoiDeg`, `SpeedPu`, `TerminalVoltagePu`, `FieldVoltagePu`, `ActivePowerMw`,
+`ReactiveCurrentPu`, `BusVoltagePu`, `Channel`, `At`), `SimulationOptions` (`IntegrationMethod.ImplicitTrapezoidal` / `ModifiedEuler`),
+`DynamicEvent` (`Fault`, `Clear`, `TripBranch`, `TripGenerator`, `LoadStep`, `ScaleLoad`, `ReferenceStep`), `DynamicSmallSignal.Analyze` →
+`DynamicSmallSignalResult` (`ElectromechanicalModes`, `ModeInfo` with participation and mode shape, `ModeTable`), models `Gencls`, `Genrou`,
+`Gensal`, `Sexs`, `Ieeet1`, `Esst1a`, `Esac4a`, `Tgov1`, `Hygov`, `Gast`, `Ieeeg1`, `Ieeest`, `Pss2b`, `Regca`, `Reeca`, `Repca`,
+`GridFormingInverter` (`GridFormingMode.Droop` / `VirtualSynchronousMachine`), `ExponentialRecoveryLoad`, `DyrReader`, `DynamicModelLibrary`,
+`DynamicTestCases` (`KundurTwoArea(KundurExcitation)`, `Case9`, `InverterBehindLine`, `GridFormingPair`), `AddDynamics()` / `IDynamicsService`.
+
+```csharp
+var ss = DynamicSmallSignal.Analyze(DynamicTestCases.KundurTwoArea(KundurExcitation.ConstantField).Build());
+var inter = ss.ElectromechanicalModes()[0];   // 0.542 Hz, ζ 3.8 % (Kundur: 0.545 Hz, ≈ 3 %)
+```
+
+**References / limitations.** Kundur, *Power System Stability and Control*, Example 12.6 (load flow to 0.5 Mvar / 0.1°, inter-area and local
+modes, PSS effect); Anderson & Fouad 9-bus; WECC generic renewable model specifications (REGC_A, REEC_A, REPC_A). Positive-sequence RMS
+only; custom models are C# classes registered in `DynamicModelLibrary`.
+
+## Electrical.Emt
+
+**Purpose.** Electromagnetic transients (v1.3). Guide: [Electromagnetic transients](emt.md).
+
+**Key types.** `EmtNetwork` (R/L/C, `AddSwitch` with `openAtCurrentZero`, `AddDiode`, `AddThyristor`, sources with `EmtWaveform`,
+`AddTransformer`, `AddBergeronLine`, `AddPiSection`, three-phase helpers incl. `AddThreePhaseLine`), `BergeronLine`, `EmtOptions`
+(`TimeStep`, `StopTime`, `CriticalDampingAdjustment`, `RecordEvery`, `PreferNative`), `EmtSimulation.Simulate` → `EmtResult` (`Voltage`,
+`Current`, `Backend`, `Steps`, `Factorizations`), `EmtChannel` (`Peak`, `TimeOfPeak`, `Rms`, `ZeroCrossings`, `At`), `AddEmt()` / `IEmtService`.
+
+```csharp
+var net = new EmtNetwork();
+net.AddThreePhaseSource("Grid", "S", 230e3, 50, l: 0.0423);
+net.AddThreePhaseSwitch("CB", "S", "A", closeTime: 0.005);
+net.AddThreePhaseLine("Line", "A", "B", 0.03, 0.93e-3, 12.3e-9, 0.30, 3.0e-3, 7.9e-9, 150);
+var r = EmtSimulation.Simulate(net, new EmtOptions { TimeStep = 20e-6, StopTime = 0.045 });   // open end ≈ 2.3 pu
+```
+
+**References / limitations.** Closed-form RL/RC/RLC responses, Greenwood (capacitor switching, line energization), Bewley lattice and
+reflection coefficients, Marti & Lin (CDA), long-line phasor steady state. Constant-parameter transposed lines, linear transformers, fixed
+time step.
+
 
 ## Electrical.Harmonic
 
@@ -430,7 +474,7 @@ in [Electrical.Distribution](#electricaldistribution).
 **Purpose.** Rust kernels with managed fallbacks. Guide: [Simulation, HPC & native](simulation-hpc-native.md#native-kernels).
 
 **Key types.** `GridKernels` (`Fft`, `Harmonics`, `Thd`, `Rms`, `PowerInjections`, `NormalSamples`, `Backend`, `IsNativeAvailable`,
-`PreferNative`).
+`PreferNative`), `EmtKernels` (`BranchUpdate`, `LuSolve`, `Backend`; v1.3, requires `eln_version` ≥ 10300).
 
 **Limitations.** `Fft` requires a power-of-two length (use `Electrical.Harmonic.Fft` for arbitrary lengths, Bluestein).
 

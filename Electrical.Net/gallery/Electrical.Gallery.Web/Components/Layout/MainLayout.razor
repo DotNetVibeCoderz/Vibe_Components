@@ -43,7 +43,7 @@
                     }
                 </div>
             }
-            <a class="rail-link modules" href="@Href("#modules")" @onclick="CloseMenu"><span class="lamp dim"></span>@T("All 23 modules", "Semua 23 modul")</a>
+            <a class="rail-link modules" href="@Href("#modules")" @onclick="CloseMenu"><span class="lamp dim"></span>@T($"All {GalleryCatalog.Modules.Length} modules", $"Semua {GalleryCatalog.Modules.Length} modul")</a>
         </nav>
 
         <main class="content">

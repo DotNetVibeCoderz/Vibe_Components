@@ -34,6 +34,8 @@
     <ProjectReference Include="../../src/Electrical.Distribution/Electrical.Distribution.csproj" />
     <ProjectReference Include="../../src/Electrical.Optimization.Highs/Electrical.Optimization.Highs.csproj" />
     <ProjectReference Include="../../src/Electrical.Markets/Electrical.Markets.csproj" />
+    <ProjectReference Include="../../src/Electrical.Emt/Electrical.Emt.csproj" />
+    <ProjectReference Include="../../src/Electrical.Dynamics/Electrical.Dynamics.csproj" />
     <ProjectReference Include="../../src/Electrical.HPC/Electrical.HPC.csproj" />
     <ProjectReference Include="../../src/Electrical.Cloud/Electrical.Cloud.csproj" />
     <ProjectReference Include="../../src/Electrical.SCADA/Electrical.SCADA.csproj" />

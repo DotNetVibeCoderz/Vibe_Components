@@ -184,6 +184,27 @@ public sealed class SparseLU<T> where T : INumberBase<T>
         return x;
     }
 
+    /// <summary>
+    /// Exports the factors in CSR form for external substitution kernels (e.g. the native EMT solver): strictly-lower
+    /// <c>L</c> (unit diagonal implied), strictly-upper <c>U</c>, pivots and the ordering. Returns null when the
+    /// factorization fell back to dense partial pivoting (zero pivot under the sparse ordering).
+    /// </summary>
+    public SparseLUFactors<T>? ExportFactors()
+    {
+        if (_dense is not null) return null;
+        static (int[] ptr, int[] idx, T[] val) Pack(int n, int[][] idx, T[][] val)
+        {
+            var ptr = new int[n + 1];
+            for (int i = 0; i < n; i++) ptr[i + 1] = ptr[i] + idx[i].Length;
+            var ci = new int[ptr[n]]; var cv = new T[ptr[n]];
+            for (int i = 0; i < n; i++) { idx[i].CopyTo(ci, ptr[i]); val[i].CopyTo(cv, ptr[i]); }
+            return (ptr, ci, cv);
+        }
+        var (lp, li, lv) = Pack(_n, _lIdx, _lVal);
+        var (up, ui, uv) = Pack(_n, _uIdx, _uVal);
+        return new SparseLUFactors<T>((int[])_perm.Clone(), lp, li, lv, up, ui, uv, (T[])_diag.Clone());
+    }
+
     /// <summary>Minimum-degree ordering on the symmetrized pattern of A (Tinney scheme 2).</summary>
     public static int[] MinimumDegreeOrdering(SparseMatrix<T> a)
     {
@@ -246,4 +267,15 @@ public sealed class SparseLU<T> where T : INumberBase<T>
         }
         return order;
     }
+}
+
+/// <summary>
+/// CSR export of a <see cref="SparseLU{T}"/> factorization P·A·Pᵀ = L·U: <see cref="Permutation"/> maps position → original
+/// index, rows of <c>L</c> hold the strictly-lower part (unit diagonal implied), rows of <c>U</c> the strictly-upper part,
+/// <see cref="Diagonal"/> the pivots. Solving reproduces <see cref="SparseLU{T}.Solve"/> operation for operation.
+/// </summary>
+public sealed record SparseLUFactors<T>(int[] Permutation, int[] LRowPtr, int[] LColIdx, T[] LValues,
+    int[] URowPtr, int[] UColIdx, T[] UValues, T[] Diagonal) where T : INumberBase<T>
+{
+    public int Size => Diagonal.Length;
 }

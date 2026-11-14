@@ -2,7 +2,9 @@
 
 > Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil · [English](../en/stability.md)
 
-Paket: `Electrical.Stability` (bergantung pada PowerFlow). Mencakup stabilitas sudut rotor (transien dan sinyal kecil), tegangan, dan frekuensi.
+Paket: `Electrical.Stability` (bergantung pada PowerFlow). Mencakup stabilitas sudut rotor (transien dan sinyal kecil), tegangan, dan frekuensi
+dengan model mesin klasik. Mesin rinci dengan eksiter, governor, PSS, dan sumber berbasis inverter ada di
+[Dinamika sistem tenaga](dinamika.md) (v1.3), yang dibangun di atas paket ini; lihat [Model klasik dan rinci](#model-klasik-dan-rinci).
 
 ## Stabilitas transien (model klasik multi-mesin)
 
@@ -134,10 +136,27 @@ var fromGrid = FrequencyResponseParameters.FromNetwork(TestCases.Case9(), distur
 | Kurva PV dua bus | V²/2X = 5 pu, V<sub>hidung</sub> = 1/√2 | 4,95–5,0; 0,70–0,75 |
 | Respons frekuensi | Rumus ROCOF dan Δf<sub>ss</sub> | eksak |
 
+## Model klasik dan rinci
+
+`Electrical.Stability` mempertahankan model klasik (E′ di belakang X′d, jaringan tereduksi Kron, RK4) karena cepat, tidak memerlukan data
+pengendali, dan memberi waktu pemutusan kritis dengan biseksi dalam hitungan milidetik. [`Electrical.Dynamics`](dinamika.md) (v1.3)
+menambahkan model rinci di atas aliran daya dan solver nilai eigen yang sama:
+
+| Pertanyaan | Gunakan |
+|---|---|
+| Apakah sistem bertahan dari gangguan ini? Berapa CCT-nya? Penyaringan ayunan pertama banyak kontingensi | `TransientStability` (klasik) |
+| Bagaimana AVR, PSS, dan governor membentuk respons? Redaman antar-area, penyetelan pengendali | `DynamicSimulation`, `DynamicSmallSignal` |
+| Sumber berbasis inverter (fault ride-through, grid-forming), data PSS/E `.dyr` | `Electrical.Dynamics` |
+
+Keduanya sepakat di tempat yang semestinya: mesin GENROU yang dipaksa ke batas klasik mereproduksi ayunan pertama klasik pada case9 dalam
+2,3°, dan mode case9 rinci (1,33 dan 2,10 Hz, dengan eksiter IEEET1) berada dekat mode klasik 1,38 dan 2,13 Hz.
+`DynamicEvent.From(StabilityEvent)` mengonversi daftar kejadian, dan `DynamicSystem.Build(net)` tanpa model merepresentasikan setiap
+generator sebagai GENCLS dari `Generator.H`, `D`, dan `XdPrime` yang sama.
+
 ## Batasan
 
-Hanya model generator klasik (tanpa AVR, governor, atau PSS di simulasi transien; model respons frekuensi bersifat teragregasi). Model mesin detail
-(GENROU/GENSAL), eksiter, governor, PSS, dan model sumber berbasis inverter direncanakan untuk v1.3.
+Paket ini hanya memakai model generator klasik (tanpa AVR, governor, atau PSS di `TransientStability`; model respons frekuensi bersifat
+teragregasi). Untuk mesin rinci, kendali, dan sumber berbasis inverter gunakan [Electrical.Dynamics](dinamika.md).
 
 ---
 *Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil · [English](../en/stability.md)*

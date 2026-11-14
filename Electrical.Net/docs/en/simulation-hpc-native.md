@@ -198,7 +198,7 @@ Probabilistic load flow on case33bw: 500/500 samples converged, backend native (
 ## Native kernels
 
 The Rust crate `native/electrical-native` exports a C ABI (`eln_version`, `eln_fft`, `eln_harmonics`, `eln_thd`, `eln_rms`,
-`eln_power_injections`, `eln_normal_samples`). Every function returns 0 on success or a negative code (−1 null pointer, −2 invalid argument);
+`eln_power_injections`, `eln_normal_samples` and, since 1.3, `eln_emt_branch_update` and `eln_emt_lu_solve`). Every function returns 0 on success or a negative code (−1 null pointer, −2 invalid argument);
 complex arrays are interleaved `[re, im, …]`. `Electrical.Native.GridKernels` wraps them:
 
 ```csharp
@@ -223,6 +223,24 @@ GridKernels.PreferNative = false;                      // force the managed path
 
 The library is loaded from the app folder or `runtimes/<rid>/native`. Tests check native vs. managed equality (FFT to 1e-9, identical
 normal samples, power injections to 1e-12 against `AdmittanceMatrix.Injections`).
+
+### EMT kernels (v1.3)
+
+Library version 1.3 (`eln_version` = 10300) adds the two inner loops of the [EMT solver](emt.md): `eln_emt_branch_update` (history-current
+recurrence of all series R-L-C branches, accumulated into the right-hand side) and `eln_emt_lu_solve` (forward/backward substitution with a
+CSR sparse LU factorized once by the managed `SparseLU`). `Electrical.Native.EmtKernels` uses them only when the loaded library reports
+`eln_version` ≥ 10300, so an older binary falls back to managed code. The managed fallbacks perform the same floating-point operations in
+the same order, so native and managed waveforms are **bit-identical** (tested on a three-phase network with switching).
+
+```csharp
+Console.WriteLine(EmtKernels.Backend);                 // "native (Rust)" or "managed"
+EmtKernels.PreferNative = false;                       // force managed EMT kernels (or EmtOptions.PreferNative = false per run)
+```
+
+| Kernel | Algorithm |
+|---|---|
+| `EmtKernels.BranchUpdate` (`eln_emt_branch_update`) | i = g·v<sub>b</sub> + i<sub>h</sub>; v<sub>C</sub> update; next history current; RHS accumulation |
+| `EmtKernels.LuSolve` (`eln_emt_lu_solve`) | Permuted sparse forward/backward substitution with unit-diagonal L |
 
 Building: `pwsh build/build-native.ps1` runs `cargo build --release` and `cargo test --release` and copies the binary to
 `src/Electrical.Native/runtimes/<rid>/native` (`-Target`/`-Rid` for cross builds). CI builds win-x64, linux-x64, linux-arm64, osx-x64 and

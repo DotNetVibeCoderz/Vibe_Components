@@ -2,7 +2,7 @@
 
 > Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil · [English](../en/gallery.md)
 
-Galeri Electrical.Net memperlihatkan pustaka bekerja dalam 26 demo langsung, masing-masing di samping kode C# yang menghasilkannya. Galeri
+Galeri Electrical.Net memperlihatkan pustaka bekerja dalam 29 demo langsung, masing-masing di samping kode C# yang menghasilkannya. Galeri
 tersedia sebagai aplikasi web **Blazor** dan aplikasi desktop **Avalonia** yang berbagi kode skenario (`gallery/Electrical.Gallery.Shared`).
 Keduanya dwibahasa (EN/ID) serta punya tema terang dan gelap. Setiap angka dihitung oleh pustaka saat berjalan; tidak ada yang dirender lebih dulu.
 
@@ -26,6 +26,9 @@ dotnet run --project gallery/Electrical.Gallery.Desktop
 | Dinamika & kualitas daya | Stabilitas transien & tegangan (`stability`) | Stability |
 | | Harmonik & resonansi (`harmonic`) | Harmonic |
 | | Simulasi rangkaian (MNA) (`circuit`) | Circuit |
+| | Dinamika sistem tenaga (Kundur dua area) (`dynamics`) (v1.3) | Dynamics, Stability |
+| | Sumber berbasis inverter (`ibr`) (v1.3) | Dynamics, Renewable |
+| | Transien elektromagnetik (`emt`) (v1.3) | Emt, Native |
 | Energi terbarukan & smart grid | Energi surya PV & angin (`renewable`) | Renewable |
 | | Operasi smart grid (`smartgrid`) | SmartGrid |
 | Pasar, peramalan & perencanaan | OPF, LMP & unit commitment (`optimization`) | Optimization |
@@ -61,6 +64,9 @@ Semua tangkapan layar ada di [docs/images](../images). Penamaan: `web-home.png`,
 | ![Aliran daya optimal AC](../images/web-acopf.png) | ![Aliran daya optimal AC](../images/desktop-acopf.png) |
 | ![Unit commitment dengan kendala keamanan](../images/web-scuc.png) | ![Unit commitment dengan kendala keamanan](../images/desktop-scuc.png) |
 | ![Kliring pasar listrik](../images/web-market.png) | ![Kliring pasar listrik](../images/desktop-market.png) |
+| ![Dinamika sistem tenaga](../images/web-dynamics.png) | ![Dinamika sistem tenaga](../images/desktop-dynamics.png) |
+| ![Sumber berbasis inverter](../images/web-ibr.png) | ![Sumber berbasis inverter](../images/desktop-ibr.png) |
+| ![Transien elektromagnetik](../images/web-emt.png) | ![Transien elektromagnetik](../images/desktop-emt.png) |
 
 Tema gelap: ![Gelap](../images/web-home-dark.png)
 
@@ -80,7 +86,7 @@ Hentikan server galeri yang sedang berjalan sebelum `dotnet build`, karena DLL y
 2. Tambahkan kelas skenario di `gallery/Electrical.Gallery.Shared/Scenarios/`. Jalur yang biasa adalah deklaratif: implementasikan
    `IInteractiveScenario` (kontrol berupa `ChoiceParam`/`RangeParam`, hasil berupa `Kpi` serta `ChartBlock`, `TableBlock`, `ListingBlock`, dan
    `NoteBlock`) lalu daftarkan di `InteractiveScenarios.All`. Kedua aplikasi menampilkannya dengan tampilan generik (`InteractiveView.razor`,
-   `Views.Interactive`) sehingga langkah 3–4 tidak diperlukan; `distribution`, `interop`, `voltagecontrol`, `acopf`, `scuc`, dan `market` dibuat dengan cara ini.
+   `Views.Interactive`) sehingga langkah 3–4 tidak diperlukan; `distribution`, `interop`, `voltagecontrol`, `acopf`, `scuc`, `market`, `dynamics`, `ibr`, dan `emt` dibuat dengan cara ini.
 3. Hanya untuk UI khusus: web `Components/Demos/<Nama>View.razor` dan sebuah case di `DemoHost.razor`.
 4. Hanya untuk UI khusus: case desktop di `Views.Build`.
 5. Jaga agar teks dwibahasa dan data deterministik (ber-seed).

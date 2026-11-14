@@ -12,6 +12,7 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | Electrical.Circuit | ✅ | MNA DC/AC/transient, SPICE-like netlists, diodes, transformers, three-phase |
 | Electrical.ShortCircuit | ✅ | IEC 60909 3φ/SLG/LL/LLG, κ (methods B/C), Ib, Ith, external grids |
 | Electrical.Stability | ✅ | Classical TS + CCT (case9 0.162 s), eigenvalues match Sauer & Pai, PV/QV curves, L-index, frequency response |
+| Electrical.Dynamics (v1.3) | ✅ | RMS DAE engine (implicit trapezoidal + modified Euler), GENCLS/GENROU/GENSAL, SEXS/IEEET1/ESST1A/ESAC4A, TGOV1/HYGOV/GAST/IEEEG1, IEEEST/PSS2B, REGC_A/REEC_A/REPC_A, grid-forming droop/VSM, .dyr reader, small-signal of the detailed model; Kundur two-area modes 0.54/1.08/1.11 Hz |
 | Electrical.Harmonic | ✅ | FFT/Bluestein, THD/TDD/K-factor, IEEE 519, IEC 61000, harmonic load flow, frequency scan, filter design |
 | Electrical.Protection | ✅ | IEC/IEEE curves, grading, distance, differential, breaker duty, arc flash (IEEE 1584-2002; 2018 model ⏳) |
 | Electrical.Renewable | ✅ | NREL SPA check, single-diode (Villalva KC200GT), PVWatts, wind/Weibull AEP, BESS, IEEE 1547 curves, hosting capacity |
@@ -69,3 +70,18 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
   relaxations (case9 24 h: 18.6 % gap after 20 s vs HiGHS optimal in ~1 s) — `eln scuc` defaults to HiGHS, docs steer SCUC to HiGHS/OR-Tools.
   `MarketSettlement.ElasticConsumerSurplus` added (VoLL-valued fixed demand dominated the welfare figure). CLI `acopf`, `scuc`, `market`.
   Version 1.2.0.
+- **2026-11-15**: v1.3 Electrical.Emt (Dommel nodal EMT: trapezoidal companion models with CDA, switches/diodes/thyristors, sources,
+  Bergeron lines with lumped losses and Clarke modes, π sections, coupled RL, transformers, three-phase helpers, `AddEmt()`). Rust kernels
+  `eln_emt_branch_update` / `eln_emt_lu_solve` (bit-identical managed fallback in `EmtKernels`), `eln_version` 10300,
+  `SparseLU<T>.ExportFactors()`. Validation: RL/RC/RLC analytic, cap inrush, back-to-back (3154 A vs 3162 A, 10.066 kHz), Bergeron
+  doubling/reflections, 150 km energization 1.98 pu, CDA, steady state vs long-line phasor 0.001 % and vs Circuit AC 0.002 %.
+  108-node 3-phase grid, Δt = 50 µs, 0.2 s: ~0.2 s (native ≈ managed; kernels are not the bottleneck). 22 tests (`tests/.../Emt`), ~2 s.
+- **2026-11-15**: v1.3 Electrical.Dynamics. DAE ẋ = f(x, V), 0 = I(x, V) − Y·V with Norton units; implicit trapezoidal (Newton on [x; V],
+  sparse Jacobian from exact Y plus per-unit numerical blocks, swapped Im/Re network rows so the diagonal is ±B, reused across steps) and
+  explicit modified Euler. Kundur two-area (Example 12.6) load flow matches the textbook (185/235/176/202 Mvar, 20.2°/10.5°/−6.8°/−17.0°);
+  constant Efd: inter-area 0.542 Hz ζ 3.8 %, local 1.077/1.112 Hz (Kundur 0.545, 1.09/1.12 Hz); ESST1A KA = 200: inter-area ζ ≈ 0.0 %;
+  with Kundur's PSS ζ = 18.6 %. 10 s Kundur run ≈ 85 ms. Found while verifying: a Newton step stalls where a non-windup limit is first
+  reached (clamped rows now count as satisfied) and at current-limit switching (failed steps redone with two explicit half steps,
+  `FallbackSteps`); REPC_A voltage-control default gains limit-cycle in Q-control mode (documented). 31 tests (`tests/.../Dynamics`), ~2 s.
+- **2026-11-15**: CLI `dyn` (Kundur / case9 fault simulation + electromechanical modes) and `emt` (line energization, capacitor inrush);
+  gallery demos and EN/ID docs for dynamics, IBR and EMT. Version 1.3.0.

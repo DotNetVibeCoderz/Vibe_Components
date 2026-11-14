@@ -16,6 +16,8 @@ graph LR
     Core --> Interop
     ShortCircuit --> Protection
     PowerFlow --> Stability
+    Stability --> Dynamics
+    Native --> Emt
     PowerFlow --> Harmonic
     PowerFlow --> Renewable
     PowerFlow --> Optimization
@@ -52,7 +54,7 @@ Applications sit on top: the `eln` CLI, the `dotnet new` templates and the galle
 |---|---|
 | Foundation | Core, Native |
 | Steady state | PowerFlow, Circuit |
-| Analysis | ShortCircuit, Protection, Stability, Harmonic, StateEstimation, Optimization (+ .Highs, .OrTools adapters), Markets |
+| Analysis | ShortCircuit, Protection, Stability, Dynamics, Emt, Harmonic, StateEstimation, Optimization (+ .Highs, .OrTools adapters), Markets |
 | Resources & grid edge | Renewable, SmartGrid, Forecasting |
 | Data & protocols | SCADA, IEC61850, CIM, GIS, Visualization(.Blazor) |
 | Platform | Simulation, HPC, Cloud, DigitalTwin, AI |
@@ -138,7 +140,8 @@ idempotent. `IGridEventBus` (in-memory, synchronous, thread-safe) carries `IGrid
 `Electrical.Native` P/Invokes the Rust crate `native/electrical-native` (C ABI, `eln_*` functions) through `LibraryImport`. A
 `DllImportResolver` looks in the application folder and `runtimes/<rid>/native`. If the library is missing or a call fails, the managed fallback
 (with identical semantics, verified by tests) is used. `GridKernels.Backend` reports `"native (Rust)"` or `"managed"`; set
-`GridKernels.PreferNative = false` to force managed code. Details in [Simulation, HPC & native](simulation-hpc-native.md).
+`GridKernels.PreferNative = false` to force managed code. Since 1.3 the EMT solver uses `EmtKernels` (`eln_emt_*`, enabled when
+`eln_version` ≥ 10300) with the same contract: bit-identical managed fallbacks, `EmtKernels.Backend`, `EmtKernels.PreferNative`. Details in [Simulation, HPC & native](simulation-hpc-native.md).
 
 ## Repository layout
 

@@ -2,7 +2,7 @@
 
 > Made by Gravicode Studios, led by Kang Fadhil · [Bahasa Indonesia](../id/galeri.md)
 
-The Electrical.Net Gallery shows the library at work in 26 live demos, each next to the C# that produced it. It ships as a **Blazor** web
+The Electrical.Net Gallery shows the library at work in 29 live demos, each next to the C# that produced it. It ships as a **Blazor** web
 app and an **Avalonia** desktop app that share their scenario code (`gallery/Electrical.Gallery.Shared`). Both are bilingual (EN/ID) and have
 light and dark themes. Every figure is computed by the library at run time; nothing is pre-rendered.
 
@@ -26,6 +26,9 @@ dotnet run --project gallery/Electrical.Gallery.Desktop
 | Dynamics & power quality | Transient & voltage stability (`stability`) | Stability |
 | | Harmonics & resonance (`harmonic`) | Harmonic |
 | | Circuit simulation (MNA) (`circuit`) | Circuit |
+| | Power system dynamics (Kundur two-area) (`dynamics`) (v1.3) | Dynamics, Stability |
+| | Inverter-based resources (`ibr`) (v1.3) | Dynamics, Renewable |
+| | Electromagnetic transients (`emt`) (v1.3) | Emt, Native |
 | Renewables & smart grid | Solar PV & wind energy (`renewable`) | Renewable |
 | | Smart grid operations (`smartgrid`) | SmartGrid |
 | Markets, forecasting & planning | OPF, LMP & unit commitment (`optimization`) | Optimization |
@@ -61,6 +64,9 @@ All screenshots are in [docs/images](../images). Names: `web-home.png`, `web-hom
 | ![AC optimal power flow](../images/web-acopf.png) | ![AC optimal power flow](../images/desktop-acopf.png) |
 | ![Security-constrained unit commitment](../images/web-scuc.png) | ![Security-constrained unit commitment](../images/desktop-scuc.png) |
 | ![Electricity market clearing](../images/web-market.png) | ![Electricity market clearing](../images/desktop-market.png) |
+| ![Power system dynamics](../images/web-dynamics.png) | ![Power system dynamics](../images/desktop-dynamics.png) |
+| ![Inverter-based resources](../images/web-ibr.png) | ![Inverter-based resources](../images/desktop-ibr.png) |
+| ![Electromagnetic transients](../images/web-emt.png) | ![Electromagnetic transients](../images/desktop-emt.png) |
 
 Dark theme: ![Dark](../images/web-home-dark.png)
 
@@ -80,7 +86,7 @@ Stop a running gallery server before `dotnet build`, otherwise locked DLLs cause
 2. Add a scenario class under `gallery/Electrical.Gallery.Shared/Scenarios/`. The usual route is declarative: implement `IInteractiveScenario`
    (controls as `ChoiceParam`/`RangeParam`, results as `Kpi`s plus `ChartBlock`, `TableBlock`, `ListingBlock` and `NoteBlock`) and register it
    in `InteractiveScenarios.All`. Both apps then render it with their generic view (`InteractiveView.razor`, `Views.Interactive`) and steps 3–4
-   are not needed; `distribution`, `interop`, `voltagecontrol`, `acopf`, `scuc` and `market` are built this way.
+   are not needed; `distribution`, `interop`, `voltagecontrol`, `acopf`, `scuc`, `market`, `dynamics`, `ibr` and `emt` are built this way.
 3. Custom UI only: web `Components/Demos/<Name>View.razor` and a case in `DemoHost.razor`.
 4. Custom UI only: desktop case in `Views.Build`.
 5. Keep text bilingual and data deterministic (seeded).

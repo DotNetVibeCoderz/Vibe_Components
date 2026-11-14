@@ -17,6 +17,8 @@
     <ProjectReference Include="../../src/Electrical.Visualization/Electrical.Visualization.csproj" />
     <ProjectReference Include="../../src/Electrical.ShortCircuit/Electrical.ShortCircuit.csproj" />
     <ProjectReference Include="../../src/Electrical.Stability/Electrical.Stability.csproj" />
+    <ProjectReference Include="../../src/Electrical.Dynamics/Electrical.Dynamics.csproj" />
+    <ProjectReference Include="../../src/Electrical.Emt/Electrical.Emt.csproj" />
     <ProjectReference Include="../../src/Electrical.Harmonic/Electrical.Harmonic.csproj" />
     <ProjectReference Include="../../src/Electrical.Protection/Electrical.Protection.csproj" />
     <ProjectReference Include="../../src/Electrical.Circuit/Electrical.Circuit.csproj" />
