@@ -20,7 +20,8 @@ dotnet add package Electrical.Protection
 dotnet add package Electrical.Stability
 dotnet add package Electrical.Visualization
 # … Electrical.Circuit, .Harmonic, .Renewable, .SmartGrid, .Optimization, .StateEstimation, .SCADA, .IEC61850, .CIM,
-#   .Forecasting, .GIS, .Simulation, .Cloud, .HPC, .Native, .Visualization.Blazor, .DigitalTwin, .AI
+#   .Forecasting, .GIS, .Simulation, .Cloud, .HPC, .Native, .Visualization.Blazor, .DigitalTwin, .AI,
+#   .Markets, .Optimization.Highs, .Optimization.OrTools (v1.2)
 ```
 
 Tool:
@@ -116,7 +117,7 @@ var modules = services.GetRequiredService<ElectricalModuleRegistry>().Modules; /
 | Extension | Mendaftarkan |
 |---|---|
 | `AddElectrical()` | `IGridEventBus` (in-memory), `TimeProvider.System`, `ElectricalModuleRegistry` |
-| `AddCircuit()`, `AddPowerFlow()`, `AddShortCircuit()`, `AddStability()`, `AddHarmonic()`, `AddProtection()`, `AddRenewable()`, `AddSmartGrid()`, `AddOptimization()`, `AddStateEstimation()`, `AddForecasting()`, `AddSimulation()`, `AddIec61850()`, `AddCim()`, `AddGis()` | `ICircuitService`, `IPowerFlowService`, `IShortCircuitService`, … (satu interface fasad per modul) |
+| `AddCircuit()`, `AddPowerFlow()`, `AddShortCircuit()`, `AddStability()`, `AddHarmonic()`, `AddProtection()`, `AddRenewable()`, `AddSmartGrid()`, `AddOptimization()`, `AddMarkets()`, `AddHighs()`, `AddOrTools()`, `AddStateEstimation()`, `AddForecasting()`, `AddSimulation()`, `AddIec61850()`, `AddCim()`, `AddGis()` | `ICircuitService`, `IPowerFlowService`, `IShortCircuitService`, … (satu interface fasad per modul) |
 | `AddScada(historianDefaults)` | `TagDatabase`, `AlarmManager`, `Historian` yang terhubung lewat event bus |
 | `AddVisualization()` | `IDiagramRenderer` |
 | `AddCloud(workers)` | `StudyRunner`, `IScenarioStore` (in-memory) |

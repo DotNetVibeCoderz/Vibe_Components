@@ -12,7 +12,7 @@ DERMS, VPP, SCADA, digital twins and smart grids on .NET.
   StateEstimation, SCADA, IEC61850, CIM, DigitalTwin, Forecasting, AI, GIS, Visualization, Simulation, Cloud, HPC, plus Native (Rust)
 - Gallery (Blazor + Avalonia), CLI tool `eln`, project templates, bilingual docs, NuGet packages and CI
 
-## v1.1: Distribution depth (current) ✅
+## v1.1: Distribution depth ✅
 - Electrical.Distribution: unbalanced three-phase power flow (ladder sweep + current injection) with single/two-phase laterals, line geometry
   (modified Carson's equations, Kron reduction, concentric-neutral and tape-shielded cables), three-phase transformers, step-voltage regulators
   with line-drop compensation, OLTC and capacitor controllers, daily time series, IEEE 4-node and 13-node feeders, OpenDSS `.dss` reader
@@ -22,10 +22,15 @@ DERMS, VPP, SCADA, digital twins and smart grids on .NET.
 - Still open from this theme: three-winding / centre-tap / open-delta transformers, PSS/E `.raw` writer for three-winding units, OpenDSS
   `XfmrCode`/energy meters, PSS/E `.dyr` dynamics
 
-## v1.2: Optimization and markets
-- AC optimal power flow (primal-dual interior point with exact Hessians)
-- Security-constrained unit commitment (MILP via an external solver adapter: HiGHS / OR-Tools)
-- Market clearing with LMP decomposition (energy, congestion, losses)
+## v1.2: Optimization and markets (current) ✅
+- AC optimal power flow: generic primal-dual interior-point NLP solver (MIPS-style) with exact Hessians; matches MATPOWER `runopf`
+  (case9 5296.69 $/h, case14 8081.53 $/h); LMPs, reactive prices, shadow prices; LMP decomposition (energy, loss, congestion, voltage)
+- LP/MILP modelling (`LinearModel`) with built-in dual simplex and branch-and-bound, plus HiGHS and OR-Tools adapter packages
+- Electrical.Markets: security-constrained unit commitment (min up/down, ramps, reserve, PTDF + LODF N-1), day-ahead / real-time
+  clearing with offers and bids, DC LMP decomposition, settlement, FTRs
+- DC-OPF interior-point start fixed (large grids)
+- Still open from this theme: AC-SCOPF, piecewise-linear costs and angle-difference limits in AC-OPF, uplift / make-whole payments,
+  cutting planes and presolve in the built-in MILP
 
 ## v1.3: Dynamics
 - Detailed generator models (GENROU/GENSAL), exciters (IEEE ST1A, AC4A), governors (TGOV1, HYGOV), PSS (PSS2B)

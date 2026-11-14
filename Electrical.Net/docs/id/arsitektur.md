@@ -39,6 +39,8 @@ graph LR
     Stability --> AI
     Renewable --> AI
     Optimization --> AI
+    Optimization --> Markets
+    Optimization --> Highs[Optimization.Highs] & OrTools[Optimization.OrTools]
     Visualization --> VizBlazor[Visualization.Blazor]
 ```
 
@@ -50,7 +52,7 @@ Aplikasi berada di atasnya: CLI `eln`, templat `dotnet new`, dan galeri.
 |---|---|
 | Fondasi | Core, Native |
 | Kondisi tunak | PowerFlow, Circuit |
-| Analisis | ShortCircuit, Protection, Stability, Harmonic, StateEstimation, Optimization |
+| Analisis | ShortCircuit, Protection, Stability, Harmonic, StateEstimation, Optimization (+ adapter .Highs, .OrTools), Markets |
 | Sumber daya & tepi jaringan | Renewable, SmartGrid, Forecasting |
 | Data & protokol | SCADA, IEC61850, CIM, GIS, Visualization(.Blazor) |
 | Platform | Simulation, HPC, Cloud, DigitalTwin, AI |

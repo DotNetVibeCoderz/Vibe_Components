@@ -10,7 +10,8 @@
 ![Galeri Electrical.Net](docs/images/web-home.png)
 
 Electrical.Net menyediakan blok bangunan perangkat lunak sistem tenaga untuk pengembang .NET: aliran daya (seimbang dan tiga fasa tak
-seimbang), hubung singkat, proteksi, stabilitas, harmonik, energi terbarukan, kendali smart grid, optimasi, estimasi keadaan, SCADA dan
+seimbang), hubung singkat, proteksi, stabilitas, harmonik, energi terbarukan, kendali smart grid, optimasi (aliran daya optimal DC
+dan AC, LP/MILP), pasar listrik, estimasi keadaan, SCADA dan
 protokol gardu induk, pertukaran model (CIM, PSS/E RAW, IEEE CDF, MATPOWER, OpenDSS), GIS, simulasi, API cloud, dan digital twin. Framework ini
 dirancang sebagai fondasi aplikasi EMS, DMS, ADMS, DERMS, VPP, SCADA, dan digital twin. Algoritmanya diuji terhadap nilai acuan yang telah
 dipublikasikan (MATPOWER, penyulang uji IEEE PES, Kersting, IEC 60909, IEEE 1584, Anderson & Fouad, Baran & Wu, Billinton & Allan, Wood &
@@ -24,6 +25,28 @@ var pf = PowerFlowSolver.Solve(TestCases.Case14());   // Newton–Raphson sparse
 Console.WriteLine(pf);
 // NewtonRaphson: converged in 3 it, mismatch 3.44E-009, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
 ```
+
+## Yang baru di 1.2
+
+- **Aliran daya optimal AC** (`Electrical.Optimization`): `AcOpf.Solve` adalah formulasi polar `runopf` MATPOWER (keseimbangan daya AC,
+  batas tegangan, P/Q generator, dan MVA cabang) yang diselesaikan dengan titik interior primal-dual dan Hessian eksak (`InteriorPointSolver`,
+  publik untuk `NonlinearProgram` Anda sendiri). Hasilnya mencakup LMP untuk P dan Q, harga bayangan cabang/tegangan/generator, kendala
+  terikat, dan tampilan `ToPowerFlowResult()` untuk diagram segaris. case9 5296,69 $/jam dan case14 8081,53 $/jam (LMP bus 1 36,724 $/MWh)
+  identik dengan MATPOWER. [Panduan](docs/id/optimasi.md#aliran-daya-optimal-ac-v12)
+- **Dekomposisi LMP**: `LmpDecomposition` memecah harga AC menjadi komponen energi, rugi, kongesti, dan tegangan (faktor rugi dari Jacobian
+  AC) dan harga DC menjadi energi dan kongesti. [Panduan](docs/id/optimasi.md#dekomposisi-lmp)
+- **Lapisan LP / MILP** (`Electrical.Optimization`): `LinearModel` dengan dual simplex berbatas bawaan (dengan dual) dan branch and bound,
+  ditambah dua paket adapter baru, **`Electrical.Optimization.Highs`** (HiGHS 1.16.0) dan **`Electrical.Optimization.OrTools`** (OR-Tools
+  9.15), yang memberi optimum dan dual yang sama. [Panduan](docs/id/solver.md)
+- **Pasar listrik** (`Electrical.Markets`, baru): unit commitment dengan kendala keamanan sebagai MILP (start-up, waktu hidup/mati minimum,
+  ramp, cadangan, batas saluran PTDF, dan N-1 melalui LODF yang ditambahkan secara malas), kliring day-ahead dan real-time dari penawaran jual
+  dan beli, LMP dengan komponen energi/kongesti, penyelesaian (pendapatan, pembayaran, sewa kongesti, surplus), dan FTR dengan pemeriksaan
+  kecukupan pendapatan. Pada kasus Wood & Wollenberg 24 jam jadwal MILP berbiaya 183 665 $ vs 184 368 $ untuk DP daftar prioritas.
+  [Panduan](docs/id/pasar-listrik.md)
+- **Keandalan DC-OPF**: titik interior QP kini dimulai dari dispatch proporsional Pmax yang seimbang; `SyntheticGrid(300)` konvergen dalam 8
+  iterasi (sebelumnya macet di 100).
+- **Galeri**: tiga demo baru: Aliran daya optimal AC, Unit commitment dengan kendala keamanan, Kliring pasar listrik.
+- **CLI**: `eln acopf`, `eln scuc`, dan `eln market`. [Referensi](docs/id/cli.md)
 
 ## Yang baru di 1.1
 
@@ -60,7 +83,10 @@ Console.WriteLine(pf);
 | **Electrical.Harmonic** | FFT (radix-2 + Bluestein), spektrum, THD/TDD/faktor-K, batas IEEE 519 dan IEC 61000, aliran daya harmonik, frequency scan dan deteksi resonansi, desain filter single-tuned, ketidakseimbangan |
 | **Electrical.Renewable** | Posisi matahari (setara SPA), model clear-sky dan transposisi, suhu sel, PV single-diode (Villalva), PVWatts, model inverter, MPPT; turbin angin, AEP Weibull, wind shear; baterai dengan degradasi; volt-var / volt-watt / freq-watt IEEE 1547; hosting capacity |
 | **Electrical.SmartGrid** | Demand response berbasis harga, peak shaving baterai, penjadwalan pengisian EV (valley filling), EMS microgrid (aturan dan dynamic programming), virtual power plant, optimasi Volt/VAR, rekonfigurasi penyulang, SAIFI/SAIDI/CAIDI/ENS |
-| **Electrical.Optimization** | Economic dispatch (dengan koefisien rugi B), DC-OPF dengan LMP dan kendala aktif, DC-OPF dengan kendala keamanan N-1, unit commitment, penempatan kapasitor, QP interior-point, Nelder–Mead, particle swarm |
+| **Electrical.Optimization** | Economic dispatch (dengan koefisien rugi B), DC-OPF dengan LMP dan kendala aktif, DC-OPF dengan kendala keamanan N-1, AC-OPF (titik interior primal-dual, Hessian eksak) dengan dekomposisi LMP (energi / rugi / kongesti / tegangan), LP/MILP `LinearModel` dengan dual simplex dan branch and bound bawaan, unit commitment, penempatan kapasitor, QP dan NLP interior-point, Nelder–Mead, particle swarm |
+| **Electrical.Optimization.Highs** (1.2) | Adapter solver LP/MIP HiGHS (`HighsSolver`, `AddHighs()`), pustaka native untuk win/linux/osx x64/arm64 |
+| **Electrical.Optimization.OrTools** (1.2) | Adapter Google OR-Tools (`OrToolsSolver`, `AddOrTools()`): SCIP, CBC, GLOP, PDLP |
+| **Electrical.Markets** (1.2) | Unit commitment dengan kendala keamanan (MILP, N-1), kliring pasar day-ahead dan real-time dengan penawaran jual dan beli, LMP dengan komponen energi/kongesti, penyelesaian, hak transmisi finansial |
 | **Electrical.StateEstimation** | Estimator AC WLS (matriks gain sparse), pengukuran V/P/Q/aliran/PMU, observabilitas, uji χ², penghapusan bad data dengan largest normalized residual |
 | **Electrical.SCADA** | Klien/server Modbus TCP dan codec PDU, basis data tag dengan penskalaan dan kualitas, alarm ISA-18.2, historian swinging-door, simulator RTU, codec APDU IEC 60870-5-104 |
 | **Electrical.IEC61850** | Parser SCL (ICD/CID/SCD), object reference dan katalog logical node, data MMS, ASN.1 BER, frame GOOSE dan Sampled Values (9-2LE), retransmisi GOOSE |
@@ -75,7 +101,7 @@ Console.WriteLine(pf);
 | **Electrical.Cloud** | Runner job studi, kontrak JSON jaringan, minimal API ASP.NET Core (`MapElectricalApi`), penyimpanan skenario multi-tenant |
 | **Electrical.HPC** | Aliran daya batch paralel, sapuan beban, aliran daya probabilistik Monte-Carlo, benchmark skalabilitas |
 | **Electrical.Native** | Kernel Rust (FFT, harmonik Goertzel, THD/RMS, injeksi daya kompleks sparse, sampling normal deterministik) dengan fallback managed yang identik |
-| **Electrical.Cli** | Dotnet tool `eln` dengan 33 perintah (termasuk `eln ask`, `eln twin`, `eln dist`, dan `eln dss`); membaca berkas MATPOWER, PSS/E RAW, IEEE CDF, JSON, dan CIM |
+| **Electrical.Cli** | Dotnet tool `eln` dengan 36 perintah (termasuk `eln ask`, `eln twin`, `eln dist`, `eln dss`, `eln acopf`, `eln scuc`, dan `eln market`); membaca berkas MATPOWER, PSS/E RAW, IEEE CDF, JSON, dan CIM |
 | **Electrical.Templates** | `dotnet new eln-console / eln-blazor / eln-avalonia / eln-scada / eln-webapi / eln-distribution` |
 
 ## Mulai cepat
@@ -84,6 +110,8 @@ Console.WriteLine(pf);
 dotnet add package Electrical.PowerFlow       # otomatis menarik Electrical.Core
 dotnet add package Electrical.ShortCircuit
 dotnet add package Electrical.Visualization
+dotnet add package Electrical.Markets         # v1.2: SCUC dan kliring pasar (menarik Electrical.Optimization)
+dotnet add package Electrical.Optimization.Highs   # solver HiGHS opsional (atau Electrical.Optimization.OrTools)
 ```
 
 Bangun jaringan dalam satuan fisik, selesaikan aliran dayanya, lalu jalankan studi hubung singkat:
@@ -158,6 +186,14 @@ Setiap baris di bawah ini diuji oleh suite xUnit di `tests/Electrical.Tests` (si
 | Posisi matahari | Contoh laporan NREL SPA (Reda & Andreas 2008) | zenit 50,11162°, azimut 194,34024° | dalam 0,05° |
 | Economic dispatch, 9-bus, 315 MW | Biaya MATPOWER case9 (biaya inkremental sama) | λ 24,04 $/MWh, 86,56 / 134,38 / 94,06 MW | 24,044 $/MWh, 86,56 / 134,38 / 94,06 MW |
 | Daftar prioritas unit commitment | Wood & Wollenberg Contoh 4A | biaya rata-rata beban penuh 9,79 / 9,40 / 11,19 $/MWh | sama; prioritas 2, 1, 3 |
+| AC-OPF, IEEE 9 bus | `runopf` MATPOWER | 5296,69 $/jam, P<sub>G</sub> 89,80 / 134,32 / 94,19 MW | 5296,69 $/jam, 89,80 / 134,32 / 94,19 MW |
+| AC-OPF, IEEE 14 bus | `runopf` MATPOWER | 8081,53 $/jam, λ<sub>P</sub>(bus 1) 36,724 $/MWh | 8081,53 $/jam, 36,724 $/MWh |
+| LMP AC | Beda-hingga biaya optimal (±0,5 MW) | biaya marginal per bus | dalam 1 %; residu dekomposisi < 1e-3 $/MWh |
+| SCUC, 24 jam, 3 unit, cadangan 5 % | DP daftar prioritas Wood & Wollenberg | 184 368 $ | 183 665 $ (komitmen MILP pada biaya eksak) |
+| SCUC, 3 jam | Brute force atas 512 komitmen | optimum | identik |
+| LP SCUC / pasar dengan solver eksternal | HiGHS 1.16, OR-Tools 9.15 | objektif, dual | identik dengan solver bawaan |
+| Pasar dua bus, saluran 100 MW | Perhitungan manual | LMP 20 / 50 $/MWh, sewa kongesti 3 000 $ | 20 / 50 $/MWh, 3 000 $ = pembayaran FTR |
+| SCUC case9, saluran 8–9 pada 57,5 MW | Harga tunggal tanpa kongesti | pemisahan harga | LMP 21,39–28,10 $/MWh pukul 14:00 |
 | Rekonfigurasi penyulang, 33-bus + 5 tie | Optimum literatur | buka 7-8, 9-10, 14-15, 32-33, 25-29; ≈ 139,5 kW | saklar yang sama; 139,6 kW |
 | Penempatan kapasitor, 33-bus (3 bank) | Rentang literatur | 132–145 kW | 132,2 kW |
 | Keandalan radial | Billinton & Allan §7.2, Tabel 7.1 | λ<sub>C</sub> 0,45 f/thn, U<sub>C</sub> 2,9 jam | 0,45 f/thn, 2,9 jam |
@@ -176,7 +212,7 @@ Setiap baris di bawah ini diuji oleh suite xUnit di `tests/Electrical.Tests` (si
 
 ## Galeri
 
-Dua puluh tiga demo langsung yang mencakup semua modul dengan UI profesional, sebagai aplikasi web **Blazor** dan aplikasi desktop **Avalonia** yang berbagi kode skenario
+Dua puluh enam demo langsung yang mencakup semua modul dengan UI profesional, sebagai aplikasi web **Blazor** dan aplikasi desktop **Avalonia** yang berbagi kode skenario
 (`gallery/Electrical.Gallery.Shared`). Setiap angka dihitung oleh pustaka saat aplikasi berjalan, di samping kode C# yang menghasilkannya.
 
 ```bash
@@ -193,6 +229,8 @@ dotnet run --project gallery/Electrical.Gallery.Desktop
 | ![Peta GIS](docs/images/web-gis.png) | ![Smart grid](docs/images/desktop-smartgrid.png) |
 | ![Distribusi tak seimbang](docs/images/web-distribution.png) | ![Pertukaran model](docs/images/desktop-interop.png) |
 | ![Kendali tegangan](docs/images/web-voltagecontrol.png) | ![Distribusi tak seimbang](docs/images/desktop-distribution.png) |
+| ![Aliran daya optimal AC](docs/images/web-acopf.png) | ![Unit commitment dengan kendala keamanan](docs/images/desktop-scuc.png) |
+| ![Kliring pasar listrik](docs/images/web-market.png) | ![Aliran daya optimal AC](docs/images/desktop-acopf.png) |
 
 Tema gelap: ![Tema gelap](docs/images/web-home-dark.png)
 
@@ -222,6 +260,9 @@ graph TD
     Forecasting --> DigitalTwin
     ShortCircuit --> AI
     Optimization --> AI
+    Optimization --> Markets
+    PF --> Markets
+    Optimization --> Highs[Optimization.Highs] & OrTools[Optimization.OrTools]
     Forecasting --> AI
     DigitalTwin --> AI
     Stability --> AI
@@ -237,7 +278,7 @@ memakai satuan teknik di permukaan API (MW, Mvar, kV, kA, Ω, pu, derajat, detik
 ## Struktur repositori
 
 ```
-src/              25 paket pustaka (+ Electrical.Visualization.Blazor)
+src/              28 paket pustaka (+ Electrical.Visualization.Blazor)
 native/           Crate Rust electrical-native (C ABI, fungsi eln_*)
 tools/            Electrical.Cli (dotnet tool "eln")
 templates/        Electrical.Templates (paket dotnet new)
@@ -264,7 +305,7 @@ memublikasikan paket ke NuGet.
 ## Dokumentasi
 
 - Bahasa Indonesia: [docs/id](docs/id/README.md): memulai, arsitektur, panduan modul, aliran daya, distribusi tak seimbang, hubung singkat &
-  proteksi, stabilitas, harmonik, energi terbarukan & smart grid, optimasi, estimasi keadaan, SCADA / IEC 61850 / CIM, pertukaran model,
+  proteksi, stabilitas, harmonik, energi terbarukan & smart grid, optimasi, pasar listrik, solver LP/MILP, estimasi keadaan, SCADA / IEC 61850 / CIM, pertukaran model,
   GIS & visualisasi, simulasi / HPC / native, API cloud, AI & digital twin, CLI, templat, galeri.
 - English: [docs/en](docs/en/README.md).
 - Peta jalan: [PLAN.md](PLAN.md).

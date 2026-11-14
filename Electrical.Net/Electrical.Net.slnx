@@ -19,6 +19,9 @@
     <Project Path="src/Electrical.IEC61850/Electrical.IEC61850.csproj" />
     <Project Path="src/Electrical.Interop/Electrical.Interop.csproj" />
     <Project Path="src/Electrical.Native/Electrical.Native.csproj" />
+    <Project Path="src/Electrical.Markets/Electrical.Markets.csproj" />
+    <Project Path="src/Electrical.Optimization.Highs/Electrical.Optimization.Highs.csproj" />
+    <Project Path="src/Electrical.Optimization.OrTools/Electrical.Optimization.OrTools.csproj" />
     <Project Path="src/Electrical.Optimization/Electrical.Optimization.csproj" />
     <Project Path="src/Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
     <Project Path="src/Electrical.Protection/Electrical.Protection.csproj" />

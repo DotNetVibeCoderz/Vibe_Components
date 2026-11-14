@@ -75,6 +75,7 @@ public static class InteractiveScenarios
     {
         new ShortCircuitDemo(), new ProtectionDemo(), new StabilityDemo(), new HarmonicDemo(), new CircuitDemo(),
         new RenewableDemo(), new SmartGridDemo(), new OptimizationDemo(), new StateEstimationDemo(), new ForecastingDemo(), new SimulationDemo(), new VoltageControlDemo(), new DigitalTwinDemo(), new InteropDemo(), new DistributionDemo(),
+        new AcOpfDemo(), new ScucDemo(), new MarketDemo(),
     }.ToDictionary(s => s.Id);
 
     public static IInteractiveScenario? Find(string id) => All.TryGetValue(id, out var s) ? s : null;

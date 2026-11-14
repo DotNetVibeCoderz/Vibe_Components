@@ -10,7 +10,7 @@
 ![Electrical.Net Gallery](docs/images/web-home.png)
 
 Electrical.Net gives .NET developers the building blocks of power-system software: power flow (balanced and unbalanced three-phase),
-short circuit, protection, stability, harmonics, renewables, smart-grid control, optimization, state estimation, SCADA and substation
+short circuit, protection, stability, harmonics, renewables, smart-grid control, optimization (DC and AC optimal power flow, LP/MILP), electricity markets, state estimation, SCADA and substation
 protocols, model exchange (CIM, PSS/E RAW, IEEE CDF, MATPOWER, OpenDSS), GIS, simulation, cloud APIs and a digital twin. It is meant as a
 base for EMS, DMS, ADMS, DERMS, VPP, SCADA and digital-twin applications. The algorithms are checked against published reference values
 (MATPOWER, IEEE PES test feeders, Kersting, IEC 60909, IEEE 1584, Anderson & Fouad, Baran & Wu, Billinton & Allan, Wood & Wollenberg and
@@ -24,6 +24,27 @@ var pf = PowerFlowSolver.Solve(TestCases.Case14());   // sparse Newton–Raphson
 Console.WriteLine(pf);
 // NewtonRaphson: converged in 3 it, mismatch 3.44E-009, gen 272.393 MW, load 259 MW, losses 13.393 MW, Vmin 1.0100 pu @ bus 3
 ```
+
+## What's new in 1.2
+
+- **AC optimal power flow** (`Electrical.Optimization`): `AcOpf.Solve` is MATPOWER's polar `runopf` formulation (AC power balance, voltage,
+  generator P/Q and branch MVA limits) solved by a primal-dual interior point with exact Hessians (`InteriorPointSolver`, public for your own
+  `NonlinearProgram`s). Results include LMPs for P and Q, branch/voltage/generator shadow prices, binding constraints and a
+  `ToPowerFlowResult()` view for single-line diagrams. case9 5296.69 $/h and case14 8081.53 $/h (LMP bus 1 36.724 $/MWh) are identical to
+  MATPOWER. [Guide](docs/en/optimization.md#ac-optimal-power-flow-v12)
+- **LMP decomposition**: `LmpDecomposition` splits AC prices into energy, loss, congestion and voltage components (loss factors from the AC
+  Jacobian) and DC prices into energy and congestion. [Guide](docs/en/optimization.md#lmp-decomposition)
+- **LP / MILP layer** (`Electrical.Optimization`): `LinearModel` with a built-in bounded dual simplex (with duals) and branch and bound, plus
+  two new adapter packages, **`Electrical.Optimization.Highs`** (HiGHS 1.16.0) and **`Electrical.Optimization.OrTools`** (OR-Tools 9.15),
+  that give the same optima and duals. [Guide](docs/en/solvers.md)
+- **Electricity markets** (`Electrical.Markets`, new): security-constrained unit commitment as a MILP (start-ups, minimum up/down, ramps,
+  reserve, PTDF line limits and N-1 through LODFs, lazily added), day-ahead and real-time clearing from supply offers and demand bids, LMPs
+  with energy/congestion components, settlement (revenues, payments, congestion rent, surpluses) and FTRs with revenue-adequacy checks. On the
+  Wood & Wollenberg 24 h case the MILP schedule costs 183 665 $ vs 184 368 $ for the priority-list DP. [Guide](docs/en/markets.md)
+- **DC-OPF robustness**: the QP interior point now starts from a balanced Pmax-proportional dispatch; `SyntheticGrid(300)` converges in 8
+  iterations (it used to stall at 100).
+- **Gallery**: three new demos: AC optimal power flow, Security-constrained unit commitment, Electricity market clearing.
+- **CLI**: `eln acopf`, `eln scuc` and `eln market`. [Reference](docs/en/cli.md)
 
 ## What's new in 1.1
 
@@ -59,7 +80,10 @@ Console.WriteLine(pf);
 | **Electrical.Harmonic** | FFT (radix-2 + Bluestein), spectra, THD/TDD/K-factor, IEEE 519 and IEC 61000 limits, harmonic load flow, frequency scan and resonance detection, single-tuned filter design, unbalance |
 | **Electrical.Renewable** | Solar position (SPA-grade), clear-sky and transposition models, cell temperature, single-diode PV (Villalva), PVWatts, inverter models, MPPT; wind turbines, Weibull AEP, shear; battery storage with degradation; IEEE 1547 volt-var / volt-watt / freq-watt; hosting capacity |
 | **Electrical.SmartGrid** | Price-based demand response, battery peak shaving, EV charging (valley filling), microgrid EMS (rules and dynamic programming), virtual power plant, Volt/VAR optimization, feeder reconfiguration, SAIFI/SAIDI/CAIDI/ENS |
-| **Electrical.Optimization** | Economic dispatch (with B-loss coefficients), DC-OPF with LMPs and binding constraints, N-1 security-constrained DC-OPF, unit commitment, capacitor placement, interior-point QP, Nelder–Mead, particle swarm |
+| **Electrical.Optimization** | Economic dispatch (with B-loss coefficients), DC-OPF with LMPs and binding constraints, N-1 security-constrained DC-OPF, AC-OPF (primal-dual interior point, exact Hessians) with LMP decomposition (energy / loss / congestion / voltage), `LinearModel` LP/MILP with built-in dual simplex and branch and bound, unit commitment, capacitor placement, interior-point QP and NLP, Nelder–Mead, particle swarm |
+| **Electrical.Optimization.Highs** (1.2) | HiGHS LP/MIP solver adapter (`HighsSolver`, `AddHighs()`), native library for win/linux/osx x64/arm64 |
+| **Electrical.Optimization.OrTools** (1.2) | Google OR-Tools adapter (`OrToolsSolver`, `AddOrTools()`): SCIP, CBC, GLOP, PDLP |
+| **Electrical.Markets** (1.2) | Security-constrained unit commitment (MILP, N-1), day-ahead and real-time market clearing with offers and bids, LMPs with energy/congestion components, settlement, financial transmission rights |
 | **Electrical.StateEstimation** | WLS AC estimator (sparse gain matrix), V/P/Q/flow/PMU measurements, observability, χ² test, largest-normalized-residual bad-data removal |
 | **Electrical.SCADA** | Modbus TCP client/server and PDU codec, tag database with scaling and quality, ISA-18.2 alarms, swinging-door historian, RTU simulator, IEC 60870-5-104 APDU codec |
 | **Electrical.IEC61850** | SCL (ICD/CID/SCD) parser, object references and logical-node catalog, MMS data, ASN.1 BER, GOOSE and Sampled Values (9-2LE) frames, GOOSE retransmission |
@@ -74,7 +98,7 @@ Console.WriteLine(pf);
 | **Electrical.Cloud** | Study job runner, JSON network contract, ASP.NET Core minimal API (`MapElectricalApi`), multi-tenant scenario stores |
 | **Electrical.HPC** | Parallel batch power flow, load sweeps, Monte-Carlo probabilistic load flow, scaling benchmark |
 | **Electrical.Native** | Rust kernels (FFT, Goertzel harmonics, THD/RMS, sparse complex power injections, deterministic normal sampling) with identical managed fallbacks |
-| **Electrical.Cli** | `eln` dotnet tool with 33 commands (incl. `eln ask`, `eln twin`, `eln dist` and `eln dss`); reads MATPOWER, PSS/E RAW, IEEE CDF, JSON and CIM files |
+| **Electrical.Cli** | `eln` dotnet tool with 36 commands (incl. `eln ask`, `eln twin`, `eln dist`, `eln dss`, `eln acopf`, `eln scuc` and `eln market`); reads MATPOWER, PSS/E RAW, IEEE CDF, JSON and CIM files |
 | **Electrical.Templates** | `dotnet new eln-console / eln-blazor / eln-avalonia / eln-scada / eln-webapi / eln-distribution` |
 
 ## Quick start
@@ -83,6 +107,8 @@ Console.WriteLine(pf);
 dotnet add package Electrical.PowerFlow       # pulls Electrical.Core
 dotnet add package Electrical.ShortCircuit
 dotnet add package Electrical.Visualization
+dotnet add package Electrical.Markets         # v1.2: SCUC and market clearing (pulls Electrical.Optimization)
+dotnet add package Electrical.Optimization.Highs   # optional HiGHS solver (or Electrical.Optimization.OrTools)
 ```
 
 Build a network in physical units, solve it and run a short-circuit study:
@@ -157,6 +183,14 @@ Every row below is asserted by the xUnit suite in `tests/Electrical.Tests` (the 
 | Solar position | NREL SPA report example (Reda & Andreas 2008) | zenith 50.11162°, azimuth 194.34024° | within 0.05° |
 | Economic dispatch, 9-bus, 315 MW | MATPOWER case9 costs (equal incremental cost) | λ 24.04 $/MWh, 86.56 / 134.38 / 94.06 MW | 24.044 $/MWh, 86.56 / 134.38 / 94.06 MW |
 | Unit commitment priority list | Wood & Wollenberg Example 4A | full-load average costs 9.79 / 9.40 / 11.19 $/MWh | same; priority 2, 1, 3 |
+| AC-OPF, IEEE 9-bus | MATPOWER `runopf` | 5296.69 $/h, P<sub>G</sub> 89.80 / 134.32 / 94.19 MW | 5296.69 $/h, 89.80 / 134.32 / 94.19 MW |
+| AC-OPF, IEEE 14-bus | MATPOWER `runopf` | 8081.53 $/h, λ<sub>P</sub>(bus 1) 36.724 $/MWh | 8081.53 $/h, 36.724 $/MWh |
+| AC LMPs | Finite difference of the optimal cost (±0.5 MW) | marginal cost per bus | within 1 %; decomposition residual < 1e-3 $/MWh |
+| SCUC, 24 h, 3 units, 5 % reserve | Wood & Wollenberg priority-list DP | 184 368 $ | 183 665 $ (MILP commitment at exact cost) |
+| SCUC, 3 h | Brute force over 512 commitments | optimum | identical |
+| SCUC / market LPs with external solvers | HiGHS 1.16, OR-Tools 9.15 | objective, duals | identical to the built-in solvers |
+| Two-bus market, 100 MW line | Hand calculation | LMP 20 / 50 $/MWh, congestion rent 3 000 $ | 20 / 50 $/MWh, 3 000 $ = FTR payout |
+| case9 SCUC, line 8–9 at 57.5 MW | Uncongested single price | price separation | LMP 21.39–28.10 $/MWh at 14:00 |
 | Feeder reconfiguration, 33-bus + 5 ties | Literature optimum | open 7-8, 9-10, 14-15, 32-33, 25-29; ≈ 139.5 kW | same switches; 139.6 kW |
 | Capacitor placement, 33-bus (3 banks) | Literature range | 132–145 kW | 132.2 kW |
 | Radial reliability | Billinton & Allan §7.2, Table 7.1 | λ<sub>C</sub> 0.45 f/yr, U<sub>C</sub> 2.9 h | 0.45 f/yr, 2.9 h |
@@ -175,7 +209,7 @@ Every row below is asserted by the xUnit suite in `tests/Electrical.Tests` (the 
 
 ## Gallery
 
-Twenty-three live demos covering all modules with a professional UI, as a **Blazor** web app and an **Avalonia** desktop app that share their scenario code
+Twenty-six live demos covering all modules with a professional UI, as a **Blazor** web app and an **Avalonia** desktop app that share their scenario code
 (`gallery/Electrical.Gallery.Shared`). Every figure is computed by the library at run time, next to the C# that produced it.
 
 ```bash
@@ -192,6 +226,8 @@ dotnet run --project gallery/Electrical.Gallery.Desktop
 | ![GIS map](docs/images/web-gis.png) | ![Smart grid](docs/images/desktop-smartgrid.png) |
 | ![Unbalanced distribution](docs/images/web-distribution.png) | ![Model exchange](docs/images/desktop-interop.png) |
 | ![Voltage control](docs/images/web-voltagecontrol.png) | ![Unbalanced distribution](docs/images/desktop-distribution.png) |
+| ![AC optimal power flow](docs/images/web-acopf.png) | ![Security-constrained unit commitment](docs/images/desktop-scuc.png) |
+| ![Electricity market clearing](docs/images/web-market.png) | ![AC optimal power flow](docs/images/desktop-acopf.png) |
 
 Dark theme: ![Dark theme](docs/images/web-home-dark.png)
 
@@ -221,6 +257,9 @@ graph TD
     Forecasting --> DigitalTwin
     ShortCircuit --> AI
     Optimization --> AI
+    Optimization --> Markets
+    PF --> Markets
+    Optimization --> Highs[Optimization.Highs] & OrTools[Optimization.OrTools]
     Forecasting --> AI
     DigitalTwin --> AI
     Stability --> AI
@@ -236,7 +275,7 @@ AOT-compatible, use SI/engineering units at the API surface (MW, Mvar, kV, kA, �
 ## Repository layout
 
 ```
-src/              25 library packages (+ Electrical.Visualization.Blazor)
+src/              28 library packages (+ Electrical.Visualization.Blazor)
 native/           Rust crate electrical-native (C ABI, eln_* functions)
 tools/            Electrical.Cli (dotnet tool "eln")
 templates/        Electrical.Templates (dotnet new pack)
@@ -263,7 +302,7 @@ publishes the packages to NuGet.
 ## Documentation
 
 - English: [docs/en](docs/en/README.md): getting started, architecture, module guide, power flow, unbalanced distribution, short circuit &
-  protection, stability, harmonics, renewables & smart grid, optimization, state estimation, SCADA / IEC 61850 / CIM, model exchange,
+  protection, stability, harmonics, renewables & smart grid, optimization, electricity markets, LP/MILP solvers, state estimation, SCADA / IEC 61850 / CIM, model exchange,
   GIS & visualization, simulation / HPC / native, cloud API, AI & digital twin, CLI, templates, gallery.
 - Bahasa Indonesia: [docs/id](docs/id/README.md).
 - Roadmap: [PLAN.md](PLAN.md).

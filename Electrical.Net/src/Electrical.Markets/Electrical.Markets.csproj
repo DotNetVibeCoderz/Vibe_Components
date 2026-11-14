@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Electricity markets for Electrical.Net: security-constrained unit commitment (MILP), day-ahead and real-time market clearing with supply offers and demand bids, locational marginal prices with energy/congestion/loss decomposition, financial transmission rights and settlement.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+    <ProjectReference Include="../Electrical.Optimization/Electrical.Optimization.csproj" />
+  </ItemGroup>
+</Project>

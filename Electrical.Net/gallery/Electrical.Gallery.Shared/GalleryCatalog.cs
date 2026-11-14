@@ -237,6 +237,54 @@ public static class GalleryCatalog
             var uc = UnitCommitment.Solve(UnitCommitment.WoodWollenbergThreeUnits(), hourlyDemandMw);
             Console.WriteLine($"cost {uc.TotalCost:0} $");
             """),
+        new("acopf", "planning",
+            new("AC optimal power flow", "Aliran daya optimal AC"),
+            new("Solve the full AC-OPF with a primal-dual interior point, tighten a line and compare with the DC-OPF; split every LMP into energy, loss, congestion and voltage components and draw the optimal operating point.",
+                "Selesaikan AC-OPF penuh dengan titik interior primal-dual, perketat satu saluran dan bandingkan dengan DC-OPF; uraikan setiap LMP menjadi komponen energi, rugi, kongesti, dan tegangan, lalu gambar titik operasi optimal."),
+            ["Optimization", "PowerFlow", "Visualization"], """
+            using Electrical.Core.Network;
+            using Electrical.Optimization;
+            using Electrical.Visualization;
+
+            var net = TestCases.Case9();
+            var opf = AcOpf.Solve(net, new AcOpfOptions { RatingOverrides = new Dictionary<int, double> { [2] = 42 } });  // line 5-6, MVA
+            Console.WriteLine(opf);                                   // cost $/h, losses, LMP range
+
+            var lmp = opf.Decompose();                                // energy + loss + congestion + voltage
+            foreach (var b in opf.Binding) Console.WriteLine($"{b.Description}: {b.ShadowPrice:0.000}");
+            string svg = SldRenderer.Render(net, opf.ToPowerFlowResult());
+            """),
+        new("scuc", "planning",
+            new("Security-constrained unit commitment", "Unit commitment dengan kendala keamanan"),
+            new("Commit units over 24 hours with a MILP (start-ups, minimum up/down times, reserve and DC line limits), compare with the priority-list dynamic program and read hourly LMPs.",
+                "Jadwalkan unit selama 24 jam dengan MILP (start-up, waktu hidup/mati minimum, cadangan, dan batas saluran DC), bandingkan dengan program dinamis daftar prioritas, dan baca LMP per jam."),
+            ["Markets", "Optimization"], """
+            using Electrical.Markets;
+            using Electrical.Optimization;
+
+            var units = UnitCommitment.WoodWollenbergThreeUnits().Select(u => ScucUnit.FromUcUnit(u)).ToList();
+            var r = SecurityConstrainedUnitCommitment.Solve(units, demandMw, new ScucOptions { ReserveFraction = 0.05 });
+            Console.WriteLine($"{r.Status}: {r.TotalCost:0} $, gap {r.MipGap:P3}, {r.MilpSolution.Nodes} nodes");
+
+            // on a network: PTDF line limits (lazy), optional N-1 through LODFs, LMP[bus, hour]
+            var grid = SecurityConstrainedUnitCommitment.Solve(TestCases.Case9(), demandMw,
+                new ScucOptions { RatingOverrides = new Dictionary<int, double> { [line] = 57.5 } });
+            """),
+        new("market", "planning",
+            new("Electricity market clearing", "Kliring pasar listrik"),
+            new("Clear stepwise supply offers against demand bids on a network, see nodal prices split by congestion, settle revenues, payments and congestion rent, and pay out a financial transmission right.",
+                "Klirkan penawaran pasokan bertingkat terhadap penawaran permintaan pada jaringan, lihat harga nodal yang terpisah karena kongesti, selesaikan pendapatan, pembayaran, dan sewa kongesti, lalu bayarkan hak transmisi finansial."),
+            ["Markets", "Optimization"], """
+            using Electrical.Markets;
+
+            SupplyOffer[] offers = [new("G1", 1, [new OfferBlock(200, 20)]), new("G2", 2, [new OfferBlock(200, 50)])];
+            DemandBid[] bids = [new("L2", 2) { FixedMw = 150 }];
+            var r = MarketClearing.ClearSinglePeriod(net, offers, bids);           // two buses, 100 MW line
+            Console.WriteLine($"LMP {r.LmpAt(1)} / {r.LmpAt(2)} $/MWh, rent {r.Settlement.CongestionRent} $");   // 20 / 50, 3000
+
+            var ftr = FinancialTransmissionRights.Settle([new FtrObligation("F12", 1, 2, 100)], r);
+            Console.WriteLine($"FTR pays {ftr.TotalPayout} $, adequate {ftr.RevenueAdequate}");
+            """),
         new("forecasting", "planning",
             new("Load forecasting", "Peramalan beban"),
             new("Forecast the next days of load with Holt-Winters, temperature regression, similar-day or an ensemble, and score it against the actual curve.",
@@ -424,7 +472,7 @@ public static class GalleryCatalog
 
     /// <summary>All framework modules with a one-line description (order of <see cref="ElectricalInfo.Modules"/>).</summary>
     // v1.1 packages not yet listed in ElectricalInfo.Modules are appended (Union keeps this idempotent once they are).
-    public static readonly ModuleInfo[] Modules = ElectricalInfo.Modules.Union(["Distribution", "Interop"]).Select(m => new ModuleInfo(m, ModuleSummary(m))).ToArray();
+    public static readonly ModuleInfo[] Modules = ElectricalInfo.Modules.Union(["Distribution", "Interop", "Markets"]).Select(m => new ModuleInfo(m, ModuleSummary(m))).ToArray();
 
     public static DemoInfo? Find(string id) => Demos.FirstOrDefault(d => d.Id == id);
     public static DemoInfo Get(string id) => Find(id) ?? throw new KeyNotFoundException($"No demo '{id}'.");
@@ -444,7 +492,8 @@ public static class GalleryCatalog
         "Protection" => new("Relay coordination, TCC curves, arc flash", "Koordinasi relai, kurva TCC, arc flash"),
         "Renewable" => new("PV, wind, BESS and hosting capacity", "PV, angin, BESS, dan kapasitas hosting"),
         "SmartGrid" => new("Demand response, EV charging, microgrids, VPP", "Respons permintaan, pengisian EV, mikrogrid, VPP"),
-        "Optimization" => new("Economic dispatch, DC-OPF with LMPs, unit commitment", "Dispatch ekonomis, DC-OPF dengan LMP, unit commitment"),
+        "Optimization" => new("Economic dispatch, DC/AC-OPF with LMPs, LP/MILP solvers, unit commitment", "Dispatch ekonomis, DC/AC-OPF dengan LMP, solver LP/MILP, unit commitment"),
+        "Markets" => new("Security-constrained unit commitment, market clearing, settlement, FTRs", "Unit commitment dengan kendala keamanan, kliring pasar, penyelesaian, FTR"),
         "StateEstimation" => new("Weighted least-squares state estimation", "Estimasi keadaan kuadrat terkecil berbobot"),
         "SCADA" => new("Modbus TCP, tags, ISA-18.2 alarms, historian, IEC 104", "Modbus TCP, tag, alarm ISA-18.2, historian, IEC 104"),
         "IEC61850" => new("SCL parsing, GOOSE and Sampled Values codecs", "Parsing SCL, codec GOOSE dan Sampled Values"),

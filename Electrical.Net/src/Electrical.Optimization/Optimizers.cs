@@ -138,11 +138,15 @@ internal sealed class OptimizationService : IOptimizationService
 
 public static class OptimizationBuilderExtensions
 {
-    /// <summary>Registers <see cref="IOptimizationService"/> (and the PowerFlow module).</summary>
+    /// <summary>Registers <see cref="IOptimizationService"/>, <see cref="IAcOpfService"/> (and the PowerFlow module).</summary>
     public static ElectricalBuilder AddOptimization(this ElectricalBuilder b)
     {
         b.AddPowerFlow();
-        if (b.TryAddModule("Optimization")) b.Services.TryAddSingleton<IOptimizationService, OptimizationService>();
+        if (b.TryAddModule("Optimization"))
+        {
+            b.Services.TryAddSingleton<IOptimizationService, OptimizationService>();
+            b.Services.TryAddSingleton<IAcOpfService, AcOpfService>();
+        }
         return b;
     }
 }

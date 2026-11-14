@@ -198,19 +198,61 @@ tidak menjamin optimum global.
 
 ## Electrical.Optimization
 
-**Tujuan.** Optimasi dispatch dan perencanaan. Panduan: [Optimasi](optimasi.md).
+**Tujuan.** Optimasi dispatch dan perencanaan, aliran daya optimal AC/DC, serta lapisan LP/MILP yang tidak bergantung pada solver. Panduan:
+[Optimasi](optimasi.md), [Solver LP / MILP](solver.md).
 
 **Tipe utama.** `EconomicDispatch`, `DispatchUnit`, `LossCoefficients`, `DcOpf` (`Solve`, `SolveSecurityConstrained`), `DcOpfOptions`,
-`DcOpfResult` (LMP, kendala aktif, congestion rent), `UnitCommitment`, `UcUnit`, `CapacitorPlacement`, `QuadraticProgram`, `QpSolver`,
-`NelderMead`, `ParticleSwarm`.
+`DcOpfResult`; v1.2: `AcOpf`, `AcOpfOptions`, `AcOpfStart`, `AcOpfResult` (`Decompose`, `ToPowerFlowResult`), `LmpDecomposition`,
+`LmpComponents`, `InteriorPointSolver`, `NonlinearProgram`, `InteriorPointOptions`, `IAcOpfService`; `LinearModel`, `Variable`,
+`LinearExpression`, `ConstraintSense`, `LinearSolution`, `SolverOptions`, `ILpSolver`, `IMilpSolver`, `SimplexSolver`, `BranchAndBoundSolver`;
+`UnitCommitment`, `UcUnit`, `CapacitorPlacement`, `QuadraticProgram`, `QpSolver`, `NelderMead`, `ParticleSwarm`.
 
 ```csharp
 var ed = EconomicDispatch.Solve(TestCases.Case9());   // λ = 24,044 $/MWh; 86,56 / 134,38 / 94,06 MW
+var opf = AcOpf.Solve(TestCases.Case9());             // 5296,69 $/jam (runopf MATPOWER)
+var lmp = opf.Decompose();                            // energi + rugi + kongesti + tegangan
 ```
 
-**Acuan / batasan.** Biaya MATPOWER case9; Wood & Wollenberg Contoh 4A; literatur penempatan kapasitor Baran–Wu. OPF berbasis DC (jaringan
-linear, biaya kuadratik); AC-OPF dan unit commitment MILP ada di peta jalan (v1.2). Unit commitment adalah dynamic programming daftar prioritas
-(W&W §4.2), bukan MILP.
+**Acuan / batasan.** MATPOWER case9/case14 (`runopf` 5296,69 / 8081,53 $/jam, LMP bus 1 36,724 $/MWh); Wood & Wollenberg Contoh 4A;
+literatur penempatan kapasitor Baran–Wu; contoh LP Hillier & Lieberman. AC-OPF memakai beban daya konstan, tanpa kendali diskrit dan
+tanpa kendala keamanan. Simplex dan branch and bound bawaan cocok untuk model kecil dan menengah; MILP besar ditangani
+[Electrical.Optimization.Highs / .OrTools](#electricaloptimizationhighs-dan-electricaloptimizationortools).
+
+## Electrical.Optimization.Highs dan Electrical.Optimization.OrTools
+
+**Tujuan.** (v1.2) Adapter yang menjalankan `LinearModel` pada solver eksternal. Panduan: [Solver LP / MILP](solver.md).
+
+**Tipe utama.** `HighsSolver` (`LpAlgorithm`), `AddHighs()`; `OrToolsSolver` (`MipBackend`, `LpBackend`), `AddOrTools(mip, lp)`. Keduanya
+mengimplementasikan `IMilpSolver` dan `ILpSolver` dan melaporkan dual dengan konvensi pustaka.
+
+```csharp
+var r = SecurityConstrainedUnitCommitment.Solve(units, demand, new ScucOptions { Solver = new HighsSolver() });
+services.AddElectrical(b => b.AddMarkets().AddOrTools("SCIP", "GLOP"));
+```
+
+**Acuan / batasan.** HiGHS 1.16.0 (`Highs.Native`, MIT) dan Google OR-Tools 9.15.6755 (Apache-2.0); optimum dan dual LP sama dengan
+solver bawaan dalam pengujian. Tidak kompatibel AOT; membawa pustaka native (pustaka HiGHS dikirim ulang sebagai `highs-native.*` agar
+kedua adapter dapat dipakai dalam satu aplikasi).
+
+## Electrical.Markets
+
+**Tujuan.** (v1.2) Pasar listrik: unit commitment dengan kendala keamanan, kliring day-ahead / real-time, LMP, penyelesaian (settlement),
+dan FTR. Panduan: [Pasar listrik](pasar-listrik.md).
+
+**Tipe utama.** `SecurityConstrainedUnitCommitment`, `ScucUnit`, `ScucOptions`, `ScucResult`, `MarketConstraint`, `DcLmpComponents`;
+`MarketClearing` (`ClearSinglePeriod`, `ClearRealTime`, `ClearDayAhead`), `SupplyOffer`, `DemandBid`, `OfferBlock`, `MarketOptions`,
+`MarketClearingResult`, `DayAheadResult`, `MarketSettlement`; `FinancialTransmissionRights`, `FtrObligation`, `FtrSettlement`;
+`IMarketService`, `AddMarkets()`.
+
+```csharp
+SupplyOffer[] offers = [new("G1", 1, [new OfferBlock(200, 20)]), new("G2", 2, [new OfferBlock(200, 50)])];
+var r = MarketClearing.ClearSinglePeriod(twoBus, offers, [new DemandBid("L2", 2) { FixedMw = 150 }]);
+// LMP 20 / 50 $/MWh dengan saluran 100 MW; sewa kongesti 3 000 $ = pembayaran FTR 100 MW 1 → 2
+```
+
+**Acuan / batasan.** Wood & Wollenberg 24 jam: komitmen MILP 183 665 $ vs DP daftar prioritas 184 368 $; brute force atas semua
+komitmen kasus 3 jam; pasar dua bus yang dicek manual; kecukupan pendapatan Hogan (1992). Jaringan DC (tanpa rugi dalam harga), hanya unit
+termal, hanya FTR obligasi.
 
 ## Electrical.StateEstimation
 

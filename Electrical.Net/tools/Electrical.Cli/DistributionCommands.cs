@@ -14,7 +14,10 @@ public static partial class Extra
             "linecode" => DistributionCommands.LineCodeCmd(cli),
             _ => null,
         };
+        DispatchMarkets(cli, ref result);
     }
+
+    static partial void DispatchMarkets(Args cli, ref Task<int>? result);
 }
 
 public static partial class Commands
@@ -27,7 +30,10 @@ public static partial class Commands
               dss --file feeder.dss [--auto]          Read an OpenDSS script and run the unbalanced power flow
               linecode --config 601                   Carson + Kron phase impedance matrix of an IEEE 13-node line configuration (601–607)
             """;
+        MoreHelpMarkets(ref text);
     }
+
+    static partial void MoreHelpMarkets(ref string text);
 }
 
 internal static class DistributionCommands

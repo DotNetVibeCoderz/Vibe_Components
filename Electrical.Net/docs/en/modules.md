@@ -199,19 +199,61 @@ flow; they do not prove global optimality.
 
 ## Electrical.Optimization
 
-**Purpose.** Dispatch and planning optimization. Guide: [Optimization](optimization.md).
+**Purpose.** Dispatch and planning optimization, AC/DC optimal power flow and a solver-independent LP/MILP layer. Guides:
+[Optimization](optimization.md), [LP / MILP solvers](solvers.md).
 
 **Key types.** `EconomicDispatch`, `DispatchUnit`, `LossCoefficients`, `DcOpf` (`Solve`, `SolveSecurityConstrained`), `DcOpfOptions`,
-`DcOpfResult` (LMPs, binding constraints, congestion rent), `UnitCommitment`, `UcUnit`, `CapacitorPlacement`, `QuadraticProgram`, `QpSolver`,
-`NelderMead`, `ParticleSwarm`.
+`DcOpfResult`; v1.2: `AcOpf`, `AcOpfOptions`, `AcOpfStart`, `AcOpfResult` (`Decompose`, `ToPowerFlowResult`), `LmpDecomposition`,
+`LmpComponents`, `InteriorPointSolver`, `NonlinearProgram`, `InteriorPointOptions`, `IAcOpfService`; `LinearModel`, `Variable`,
+`LinearExpression`, `ConstraintSense`, `LinearSolution`, `SolverOptions`, `ILpSolver`, `IMilpSolver`, `SimplexSolver`, `BranchAndBoundSolver`;
+`UnitCommitment`, `UcUnit`, `CapacitorPlacement`, `QuadraticProgram`, `QpSolver`, `NelderMead`, `ParticleSwarm`.
 
 ```csharp
 var ed = EconomicDispatch.Solve(TestCases.Case9());   // λ = 24.044 $/MWh; 86.56 / 134.38 / 94.06 MW
+var opf = AcOpf.Solve(TestCases.Case9());             // 5296.69 $/h (MATPOWER runopf)
+var lmp = opf.Decompose();                            // energy + loss + congestion + voltage
 ```
 
-**References / limitations.** MATPOWER case9 costs; Wood & Wollenberg Example 4A; Baran–Wu capacitor-placement literature. OPF is DC
-(linear network, quadratic costs); AC-OPF and MILP unit commitment are on the roadmap (v1.2). Unit commitment is a priority-list dynamic
-program (W&W §4.2), not a MILP.
+**References / limitations.** MATPOWER case9/case14 (`runopf` 5296.69 / 8081.53 $/h, LMP bus 1 36.724 $/MWh); Wood & Wollenberg Example 4A;
+Baran–Wu capacitor-placement literature; Hillier & Lieberman LP examples. AC-OPF has constant-power loads, no discrete controls and no
+security constraints. The built-in simplex and branch and bound suit small and medium models; large MILPs go to
+[Electrical.Optimization.Highs / .OrTools](#electricaloptimizationhighs-and-electricaloptimizationortools).
+
+## Electrical.Optimization.Highs and Electrical.Optimization.OrTools
+
+**Purpose.** (v1.2) Adapters that run `LinearModel`s on external solvers. Guide: [LP / MILP solvers](solvers.md).
+
+**Key types.** `HighsSolver` (`LpAlgorithm`), `AddHighs()`; `OrToolsSolver` (`MipBackend`, `LpBackend`), `AddOrTools(mip, lp)`. Both implement
+`IMilpSolver` and `ILpSolver` and report duals with the library's convention.
+
+```csharp
+var r = SecurityConstrainedUnitCommitment.Solve(units, demand, new ScucOptions { Solver = new HighsSolver() });
+services.AddElectrical(b => b.AddMarkets().AddOrTools("SCIP", "GLOP"));
+```
+
+**References / limitations.** HiGHS 1.16.0 (`Highs.Native`, MIT) and Google OR-Tools 9.15.6755 (Apache-2.0); same optima and LP duals as the
+built-in solvers in the tests. Not AOT-compatible; they carry native libraries (the HiGHS library is re-shipped as `highs-native.*` so both
+adapters can live in one app).
+
+## Electrical.Markets
+
+**Purpose.** (v1.2) Electricity markets: security-constrained unit commitment, day-ahead / real-time clearing, LMPs, settlement and FTRs.
+Guide: [Electricity markets](markets.md).
+
+**Key types.** `SecurityConstrainedUnitCommitment`, `ScucUnit`, `ScucOptions`, `ScucResult`, `MarketConstraint`, `DcLmpComponents`;
+`MarketClearing` (`ClearSinglePeriod`, `ClearRealTime`, `ClearDayAhead`), `SupplyOffer`, `DemandBid`, `OfferBlock`, `MarketOptions`,
+`MarketClearingResult`, `DayAheadResult`, `MarketSettlement`; `FinancialTransmissionRights`, `FtrObligation`, `FtrSettlement`;
+`IMarketService`, `AddMarkets()`.
+
+```csharp
+SupplyOffer[] offers = [new("G1", 1, [new OfferBlock(200, 20)]), new("G2", 2, [new OfferBlock(200, 50)])];
+var r = MarketClearing.ClearSinglePeriod(twoBus, offers, [new DemandBid("L2", 2) { FixedMw = 150 }]);
+// LMP 20 / 50 $/MWh with a 100 MW line; congestion rent 3 000 $ = payout of a 100 MW FTR 1 → 2
+```
+
+**References / limitations.** Wood & Wollenberg 24 h: MILP commitment 183 665 $ vs priority-list DP 184 368 $; brute force over all
+commitments of a 3-hour case; hand-checked two-bus market; Hogan (1992) revenue adequacy. DC network (no losses in prices), thermal units
+only, FTR obligations only.
 
 ## Electrical.StateEstimation
 

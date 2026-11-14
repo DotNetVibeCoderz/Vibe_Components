@@ -2,7 +2,7 @@
 
 > Made by Gravicode Studios, led by Kang Fadhil · [Bahasa Indonesia](../id/README.md)
 
-Electrical.Net is a power-system framework for .NET 10: 24 library modules plus Rust native kernels, a CLI tool, project templates and a
+Electrical.Net is a power-system framework for .NET 10: 27 library modules plus Rust native kernels, a CLI tool, project templates and a
 Blazor/Avalonia gallery. Start with [Getting started](getting-started.md), then read the guide for the area you work in.
 
 | Guide | Contents |
@@ -16,7 +16,9 @@ Blazor/Avalonia gallery. Start with [Getting started](getting-started.md), then 
 | [Stability](stability.md) | Transient stability, CCT, equal-area criterion, small-signal, PV/QV curves, L-index, frequency response |
 | [Harmonics & power quality](harmonics.md) | FFT and spectra, IEEE 519 / IEC 61000, harmonic load flow, frequency scan, filters |
 | [Renewables & smart grid](renewables-smartgrid.md) | PV, wind, batteries, grid codes, hosting capacity, DR, EV, microgrid, VPP, VVO, reconfiguration, reliability, forecasting |
-| [Optimization](optimization.md) | Economic dispatch, DC-OPF and LMPs, security constraints, unit commitment, capacitor placement |
+| [Optimization](optimization.md) | Economic dispatch, DC-OPF, AC-OPF (interior point) and LMP decomposition, security constraints, unit commitment, capacitor placement |
+| [Electricity markets](markets.md) | Security-constrained unit commitment (MILP), day-ahead and real-time clearing, LMPs, settlement, FTRs (v1.2) |
+| [LP / MILP solvers](solvers.md) | `LinearModel`, built-in dual simplex and branch and bound, HiGHS and OR-Tools adapters, choosing a solver (v1.2) |
 | [State estimation](state-estimation.md) | WLS estimator, measurements, observability, bad-data detection |
 | [SCADA, IEC 61850 & CIM](scada-iec61850-cim.md) | Modbus TCP, tags, alarms, historian, RTU simulator, IEC 104, GOOSE, SV, SCL, CGMES |
 | [Model exchange](interop.md) | PSS/E RAW v33/v35 read and write, IEEE CDF, format auto-detection, conversion warnings (v1.1) |

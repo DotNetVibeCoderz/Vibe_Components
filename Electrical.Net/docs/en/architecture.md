@@ -39,6 +39,8 @@ graph LR
     Stability --> AI
     Renewable --> AI
     Optimization --> AI
+    Optimization --> Markets
+    Optimization --> Highs[Optimization.Highs] & OrTools[Optimization.OrTools]
     Visualization --> VizBlazor[Visualization.Blazor]
 ```
 
@@ -50,7 +52,7 @@ Applications sit on top: the `eln` CLI, the `dotnet new` templates and the galle
 |---|---|
 | Foundation | Core, Native |
 | Steady state | PowerFlow, Circuit |
-| Analysis | ShortCircuit, Protection, Stability, Harmonic, StateEstimation, Optimization |
+| Analysis | ShortCircuit, Protection, Stability, Harmonic, StateEstimation, Optimization (+ .Highs, .OrTools adapters), Markets |
 | Resources & grid edge | Renewable, SmartGrid, Forecasting |
 | Data & protocols | SCADA, IEC61850, CIM, GIS, Visualization(.Blazor) |
 | Platform | Simulation, HPC, Cloud, DigitalTwin, AI |

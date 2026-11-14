@@ -59,17 +59,24 @@ public sealed record QpResult(double[] X, double[] EqualityDuals, double[] Inequ
 /// </summary>
 public static class QpSolver
 {
-    public static QpResult Solve(QuadraticProgram qp, double tolerance = 1e-8, int maxIterations = 100)
+    /// <param name="initialX">Optional starting point (e.g. a dispatch that meets the equalities); improves robustness on large problems.</param>
+    public static QpResult Solve(QuadraticProgram qp, double tolerance = 1e-8, int maxIterations = 100, double[]? initialX = null)
     {
         int n = qp.N, p = qp.Equalities.Count, m = qp.Inequalities.Count;
-        var x = new double[n]; var y = new double[p]; var z = new double[m]; var s = new double[m];
+        var x = initialX is { } x0 && x0.Length == n ? (double[])x0.Clone() : new double[n];
+        var y = new double[p]; var z = new double[m]; var s = new double[m];
         // scale for relative stopping
         double scale = 1 + qp.C.Select(Math.Abs).DefaultIfEmpty(0).Max();
+        // Interior start: slacks from the starting point (at least a fraction of the row scale) and duals on the central path
+        // s·z = μ0, with μ0 tied to the cost scale so that neither primal nor dual residuals dominate the first steps.
+        double mu0 = Math.Max(1, scale);
         for (int i = 0; i < m; i++)
         {
-            double gx = Dot(qp.Inequalities[i].Row, x);
-            s[i] = Math.Max(qp.Inequalities[i].Rhs - gx, 1.0);
-            z[i] = 1.0;
+            var (row, rhs) = qp.Inequalities[i];
+            double gx = Dot(row, x);
+            double rowScale = 1 + Math.Abs(rhs);
+            s[i] = Math.Max(rhs - gx, 1e-2 * rowScale);
+            z[i] = mu0 / s[i];
         }
         var rd = new double[n]; var rp = new double[p]; var rg = new double[m];
         int it;

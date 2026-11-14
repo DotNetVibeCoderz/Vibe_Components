@@ -51,6 +51,9 @@ oleh perintahnya.
 | `dist` | `--feeder ieee13\|ieee4`, `--auto`, `--delta`, `--unbalanced` | Aliran daya tiga fasa tak seimbang pada penyulang uji IEEE |
 | `dss` | `--file feeder.dss`, `--auto` | Membaca skrip OpenDSS dan menjalankan aliran daya tak seimbang |
 | `linecode` | `--config 601` | Matriks impedansi fasa Carson + Kron untuk konfigurasi saluran IEEE 13 node (601–607) |
+| `acopf` | `--limit 5-6:42` (MVA), `--no-limits` | Aliran daya optimal AC (titik interior): biaya vs DC-OPF, dispatch P/Q, dekomposisi LMP, kendala terikat (v1.2) |
+| `scuc` | `--limit 8-9:57.5` (MW), `--reserve 0.1`, `--solver highs\|builtin`, `--gap 1e-4`, `--time 30` | Unit commitment dengan kendala keamanan 24 jam (MILP, HiGHS secara bawaan) dengan LMP per jam (v1.2) |
+| `market` | `--limit 8-9:60` (MW) | Kliring pasar satu periode dari penawaran jual dan beli: LMP, penyelesaian, sewa kongesti, pembayaran FTR (v1.2) |
 
 ## Contoh keluaran
 
@@ -213,6 +216,124 @@ IEEE 13-node configuration 603 (2 phases): phase impedance matrix [Ω/mile]
 
 Keluaran lengkap `dist`, `dss`, dan `linecode` ada di [Distribusi tak seimbang](distribusi.md#cli), penanganan RAW/CDF di
 [Pertukaran model](pertukaran-model.md#cli), dan pengendali QSTS di [Simulasi, HPC & native](simulasi-hpc-native.md#kendali-tegangan-dalam-qsts-v11).
+
+### Baru di 1.2
+
+`acopf`, `scuc`, dan `market` memakai `case9` secara bawaan (`--case`/`--file` berlaku seperti perintah lain). `scuc` diselesaikan dengan
+HiGHS kecuali diberi `--solver builtin`: branch and bound bawaan lemah pada relaksasi unit commitment (case9 24 jam: berhenti pada gap
+18,6 % setelah 20 detik, sedangkan HiGHS membuktikan optimum 92 701,61 $ dalam sekitar satu detik), lihat
+[Solver LP / MILP](solver.md#solver-mana-yang-dipakai). `--gap` adalah gap MIP relatif dan `--time` batas waktu dalam detik. Tabel panjang
+dipersingkat dengan `…` di bawah.
+
+```
+$ eln acopf
+AC-OPF on case9: optimal in 11 it, cost 5296.69 $/h (DC-OPF 5216.03 $/h)
+  Gen 1: P    89.80 MW  Q    12.94 Mvar
+  Gen 2: P   134.32 MW  Q     0.05 Mvar
+  Gen 3: P    94.19 MW  Q   -22.62 Mvar
+  Bus    Vm[pu]   LMP[$/MWh]  energy    loss  congestion  voltage
+  1      1.1000      24.756   24.756   0.000       0.000    0.000
+  2      1.0974      24.035   24.756  -0.641      -0.000   -0.080
+  3      1.0866      24.076   24.756  -0.623      -0.000   -0.057
+  4      1.0942      24.756   24.756  -0.039      -0.000    0.040
+  5      1.0844      24.998   24.756   0.178      -0.000    0.064
+  6      1.1000      24.076   24.756  -0.662      -0.000   -0.018
+  7      1.0895      24.254   24.756  -0.512      -0.000    0.010
+  8      1.1000      24.035   24.756  -0.699      -0.000   -0.022
+  9      1.0717      24.999   24.756   0.166      -0.000    0.077
+  Binding: Bus 1 at Vmax (shadow price 8.384)
+  Binding: Bus 6 at Vmax (shadow price 75.329)
+  Binding: Bus 8 at Vmax (shadow price 77.457)
+
+$ eln acopf --limit 5-6:42
+AC-OPF on case9: optimal in 12 it, cost 5472.70 $/h (DC-OPF 5338.40 $/h)
+  Gen 1: P   116.38 MW  Q    15.39 Mvar
+  Gen 2: P   130.03 MW  Q    71.79 Mvar
+  Gen 3: P    72.83 MW  Q   -37.37 Mvar
+  Bus    Vm[pu]   LMP[$/MWh]  energy    loss  congestion  voltage
+  1      0.9327      30.604   30.604   0.000       0.000    0.000
+  2      1.0246      23.305   30.604  -0.607      -6.693    0.001
+  3      0.9001      18.843   30.604  -0.590     -11.172    0.000
+  4      0.9260      30.604   30.604  -0.100       0.101   -0.001
+  5      0.9061      33.818   30.604   0.433       2.782   -0.002
+  6      0.9256      18.843   30.604  -0.665     -11.096   -0.001
+  7      0.9450      21.752   30.604  -0.491      -8.360   -0.001
+  8      0.9840      23.305   30.604  -0.778      -6.520   -0.000
+  9      0.9130      28.731   30.604   0.322      -2.193   -0.002
+  Binding: Bus 3 at Vmin (shadow price 2.484)
+  Binding: Branch 5-6 (from end) (shadow price 7.949)
+  Binding: Branch 5-6 (to end) (shadow price 12.344)
+
+$ eln acopf --case case14
+AC-OPF on case14: optimal in 11 it, cost 8081.53 $/h (DC-OPF 7642.59 $/h)
+  Gen 1: P   194.33 MW  Q     0.00 Mvar
+  Gen 2: P    36.72 MW  Q    23.69 Mvar
+  Gen 3: P    28.74 MW  Q    24.13 Mvar
+  Gen 4: P     0.00 MW  Q    11.55 Mvar
+  Gen 5: P     8.50 MW  Q     8.27 Mvar
+  Bus    Vm[pu]   LMP[$/MWh]  energy    loss  congestion  voltage
+  1      1.0600      36.724   36.724   0.000       0.000    0.000
+  2      1.0408      38.360   36.724   1.014      -0.000    0.622
+  …                                                    (buses 3–13)
+  14     1.0239      41.197   36.724   2.133      -0.000    2.341
+  Binding: G1 at Qmin (shadow price 0.094)
+  Binding: G4 at Pmin (shadow price 0.266)
+  Binding: Bus 1 at Vmax (shadow price 583.779)
+  Binding: Bus 6 at Vmax (shadow price 55.184)
+  Binding: Bus 8 at Vmax (shadow price 71.069)
+
+$ eln scuc
+SCUC on case9 (24 h, HiGHS): Optimal, total cost 92701.61 $ (production 92701.61, startup 0.00), gap 0.000 %
+  Hour  Demand    U1[MW]   U2[MW]   U3[MW]   λ[$/MWh]  LMP min..max
+     0   189.0      31.5     82.5     75.0      13.80  13.80..13.80
+  …
+    14   315.0      85.0    155.0     75.0      27.00  27.00..27.00
+  …
+
+$ eln scuc --limit 8-9:57.5
+SCUC on case9 (24 h, HiGHS): Optimal, total cost 94259.28 $ (production 94259.28, startup 0.00), gap 0.000 %
+  Hour  Demand    U1[MW]   U2[MW]   U3[MW]   λ[$/MWh]  LMP min..max
+     0   189.0      31.5     82.5     75.0      13.80  13.80..13.80
+  …
+     8   237.2      70.0     92.2     75.0      21.39  21.39..21.39
+     9   259.0      75.0    109.0     75.0      27.00  21.39..28.10
+  …
+    14   315.0     117.1    122.9     75.0      27.00  21.39..28.10
+  …
+    20   237.2      70.0     92.2     75.0      21.39  21.39..21.39
+  …
+  Binding: Flow hour 9 branch 7 (57.5/57.5 MW, μ 8.79)
+  Binding: Flow hour 10 branch 7 (57.5/57.5 MW, μ 8.79)
+  Binding: Flow hour 11 branch 7 (57.5/57.5 MW, μ 8.79)
+  Binding: Flow hour 12 branch 7 (57.5/57.5 MW, μ 8.79)
+  Binding: Flow hour 13 branch 7 (57.5/57.5 MW, μ 8.79)
+
+$ eln market
+Market clearing on case9: Optimal, system λ 26.70 $/MWh
+  G1   bus 1:    83.3 MW, revenue   2225.00 $
+  G2   bus 2:   141.7 MW, revenue   3782.50 $
+  G3   bus 3:    90.0 MW, revenue   2403.00 $
+  Load 5  :    90.0 MW, pays   2403.00 $
+  Load 7  :   100.0 MW, pays   2670.00 $
+  Load 9  :   125.0 MW, pays   3337.50 $
+  LMP [$/MWh]: 1:26.70  2:26.70  3:26.70  4:26.70  5:26.70  6:26.70  7:26.70  8:26.70  9:26.70
+  Congestion rent 0.00 $ (Σ μ·flow 0.00 $), consumer surplus (elastic bids) 1048.95 $, producer surplus 4065.37 $
+
+$ eln market --limit 8-9:60
+Market clearing on case9: Optimal, system λ 32.50 $/MWh
+  G1   bus 1:   107.2 MW, revenue   3485.23 $
+  G2   bus 2:   117.8 MW, revenue   3144.25 $
+  G3   bus 3:    90.0 MW, revenue   2610.46 $
+  Load 5  :    90.0 MW, pays   2814.55 $
+  Load 7  :   100.0 MW, pays   2766.04 $
+  Load 9  :   125.0 MW, pays   4204.23 $
+  LMP [$/MWh]: 1:32.50  2:26.70  3:29.01  4:32.50  5:31.27  6:29.01  7:27.66  8:26.70  9:33.63
+  Binding: Flow branch 7 (60.0/60.0 MW, μ 9.08 $/MWh)
+  Congestion rent 544.89 $ (Σ μ·flow 544.89 $), consumer surplus (elastic bids) 911.52 $, producer surplus 4756.16 $
+  FTR 50 MW 1→9 pays 56.69 $
+```
+
+Panduan: [Optimasi](optimasi.md#aliran-daya-optimal-ac-v12), [Pasar listrik](pasar-listrik.md).
 
 Keluaran lain (`pf`, `n1`, pemindaian `sc`, `modes`, `harmonic`, `ed`, `forecast`, `plf`, `qsts`, `ask`, `twin`) ada di panduan topik:
 [aliran daya](aliran-daya.md), [hubung singkat](hubung-singkat-proteksi.md), [stabilitas](stabilitas.md), [harmonik](harmonik.md),

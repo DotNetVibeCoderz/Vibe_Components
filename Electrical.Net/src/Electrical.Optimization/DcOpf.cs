@@ -127,7 +127,10 @@ public static class DcOpf
         var boundIdx = new List<(int Upper, int Lower)>();
         for (int j = 0; j < n; j++) boundIdx.Add(qp.AddBounds(j, gens[j].g.Pmin, gens[j].g.Pmax));
 
-        var res = QpSolver.Solve(qp, options.Tolerance);
+        // Start from a Pmax-proportional share of the demand (meets the balance row, inside the generator limits when feasible).
+        double capacity = gens.Sum(t => Math.Max(t.g.Pmax - t.g.Pmin, 0));
+        var x0 = gens.Select(t => t.g.Pmin + (capacity > 0 ? Math.Max(t.g.Pmax - t.g.Pmin, 0) / capacity * Math.Max(demand - gens.Sum(u => u.g.Pmin), 0) : 0)).ToArray();
+        var res = QpSolver.Solve(qp, options.Tolerance, initialX: x0);
         double lambda = res.EqualityDuals[0];
         var lmp = new double[nb];
         for (int i = 0; i < nb; i++)

@@ -2,7 +2,7 @@
 
 > Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil · [English](../en/README.md)
 
-Electrical.Net adalah framework sistem tenaga untuk .NET 10: 24 modul pustaka ditambah kernel native Rust, tool CLI, templat proyek, dan galeri
+Electrical.Net adalah framework sistem tenaga untuk .NET 10: 27 modul pustaka ditambah kernel native Rust, tool CLI, templat proyek, dan galeri
 Blazor/Avalonia. Mulailah dari [Memulai](memulai.md), lalu baca panduan untuk bidang yang Anda kerjakan.
 
 | Panduan | Isi |
@@ -16,7 +16,9 @@ Blazor/Avalonia. Mulailah dari [Memulai](memulai.md), lalu baca panduan untuk bi
 | [Stabilitas](stabilitas.md) | Stabilitas transien, CCT, kriteria luas sama, sinyal kecil, kurva PV/QV, indeks-L, respons frekuensi |
 | [Harmonik & kualitas daya](harmonik.md) | FFT dan spektrum, IEEE 519 / IEC 61000, aliran daya harmonik, frequency scan, filter |
 | [Energi terbarukan & smart grid](energi-terbarukan-smartgrid.md) | PV, angin, baterai, grid code, hosting capacity, DR, EV, microgrid, VPP, VVO, rekonfigurasi, keandalan, prakiraan |
-| [Optimasi](optimasi.md) | Economic dispatch, DC-OPF dan LMP, kendala keamanan, unit commitment, penempatan kapasitor |
+| [Optimasi](optimasi.md) | Dispatch ekonomis, DC-OPF, AC-OPF (titik interior) dan dekomposisi LMP, kendala keamanan, unit commitment, penempatan kapasitor |
+| [Pasar listrik](pasar-listrik.md) | Unit commitment dengan kendala keamanan (MILP), kliring day-ahead dan real-time, LMP, penyelesaian, FTR (v1.2) |
+| [Solver LP / MILP](solver.md) | `LinearModel`, dual simplex dan branch and bound bawaan, adapter HiGHS dan OR-Tools, memilih solver (v1.2) |
 | [Estimasi keadaan](estimasi-keadaan.md) | Estimator WLS, pengukuran, observabilitas, deteksi bad data |
 | [SCADA, IEC 61850 & CIM](scada-iec61850-cim.md) | Modbus TCP, tag, alarm, historian, simulator RTU, IEC 104, GOOSE, SV, SCL, CGMES |
 | [Pertukaran model](pertukaran-model.md) | Baca dan tulis PSS/E RAW v33/v35, IEEE CDF, deteksi format otomatis, peringatan konversi (v1.1) |

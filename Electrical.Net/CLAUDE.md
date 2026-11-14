@@ -50,6 +50,11 @@ A running gallery server locks DLLs and makes `dotnet build` fail with MSB3027, 
   Cloud JSON. Balanced QSTS controllers (`OltcController`, `VoltageRegulatorController`, `CapacitorController`) live in `Electrical.Simulation`.
 - Newton–Raphson flat start takes its initial angles from a DC power flow (`PowerFlowCase.DcStartAngles`) — keep it; pure flat starts diverge
   or find spurious solutions with large phase shifters.
+- v1.2 optimization: `AcOpf` (polar AC-OPF on the generic `InteriorPointSolver`/`NonlinearProgram`, exact Hessians) and
+  `LmpDecomposition`; `LinearModel` + `ILpSolver`/`IMilpSolver` with built-in `SimplexSolver`/`BranchAndBoundSolver` (small models only —
+  weak on unit-commitment relaxations) and adapter packages `Electrical.Optimization.Highs` (re-ships HiGHS as `highs-native.*` to avoid a
+  DLL-name clash with OR-Tools) and `.OrTools`. `Electrical.Markets` holds SCUC and market clearing; LP duals follow "objective change per
+  unit RHS" in every solver.
 - `Electrical.DigitalTwin.GridTwin` ingests SCADA tags (`RtuSimulator` naming `BUSn.VM`, `BRk.PF`, …), runs WLS state estimation with bad-data removal
   each cycle and produces explained alarms (EN `Message` / ID `MessageId`). `TwinSimulator` is a deterministic closed loop used by tests, CLI and gallery.
 - `Electrical.AI.GridAgent` answers through tool calling (`GridTools`, 10 tools). `LlmOptions.FromEnvironment()` reads `ELECTRICAL_LLM_PROVIDER`

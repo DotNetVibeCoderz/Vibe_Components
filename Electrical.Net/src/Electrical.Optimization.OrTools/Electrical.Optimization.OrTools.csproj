@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Google OR-Tools solver adapter for Electrical.Net (IMilpSolver / ILpSolver backed by OR-Tools linear solvers: SCIP, CBC, GLOP, PDLP).</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Optimization/Electrical.Optimization.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Google.OrTools" Version="9.15.6755" />
+  </ItemGroup>
+</Project>

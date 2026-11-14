@@ -16,7 +16,10 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
 | Electrical.Protection | ✅ | IEC/IEEE curves, grading, distance, differential, breaker duty, arc flash (IEEE 1584-2002; 2018 model ⏳) |
 | Electrical.Renewable | ✅ | NREL SPA check, single-diode (Villalva KC200GT), PVWatts, wind/Weibull AEP, BESS, IEEE 1547 curves, hosting capacity |
 | Electrical.SmartGrid | ✅ | Reconfiguration reaches 139.55 kW optimum, VVO, EV valley filling, microgrid DP, VPP, reliability (Billinton & Allan) |
-| Electrical.Optimization | ✅ | ED (case9 λ 24.04), interior-point DC-OPF with LMPs, SCOPF, UC (Wood & Wollenberg), capacitor placement |
+| Electrical.Optimization | ✅ | ED (case9 λ 24.04), DC-OPF with LMPs, SCOPF, UC, capacitor placement; v1.2: AC-OPF (= MATPOWER runopf case9 5296.69 / case14 8081.53 $/h), LMP decomposition, LP/MILP (`LinearModel`, dual simplex, branch-and-bound) |
+| LP/MILP abstraction (v1.2) | ✅ | `LinearModel`, `ILpSolver`/`IMilpSolver`; built-in bounded dual simplex (duals, reduced costs, Bland fallback) + branch and bound (pseudo-costs, best-bound/dive); Wyndor/Beale/knapsack brute-force checks |
+| Electrical.Optimization.Highs / .OrTools (v1.2) | ✅ | HiGHS 1.16.0 (`Highs.Native`, native lib re-shipped as `highs-native.*` to avoid the OR-Tools `highs.dll` clash) and OR-Tools 9.15.6755 (SCIP/GLOP); same optima and LP duals as built-in |
+| Electrical.Markets (v1.2) | ✅ | SCUC MILP (min up/down, ramps, reserve, PTDF + LODF N-1, lazy constraints) with fixed-commitment LMPs; W&W 24 h: 183 665 $ vs priority-list DP 184 368 $; DC LMP decomposition, settlement, FTR revenue adequacy, two-bus hand check |
 | Electrical.StateEstimation | ✅ | WLS, observability, χ² + largest normalized residual bad-data removal |
 | Electrical.Forecasting | ✅ | Holt-Winters (double seasonal), regression, similar-day, ensemble, solar/wind forecasts |
 | Electrical.Simulation | ✅ | QSTS, events, scenarios, sequential Monte-Carlo adequacy (LOLE/EENS); v1.1: OLTC, LDC regulator and switched-capacitor controllers in QSTS (Case33 demo: 64 → 1 violation steps) |
@@ -55,3 +58,14 @@ Status legend: ✅ done · 🟡 partial · ⏳ planned
   Also fixed: the reference shunt that keeps delta windings non-singular was a real conductance scaled by the winding admittance, so stiff
   substation transformers absorbed spurious power (IEEE 13-node script: 131.8 → 111.2 kW losses, matching the code-built feeder); it is now a
   tiny pure susceptance (regression test).
+- **2026-11-14**: v1.2 LP/MILP abstraction, built-in dual simplex / branch and bound, HiGHS and OR-Tools adapters, Electrical.Markets (SCUC,
+  day-ahead / real-time clearing, DC LMP components, settlement, FTRs). Found while verifying: `Highs.Native` and `Google.OrTools.runtime.*`
+  both ship `runtimes/<rid>/native/highs.dll` (different HiGHS builds) and overwrite each other in one output folder, so OR-Tools failed to
+  load; the HiGHS adapter now excludes the package's native asset, re-ships it as `highs-native.*` and loads it with a DllImport resolver.
+  25 tests (`Optimization/MilpTests`, `Markets/*`), ~12 s.
+- **2026-11-15**: v1.2 AC-OPF (interior point, exact Hessians) and LMP decomposition. Fixed: DC-OPF stalled on large grids (SyntheticGrid(300):
+  100 iterations, 205 062 $/h instead of 186 364 $/h) because the interior point started at x = 0 — now Pmax-proportional start with
+  central-path slacks/duals, 5–8 iterations up to 600 buses (regression test). Found: the built-in branch-and-bound is weak on UC
+  relaxations (case9 24 h: 18.6 % gap after 20 s vs HiGHS optimal in ~1 s) — `eln scuc` defaults to HiGHS, docs steer SCUC to HiGHS/OR-Tools.
+  `MarketSettlement.ElasticConsumerSurplus` added (VoLL-valued fixed demand dominated the welfare figure). CLI `acopf`, `scuc`, `market`.
+  Version 1.2.0.

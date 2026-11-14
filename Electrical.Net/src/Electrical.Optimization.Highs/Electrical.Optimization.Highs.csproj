@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>HiGHS LP/MIP solver adapter for Electrical.Net (IMilpSolver / ILpSolver backed by the HiGHS open-source solver).</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Optimization/Electrical.Optimization.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Highs.Native ships runtimes/<rid>/native/highs.dll, the same relative path as the (older, ABI-different) highs.dll inside
+         Google.OrTools.runtime.*: with both packages in one app the files overwrite each other and one solver fails to load.
+         The native asset is therefore excluded here and re-published as "highs-native.*", loaded by HighsNativeLoader. -->
+    <PackageReference Include="Highs.Native" Version="1.16.0" ExcludeAssets="native" GeneratePathProperty="true" />
+  </ItemGroup>
+  <ItemGroup>
+    <HighsNativeFile Include="$(PkgHighs_Native)/runtimes/win-x64/native/highs.dll" Rid="win-x64" Ext="dll" />
+    <HighsNativeFile Include="$(PkgHighs_Native)/runtimes/win-x86/native/highs.dll" Rid="win-x86" Ext="dll" />
+    <HighsNativeFile Include="$(PkgHighs_Native)/runtimes/win-arm64/native/highs.dll" Rid="win-arm64" Ext="dll" />
+    <HighsNativeFile Include="$(PkgHighs_Native)/runtimes/linux-x64/native/highs.so" Rid="linux-x64" Ext="so" />
+    <HighsNativeFile Include="$(PkgHighs_Native)/runtimes/linux-arm64/native/highs.so" Rid="linux-arm64" Ext="so" />
+    <HighsNativeFile Include="$(PkgHighs_Native)/runtimes/osx-x64/native/highs.dylib" Rid="osx-x64" Ext="dylib" />
+    <HighsNativeFile Include="$(PkgHighs_Native)/runtimes/osx-arm64/native/highs.dylib" Rid="osx-arm64" Ext="dylib" />
+    <None Include="@(HighsNativeFile)" Link="runtimes/%(Rid)/native/highs-native.%(Ext)" CopyToOutputDirectory="PreserveNewest" Visible="false"
+          Pack="true" PackagePath="runtimes/%(Rid)/native/highs-native.%(Ext)" />
+  </ItemGroup>
+</Project>

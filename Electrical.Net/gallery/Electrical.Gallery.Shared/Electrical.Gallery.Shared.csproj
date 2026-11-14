@@ -23,6 +23,7 @@
     <ProjectReference Include="../../src/Electrical.Renewable/Electrical.Renewable.csproj" />
     <ProjectReference Include="../../src/Electrical.SmartGrid/Electrical.SmartGrid.csproj" />
     <ProjectReference Include="../../src/Electrical.Optimization/Electrical.Optimization.csproj" />
+    <ProjectReference Include="../../src/Electrical.Markets/Electrical.Markets.csproj" />
     <ProjectReference Include="../../src/Electrical.StateEstimation/Electrical.StateEstimation.csproj" />
     <ProjectReference Include="../../src/Electrical.Forecasting/Electrical.Forecasting.csproj" />
     <ProjectReference Include="../../src/Electrical.Simulation/Electrical.Simulation.csproj" />
