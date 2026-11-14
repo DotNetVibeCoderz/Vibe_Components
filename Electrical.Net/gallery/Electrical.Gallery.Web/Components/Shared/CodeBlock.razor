@@ -1,0 +1,29 @@
+@* Read-only code listing with lightweight syntax colouring and a copy button. *@
+@inject IJSRuntime JS
+<figure class="code @Class">
+    <figcaption class="code-head">
+        <span>@Caption</span>
+        @if (Copyable)
+        {
+            <button class="ghost-btn" @onclick="Copy">@(_copied ? CopiedText : CopyText)</button>
+        }
+    </figcaption>
+    <pre tabindex="0"><code>@foreach (var (cls, text) in Highlight.Tokens(Code, Language)) { if (cls is null) { @text } else { <span class="@cls">@text</span> } }</code></pre>
+</figure>
+
+@code {
+    private bool _copied;
+    [Parameter, EditorRequired] public string Code { get; set; } = "";
+    [Parameter] public string Language { get; set; } = "csharp";
+    [Parameter] public string? Caption { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public bool Copyable { get; set; }
+    [Parameter] public string CopyText { get; set; } = "Copy";
+    [Parameter] public string CopiedText { get; set; } = "Copied";
+
+    private async Task Copy()
+    {
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", Code); _copied = true; }
+        catch (JSException) { }
+    }
+}

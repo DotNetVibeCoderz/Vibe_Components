@@ -1,0 +1,17 @@
+@* Multi-series line chart; set Options.TimeStart/TimeStep (or pass TimeSeries) for a clock-time axis. *@
+<figure class="eln-chart @Class" aria-label="@Options?.Title">
+    @((MarkupString)Render())
+    @if (Caption is not null) { <figcaption>@Caption</figcaption> }
+</figure>
+
+@code {
+    [Parameter] public IReadOnlyList<ChartSeries>? Series { get; set; }
+    /// <summary>Alternative input: aligned time series (sets the time axis automatically).</summary>
+    [Parameter] public IReadOnlyList<Electrical.Core.Data.TimeSeries>? TimeSeries { get; set; }
+    [Parameter] public ChartOptions? Options { get; set; }
+    [Parameter] public string? Caption { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private string Render() =>
+        TimeSeries is { Count: > 0 } ts ? SvgCharts.TimeSeries(ts, Options) : SvgCharts.Line(Series ?? [], Options);
+}

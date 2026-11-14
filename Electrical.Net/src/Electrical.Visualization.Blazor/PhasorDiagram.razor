@@ -1,0 +1,14 @@
+@* Phasor diagram (voltages solid, currents dashed; each kind scaled to its own maximum). *@
+<figure class="eln-chart eln-phasor @Class" aria-label="@Title">
+    @((MarkupString)SvgCharts.Phasor(Phasors, Title, Size))
+    @if (Caption is not null) { <figcaption>@Caption</figcaption> }
+</figure>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<PhasorItem> Phasors { get; set; } = [];
+    [Parameter] public string? Title { get; set; }
+    /// <summary>Diagram size [px].</summary>
+    [Parameter] public int Size { get; set; } = 360;
+    [Parameter] public string? Caption { get; set; }
+    [Parameter] public string? Class { get; set; }
+}

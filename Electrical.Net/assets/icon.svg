@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#13244A"/><stop offset="1" stop-color="#070E20"/>
+    </linearGradient>
+    <linearGradient id="bolt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5EEBFF"/><stop offset="0.55" stop-color="#22D3EE"/><stop offset="1" stop-color="#F5B342"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#22D3EE" stop-opacity="0.35"/><stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="r"><rect width="512" height="512" rx="104"/></clipPath>
+  </defs>
+  <g clip-path="url(#r)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+    <g stroke="#2B4A7E" stroke-width="3" fill="none" opacity="0.55">
+      <path d="M0 96 H120 L150 126 H230"/><path d="M512 120 H400 L370 150 H300"/>
+      <path d="M0 420 H90 L130 380 H190"/><path d="M512 400 H420 L390 430 H320"/>
+      <path d="M60 0 V60 L90 90"/><path d="M450 512 V460 L420 430"/>
+    </g>
+    <circle cx="256" cy="262" r="210" fill="url(#glow)"/>
+    <!-- transmission tower -->
+    <g stroke="#CFE3F5" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9">
+      <path d="M200 440 L240 150 M312 440 L272 150 M240 150 L256 96 L272 150"/>
+      <path d="M150 190 H362 M170 250 H342"/>
+      <path d="M218 300 L294 360 M294 300 L218 360 M226 360 L306 420 M286 360 L206 420"/>
+    </g>
+    <!-- grid nodes -->
+    <g stroke="#7DD3FC" stroke-width="4" opacity="0.9">
+      <line x1="150" y1="190" x2="88" y2="300"/><line x1="362" y1="190" x2="424" y2="300"/><line x1="88" y1="300" x2="424" y2="300" stroke-dasharray="10 12" opacity="0.6"/>
+    </g>
+    <g fill="#F5B342"><circle cx="150" cy="190" r="13"/><circle cx="362" cy="190" r="13"/></g>
+    <g fill="#22D3EE"><circle cx="88" cy="300" r="16"/><circle cx="424" cy="300" r="16"/></g>
+    <!-- bolt -->
+    <path d="M286 64 L176 286 H252 L222 452 L352 214 H272 L318 64 Z" fill="url(#bolt)" stroke="#0B1630" stroke-width="10" stroke-linejoin="round"/>
+  </g>
+</svg>

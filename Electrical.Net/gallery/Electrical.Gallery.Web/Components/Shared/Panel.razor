@@ -1,0 +1,15 @@
+@* Instrument panel: engraved title plate, optional meta text on the right. *@
+<section class="panel @Class">
+    <header class="panel-head">
+        <h2>@Title</h2>
+        @if (Meta is not null) { <span class="panel-meta">@Meta</span> }
+    </header>
+    <div class="panel-body">@ChildContent</div>
+</section>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? Meta { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

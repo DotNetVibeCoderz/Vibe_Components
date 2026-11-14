@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [ "Electrical", "Power System", "Web", "API" ],
+  "identity": "Electrical.Templates.WebApi",
+  "name": "Electrical.Net Power System API",
+  "description": "ASP.NET Core minimal API exposing power flow, contingency and study jobs (Electrical.Cloud).",
+  "shortName": "eln-webapi",
+  "sourceName": "GridApi",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" }
+}

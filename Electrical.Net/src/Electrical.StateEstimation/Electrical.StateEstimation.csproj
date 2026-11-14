@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>State estimation: weighted least squares AC estimator with sparse gain matrix, measurement model (V, P, Q, flows, PMU), observability, chi-square and largest-normalized-residual bad-data detection.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+  </ItemGroup>
+</Project>

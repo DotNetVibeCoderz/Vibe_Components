@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>GIS for grids: GeoJSON export/import of networks, Web Mercator projection, line length from geometry, nearest-asset search, SVG map rendering and outage areas.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [ "Electrical", "Power System", "Web", "Blazor" ],
+  "identity": "Electrical.Templates.Blazor",
+  "name": "Electrical.Net Grid Dashboard (Blazor)",
+  "description": "Blazor Server grid dashboard with live single-line diagram, KPI cards and load-scaling what-if.",
+  "shortName": "eln-blazor",
+  "sourceName": "GridDashboard",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" },
+  "symbols": {
+    "case": { "type": "parameter", "datatype": "choice", "choices": [ { "choice": "case9" }, { "choice": "case14" }, { "choice": "case33bw" } ], "defaultValue": "case14", "replaces": "CASE_NAME", "description": "Built-in test network" }
+  }
+}

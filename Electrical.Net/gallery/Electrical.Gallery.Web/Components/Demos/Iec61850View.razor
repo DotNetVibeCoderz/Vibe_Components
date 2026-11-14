@@ -1,0 +1,78 @@
+@inherits DemoBase
+
+<div class="controls">
+    <Seg Label="@T("Message", "Pesan")" Options="@KindOptions" Value="@_kind" ValueChanged="v => { _kind = v; Run(); }" />
+    @if (_kind == "goose")
+    {
+        <Seg Label="@T("Breaker XCBR1", "Pemutus XCBR1")" Options="@BreakerOptions" Value="@BreakerValue" ValueChanged="SetBreaker" />
+        <Range Label="@T("Retransmission", "Retransmisi")" Min="0" Max="9" Step="1" Value="_sq" Format="0" ValueChanged="v => { _sq = (int)v; Run(); }" />
+    }
+    else
+    {
+        <Range Label="@T("Phase current", "Arus fasa")" Min="50" Max="1200" Step="10" Value="_amps" Format="0" Unit=" A" ValueChanged="v => { _amps = v; Run(); }" />
+        <Range Label="@T("Power-factor angle", "Sudut faktor daya")" Min="-30" Max="60" Step="1" Value="_phi" Format="0" Unit="°" ValueChanged="v => { _phi = v; Run(); }" />
+    }
+    <Seg Label="802.1Q VLAN" Options="@VlanOptions" Value="@VlanValue" ValueChanged="SetVlan" />
+</div>
+
+<Annunciator Items="_r.Kpis" Lang="@Lang" />
+
+<div class="grid two-one">
+    <Panel Title="@T("Frame bytes", "Byte frame")" Meta="@($"{_r.Frame.Length} B · EtherType {(_kind == "sv" ? "88BA" : "88B8")}")">
+        <div class="hexdump" role="table" aria-label="@T("Hex dump", "Hex dump")">
+            @foreach (var row in HexDump.Rows(_r.Frame))
+            {
+                <div class="hx-row" role="row">
+                    <span class="hx-off">@row.Offset.ToString("X4")</span>
+                    <span class="hx-bytes">@for (int i = 0; i < row.Bytes.Length; i++) { var k = HexDump.KeyAt(_r.Segments, row.Offset + i); <span class="hx seg-@k">@row.Bytes[i].ToString("X2")</span> }</span>
+                    <span class="hx-ascii">@string.Concat(row.Bytes.Select(HexDump.Ascii))</span>
+                </div>
+            }
+        </div>
+        <div class="seg-legend">@foreach (var s in _r.Segments) { <span><b class="sw seg-@s.Key"></b>@T(s.Label) <small>@(s.End - s.Start) B</small></span> }</div>
+    </Panel>
+    <Panel Title="@T("Decoded", "Hasil dekode")" Meta="@(_r.RoundTripOk ? T("round trip identical", "bolak-balik identik") : T("round trip differs", "bolak-balik berbeda"))">
+        <div class="fields">
+            @foreach (var f in _r.Fields)
+            {
+                <div class="field d@(f.Depth)"><span class="f-tag">@f.Tag</span><span class="f-name">@f.Name</span><span class="f-val">@f.Value</span></div>
+            }
+        </div>
+    </Panel>
+</div>
+
+<div class="grid @(_r.PhasorSvg is null ? "two" : "three")">
+    <Panel Title="@(_kind == "sv" ? T("Merging-unit waveform", "Bentuk gelombang merging unit") : T("GOOSE retransmission", "Retransmisi GOOSE"))"
+           Meta="@(_kind == "sv" ? T("one cycle, 4 kHz", "satu siklus, 4 kHz") : T("2 ms doubling to 1 s heartbeat", "2 md berlipat hingga detak 1 dtk"))">
+        <SvgMarkup Svg="@_r.ChartSvg" />
+    </Panel>
+    @if (_r.PhasorSvg is { } ph)
+    {
+        <Panel Title="@T("Phasors", "Fasor")" Meta="V kV · I A"><SvgMarkup Svg="@ph" Class="phasor" /></Panel>
+    }
+    <Panel Title="@T("SCL model", "Model SCL")" Meta="BayController.icd">
+        <ul class="tree">
+            @foreach (var n in _r.SclTree)
+            {
+                <li class="d@(n.Depth)"><span class="t-kind">@n.Kind</span><span class="t-name">@n.Name</span>@if (n.Detail is not null) { <span class="t-detail">@n.Detail</span> }</li>
+            }
+        </ul>
+    </Panel>
+</div>
+
+@code {
+    private string _kind = "goose";
+    private bool _open = true, _vlan = true;
+    private int _sq;
+    private double _amps = 400, _phi = 25;
+    private Iec61850DemoResult _r = null!;
+    private static readonly IReadOnlyList<Seg.Option> KindOptions = [new("goose", "GOOSE"), new("sv", "Sampled Values")];
+    private IReadOnlyList<Seg.Option> BreakerOptions => [new("open", T("Open (trip)", "Buka (trip)")), new("closed", T("Closed", "Tutup"))];
+    private IReadOnlyList<Seg.Option> VlanOptions => [new("on", T("Tagged", "Bertag")), new("off", T("Untagged", "Tanpa tag"))];
+    private string BreakerValue => _open ? "open" : "closed";
+    private string VlanValue => _vlan ? "on" : "off";
+    private void SetBreaker(string v) { _open = v == "open"; Run(); }
+    private void SetVlan(string v) { _vlan = v == "on"; Run(); }
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = Iec61850Scenario.Run(_kind, _open, _sq, _vlan, _amps, _phi, Lang);
+}

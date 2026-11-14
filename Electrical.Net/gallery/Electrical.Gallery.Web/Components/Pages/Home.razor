@@ -1,0 +1,114 @@
+@page "/"
+
+<PageTitle>Electrical.Net Gallery</PageTitle>
+
+<section class="hero">
+    <div class="hero-copy">
+        <div class="eyebrow">@T("Electrical.Net gallery", "Galeri Electrical.Net") · @GalleryCatalog.Demos.Length @T("live demos", "demo langsung")</div>
+        <h1>@T("Power-system engineering", "Rekayasa sistem tenaga") <span>@T("in C#, solved on this page.", "dalam C#, dihitung di halaman ini.")</span></h1>
+        <p class="lede">@T(
+            "Power flow, contingency screening, Monte-Carlo studies, SCADA telemetry, IEC 61850 messages, CIM exchange and grid maps. Every figure here comes from the library running on the server, next to the C# that produced it.",
+            "Aliran daya, penapisan kontingensi, studi Monte-Carlo, telemetri SCADA, pesan IEC 61850, pertukaran CIM, dan peta jaringan. Setiap angka di sini berasal dari pustaka yang berjalan di server, berdampingan dengan kode C# yang menghasilkannya.")</p>
+        <div class="hero-actions">
+            <a class="btn primary" href="@L("demo/powerflow")">@T("Run a power flow", "Jalankan aliran daya")</a>
+            <a class="btn" href="@L("demo/contingency")">@T("Rank N-1 outages", "Urutkan gangguan N-1")</a>
+        </div>
+        <CodeBlock Class="hero-code" Caption="Program.cs" Code="@HeroCode" />
+    </div>
+
+    <figure class="mimic">
+        <div class="mimic-head">
+            <span><span class="lamp on"></span> IEEE 14-BUS · NEWTON–RAPHSON</span>
+            <span>@(_pf.Converged ? T("CONVERGED", "KONVERGEN") : T("DIVERGED", "DIVERGEN")) · @_pf.Iterations @T("it", "iterasi") · @_pf.Elapsed.TotalMilliseconds.ToString("0.0", CultureInfo.InvariantCulture) ms</span>
+        </div>
+        <div class="mimic-body">
+            <SvgMarkup Svg="@_sld" />
+        </div>
+        <Annunciator Items="_kpis" Lang="@Lang" />
+    </figure>
+</section>
+
+@foreach (var c in GalleryCatalog.Categories)
+{
+    var demos = GalleryCatalog.Demos.Where(d => d.Category == c.Key).ToList();
+    <section class="index-group">
+        <header class="index-head">
+            <h2>@c.Name[Lang]</h2>
+            <p>@c.Blurb[Lang]</p>
+        </header>
+        <div class="cards">
+            @foreach (var d in demos)
+            {
+                <a class="card" href="@L($"demo/{d.Id}")">
+                    <span class="card-id">/demo/@d.Id</span>
+                    <h3>@d.Title[Lang]</h3>
+                    <p>@d.Summary[Lang]</p>
+                    <span class="chips">@foreach (var m in d.Modules) { <span class="chip">@m</span> }</span>
+                    <span class="card-go" aria-hidden="true">→</span>
+                </a>
+            }
+        </div>
+    </section>
+}
+
+<section id="modules" class="modules">
+    <header class="index-head">
+        <h2>@T("Module panel", "Panel modul")</h2>
+        <p>@T($"All {GalleryCatalog.Modules.Length} packages of the framework. A lit lamp means the module has a live demo in this gallery.",
+              $"Semua {GalleryCatalog.Modules.Length} paket framework. Lampu menyala berarti modul memiliki demo langsung di galeri ini.")</p>
+    </header>
+    <div class="bays">
+        @foreach (var m in GalleryCatalog.Modules)
+        {
+            var demos = GalleryCatalog.DemosFor(m.Name).ToList();
+            <div class="bay @(demos.Count > 0 ? "live" : "")">
+                <div class="bay-top">
+                    <span class="lamp @(demos.Count > 0 ? "on" : "dim")" aria-hidden="true"></span>
+                    <span class="bay-name">@m.Name</span>
+                </div>
+                <p>@m.Summary[Lang]</p>
+                <div class="bay-foot">
+                    @if (demos.Count == 0)
+                    {
+                        <span class="muted">@T("demo coming", "demo menyusul")</span>
+                    }
+                    else
+                    {
+                        @foreach (var d in demos.Take(3)) { <a href="@L($"demo/{d.Id}")">@d.Id</a> }
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    [CascadingParameter(Name = "Lang")] public string Lang { get; set; } = "en";
+    private PowerFlowResult _pf = null!;
+    private string _sld = "";
+    private List<Kpi> _kpis = [];
+
+    private const string HeroCode = """
+        var net = TestCases.Case14();
+        var pf  = PowerFlowSolver.Solve(net);   // Newton–Raphson
+        var svg = SldRenderer.Render(net, pf);  // diagram →
+        """;
+
+    protected override void OnInitialized()
+    {
+        var net = Electrical.Core.Network.TestCases.Case14();
+        _pf = PowerFlowSolver.Solve(net);
+        _sld = SldRenderer.Render(net, _pf, new SldOptions { ShowLegend = false, LayerGap = 120, BusGap = 48 });
+        var min = _pf.MinVoltageBus;
+        _kpis =
+        [
+            new(new("Generation", "Pembangkitan"), _pf.TotalGenerationMw.ToString("0.0", CultureInfo.InvariantCulture), "MW", null, "ok"),
+            new(new("Losses", "Rugi-rugi"), _pf.LossesMw.ToString("0.00", CultureInfo.InvariantCulture), "MW"),
+            new(new("Min voltage", "Tegangan min"), min.Vm.ToString("0.000", CultureInfo.InvariantCulture), "pu", new($"bus {min.BusId}", $"bus {min.BusId}")),
+            new(new("Max voltage", "Tegangan maks"), _pf.MaxVoltageBus.Vm.ToString("0.000", CultureInfo.InvariantCulture), "pu", new($"bus {_pf.MaxVoltageBus.BusId}", $"bus {_pf.MaxVoltageBus.BusId}"), _pf.MaxVoltageBus.Vm > 1.06 ? "warn" : null),
+        ];
+    }
+
+    private string T(string en, string id) => Lang == "id" ? id : en;
+    private string L(string path) => Lang == "id" ? path + "?lang=id" : path;
+}

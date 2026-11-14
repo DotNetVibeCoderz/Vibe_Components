@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Electrical.AI/Electrical.AI.csproj" />
+    <ProjectReference Include="../../src/Electrical.CIM/Electrical.CIM.csproj" />
+    <ProjectReference Include="../../src/Electrical.Circuit/Electrical.Circuit.csproj" />
+    <ProjectReference Include="../../src/Electrical.Cloud/Electrical.Cloud.csproj" />
+    <ProjectReference Include="../../src/Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../../src/Electrical.DigitalTwin/Electrical.DigitalTwin.csproj" />
+    <ProjectReference Include="../../src/Electrical.Forecasting/Electrical.Forecasting.csproj" />
+    <ProjectReference Include="../../src/Electrical.GIS/Electrical.GIS.csproj" />
+    <ProjectReference Include="../../src/Electrical.HPC/Electrical.HPC.csproj" />
+    <ProjectReference Include="../../src/Electrical.Harmonic/Electrical.Harmonic.csproj" />
+    <ProjectReference Include="../../src/Electrical.IEC61850/Electrical.IEC61850.csproj" />
+    <ProjectReference Include="../../src/Electrical.Native/Electrical.Native.csproj" />
+    <ProjectReference Include="../../src/Electrical.Optimization/Electrical.Optimization.csproj" />
+    <ProjectReference Include="../../src/Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+    <ProjectReference Include="../../src/Electrical.Protection/Electrical.Protection.csproj" />
+    <ProjectReference Include="../../src/Electrical.Renewable/Electrical.Renewable.csproj" />
+    <ProjectReference Include="../../src/Electrical.SCADA/Electrical.SCADA.csproj" />
+    <ProjectReference Include="../../src/Electrical.ShortCircuit/Electrical.ShortCircuit.csproj" />
+    <ProjectReference Include="../../src/Electrical.Simulation/Electrical.Simulation.csproj" />
+    <ProjectReference Include="../../src/Electrical.SmartGrid/Electrical.SmartGrid.csproj" />
+    <ProjectReference Include="../../src/Electrical.Stability/Electrical.Stability.csproj" />
+    <ProjectReference Include="../../src/Electrical.StateEstimation/Electrical.StateEstimation.csproj" />
+    <ProjectReference Include="../../src/Electrical.Visualization/Electrical.Visualization.csproj" />
+  </ItemGroup>
+</Project>

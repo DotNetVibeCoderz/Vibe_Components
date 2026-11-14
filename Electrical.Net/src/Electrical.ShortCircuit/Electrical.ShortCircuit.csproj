@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Short-circuit analysis per IEC 60909 / ANSI: three-phase, single-line-to-ground, line-to-line and double-line-to-ground faults via sequence networks and Z-bus, peak (ip) and breaking currents, fault contributions.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+  </ItemGroup>
+</Project>

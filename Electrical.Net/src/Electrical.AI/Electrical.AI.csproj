@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>AI for power systems: LLM grid-operator agent with tool calling (OpenAI, Azure OpenAI, Hugging Face, Ollama, offline), anomaly detection, fault classification, and reinforcement-learning environments for Volt/VAR control.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+    <ProjectReference Include="../Electrical.ShortCircuit/Electrical.ShortCircuit.csproj" />
+    <ProjectReference Include="../Electrical.Forecasting/Electrical.Forecasting.csproj" />
+    <ProjectReference Include="../Electrical.Optimization/Electrical.Optimization.csproj" />
+    <ProjectReference Include="../Electrical.Stability/Electrical.Stability.csproj" />
+    <ProjectReference Include="../Electrical.Renewable/Electrical.Renewable.csproj" />
+    <ProjectReference Include="../Electrical.DigitalTwin/Electrical.DigitalTwin.csproj" />
+  </ItemGroup>
+</Project>

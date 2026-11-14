@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Power quality and harmonics: FFT, THD/TDD, IEEE 519 and IEC 61000 limits, harmonic load flow and frequency scan, resonance detection, passive filter design, flicker and unbalance.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+  </ItemGroup>
+</Project>

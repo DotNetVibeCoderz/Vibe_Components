@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <Description>Electrical.Net Gallery (Blazor web, interactive server).</Description>
+    <IsPackable>false</IsPackable>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Gallery.Shared/Electrical.Gallery.Shared.csproj" />
+    <ProjectReference Include="../../src/Electrical.Visualization.Blazor/Electrical.Visualization.Blazor.csproj" />
+  </ItemGroup>
+</Project>

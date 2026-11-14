@@ -1,0 +1,101 @@
+@inherits DemoBase
+@using Electrical.SCADA
+
+<div class="controls">
+    <Range Label="@T("Evening peak", "Puncak malam")" Min="0.8" Max="1.7" Step="0.05" Value="_peak" Format="0.00" Unit="× base" ValueChanged="v => { _peak = v; Run(); }" />
+    <Range Label="@T("Historian deviation", "Deviasi historian")" Min="0.1" Max="4" Step="0.1" Value="_dev" Format="0.0" Unit=" MW" ValueChanged="v => { _dev = v; Run(); }" />
+    <div class="control"><span class="control-label">@T("Scenario", "Skenario")</span><span class="control-text">IEEE 14-bus · 288 × 5 min · @T("operator acknowledges at 12:00", "operator mengakui pukul 12:00")</span></div>
+</div>
+
+<Annunciator Items="_r.Kpis" Lang="@Lang" />
+
+<div class="grid two-one">
+    <Panel Title="@T("Historian: line 1–2 flow", "Historian: aliran saluran 1–2")" Meta="@($"swinging-door ±{F(_dev, "0.0")} MW · {_r.ArchivedSamples}/{_r.RawSamples}")">
+        <SvgMarkup Svg="@_r.HistorianSvg" />
+    </Panel>
+    <Panel Title="@T("Alarm summary", "Ringkasan alarm")" Meta="ISA-18.2">
+        @if (_r.Alarms.Count == 0)
+        {
+            <p class="hint">@T("No alarms today. Raise the evening peak to push voltages below their limits.", "Tidak ada alarm hari ini. Naikkan puncak malam agar tegangan turun di bawah batas.")</p>
+        }
+        else
+        {
+            <ul class="alarm-list">
+                @foreach (var a in _r.Alarms)
+                {
+                    <li class="alarm @StateClass(a.State)">
+                        <span class="alarm-state" title="@a.State">@StateLetter(a.State)</span>
+                        <span class="alarm-tag">@a.Tag</span>
+                        <span class="alarm-limit">@(a.Limit ?? "—")</span>
+                        <span class="alarm-val">@F(a.Value, a.Value is > -10 and < 10 ? "0.000" : "0.0")</span>
+                        <span class="alarm-pri p@((int)a.Priority)">@a.Priority</span>
+                    </li>
+                }
+            </ul>
+            <p class="legend-line">
+                <span><b class="sw unack"></b>B @T("unacknowledged", "belum diakui")</span>
+                <span><b class="sw ack"></b>C @T("acknowledged", "diakui")</span>
+                <span><b class="sw rtn"></b>D @T("cleared, unacknowledged", "pulih, belum diakui")</span>
+                <span><b class="sw norm"></b>A @T("normal", "normal")</span>
+            </p>
+        }
+    </Panel>
+</div>
+
+<div class="grid two-one">
+    <Panel Title="@T("Bus 14 voltage trend", "Tren tegangan bus 14")" Meta="@T("resampled from the historian, 15 min", "diresampel dari historian, 15 mnt")">
+        <SvgMarkup Svg="@_r.VoltageTrendSvg" />
+    </Panel>
+    <Panel Title="@T("Alarm journal", "Jurnal alarm")" Meta="@($"{_r.Events.Count} {T("events", "kejadian")}")">
+        <div class="journal">
+            @foreach (var e in _r.Events)
+            {
+                <div class="jrow @StateClass(e.To)"><time>@e.Time.ToString("HH:mm", CultureInfo.InvariantCulture)</time><span>@e.Tag</span><span class="muted">@StateLetter(e.From) → @StateLetter(e.To)</span></div>
+            }
+        </div>
+    </Panel>
+</div>
+
+<div class="grid two">
+    <Panel Title="@T("RTU register map", "Peta register RTU")" Meta="@T("Float32 input registers, high word first", "register input Float32, word tinggi dulu")">
+        <div class="table-wrap tall">
+            <table class="data compact mono">
+                <thead><tr><th>@T("Point", "Titik")</th><th>@T("Table", "Tabel")</th><th class="num">@T("Addr", "Alamat")</th><th>@T("Registers", "Register")</th><th class="num">@T("Read", "Terbaca")</th><th class="num">@T("True", "Sebenarnya")</th><th>@T("Unit", "Satuan")</th></tr></thead>
+                <tbody>
+                    @foreach (var p in _r.Points)
+                    {
+                        <tr><td>@p.Name</td><td class="muted">@p.Table</td><td class="num">@p.Address</td><td class="regs">@p.Registers</td><td class="num">@F(p.Value, "0.0000")</td><td class="num muted">@F(p.TrueValue, "0.0000")</td><td class="muted">@p.Unit</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </Panel>
+    <Panel Title="@T("Modbus TCP exchange", "Pertukaran Modbus TCP")" Meta="@T("read bus 14: FC 04, 6 registers", "baca bus 14: FC 04, 6 register")">
+        <div class="wire">
+            <div class="wire-label">@T("Request ADU", "ADU permintaan") · @T("master → RTU", "master → RTU")</div>
+            <code class="hex">@_r.ModbusRequestHex</code>
+            <div class="wire-key"><span>@T("transaction", "transaksi") 002A</span><span>@T("protocol", "protokol") 0000</span><span>@T("length", "panjang")</span><span>unit 01</span><span>FC 04</span><span>@T("address", "alamat")</span><span>@T("quantity", "jumlah") 6</span></div>
+            <div class="wire-label">@T("Response ADU", "ADU respons") · @T("RTU → master", "RTU → master")</div>
+            <code class="hex">@_r.ModbusResponseHex</code>
+            <p class="hint">@T("Served by RtuSimulator.Map.Process in-process; the same bytes go over a socket with ModbusTcpServer.",
+                               "Dilayani oleh RtuSimulator.Map.Process di dalam proses; byte yang sama dikirim lewat soket oleh ModbusTcpServer.")</p>
+        </div>
+    </Panel>
+</div>
+
+@code {
+    private double _peak = 1.3, _dev = 0.5;
+    private ScadaDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = ScadaScenario.Run(_peak, _dev, Lang);
+
+    private static string StateClass(AlarmState s) => s switch
+    {
+        AlarmState.Unacknowledged => "unack", AlarmState.Acknowledged => "ack", AlarmState.ReturnToNormalUnacknowledged => "rtn", AlarmState.Shelved => "shelved", _ => "norm",
+    };
+
+    private static string StateLetter(AlarmState s) => s switch
+    {
+        AlarmState.Normal => "A", AlarmState.Unacknowledged => "B", AlarmState.Acknowledged => "C", AlarmState.ReturnToNormalUnacknowledged => "D", _ => "E",
+    };
+}

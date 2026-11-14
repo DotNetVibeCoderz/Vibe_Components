@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Smart grid: demand response, EV charging scheduling, microgrid energy management, virtual power plant aggregation, Volt/VAR optimization, DERMS, feeder reconfiguration and reliability indices (SAIDI/SAIFI/CAIDI/ENS).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+    <ProjectReference Include="../Electrical.Renewable/Electrical.Renewable.csproj" />
+  </ItemGroup>
+</Project>

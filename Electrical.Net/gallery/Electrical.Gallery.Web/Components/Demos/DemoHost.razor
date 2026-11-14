@@ -1,0 +1,20 @@
+@* Maps a catalog id to its view. Add a case here when you add a demo. *@
+@switch (Id)
+{
+    case "powerflow": <PowerFlowView Lang="@Lang" /> break;
+    case "contingency": <ContingencyView Lang="@Lang" /> break;
+    case "plf": <PlfView Lang="@Lang" /> break;
+    case "scada": <ScadaView Lang="@Lang" /> break;
+    case "iec61850": <Iec61850View Lang="@Lang" /> break;
+    case "cim": <CimView Lang="@Lang" /> break;
+    case "gis": <GisView Lang="@Lang" /> break;
+    case "agent": <AgentView Lang="@Lang" /> break;
+    default:
+        if (InteractiveScenarios.Find(Id) is { } scenario) { <InteractiveView Scenario="scenario" Lang="@Lang" /> break; }
+        <p class="hint">@(Lang == "id" ? "Tampilan untuk demo ini belum tersedia." : "This demo has no view yet.")</p> break;
+}
+
+@code {
+    [Parameter, EditorRequired] public string Id { get; set; } = "";
+    [Parameter] public string Lang { get; set; } = "en";
+}

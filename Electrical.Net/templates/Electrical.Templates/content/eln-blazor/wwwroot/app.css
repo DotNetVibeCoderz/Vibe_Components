@@ -1,0 +1,7 @@
+body { margin: 0; background: var(--eln-bg); color: var(--eln-fg); font-family: var(--eln-font); }
+.page { max-width: 1200px; margin: 0 auto; padding: 24px; }
+header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+h1 { font-size: 1.6rem; margin: 0; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 20px 0; }
+footer { margin-top: 24px; color: var(--eln-muted); font-size: .85rem; }
+input[type=range] { accent-color: var(--eln-accent); vertical-align: middle; }

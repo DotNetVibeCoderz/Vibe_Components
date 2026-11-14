@@ -1,0 +1,31 @@
+@* Labelled range slider with a live read-out. *@
+<div class="control">
+    <label class="control-label" for="@_id">@Label</label>
+    <div class="range">
+        <input id="@_id" type="range" min="@Inv(Min)" max="@Inv(Max)" step="@Inv(Step)" value="@Inv(Value)" @oninput="OnInput" />
+        <output for="@_id">@Value.ToString(Format, CultureInfo.InvariantCulture)@Unit</output>
+    </div>
+</div>
+
+@code {
+    private readonly string _id = "rng" + Guid.NewGuid().ToString("N")[..8];
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public double Min { get; set; }
+    [Parameter] public double Max { get; set; } = 1;
+    [Parameter] public double Step { get; set; } = 0.1;
+    [Parameter] public double Value { get; set; }
+    [Parameter] public string Format { get; set; } = "0.##";
+    [Parameter] public string? Unit { get; set; }
+    [Parameter] public EventCallback<double> ValueChanged { get; set; }
+
+    private static string Inv(double v) => v.ToString(CultureInfo.InvariantCulture);
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+        {
+            Value = v;
+            await ValueChanged.InvokeAsync(v);
+        }
+    }
+}

@@ -1,0 +1,14 @@
+@* Heatmap of Values[row, col] with a color legend. *@
+<figure class="eln-chart eln-heatmap @Class" aria-label="@Options?.Title">
+    @((MarkupString)SvgCharts.Heatmap(Values, RowLabels, ColumnLabels, Options))
+    @if (Caption is not null) { <figcaption>@Caption</figcaption> }
+</figure>
+
+@code {
+    [Parameter, EditorRequired] public double[,] Values { get; set; } = new double[0, 0];
+    [Parameter] public IReadOnlyList<string>? RowLabels { get; set; }
+    [Parameter] public IReadOnlyList<string>? ColumnLabels { get; set; }
+    [Parameter] public HeatmapOptions? Options { get; set; }
+    [Parameter] public string? Caption { get; set; }
+    [Parameter] public string? Class { get; set; }
+}

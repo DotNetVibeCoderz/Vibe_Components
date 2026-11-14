@@ -1,0 +1,42 @@
+<Solution>
+  <Folder Name="/gallery/">
+    <Project Path="gallery/Electrical.Gallery.Desktop/Electrical.Gallery.Desktop.csproj" />
+    <Project Path="gallery/Electrical.Gallery.Shared/Electrical.Gallery.Shared.csproj" />
+    <Project Path="gallery/Electrical.Gallery.Web/Electrical.Gallery.Web.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Electrical.AI/Electrical.AI.csproj" />
+    <Project Path="src/Electrical.CIM/Electrical.CIM.csproj" />
+    <Project Path="src/Electrical.Circuit/Electrical.Circuit.csproj" />
+    <Project Path="src/Electrical.Cloud/Electrical.Cloud.csproj" />
+    <Project Path="src/Electrical.Core/Electrical.Core.csproj" />
+    <Project Path="src/Electrical.DigitalTwin/Electrical.DigitalTwin.csproj" />
+    <Project Path="src/Electrical.Forecasting/Electrical.Forecasting.csproj" />
+    <Project Path="src/Electrical.GIS/Electrical.GIS.csproj" />
+    <Project Path="src/Electrical.HPC/Electrical.HPC.csproj" />
+    <Project Path="src/Electrical.Harmonic/Electrical.Harmonic.csproj" />
+    <Project Path="src/Electrical.IEC61850/Electrical.IEC61850.csproj" />
+    <Project Path="src/Electrical.Native/Electrical.Native.csproj" />
+    <Project Path="src/Electrical.Optimization/Electrical.Optimization.csproj" />
+    <Project Path="src/Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+    <Project Path="src/Electrical.Protection/Electrical.Protection.csproj" />
+    <Project Path="src/Electrical.Renewable/Electrical.Renewable.csproj" />
+    <Project Path="src/Electrical.SCADA/Electrical.SCADA.csproj" />
+    <Project Path="src/Electrical.ShortCircuit/Electrical.ShortCircuit.csproj" />
+    <Project Path="src/Electrical.Simulation/Electrical.Simulation.csproj" />
+    <Project Path="src/Electrical.SmartGrid/Electrical.SmartGrid.csproj" />
+    <Project Path="src/Electrical.Stability/Electrical.Stability.csproj" />
+    <Project Path="src/Electrical.StateEstimation/Electrical.StateEstimation.csproj" />
+    <Project Path="src/Electrical.Visualization.Blazor/Electrical.Visualization.Blazor.csproj" />
+    <Project Path="src/Electrical.Visualization/Electrical.Visualization.csproj" />
+  </Folder>
+  <Folder Name="/templates/">
+    <Project Path="templates/Electrical.Templates/Electrical.Templates.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Electrical.Tests/Electrical.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Electrical.Cli/Electrical.Cli.csproj" />
+  </Folder>
+</Solution>

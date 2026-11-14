@@ -1,0 +1,9 @@
+@* Hosts any SVG string produced by Electrical.Visualization (or Electrical.GIS). *@
+<div class="eln-svg-host @Class" style="@Style">@((MarkupString)Svg)</div>
+
+@code {
+    /// <summary>SVG markup to render.</summary>
+    [Parameter, EditorRequired] public string Svg { get; set; } = "";
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Style { get; set; }
+}

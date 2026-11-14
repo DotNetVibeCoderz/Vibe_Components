@@ -1,0 +1,14 @@
+@* Grouped or stacked vertical bar chart. *@
+<figure class="eln-chart @Class" aria-label="@Options?.Title">
+    @((MarkupString)SvgCharts.Bar(Categories, Series, Options, Stacked))
+    @if (Caption is not null) { <figcaption>@Caption</figcaption> }
+</figure>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<string> Categories { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<ChartSeries> Series { get; set; } = [];
+    [Parameter] public ChartOptions? Options { get; set; }
+    [Parameter] public bool Stacked { get; set; }
+    [Parameter] public string? Caption { get; set; }
+    [Parameter] public string? Class { get; set; }
+}

@@ -1,0 +1,17 @@
+@* 240-degree gauge with optional colored bands. *@
+<div class="eln-gauge @Class" style="max-width:@(Size)px">
+    @((MarkupString)SvgCharts.Gauge(Value, Min, Max, Label, Unit, Bands, Size, Format))
+</div>
+
+@code {
+    [Parameter] public double Value { get; set; }
+    [Parameter] public double Min { get; set; }
+    [Parameter] public double Max { get; set; } = 1;
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string? Unit { get; set; }
+    [Parameter] public IReadOnlyList<GaugeBand>? Bands { get; set; }
+    /// <summary>Gauge size [px].</summary>
+    [Parameter] public int Size { get; set; } = 200;
+    [Parameter] public string Format { get; set; } = "0.##";
+    [Parameter] public string? Class { get; set; }
+}

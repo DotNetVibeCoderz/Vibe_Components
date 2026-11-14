@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [ "Electrical", "SCADA", "IoT", "Modbus" ],
+  "identity": "Electrical.Templates.Scada",
+  "name": "Electrical.Net SCADA Edge Gateway",
+  "description": "SCADA edge gateway: polls a Modbus TCP RTU, scales tags, evaluates ISA-18.2 alarms and historizes values (includes a built-in RTU simulator).",
+  "shortName": "eln-scada",
+  "sourceName": "ScadaGateway",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" }
+}

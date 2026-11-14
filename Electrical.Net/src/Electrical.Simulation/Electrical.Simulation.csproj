@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Simulation: quasi-static time-series (QSTS) simulation over load/PV profiles, Monte-Carlo reliability (sequential), scenario management and event timelines.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+    <ProjectReference Include="../Electrical.Renewable/Electrical.Renewable.csproj" />
+    <ProjectReference Include="../Electrical.Forecasting/Electrical.Forecasting.csproj" />
+  </ItemGroup>
+</Project>

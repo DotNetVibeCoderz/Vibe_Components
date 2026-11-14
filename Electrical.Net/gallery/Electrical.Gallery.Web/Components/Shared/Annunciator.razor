@@ -1,0 +1,17 @@
+@* Annunciator strip: one illuminated window per key figure, lit by its tone (ok / warn / alarm). *@
+<div class="annunciator" role="list">
+    @foreach (var k in Items)
+    {
+        <div class="ann @(k.Tone is null ? "" : "tone-" + k.Tone)" role="listitem">
+            <span class="ann-lamp" aria-hidden="true"></span>
+            <span class="ann-label">@k.Label[Lang]</span>
+            <span class="ann-value">@k.Value@if (k.Unit is not null) {<small>@k.Unit</small>}</span>
+            @if (k.Note is { } n) { <span class="ann-note">@n[Lang]</span> }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<Kpi> Items { get; set; } = [];
+    [Parameter] public string Lang { get; set; } = "en";
+}

@@ -1,0 +1,56 @@
+@page "/demo/{Id}"
+
+@if (_info is null)
+{
+    <PageTitle>@T("Demo not found", "Demo tidak ditemukan") · Electrical.Net Gallery</PageTitle>
+    <section class="empty">
+        <h1>@T("There is no demo called", "Tidak ada demo bernama") “@Id”</h1>
+        <p>@T("Pick a demo from the list on the left, or go back to the overview.", "Pilih demo dari daftar di kiri, atau kembali ke ringkasan.")</p>
+        <a class="btn primary" href="">@T("Back to overview", "Kembali ke ringkasan")</a>
+    </section>
+}
+else
+{
+    <PageTitle>@_info.Title[Lang] · Electrical.Net Gallery</PageTitle>
+    <header class="demo-head">
+        <div class="eyebrow">@GalleryCatalog.CategoryOf(_info).Name[Lang]</div>
+        <h1>@_info.Title[Lang]</h1>
+        <p>@_info.Summary[Lang]</p>
+        <div class="chips">@foreach (var p in _info.Packages) { <span class="chip">@p</span> }</div>
+    </header>
+
+    <div class="tabs" role="tablist" aria-label="@T("Demo views", "Tampilan demo")">
+        <button role="tab" id="tab-live" aria-selected="@Aria.B(!_code)" aria-controls="panel-live" @onclick="() => _code = false">@T("Live demo", "Demo langsung")</button>
+        <button role="tab" id="tab-code" aria-selected="@Aria.B(_code)" aria-controls="panel-code" @onclick="() => _code = true">@T("C# code", "Kode C#")</button>
+    </div>
+
+    @if (_code)
+    {
+        <div id="panel-code" role="tabpanel" aria-labelledby="tab-code">
+            <CodeBlock Code="@_info.Code" Caption="@($"C# · {string.Join(" · ", _info.Packages)}")" Copyable="true" CopyText="@T("Copy", "Salin")" CopiedText="@T("Copied", "Tersalin")" />
+            <p class="hint">@T("Add the packages with", "Tambahkan paket dengan") <code>dotnet add package @_info.Packages.First()</code>.</p>
+        </div>
+    }
+    else
+    {
+        <div id="panel-live" role="tabpanel" aria-labelledby="tab-live">
+            <DemoHost Id="@_info.Id" Lang="@Lang" />
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+    [CascadingParameter(Name = "Lang")] public string Lang { get; set; } = "en";
+    private DemoInfo? _info;
+    private bool _code;
+    private string? _last;
+
+    protected override void OnParametersSet()
+    {
+        if (_last != Id) { _code = false; _last = Id; }
+        _info = GalleryCatalog.Find(Id);
+    }
+
+    private string T(string en, string id) => Lang == "id" ? id : en;
+}

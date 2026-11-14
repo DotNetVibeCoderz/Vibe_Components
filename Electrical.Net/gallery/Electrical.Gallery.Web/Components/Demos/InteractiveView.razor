@@ -1,0 +1,115 @@
+@inherits DemoBase
+@* Generic renderer for declarative demos (Electrical.Gallery.Shared.IInteractiveScenario): controls from Params, KPIs, then blocks. *@
+
+<div class="controls">
+    @foreach (var p in Scenario.Params(_v))
+    {
+        switch (p)
+        {
+            case ChoiceParam c:
+                <Seg Label="@T(c.Label)" Options="@c.Options.Select(o => new Seg.Option(o.Value, T(o.Text))).ToList()" Value="@_v[c.Key]" ValueChanged="x => Set(c.Key, x)" />
+                break;
+            case RangeParam r:
+                <Range Label="@T(r.Label)" Min="r.Min" Max="r.Max" Step="r.Step" Value="_v.D(r.Key)" Format="@r.Format" Unit="@r.Unit"
+                       ValueChanged="x => Set(r.Key, x.ToString(CultureInfo.InvariantCulture))" />
+                break;
+        }
+    }
+</div>
+
+@if (_error is not null)
+{
+    <p class="notice">@T("The study did not finish with these settings:", "Studi tidak selesai dengan pengaturan ini:") @_error</p>
+}
+else if (_r is not null)
+{
+    <Annunciator Items="_r.Kpis" Lang="@Lang" />
+    @foreach (var row in Rows(_r.Blocks))
+    {
+        if (row.Count == 1 && row[0] is NoteBlock note)
+        {
+            <p class="notice">@T(note.Text)</p>
+        }
+        else if (row.Count == 1)
+        {
+            @RenderBlock(row[0])
+        }
+        else
+        {
+            <div class="grid two">@foreach (var b in row) { @RenderBlock(b) }</div>
+        }
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public IInteractiveScenario Scenario { get; set; } = null!;
+    private ParamValues _v = null!;
+    private InteractiveResult? _r;
+    private string? _error;
+    private string? _lang;
+
+    protected override void OnInitialized()
+    {
+        _v = InteractiveScenarios.Defaults(Scenario);
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_lang != Lang) { _lang = Lang; Run(); } // charts carry localized axis labels
+    }
+
+    private void Set(string key, string value)
+    {
+        _v[key] = value;
+        InteractiveScenarios.Sync(Scenario, _v);
+        Run();
+    }
+
+    private void Run()
+    {
+        try { _r = Scenario.Run(_v, Lang); _error = null; }
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException or ArithmeticException) { _error = e.Message; }
+    }
+
+    /// <summary>Wide blocks get their own row; narrow blocks pair up.</summary>
+    private static List<List<Block>> Rows(IReadOnlyList<Block> blocks)
+    {
+        var rows = new List<List<Block>>();
+        List<Block>? open = null;
+        foreach (var b in blocks)
+        {
+            if (b.Wide) { rows.Add([b]); open = null; continue; }
+            if (open is { Count: 1 }) { open.Add(b); open = null; }
+            else { open = [b]; rows.Add(open); }
+        }
+        return rows;
+    }
+
+    private RenderFragment RenderBlock(Block b) => b switch
+    {
+        ChartBlock c => @<Panel Title="@T(c.Title)" Meta="@(c.Meta is { } m ? T(m) : null)"><SvgMarkup Svg="@c.Svg" /></Panel>,
+        TableBlock t => @<Panel Title="@T(t.Title)" Meta="@(t.Meta is { } m ? T(m) : null)">
+            <div class="table-wrap">
+                <table class="data compact">
+                    <thead><tr>@foreach (var h in t.Headers) { <th>@T(h)</th> }</tr></thead>
+                    <tbody>
+                        @foreach (var row in t.Rows)
+                        {
+                            <tr>
+                                @foreach (var cell in row)
+                                {
+                                    if (cell.Tone is not null) { <td><span class="state @cell.Tone">@cell.Text</span></td> }
+                                    else if (cell.Numeric) { <td class="num">@cell.Text</td> }
+                                    else { <td>@cell.Text</td> }
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </Panel>,
+        ListingBlock l => @<CodeBlock Code="@l.Text" Language="@l.Language" Caption="@($"{T(l.Title)}{(l.Meta is { } m ? " · " + T(m) : "")}")" />,
+        NoteBlock n => @<p class="notice">@T(n.Text)</p>,
+        _ => @<span></span>,
+    };
+}

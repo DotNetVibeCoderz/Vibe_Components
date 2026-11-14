@@ -1,0 +1,44 @@
+@* KPI card: label, value with unit, optional delta and sparkline trend. Styled with the --eln-* variables. *@
+<div class="eln-kpi @Class" style="background:var(--eln-surface,#fff);border:1px solid var(--eln-grid,#dfe6ef);border-left:3px solid var(--eln-accent,#0091ad);border-radius:10px;padding:12px 14px;color:var(--eln-fg,#0f1e33);font-family:var(--eln-font,system-ui,sans-serif);display:flex;flex-direction:column;gap:4px;min-width:180px">
+    <div class="eln-kpi-label" style="font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--eln-muted,#5b6b82)">@Label</div>
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px">
+        <div class="eln-kpi-value" style="font-size:1.8rem;font-weight:700;line-height:1.1">
+            @Value
+            @if (Unit is not null)
+            {
+                <span class="eln-kpi-unit" style="font-size:.85rem;font-weight:500;margin-left:4px;color:var(--eln-muted,#5b6b82)">@Unit</span>
+            }
+        </div>
+        @if (Trend is { Count: >= 2 })
+        {
+            @((MarkupString)SvgCharts.Sparkline(Trend, 96, 32))
+        }
+    </div>
+    @if (Delta is not null)
+    {
+        <div class="eln-kpi-delta" style="font-size:.78rem;font-weight:600;color:@DeltaColor">@Delta</div>
+    }
+    @if (Note is not null)
+    {
+        <div class="eln-kpi-note" style="font-size:.75rem;color:var(--eln-muted,#5b6b82)">@Note</div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public string? Unit { get; set; }
+    [Parameter] public IReadOnlyList<double>? Trend { get; set; }
+    [Parameter] public string? Delta { get; set; }
+    /// <summary>True = delta in the "ok" color, false = "danger", null = muted.</summary>
+    [Parameter] public bool? DeltaGood { get; set; }
+    [Parameter] public string? Note { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private string DeltaColor => DeltaGood switch
+    {
+        true => "var(--eln-ok,#1f9d5f)",
+        false => "var(--eln-danger,#d62f3a)",
+        _ => "var(--eln-muted,#5b6b82)",
+    };
+}

@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Circuit simulation: modified nodal analysis (DC operating point, AC phasor sweep, transient with companion models), SPICE-like netlists, R/L/C, sources, diodes, switches, transformers, three-phase circuits.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+  </ItemGroup>
+</Project>

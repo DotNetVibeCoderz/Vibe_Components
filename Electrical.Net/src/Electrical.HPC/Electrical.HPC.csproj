@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>High-performance computing: parallel batch and Monte-Carlo power flow, probabilistic load flow, SIMD kernels and Rust native acceleration with managed fallback.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+    <ProjectReference Include="../Electrical.Native/Electrical.Native.csproj" />
+  </ItemGroup>
+</Project>

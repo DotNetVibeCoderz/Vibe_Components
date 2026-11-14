@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Cloud: study job runner with JSON contracts, ASP.NET Core minimal API endpoints (MapElectricalApi) for power flow, short circuit and contingency, and multi-tenant scenario storage abstractions.</Description>
+    <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+    <ProjectReference Include="../Electrical.ShortCircuit/Electrical.ShortCircuit.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,18 @@
+[package]
+name = "electrical-native"
+version = "1.0.0"
+edition = "2021"
+description = "High-performance native kernels for Electrical.Net (FFT, harmonic analysis, sparse complex power injections, deterministic Monte-Carlo sampling)."
+license = "MIT"
+authors = ["Gravicode Studios (Kang Fadhil)"]
+
+[lib]
+name = "electrical_native"
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

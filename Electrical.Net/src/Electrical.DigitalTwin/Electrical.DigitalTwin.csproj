@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Digital twin: live grid twin synchronised from SCADA measurements via state estimation, what-if simulation, asset health and explained alarms.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.PowerFlow/Electrical.PowerFlow.csproj" />
+    <ProjectReference Include="../Electrical.StateEstimation/Electrical.StateEstimation.csproj" />
+    <ProjectReference Include="../Electrical.SCADA/Electrical.SCADA.csproj" />
+    <ProjectReference Include="../Electrical.Forecasting/Electrical.Forecasting.csproj" />
+  </ItemGroup>
+</Project>

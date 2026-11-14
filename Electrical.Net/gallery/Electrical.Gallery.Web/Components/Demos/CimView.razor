@@ -1,0 +1,52 @@
+@inherits DemoBase
+
+<div class="controls">
+    <Seg Label="@T("Network", "Jaringan")" Options="@CaseOptions(CimScenario.Cases)" Value="@_case" ValueChanged="v => { _case = v; Run(); }" />
+</div>
+
+<Annunciator Items="_r.Kpis" Lang="@Lang" />
+
+<div class="grid two-one">
+    <CodeBlock Code="@_r.Snippet" Language="xml" Class="tall-code" Caption="@($"{_r.Case}.xml · {T("first lines of", "baris pertama dari")} {_r.TotalLines:N0}")" />
+    <div class="stack">
+        <Panel Title="@T("Round-trip check", "Pemeriksaan bolak-balik")" Meta="export → import → power flow">
+            <table class="data compact">
+                <thead><tr><th>@T("Quantity", "Besaran")</th><th class="num">@T("Original", "Asli")</th><th class="num">@T("Imported", "Impor")</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var c in _r.Checks)
+                    {
+                        <tr><td>@T(c.Quantity)</td><td class="num">@c.Original</td><td class="num">@c.Imported</td><td>@if (c.Match) { <span class="state ok">✓</span> } else { <span class="state alarm">≠</span> }</td></tr>
+                    }
+                </tbody>
+            </table>
+            @if (_r.Warnings.Count > 0) { <p class="notice">@string.Join(" ", _r.Warnings)</p> }
+        </Panel>
+        <Panel Title="@T("CGMES profiles", "Profil CGMES")" Meta="ExportProfiles">
+            <table class="data compact">
+                <thead><tr><th>@T("Profile", "Profil")</th><th class="num">@T("Objects", "Objek")</th><th class="num">KiB</th></tr></thead>
+                <tbody>
+                    @foreach (var p in _r.Profiles)
+                    {
+                        <tr><td><strong>@p.Profile</strong> <span class="muted">@ProfileName(p.Profile)</span></td><td class="num">@p.Objects</td><td class="num">@F(p.Bytes / 1024.0, "0.0")</td></tr>
+                    }
+                </tbody>
+            </table>
+        </Panel>
+    </div>
+</div>
+
+<Panel Title="@T("Objects by CIM class", "Objek per kelas CIM")" Meta="@($"{_r.Classes.Count} {T("classes", "kelas")}")">
+    <SvgMarkup Svg="@_r.ClassChartSvg" />
+</Panel>
+
+@code {
+    private string _case = "case14";
+    private CimDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = CimScenario.Run(_case, 70, Lang);
+
+    private string ProfileName(string p) => p switch
+    {
+        "EQ" => T("equipment", "peralatan"), "TP" => T("topology", "topologi"), "SSH" => T("steady-state hypothesis", "hipotesis tunak"), _ => T("state variables", "variabel keadaan"),
+    };
+}

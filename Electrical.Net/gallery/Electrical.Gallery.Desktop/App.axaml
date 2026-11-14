@@ -1,0 +1,14 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Electrical.Gallery.Desktop.App"
+             RequestedThemeVariant="Dark">
+    <!-- Electrical.Net Gallery "control-room mimic" palette lives in Pal.cs (light + dark); fonts are bundled under Assets/Fonts (OFL). -->
+    <Application.Resources>
+        <FontFamily x:Key="Display">avares://Electrical.Gallery.Desktop/Assets/Fonts#Barlow Semi Condensed</FontFamily>
+        <FontFamily x:Key="Body">avares://Electrical.Gallery.Desktop/Assets/Fonts#IBM Plex Sans</FontFamily>
+        <FontFamily x:Key="Mono">avares://Electrical.Gallery.Desktop/Assets/Fonts#IBM Plex Mono</FontFamily>
+    </Application.Resources>
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+</Application>

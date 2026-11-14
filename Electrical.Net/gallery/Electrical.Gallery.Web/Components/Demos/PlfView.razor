@@ -1,0 +1,45 @@
+@inherits DemoBase
+
+<div class="controls">
+    <Seg Label="@T("Test system", "Sistem uji")" Options="@CaseOptions(PlfScenario.Cases)" Value="@_case" ValueChanged="v => { _case = v; Run(); }" />
+    <Seg Label="@T("Samples", "Sampel")" Options="@SampleOptions" Value="@_samples.ToString()" ValueChanged="v => { _samples = int.Parse(v); Run(); }" />
+    <Range Label="@T("Load σ", "σ beban")" Min="0.02" Max="0.25" Step="0.01" Value="_std" Format="0%" ValueChanged="v => { _std = v; Run(); }" />
+</div>
+
+<Annunciator Items="_r.Kpis" Lang="@Lang" />
+
+<div class="grid two">
+    <Panel Title="@T("Losses", "Rugi-rugi")" Meta="@T("distribution over samples", "sebaran atas sampel")"><SvgMarkup Svg="@_r.LossHistogramSvg" /></Panel>
+    <Panel Title="@T("Minimum voltage", "Tegangan minimum")" Meta="@T("lowest bus per sample", "bus terendah per sampel")"><SvgMarkup Svg="@_r.VminHistogramSvg" /></Panel>
+</div>
+
+<div class="grid two-one">
+    <Panel Title="@T("Voltage band per bus", "Pita tegangan per bus")" Meta="@($"P05 · {T("mean", "rata-rata")} · P95")"><SvgMarkup Svg="@_r.VoltageBandSvg" /></Panel>
+    <Panel Title="@T("Under-voltage risk", "Risiko tegangan rendah")" Meta="P(V &lt; Vmin)">
+        <table class="data compact">
+            <thead><tr><th>Bus</th><th class="num">@T("mean", "rata2")</th><th class="num">P05</th><th>@T("risk", "risiko")</th></tr></thead>
+            <tbody>
+                @foreach (var b in _r.Result.Buses.OrderByDescending(b => b.ProbabilityUnderVoltage).ThenBy(b => b.Mean).Take(9))
+                {
+                    <tr>
+                        <td>@b.BusId</td><td class="num">@F(b.Mean, "0.000")</td><td class="num">@F(b.P05, "0.000")</td>
+                        <td class="meter-cell"><span class="meter"><span class="@(b.ProbabilityUnderVoltage > 0.5 ? "over" : b.ProbabilityUnderVoltage > 0.05 ? "high" : "")" style="width:@((100 * b.ProbabilityUnderVoltage).ToString("0.#", CultureInfo.InvariantCulture))%"></span></span> @F(100 * b.ProbabilityUnderVoltage, "0") %</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </Panel>
+</div>
+
+<p class="hint">@T($"Gaussian draws come from the {_r.Backend} kernel; each sample is a warm-started Newton–Raphson solve scheduled with Parallel.For.",
+                   $"Bilangan acak Gauss berasal dari kernel {_r.Backend}; setiap sampel adalah solusi Newton–Raphson warm-start yang dijadwalkan dengan Parallel.For.")</p>
+
+@code {
+    private string _case = "case33bw";
+    private int _samples = 1000;
+    private double _std = 0.10;
+    private PlfDemoResult _r = null!;
+    private static readonly IReadOnlyList<Seg.Option> SampleOptions = [new("250", "250"), new("1000", "1 000"), new("4000", "4 000")];
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = PlfScenario.Run(_case, _samples, _std, Lang);
+}

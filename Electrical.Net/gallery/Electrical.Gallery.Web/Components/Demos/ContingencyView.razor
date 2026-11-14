@@ -1,0 +1,61 @@
+@inherits DemoBase
+
+<div class="controls">
+    <Seg Label="@T("Test system", "Sistem uji")" Options="@CaseOptions(ContingencyScenario.Cases)" Value="@_case" ValueChanged="v => { _case = v; Run(); }" />
+    <Range Label="@T("Load scale", "Skala beban")" Min="0.8" Max="1.4" Step="0.05" Value="_scale" Format="0.00" Unit="×" ValueChanged="v => { _scale = v; Run(); }" />
+</div>
+
+<Annunciator Items="_r.Kpis" Lang="@Lang" />
+@if (_r.RatingsAssumed)
+{
+    <p class="notice">@T("This case has no branch ratings; the demo assumes 140 % of each branch's base-case flow (rounded up to 10 MVA).",
+                         "Kasus ini tidak memiliki rating cabang; demo mengasumsikan 140 % dari aliran kasus dasar tiap cabang (dibulatkan ke 10 MVA).")</p>
+}
+
+<div class="grid two">
+    <Panel Title="@T("Worst post-contingency loading", "Pembebanan terburuk pasca-kontingensi")" Meta="@T("top 12 outages", "12 gangguan teratas")">
+        <SvgMarkup Svg="@_r.ChartSvg" />
+    </Panel>
+    <Panel Title="@T("After the worst outage", "Setelah gangguan terburuk")" Meta="@($"{T("branch", "cabang")} {_r.WorstOutage} {T("out of service", "lepas")}")">
+        <div class="sld-scroll short"><SvgMarkup Svg="@_r.WorstSldSvg" /></div>
+    </Panel>
+</div>
+
+<Panel Title="@T("Contingency ranking", "Peringkat kontingensi")" Meta="@($"{_r.Ranking.Count} {T("outages", "gangguan")} · {F(_r.Milliseconds, "0")} ms")">
+    <div class="table-wrap tall">
+        <table class="data">
+            <thead><tr><th class="num">#</th><th>@T("Outage", "Gangguan")</th><th>@T("Result", "Hasil")</th><th>@T("Max loading", "Pembebanan maks")</th><th>@T("On branch", "Di cabang")</th><th class="num">Vmin pu</th><th class="num">@T("Overloads", "Beban lebih")</th><th class="num">@T("V viol.", "Pelanggaran V")</th><th class="num">@T("Severity", "Keparahan")</th></tr></thead>
+            <tbody>
+                @for (int i = 0; i < _r.Ranking.Count; i++)
+                {
+                    var c = _r.Ranking[i];
+                    <tr>
+                        <td class="num">@(i + 1)</td>
+                        <td><strong>@c.Outage</strong></td>
+                        <td>
+                            @if (c.Islanding) { <span class="state warn">@T("islanding", "pulau")</span> }
+                            else if (!c.Converged) { <span class="state alarm">@T("diverged", "divergen")</span> }
+                            else if (c.Overloads + c.VoltageViolations > 0) { <span class="state alarm">@T("insecure", "tidak aman")</span> }
+                            else { <span class="state ok">@T("secure", "aman")</span> }
+                        </td>
+                        <td class="meter-cell"><span class="meter"><span style="width:@Pct(c.MaxLoadingPercent / 1.5)" class="@(c.MaxLoadingPercent > 100 ? "over" : c.MaxLoadingPercent > 80 ? "high" : "")"></span></span> @F(c.MaxLoadingPercent, "0.0") %</td>
+                        <td>@(c.MostLoadedBranch ?? "—")</td>
+                        <td class="num">@(c.Islanding ? "—" : $"{F(c.MinVoltage, "0.000")} @ {c.MinVoltageBus}")</td>
+                        <td class="num">@c.Overloads</td>
+                        <td class="num">@c.VoltageViolations</td>
+                        <td class="num">@(double.IsInfinity(c.Severity) ? "∞" : F(c.Severity, "0.0"))</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</Panel>
+
+@code {
+    private string _case = "case9";
+    private double _scale = 1.0;
+    private ContingencyDemoResult _r = null!;
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = ContingencyScenario.Run(_case, _scale, Lang);
+    private static string Pct(double v) => Math.Clamp(v, 0, 100).ToString("0.#", CultureInfo.InvariantCulture) + "%";
+}

@@ -13,6 +13,7 @@ Each component is a self-contained folder with its own solution, docs (English a
 | [**AquaCulture.Net**](AquaCulture.Net) | The ultimate open-source aquaculture platform for .NET: species database, water quality (WQI, NH₃, alerts, dosed actions), AquaGrowth engine, feeding and FCR, disease diagnosis, stock assessment (MSY, Kobe, YPR), population dynamics, hydrodynamics and pond oxygen budget, IoT (MQTT, LoRaWAN, Modbus), GIS, AI and LLM AquaAgent, computer vision, reporting (GAP/CBIB/ASC/BAP) and a 3D digital twin. Rust kernels, Blazor and Avalonia/ThreeNet gallery, CLI and templates. | [`AquaCulture.*`](https://www.nuget.org/packages?q=AquaCulture) · 1.0.0 | [![AquaCulture.Net](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/aquaculture-net.yml/badge.svg)](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/aquaculture-net.yml) |
 | [**Blazor.AI**](Blazor.AI) | AI components for Blazor: smart forms, copilots, cited document chat, agents, decision engines, RAG, local models, MediaPipe and 3D. | [`Blazor.AI.*`](https://www.nuget.org/packages?q=Blazor.AI) · 1.2.0 | [![Blazor.AI](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/blazor-ai.yml/badge.svg)](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/blazor-ai.yml) |
 | [**Cesium.Net**](Cesium.Net) | CesiumJS for .NET: 3D globes, maps, terrain, 3D Tiles, time-dynamic data and geospatial analysis from C#, for Blazor and Avalonia. | [`Cesium.Net*`](https://www.nuget.org/packages?q=Cesium.Net) · 1.0.0 | [![Cesium.Net](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/cesium-net.yml/badge.svg)](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/cesium-net.yml) |
+| [**Electrical.Net**](Electrical.Net) | Comprehensive electrical engineering & power-system framework for .NET: sparse power flow (NR/FDLF/GS/DC/sweep), N-1, IEC 60909 short circuit, protection and arc flash, transient/small-signal/voltage stability, harmonics, renewables and hosting capacity, smart grid (reconfiguration, VVO, EV, microgrid, VPP), DC-OPF with LMPs and unit commitment, WLS state estimation, forecasting, QSTS, SCADA (Modbus, IEC 104), IEC 61850 GOOSE/SV, CIM, GIS, digital twin and an AI grid agent. Rust kernels, Blazor and Avalonia gallery, CLI and templates. | [`Electrical.*`](https://www.nuget.org/packages?q=Electrical.Core) · 1.0.0 | [![Electrical.Net](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/electrical-net.yml/badge.svg)](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/electrical-net.yml) |
 | [**GDAL.Net**](GDAL.Net) | GDAL for modern .NET: read, write, convert, reproject and analyse 200+ raster and vector formats, with Rust kernels and Blazor/Avalonia components. | [`Gravicode.GDAL.Net*`](https://www.nuget.org/packages?q=Gravicode.GDAL.Net) · 1.0.0 | [![GDAL.Net](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/gdal-net.yml/badge.svg)](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/gdal-net.yml) |
 | [**GnuRadio.Net**](GnuRadio.Net) | Software-defined radio and DSP for .NET modelled on GNU Radio: flowgraphs, filters, FFT, modulation, FEC, SDR hardware and live instruments. | [`GnuRadio.Net*`](https://www.nuget.org/packages?q=GnuRadio.Net) · 0.1.0 | [![GnuRadio.Net](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/gnuradio-net.yml/badge.svg)](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/gnuradio-net.yml) |
 | [**Medical.Net**](Medical.Net) | Comprehensive medical platform for .NET: FHIR R4 (Firely) with IPS and SATUSEHAT, HL7 v2 (NHapi) with MLLP, DICOM (fo-dicom) with DICOMweb and C-STORE, SNOMED CT / ICD-10 / LOINC / RxNorm, clinical scores, NRules decision support, EF Core EMR, de-identification, ECG/HRV, ML.NET risk models, a Claude-powered clinical assistant and CT haemorrhage screening (MONAI service). Rust kernels, Blazor and Avalonia gallery, CLI and templates. | [`Medical.*`](https://www.nuget.org/packages?q=Medical.Core) · 1.0.0 | [![Medical.Net](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/medical-net.yml/badge.svg)](https://github.com/DotNetVibeCoderz/Vibe_Components/actions/workflows/medical-net.yml) |
@@ -45,6 +46,20 @@ dotnet tool install -g AquaCulture.Cli         # aqua ask "Berapa pakan udang ha
 ```
 
 See the [AquaCulture.Net README](AquaCulture.Net/README.md) ([Bahasa Indonesia](AquaCulture.Net/README.id.md)) and its [documentation](AquaCulture.Net/docs/en/README.md).
+
+## Electrical.Net
+
+<p align="center"><img src="Electrical.Net/assets/icon-512.png" width="96" alt="Electrical.Net logo" /></p>
+
+![Electrical.Net Gallery](Electrical.Net/docs/images/web-home.png)
+
+```bash
+dotnet add package Electrical.PowerFlow        # network model, Newton–Raphson power flow, N-1, PTDF/LODF
+dotnet new install Electrical.Templates        # eln-console / -blazor / -avalonia / -scada / -webapi
+dotnet tool install -g Electrical.Cli          # eln ask "Berapa arus hubung singkat di bus 4?"
+```
+
+See the [Electrical.Net README](Electrical.Net/README.md) ([Bahasa Indonesia](Electrical.Net/README.id.md)) and its [documentation](Electrical.Net/docs/en/README.md).
 
 ## Medical.Net
 

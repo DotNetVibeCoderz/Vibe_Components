@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>AC/DC power flow for Electrical.Net: sparse Newton–Raphson, Gauss–Seidel, fast-decoupled (XB), DC, backward/forward sweep for radial feeders, Q-limit enforcement, ZIP loads, N-1 contingency screening, PTDF/LODF sensitivities.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+  </ItemGroup>
+</Project>

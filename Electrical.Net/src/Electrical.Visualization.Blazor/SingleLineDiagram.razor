@@ -1,0 +1,19 @@
+@* Automatic single-line diagram with optional power-flow overlay (voltage-colored bus bars, loading-colored branches, flow arrows). *@
+<figure class="eln-sld @Class" aria-label="@(Options?.Title ?? Network?.Name)">
+    @((MarkupString)_svg)
+    @if (Caption is not null) { <figcaption>@Caption</figcaption> }
+</figure>
+
+@code {
+    private string _svg = "";
+
+    [Parameter, EditorRequired] public PowerNetwork? Network { get; set; }
+    /// <summary>Solved power flow to overlay (optional).</summary>
+    [Parameter] public PowerFlowResult? Result { get; set; }
+    [Parameter] public SldOptions? Options { get; set; }
+    [Parameter] public string? Caption { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnParametersSet() =>
+        _svg = Network is null ? "" : SldRenderer.Render(Network, Result, Options);
+}

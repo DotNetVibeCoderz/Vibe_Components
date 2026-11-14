@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Protection engineering: IEC 60255 / IEEE C37.112 inverse-time overcurrent curves, relay coordination, distance protection zones, differential protection, fuses, breaker duty and IEEE 1584 arc-flash incident energy.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Core/Electrical.Core.csproj" />
+    <ProjectReference Include="../Electrical.ShortCircuit/Electrical.ShortCircuit.csproj" />
+  </ItemGroup>
+</Project>

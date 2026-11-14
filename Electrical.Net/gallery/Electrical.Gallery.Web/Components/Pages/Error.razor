@@ -1,0 +1,14 @@
+@page "/Error"
+@using System.Diagnostics
+<PageTitle>Error · Electrical.Net Gallery</PageTitle>
+<section class="empty">
+    <h1>Something went wrong / Terjadi kesalahan</h1>
+    <p>The request could not be completed. Reload the page or go back to the overview.</p>
+    @if (!string.IsNullOrEmpty(RequestId)) { <p class="hint">Request ID: <code>@RequestId</code></p> }
+    <a class="btn primary" href="">Overview / Ringkasan</a>
+</section>
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+    private string? RequestId { get; set; }
+    protected override void OnInitialized() => RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}

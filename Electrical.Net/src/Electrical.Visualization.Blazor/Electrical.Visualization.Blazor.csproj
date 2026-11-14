@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <Description>Blazor components for Electrical.Net: single-line diagram with power-flow overlay, line/bar charts, heatmap, phasor diagram, TCC (protection) chart, gauge, KPI card and raw SVG host. Themed with the --eln-* CSS variables.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Electrical.Visualization/Electrical.Visualization.csproj" />
+  </ItemGroup>
+</Project>

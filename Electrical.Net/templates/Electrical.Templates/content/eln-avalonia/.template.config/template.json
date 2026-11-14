@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": [ "Electrical", "Power System", "Desktop", "Avalonia" ],
+  "identity": "Electrical.Templates.Avalonia",
+  "name": "Electrical.Net Single-Line Viewer (Avalonia)",
+  "description": "Avalonia desktop single-line diagram viewer with power-flow overlay.",
+  "shortName": "eln-avalonia",
+  "sourceName": "GridViewer",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" },
+  "symbols": {
+    "case": { "type": "parameter", "datatype": "choice", "choices": [ { "choice": "case9" }, { "choice": "case14" }, { "choice": "case33bw" } ], "defaultValue": "case14", "replaces": "CASE_NAME", "description": "Built-in test network" }
+  }
+}

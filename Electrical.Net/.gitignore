@@ -1,0 +1,13 @@
+bin/
+obj/
+artifacts/
+target/
+*.user
+.vs/
+.idea/
+TestResults/
+*.nupkg
+*.snupkg
+scratch*/
+# native binaries are produced by build/build-native.ps1 and by CI
+src/Electrical.Native/runtimes/

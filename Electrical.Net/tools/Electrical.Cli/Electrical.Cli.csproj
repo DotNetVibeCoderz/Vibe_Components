@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>eln</ToolCommandName>
+    <IsPackable>true</IsPackable>
+    <PackageId>Electrical.Cli</PackageId>
+    <Description>Electrical.Net command-line tool (eln): power flow, N-1 contingency, short circuit, stability, harmonics, protection, dispatch/OPF, state estimation, forecasting, probabilistic load flow, single-line diagrams, GeoJSON/CIM/MATPOWER conversion, Modbus RTU simulator, REST API server and the AI grid agent. Made by Gravicode Studios, led by Kang Fadhil.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
+    <PackageTags>electrical;power-system;power-flow;cli;dotnet-tool;smart-grid</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(ElectricalRoot)assets/icon.png" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="$(ElectricalRoot)PACKAGE.md" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../../src/Electrical.ShortCircuit/Electrical.ShortCircuit.csproj" />
+    <ProjectReference Include="../../src/Electrical.Stability/Electrical.Stability.csproj" />
+    <ProjectReference Include="../../src/Electrical.Harmonic/Electrical.Harmonic.csproj" />
+    <ProjectReference Include="../../src/Electrical.Protection/Electrical.Protection.csproj" />
+    <ProjectReference Include="../../src/Electrical.Circuit/Electrical.Circuit.csproj" />
+    <ProjectReference Include="../../src/Electrical.Optimization/Electrical.Optimization.csproj" />
+    <ProjectReference Include="../../src/Electrical.StateEstimation/Electrical.StateEstimation.csproj" />
+    <ProjectReference Include="../../src/Electrical.Forecasting/Electrical.Forecasting.csproj" />
+    <ProjectReference Include="../../src/Electrical.Renewable/Electrical.Renewable.csproj" />
+    <ProjectReference Include="../../src/Electrical.SmartGrid/Electrical.SmartGrid.csproj" />
+    <ProjectReference Include="../../src/Electrical.Simulation/Electrical.Simulation.csproj" />
+    <ProjectReference Include="../../src/Electrical.AI/Electrical.AI.csproj" />
+    <ProjectReference Include="../../src/Electrical.DigitalTwin/Electrical.DigitalTwin.csproj" />
+    <ProjectReference Include="../../src/Electrical.HPC/Electrical.HPC.csproj" />
+    <ProjectReference Include="../../src/Electrical.Cloud/Electrical.Cloud.csproj" />
+    <ProjectReference Include="../../src/Electrical.SCADA/Electrical.SCADA.csproj" />
+    <ProjectReference Include="../../src/Electrical.CIM/Electrical.CIM.csproj" />
+    <ProjectReference Include="../../src/Electrical.GIS/Electrical.GIS.csproj" />
+    <ProjectReference Include="../../src/Electrical.Visualization/Electrical.Visualization.csproj" />
+  </ItemGroup>
+</Project>

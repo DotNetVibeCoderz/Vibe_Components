@@ -1,0 +1,75 @@
+@inherits DemoBase
+@using Electrical.AI
+
+<div class="agent">
+    <section class="panel chat" aria-live="polite">
+        <header class="panel-head">
+            <h2>@T("Operator console", "Konsol operator")</h2>
+            <span class="panel-meta">@_agent.Model.Name · IEEE 14-bus</span>
+        </header>
+        <div class="panel-body chat-log">
+            @foreach (var m in _log)
+            {
+                <div class="msg @(m.User ? "user" : "bot")">
+                    <div class="msg-who">@(m.User ? T("You", "Anda") : "Electrical.AI")</div>
+                    <div class="msg-text">@m.Text</div>
+                    @if (m.Tools is { Count: > 0 })
+                    {
+                        <div class="chips">@foreach (var t in m.Tools) { <span class="chip">⚙ @t</span> }<span class="chip muted">@m.Language</span></div>
+                    }
+                </div>
+            }
+            @if (_busy) { <div class="msg bot"><div class="msg-who">Electrical.AI</div><div class="msg-text muted">@T("Working…", "Memproses…")</div></div> }
+        </div>
+        <form class="ask" @onsubmit="Send" @onsubmit:preventDefault>
+            <label class="sr-only" for="q">@T("Question", "Pertanyaan")</label>
+            <input id="q" @bind="_q" placeholder="@T("Ask about the grid in English or Bahasa Indonesia…", "Tanyakan tentang jaringan dalam bahasa Inggris atau Indonesia…")" autocomplete="off" />
+            <button class="btn primary" type="submit" disabled="@(_busy || string.IsNullOrWhiteSpace(_q))">@T("Ask", "Tanya")</button>
+        </form>
+    </section>
+
+    <aside class="stack">
+        <Panel Title="@T("Try a prompt", "Coba perintah")" Meta="EN · ID">
+            <div class="prompts">
+                @foreach (var p in AgentScenario.SuggestedPrompts)
+                {
+                    <button class="prompt" disabled="@_busy" @onclick="() => AskAsync(p.En)">@p.En</button>
+                    <button class="prompt id" disabled="@_busy" @onclick="() => AskAsync(p.Id)">@p.Id</button>
+                }
+            </div>
+        </Panel>
+        <Panel Title="@T("Tools", "Alat")" Meta="@($"{_agent.Tools.Count}")">
+            <ul class="tool-list">@foreach (var t in _agent.Tools) { <li><code>@t.Name</code> <span class="muted">@t.Description</span></li> }</ul>
+        </Panel>
+        <p class="hint">@(AgentScenario.LlmConfigured
+            ? T("An LLM endpoint is configured through ELECTRICAL_LLM_* variables.", "Endpoint LLM diatur melalui variabel ELECTRICAL_LLM_*.")
+            : T("Running offline with the rule-based model. Set ELECTRICAL_LLM_* variables to use an LLM.", "Berjalan offline dengan model berbasis aturan. Atur variabel ELECTRICAL_LLM_* untuk memakai LLM."))</p>
+    </aside>
+</div>
+
+@code {
+    private sealed record Line(bool User, string Text, IReadOnlyList<string>? Tools = null, string? Language = null);
+    private readonly List<Line> _log = [];
+    private GridAgent _agent = null!;
+    private string _q = "";
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _agent = AgentScenario.CreateAgent();
+        await AskAsync(T(AgentScenario.SuggestedPrompts[0]));
+    }
+
+    private Task Send() => AskAsync(_q);
+
+    private async Task AskAsync(string q)
+    {
+        if (string.IsNullOrWhiteSpace(q) || _busy) return;
+        _q = "";
+        _busy = true;
+        _log.Add(new Line(true, q));
+        var a = await AgentScenario.AskAsync(_agent, q);
+        _log.Add(new Line(false, a.Text, a.ToolsUsed, a.Language));
+        _busy = false;
+    }
+}

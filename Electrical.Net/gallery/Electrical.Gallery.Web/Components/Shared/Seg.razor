@@ -1,0 +1,27 @@
+@* Segmented control (radio group) used for case / method pickers. *@
+<div class="control">
+    <span class="control-label" id="@_id">@Label</span>
+    <div class="seg" role="radiogroup" aria-labelledby="@_id">
+        @foreach (var o in Options)
+        {
+            <button role="radio" aria-checked="@Aria.B(o.Value == Value)" aria-pressed="@Aria.B(o.Value == Value)" disabled="@o.Disabled" title="@o.Title"
+                    @onclick="() => Pick(o.Value)">@o.Text</button>
+        }
+    </div>
+</div>
+
+@code {
+    public sealed record Option(string Value, string Text, bool Disabled = false, string? Title = null);
+    private readonly string _id = "seg" + Guid.NewGuid().ToString("N")[..8];
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter, EditorRequired] public IReadOnlyList<Option> Options { get; set; } = [];
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    private async Task Pick(string v)
+    {
+        if (v == Value) return;
+        Value = v;
+        await ValueChanged.InvokeAsync(v);
+    }
+}

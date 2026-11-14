@@ -1,0 +1,34 @@
+@* Grid dashboard — built with Electrical.Net (Gravicode Studios, led by Kang Fadhil) *@
+<main class="page">
+    <header>
+        <h1>⚡ GridDashboard</h1>
+        <label>Load scale <input type="range" min="0.5" max="1.6" step="0.05" @bind="scale" @bind:event="oninput" @bind:after="Solve" /> <b>@scale.ToString("0.00")×</b></label>
+    </header>
+    @if (result is not null)
+    {
+        <section class="kpis">
+            <KpiCard Label="Load" Value="@result.TotalLoadMw.ToString("0.0")" Unit="MW" />
+            <KpiCard Label="Losses" Value="@result.LossesMw.ToString("0.00")" Unit="MW" />
+            <KpiCard Label="Min voltage" Value="@result.MinVoltageBus.Vm.ToString("0.000")" Unit="pu" Note="@($"bus {result.MinVoltageBus.BusId}")" />
+            <KpiCard Label="Status" Value="@(result.Converged ? "Converged" : "Diverged")" Note="@($"{result.Iterations} iterations")" />
+        </section>
+        <SingleLineDiagram Network="net" Result="result" Caption="Single-line diagram with power-flow overlay" />
+    }
+    <footer>Made with Electrical.Net — Gravicode Studios, led by Kang Fadhil</footer>
+</main>
+
+@code {
+    private readonly PowerNetwork baseNet = TestCases.ByName("CASE_NAME");
+    private PowerNetwork net = default!;
+    private PowerFlowResult? result;
+    private double scale = 1.0;
+
+    protected override void OnInitialized() => Solve();
+
+    private void Solve()
+    {
+        net = baseNet.Clone();
+        foreach (var l in net.Loads) { l.P *= scale; l.Q *= scale; }
+        result = PowerFlowSolver.Solve(net);
+    }
+}

@@ -1,0 +1,40 @@
+@inherits DemoBase
+
+<div class="controls">
+    <Seg Label="@T("Substations", "Gardu induk")" Options="@SizeOptions" Value="@_size.ToString()" ValueChanged="v => { _size = int.Parse(v); Run(); }" />
+    <Range Label="@T("Load scale", "Skala beban")" Min="0.8" Max="1.8" Step="0.05" Value="_scale" Format="0.00" Unit="×" ValueChanged="v => { _scale = v; Run(); }" />
+    <Seg Label="@T("Colours", "Warna")" Options="@ColorOptions" Value="@ColorValue" ValueChanged="SetColors" />
+</div>
+
+<Annunciator Items="_r.Kpis" Lang="@Lang" />
+
+<div class="grid two-one">
+    <Panel Title="@T("Grid map", "Peta jaringan")" Meta="Web Mercator · West Java (synthetic)" Class="map-panel">
+        <SvgMarkup Svg="@_r.MapSvg" Class="map" />
+    </Panel>
+    <div class="stack">
+        <Panel Title="@T("Weakest buses", "Bus terlemah")" Meta="|V| pu">
+            <ol class="rank">
+                @foreach (var (bus, vm) in _r.WeakestBuses)
+                {
+                    <li><span>B@(bus)</span><span class="meter"><span class="@(vm < 0.95 ? "over" : vm < 0.98 ? "high" : "")" style="width:@Pct((vm - 0.85) / 0.2 * 100)"></span></span><span class="num">@F(vm, "0.000")</span></li>
+                }
+            </ol>
+        </Panel>
+        <CodeBlock Code="@_r.GeoJsonSnippet" Language="json" Class="short-code" Caption="@($"GeoJSON · {_r.GeoJsonFeatures} features · {F(_r.GeoJsonBytes / 1024.0, "0")} KiB")" />
+    </div>
+</div>
+
+@code {
+    private int _size = 49;
+    private double _scale = 1.25;
+    private bool _cont = true;
+    private GisDemoResult _r = null!;
+    private static readonly IReadOnlyList<Seg.Option> SizeOptions = GisScenario.Sizes.Select(s => new Seg.Option(s.ToString(), s.ToString())).ToList();
+    private IReadOnlyList<Seg.Option> ColorOptions => [new("ramp", T("Continuous", "Kontinu")), new("bands", T("Bands", "Pita"))];
+    private string ColorValue => _cont ? "ramp" : "bands";
+    private void SetColors(string v) { _cont = v == "ramp"; Run(); }
+    protected override void OnInitialized() => Run();
+    private void Run() => _r = GisScenario.Run(_size, _scale, _cont, Lang);
+    private static string Pct(double v) => Math.Clamp(v, 0, 100).ToString("0.#", CultureInfo.InvariantCulture) + "%";
+}

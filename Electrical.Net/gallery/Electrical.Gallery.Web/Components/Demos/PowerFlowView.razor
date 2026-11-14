@@ -1,0 +1,86 @@
+@inherits DemoBase
+
+<div class="controls">
+    <Seg Label="@T("Test system", "Sistem uji")" Options="@CaseOptions(GalleryCases.All.Select(c => c.Key))" Value="@_case" ValueChanged="v => { _case = v; Run(); }" />
+    <Seg Label="@T("Method", "Metode")" Options="@MethodOptions" Value="@_method.ToString()" ValueChanged="v => { _method = Enum.Parse<PowerFlowMethod>(v); Run(); }" />
+    <Range Label="@T("Load scale", "Skala beban")" Min="0.6" Max="1.6" Step="0.05" Value="_scale" Format="0.00" Unit="×" ValueChanged="v => { _scale = v; Run(); }" />
+</div>
+
+<Annunciator Items="_r.Kpis" Lang="@Lang" />
+
+<Panel Title="@T("Single-line diagram", "Diagram segaris")" Meta="@($"{_r.Network.Name} · {_r.Network.BusCount} {T("buses", "bus")} · {PowerFlowScenario.Short(_r.Method)}")" Class="sld-panel">
+    <div class="sld-scroll"><SvgMarkup Svg="@_r.SldSvg" /></div>
+    <p class="hint">@T("Bus bars are coloured by voltage, branches by loading; arrows show active-power flow. Hover for values.",
+                       "Rel diwarnai menurut tegangan, cabang menurut pembebanan; panah menunjukkan aliran daya aktif. Arahkan kursor untuk nilai.")</p>
+</Panel>
+
+<div class="grid two">
+    <Panel Title="@T("Voltage profile", "Profil tegangan")" Meta="|V| pu">
+        <SvgMarkup Svg="@_r.VoltageSvg" />
+    </Panel>
+    <Panel Title="@T("Convergence", "Konvergensi")" Meta="@T("mismatch per iteration", "mismatch per iterasi")">
+        <SvgMarkup Svg="@_r.ConvergenceSvg" />
+    </Panel>
+</div>
+
+<Panel Title="@T("Method comparison", "Perbandingan metode")" Meta="@T("same operating point", "titik operasi yang sama")">
+    <div class="table-wrap">
+        <table class="data">
+            <thead><tr><th>@T("Method", "Metode")</th><th>@T("Status", "Status")</th><th class="num">@T("Iterations", "Iterasi")</th><th class="num">ms</th><th class="num">@T("Losses MW", "Rugi MW")</th><th class="num">Vmin pu</th><th>@T("Note", "Catatan")</th></tr></thead>
+            <tbody>
+                @foreach (var m in _r.Methods)
+                {
+                    <tr class="@(m.Method == _r.Method ? "selected" : "")">
+                        <td><strong>@m.Label</strong> <span class="muted">@T(PowerFlowScenario.MethodNames.First(x => x.Method == m.Method).Name)</span></td>
+                        <td>
+                            @if (!m.Applicable) { <span class="state na">N/A</span> }
+                            else if (m.Converged) { <span class="state ok">@T("converged", "konvergen")</span> }
+                            else { <span class="state alarm">@T("diverged", "divergen")</span> }
+                        </td>
+                        <td class="num">@(m.Applicable ? m.Iterations.ToString() : "—")</td>
+                        <td class="num">@(m.Applicable ? F(m.Milliseconds, "0.00") : "—")</td>
+                        <td class="num">@F(m.LossesMw, "0.000")</td>
+                        <td class="num">@(m.Applicable ? $"{F(m.MinVm, "0.0000")} @ {m.MinVmBus}" : "—")</td>
+                        <td class="muted">@(m.Note is { } n ? T(n) : "")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</Panel>
+
+<details class="panel fold">
+    <summary>@T("Bus results", "Hasil per bus") <span class="muted">(@_r.Result.Buses.Count)</span></summary>
+    <div class="table-wrap">
+        <table class="data compact">
+            <thead><tr><th>Bus</th><th>@T("Type", "Tipe")</th><th class="num">|V| pu</th><th class="num">θ °</th><th class="num">Pg MW</th><th class="num">Qg Mvar</th><th class="num">Pd MW</th><th class="num">Qd Mvar</th></tr></thead>
+            <tbody>
+                @foreach (var b in _r.Result.Buses)
+                {
+                    <tr>
+                        <td>@b.BusId</td><td>@b.Type</td><td class="num @(b.Vm < 0.95 || b.Vm > 1.05 ? "warn-text" : "")">@F(b.Vm, "0.0000")</td><td class="num">@F(b.VaDeg, "0.00")</td>
+                        <td class="num">@F(b.PGen, "0.00")</td><td class="num">@F(b.QGen, "0.00")</td><td class="num">@F(b.PLoad, "0.00")</td><td class="num">@F(b.QLoad, "0.00")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</details>
+
+@code {
+    private string _case = "case14";
+    private double _scale = 1.0;
+    private PowerFlowMethod _method = PowerFlowMethod.NewtonRaphson;
+    private PowerFlowDemoResult _r = null!;
+
+    private IReadOnlyList<Seg.Option> MethodOptions => PowerFlowScenario.MethodNames
+        .Select(m => new Seg.Option(m.Method.ToString(), m.Short, m.Method == PowerFlowMethod.BackwardForwardSweep && !_r.Radial, T(m.Name))).ToList();
+
+    protected override void OnInitialized() => Run();
+
+    private void Run()
+    {
+        _r = PowerFlowScenario.Run(_case, _scale, _method, Lang);
+        _method = _r.Method;
+    }
+}

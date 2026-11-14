@@ -1,0 +1,14 @@
+@* Log-log time-current characteristic chart for protection coordination. *@
+<figure class="eln-chart eln-tcc @Class" aria-label="@Options?.Title">
+    @((MarkupString)SvgCharts.Tcc(Curves, Markers, Options))
+    @if (Caption is not null) { <figcaption>@Caption</figcaption> }
+</figure>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<TccCurve> Curves { get; set; } = [];
+    /// <summary>Vertical current markers (e.g. maximum fault current).</summary>
+    [Parameter] public IReadOnlyList<TccMarker>? Markers { get; set; }
+    [Parameter] public TccOptions? Options { get; set; }
+    [Parameter] public string? Caption { get; set; }
+    [Parameter] public string? Class { get; set; }
+}
