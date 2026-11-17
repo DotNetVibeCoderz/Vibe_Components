@@ -1,8 +1,14 @@
 using System.Diagnostics;
 using GeoPandas.Net.AI;
 using GeoPandas.Net.Analytics;
+using GeoPandas.Net.Arrow;
 using GeoPandas.Net.CAD;
+using GeoPandas.Net.Data;
+using GeoPandas.Net.Data.Versioning;
 using GeoPandas.Net.Datasets;
+using GeoPandas.Net.Lazy;
+using GeoPandas.Net.PointCloud;
+using GeoPandas.Net.Versioning;
 using GeoPandas.Net.Geometry;
 using GeoPandas.Net.Network;
 using GeoPandas.Net.Plotting;
@@ -54,6 +60,7 @@ public static class GalleryCatalog
     public static IReadOnlyList<GalleryCategory> Categories { get; } =
     [
         new("gis", new("GIS & vector", "GIS & vektor"), "◇"),
+        new("data", new("Data & formats", "Data & format"), "⧉"),
         new("stats", new("Spatial statistics", "Statistik spasial"), "∴"),
         new("network", new("Networks", "Jaringan"), "⋈"),
         new("raster", new("Raster & terrain", "Raster & terrain"), "▦"),
@@ -470,6 +477,163 @@ public static class GalleryCatalog
                 return new(scene, plan.GroupBy("layer").Size(), [F("Entities", "Entitas", plan.RowCount.ToString()), F("Rotation", "Rotasi", $"{georef.RotationDegrees:F1}°"), F("Scale", "Skala", $"{georef.Scale:F3}")], default);
             }),
 
+        // ---------------------------------------------------------------- Data & formats (Phase 2)
+        new("flatgeobuf", "data", new("FlatGeobuf: Hilbert R-tree bbox read", "FlatGeobuf: baca bbox via Hilbert R-tree"),
+            new("Write 1 500 points to FlatGeobuf with a packed Hilbert R-tree, then read only one window. The blue line follows the row order in the file — the Hilbert curve that keeps neighbours together on disk.",
+                "Tulis 1 500 titik ke FlatGeobuf dengan packed Hilbert R-tree, lalu baca satu jendela saja. Garis biru mengikuti urutan baris di file — kurva Hilbert yang menjaga tetangga tetap berdekatan di disk."),
+            """
+            pois.ToFile("pois.fgb");                                 // packed Hilbert R-tree
+            var window = new Envelope(700_500, 703_500, 9_309_500, 9_312_500);
+            var hits = FlatGeobuf.Read("pois.fgb", bbox: window);   // memory-mapped: index nodes + matching features only
+            var info = FlatGeobuf.ReadInfo("pois.fgb");             // header: count, CRS, index node size
+            """,
+            () =>
+            {
+                var pts = SampleData.PointsOfInterest(1500, 21);
+                var path = TempFile("pois.fgb");
+                FlatGeobuf.Write(pts, path);
+                var ordered = FlatGeobuf.Read(path);
+                var c = ordered.TotalBounds.Centre;
+                var window = new Envelope(c.X - 1500, c.X + 1500, c.Y - 1500, c.Y + 1500);
+                var sw = Stopwatch.StartNew();
+                var hits = FlatGeobuf.Read(path, window);
+                var ms = sw.Elapsed.TotalMilliseconds;
+                var curve = Geo.LineString(ordered.Geometry.Select(g => g!.Coordinate));
+                var scene = Scene().AddLayer(Districts, Base)
+                    .AddLayer(new GeoSeries([curve], pts.Crs), new LayerStyle { Fill = null, Stroke = "#2f6f9f", StrokeWidth = 0.6, LegendTitle = "File order (Hilbert)" }, "Hilbert order")
+                    .AddLayer(ordered, new LayerStyle { Fill = "#9aa79a", PointRadius = 1.6, Stroke = null, ShowInLegend = false })
+                    .AddLayer(new GeoSeries([Geo.Box(window.MinX, window.MinY, window.MaxX, window.MaxY)], pts.Crs), new LayerStyle { Fill = null, Stroke = "#b0306a", StrokeWidth = 2, DashArray = [6, 4], LegendTitle = "Query window" }, "Window")
+                    .AddLayer(hits, new LayerStyle { Fill = "#b0306a", PointRadius = 3, Stroke = "#ffffff", StrokeWidth = 0.6, LegendTitle = "Features read" }, "Read");
+                var info = FlatGeobuf.ReadInfo(path);
+                var table = new DataFrame(
+                    Column.Create("property", new[] { "features", "geometry type", "CRS", "index node size", "header bytes", "index bytes", "file bytes" }),
+                    Column.Create("value", new[] { info.FeatureCount.ToString(), info.GeometryType, info.Crs?.ToString() ?? "-", info.IndexNodeSize.ToString(), info.HeaderSize.ToString("N0"), info.IndexSize.ToString("N0"), new FileInfo(path).Length.ToString("N0") }));
+                return new(scene, table, [F("Read / total", "Dibaca / total", $"{hits.RowCount} / {info.FeatureCount}"), F("Bbox read", "Baca bbox", $"{ms:F2} ms")], default);
+            }),
+
+        new("lazy", "data", new("Lazy GeoParquet query with pushdown", "Kueri GeoParquet lazy dengan pushdown"),
+            new("A LazyGeoDataFrame plan over GeoParquet: the bbox prunes row groups through the bbox covering column, only the selected columns are decoded and the attribute filter runs inside the reader.",
+                "Rencana LazyGeoDataFrame atas GeoParquet: bbox memangkas row group lewat kolom bbox covering, hanya kolom terpilih yang didekode dan filter atribut dijalankan di dalam reader."),
+            """
+            roads.ToFile("roads.parquet");                    // GeoParquet 1.1, bbox covering, row groups
+            var plan = Gpd.Scan("roads.parquet")
+                .FilterBbox(window)
+                .Where("highway", CompareOp.Ne, "residential")
+                .Select("name", "highway");
+            Console.WriteLine(plan.Explain());                 // what was pushed into the reader
+            var mainRoads = plan.Collect();
+            """,
+            () =>
+            {
+                var path = TempFile("roads.parquet");
+                GeoParquet.Write(Roads, path, new GeoParquetWriteOptions { RowGroupSize = 24 });
+                var b = Roads.TotalBounds;
+                var window = new Envelope(b.MinX + b.Width * 0.15, b.MinX + b.Width * 0.7, b.MinY + b.Height * 0.2, b.MinY + b.Height * 0.85);
+                var counter = new CountingSource(GeoParquet.ScanSource(path));
+                var plan = LazyGeoDataFrame.From(counter).FilterBbox(window).Where("highway", CompareOp.Ne, "residential").Select("name", "highway");
+                var res = plan.Collect();
+                var scene = Scene().AddLayer(Districts, Base).AddLayer(Roads, RoadStyle with { Stroke = "#c3cbc2", ShowInLegend = false })
+                    .AddLayer(new GeoSeries([Geo.Box(window.MinX, window.MinY, window.MaxX, window.MaxY)], Roads.Crs), new LayerStyle { Fill = null, Stroke = "#b0306a", StrokeWidth = 2, DashArray = [6, 4], LegendTitle = "FilterBbox" }, "Window")
+                    .AddLayer(res, new LayerStyle { Column = "highway", Categorical = true, StrokeWidth = 2.2, LegendTitle = "Result (highway)" });
+                var lines = plan.Explain().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                var table = new DataFrame(Column.Create("plan", lines));
+                var info = GeoParquet.ReadInfo(path);
+                return new(scene, table, [F("Row groups", "Row group", info.RowGroups.ToString()), F("Rows decoded", "Baris didekode", $"{counter.RowsRead} / {info.Rows}"), F("Rows returned", "Baris hasil", res.RowCount.ToString())], default);
+            }),
+
+        new("versioning", "data", new("Dataset versioning: what changed?", "Versi dataset: apa yang berubah?"),
+            new("Commit two versions of the district layer to a content-addressed repository and diff them by key: added, removed and modified districts, with the columns that changed.",
+                "Commit dua versi layer distrik ke repositori berbasis konten lalu bandingkan per kunci: distrik yang ditambah, dihapus dan diubah, lengkap dengan kolom yang berubah."),
+            """
+            var repo = DatasetRepository.Open("districts.repo", key: "district_id");
+            repo.Commit(districts, "Initial import");
+            repo.Commit(edited, "2026 boundary review");
+            var diff = repo.Diff("HEAD~1", "HEAD");        // +1 added, -1 removed, ~3 modified
+            diff.ToChangeFrame().Plot(new LayerStyle { Column = "_change", Categorical = true });
+            """,
+            () =>
+            {
+                var dir = TempDir("districts.repo");
+                var repo = DatasetRepository.Open(dir, key: "district_id");
+                var v1 = Districts;
+                repo.Commit(v1, "Initial import", "gallery");
+                int i4 = Enumerable.Range(0, v1.RowCount).First(i => v1["district_id"].GetDouble(i) == 4);
+                int i5 = Enumerable.Range(0, v1.RowCount).First(i => v1["district_id"].GetDouble(i) == 5);
+                var merged = v1.Geometry[i4]!.Union(v1.Geometry[i5]!);
+                var keep = Enumerable.Range(0, v1.RowCount).Where(i => i != i5).ToArray();
+                var edited = v1.Take(keep);
+                edited = edited.WithGeometry(new GeoSeries(keep.Select(i => i == i4 ? merged : v1.Geometry[i]), v1.Crs))
+                    .WithColumn<long>("population", r => r.Get<long>("district_id") is 9 or 17 ? (long)(r.Get<long>("population") * 1.18) : r.Get<long>("population"));
+                var added = v1.Take([0]).WithColumn(Column.Create("district_id", new long[] { 33 })).WithColumn(Column.Create("name", new string?[] { "Nusantara Baru" }))
+                    .WithGeometry(new GeoSeries([v1.Geometry[0]!.Buffer(-250)], v1.Crs));
+                edited = GeoDataFrame.Concat(edited, added);
+                repo.Commit(edited, "2026 boundary review", "gallery");
+                var diff = repo.Diff("HEAD~1", "HEAD");
+                var change = (GeoDataFrame)diff.ToChangeFrame();
+                GeoDataFrame Kind(string k) => change.Filter<string?>("_change", c => c == k);
+                var scene = Scene().AddLayer(edited, Base)
+                    .AddLayer(Kind("modified"), new LayerStyle { Fill = "#9a6b3f", FillOpacity = 0.7, Stroke = "#1b2a33", StrokeWidth = 1, LabelColumn = "name", LegendTitle = "Modified" }, "Modified")
+                    .AddLayer(Kind("added"), new LayerStyle { Fill = "#2f6f9f", FillOpacity = 0.8, Stroke = "#1b2a33", StrokeWidth = 1, LabelColumn = "name", LegendTitle = "Added" }, "Added")
+                    .AddLayer(Kind("removed"), new LayerStyle { Fill = "#b0306a", FillOpacity = 0.55, Stroke = "#b0306a", StrokeWidth = 2, DashArray = [5, 3], LabelColumn = "name", LegendTitle = "Removed (old outline)" }, "Removed");
+                var log = repo.Log();
+                var table = new DataFrame(
+                    Column.Create("commit", log.Select(c => c.ShortId).ToArray()), Column.Create("message", log.Select(c => c.Message).ToArray()),
+                    Column.Create("rows", log.Select(c => (long)c.Rows).ToArray()), Column.Create("summary", log.Select(c => c.Summary ?? "initial").ToArray()));
+                return new(scene, table, [F("Diff", "Selisih", diff.Summary), F("Changed columns", "Kolom berubah", string.Join(", ", diff.Modified.SelectMany(m => m.ChangedColumns).Distinct()))], default);
+            }),
+
+        new("lidar", "rs", new("LiDAR: canopy & building heights", "LiDAR: tinggi kanopi & bangunan"),
+            new("Read a classified LAS tile, grid a DSM (highest return) and a DTM (ground class), and subtract them into a normalised height model (nDSM).",
+                "Baca tile LAS terklasifikasi, buat DSM (pantulan tertinggi) dan DTM (kelas ground), lalu kurangkan menjadi model tinggi ternormalisasi (nDSM)."),
+            """
+            var cloud = Las.Read("tile.las");                       // memory-mapped; LAS formats 0–10, LAZ 0–5
+            var dsm = cloud.Dsm(cellSize: 2);
+            var dtm = cloud.Dtm(cellSize: 2);                        // ground = class 2, gaps filled
+            var ndsm = Raster.Combine(dsm, dtm, (s, t) => s - t);    // height above ground
+            var buildings = cloud.ByClass(LasClass.Building);
+            """,
+            () =>
+            {
+                var path = TempFile("tile.las");
+                Las.Write(SampleData.LidarTile(density: 3), path);
+                var cloud = Las.Read(path);
+                var dsm = cloud.Dsm(2);
+                var dtm = cloud.Dtm(2);
+                var ndsm = RasterGrid.Combine(dsm, dtm, (s, t) => float.IsNaN(s) || float.IsNaN(t) ? float.NaN : Math.Max(0, s - t));
+                var shade = Terrain.Hillshade(dsm, 315, 45);
+                var scene = Scene().AddRaster(ndsm, ColorMaps.Viridis, legendTitle: "Height above ground (m)").AddHillshade(shade, 0.35);
+                var counts = cloud.ClassCounts();
+                var table = new DataFrame(Column.Create("class", counts.Select(c => (long)c.Class).ToArray()), Column.Create("name", counts.Select(c => c.Name).ToArray()),
+                    Column.Create("points", counts.Select(c => (long)c.Count).ToArray()));
+                var info = cloud.Source!;
+                return new(scene, table, [F("Points", "Titik", cloud.Count.ToString("N0")), F("LAS", "LAS", $"{info.Version} format {info.PointFormat}"), F("Tallest", "Tertinggi", $"{ndsm.Statistics().Max:F1} m")], default);
+            }),
+
+        new("netcdf", "rs", new("NetCDF climate grid (CF conventions)", "Grid iklim NetCDF (konvensi CF)"),
+            new("Write a 3-hourly 2 m temperature series as CF-1.8 NetCDF, reopen it, decode the time axis and map one step over the archipelago with its main cities.",
+                "Tulis seri suhu 2 m per 3 jam sebagai NetCDF CF-1.8, buka kembali, dekode sumbu waktu dan petakan satu langkah di atas kepulauan beserta kota-kota utamanya."),
+            """
+            using var nc = NetCdfDataset.Open("t2m.nc");            // CDF-1/2/5 and NetCDF-4 (HDF5)
+            var times = nc.Times();                                  // "seconds since …" → DateTime
+            var step = nc.ToRaster("t2m", 2).Map(k => k - 273.15f);  // north-up WGS 84 grid, Kelvin → °C
+            """,
+            () =>
+            {
+                var (grid, times) = SampleData.ClimateGrid(6);
+                var path = TempFile("t2m.nc");
+                NetCdf.WriteClassic(grid, path, "t2m", times, "K", "2 m air temperature");
+                using var nc = NetCdfDataset.Open(path);
+                var t = nc.Times()!;
+                var step = nc.ToRaster("t2m", 2).Map(k => k - 273.15f);
+                var cities = SampleData.Cities().Cx(95, -11, 141, 6);
+                var scene = Scene().AddRaster(step, ColorMaps.Spectral.Reversed(), legendTitle: $"°C at {t[2]:HH:mm} UTC")
+                    .AddLayer(cities, new LayerStyle { Fill = "#1b2a33", PointRadius = 3.5, Stroke = "#ffffff", StrokeWidth = 1, LabelColumn = "name", ShowInLegend = false });
+                var v = nc.Variable("t2m");
+                var table = new DataFrame(Column.Create("dimension", v.Dimensions.ToArray()), Column.Create("length", v.Shape.ToArray()));
+                var stats = step.Statistics();
+                return new(scene, table, [F("Format", "Format", nc.Format), F("Time steps", "Langkah waktu", $"{t.Length} ({t[0]:dd MMM HH:mm} → {t[^1]:HH:mm})"), F("Range", "Rentang", $"{stats.Min:F1} – {stats.Max:F1} °C")], default);
+            }),
+
         // ---------------------------------------------------------------- AI
         new("geollm", "ai", new("GeoLLM: ask your map", "GeoLLM: tanya peta Anda"),
             new("An LLM turns a natural-language question into a whitelisted query plan that GeoPandas.Net executes — no generated code is ever run. This preview replays a recorded plan offline.",
@@ -496,4 +660,34 @@ public static class GalleryCatalog
                 return new(scene, steps, [F("Model", "Model", "gpt-5-mini (recorded)"), F("Rows returned", "Baris hasil", res.RowCount.ToString())], default);
             }),
     ];
+
+    private static string TempDir(string name)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "gpd-gallery", name);
+        if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    private static string TempFile(string name)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "gpd-gallery");
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, name);
+    }
+
+    /// <summary>Wraps a scan source to count the rows the reader actually decoded.</summary>
+    private sealed class CountingSource(IGeoScanSource inner) : IGeoScanSource
+    {
+        public long RowsRead;
+        public string Name => inner.Name;
+        public CoordinateReferenceSystem? Crs => inner.Crs;
+        public IReadOnlyList<string> ColumnNames => inner.ColumnNames;
+        public long? RowCountHint => inner.RowCountHint;
+        public ScanPushdown Pushdown => inner.Pushdown;
+        public IEnumerable<GeoDataFrame> Scan(ScanRequest request)
+        {
+            foreach (var b in inner.Scan(request)) { RowsRead += b.RowCount; yield return b; }
+        }
+    }
 }

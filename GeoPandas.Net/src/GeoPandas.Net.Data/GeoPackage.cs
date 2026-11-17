@@ -90,7 +90,7 @@ public static class GeoPackage
         return res;
     }
 
-    private static CoordinateReferenceSystem? ReadCrs(SqliteConnection con, int srsId)
+    internal static CoordinateReferenceSystem? ReadCrs(SqliteConnection con, int srsId)
     {
         if (srsId <= 0) return srsId == 0 ? CoordinateReferenceSystem.Wgs84 : null;
         using var cmd = con.CreateCommand();
@@ -265,5 +265,137 @@ public static class GeoPackage
         c.Transaction = tx;
         c.CommandText = sql;
         c.ExecuteNonQuery();
+    }
+}
+
+/// <summary>
+/// Lazy scan source over a GeoPackage layer: column pruning and LIMIT in SQL, bbox through the layer's
+/// <c>rtree_&lt;table&gt;_&lt;geom&gt;</c> index when present (GDAL/QGIS create it) and the envelope in each geometry header.
+/// </summary>
+public sealed class GeoPackageScanSource : Lazy.IGeoScanSource
+{
+    private readonly string _path;
+    private readonly string _layer;
+    private readonly string _geomCol;
+    private readonly string? _pk;
+    private readonly bool _hasRtree;
+    private readonly long _count;
+    private readonly int _srsId;
+
+    public GeoPackageScanSource(string path, string? layer = null)
+    {
+        _path = path;
+        using var con = Open(path);
+        _layer = layer ?? GeoPackage.ListLayers(path).FirstOrDefault() ?? throw new InvalidDataException("GeoPackage has no feature layers.");
+        using (var cmd = con.CreateCommand())
+        {
+            cmd.CommandText = "SELECT column_name, srs_id FROM gpkg_geometry_columns WHERE table_name = $t";
+            cmd.Parameters.AddWithValue("$t", _layer);
+            using var r = cmd.ExecuteReader();
+            if (!r.Read()) throw new InvalidDataException($"Layer '{_layer}' has no geometry column entry.");
+            _geomCol = r.GetString(0);
+            _srsId = r.GetInt32(1);
+        }
+        var cols = new List<string>();
+        using (var cmd = con.CreateCommand())
+        {
+            cmd.CommandText = $"PRAGMA table_info({Q(_layer)})";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                var name = r.GetString(1);
+                if (r.GetInt32(5) > 0) _pk ??= name;
+                if (!name.Equals(_geomCol, StringComparison.OrdinalIgnoreCase)) cols.Add(name);
+            }
+        }
+        ColumnNames = cols;
+        using (var cmd = con.CreateCommand())
+        {
+            cmd.CommandText = "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = $n";
+            cmd.Parameters.AddWithValue("$n", $"rtree_{_layer}_{_geomCol}");
+            _hasRtree = Convert.ToInt64(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) > 0 && _pk is not null;
+        }
+        using (var cmd = con.CreateCommand())
+        {
+            cmd.CommandText = $"SELECT count(*) FROM {Q(_layer)}";
+            _count = Convert.ToInt64(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+        }
+        Crs = GeoPackage.ReadCrs(con, _srsId);
+    }
+
+    private static Microsoft.Data.Sqlite.SqliteConnection Open(string path)
+    {
+        var con = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = path, Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly, Pooling = false }.ToString());
+        con.Open();
+        return con;
+    }
+
+    private static string Q(string s) => "\"" + s.Replace("\"", "\"\"") + "\"";
+
+    public string Name => $"GeoPackage '{System.IO.Path.GetFileName(_path)}' layer '{_layer}' ({_count} rows, {(_hasRtree ? "R-tree index" : "no R-tree")})";
+    public CoordinateReferenceSystem? Crs { get; }
+    public IReadOnlyList<string> ColumnNames { get; }
+    public long? RowCountHint => _count;
+    public Lazy.ScanPushdown Pushdown => Lazy.ScanPushdown.Bbox | Lazy.ScanPushdown.ExactBbox | Lazy.ScanPushdown.Columns | Lazy.ScanPushdown.Limit;
+
+    public IEnumerable<GeoDataFrame> Scan(Lazy.ScanRequest request)
+    {
+        using var con = Open(_path);
+        var cols = (request.Columns ?? ColumnNames).ToArray();
+        using var cmd = con.CreateCommand();
+        var sql = new System.Text.StringBuilder($"SELECT {Q(_geomCol)}{string.Concat(cols.Select(c => ", " + Q(c)))} FROM {Q(_layer)}");
+        if (request.Bbox is { } b && _hasRtree)
+        {
+            sql.Append($" WHERE {Q(_pk!)} IN (SELECT id FROM {Q($"rtree_{_layer}_{_geomCol}")} WHERE minx <= $maxx AND maxx >= $minx AND miny <= $maxy AND maxy >= $miny)");
+            cmd.Parameters.AddWithValue("$minx", b.MinX); cmd.Parameters.AddWithValue("$maxx", b.MaxX);
+            cmd.Parameters.AddWithValue("$miny", b.MinY); cmd.Parameters.AddWithValue("$maxy", b.MaxY);
+        }
+        if (request.Limit is { } lim && request.Bbox is null) sql.Append($" LIMIT {lim}");
+        cmd.CommandText = sql.ToString();
+        using var r = cmd.ExecuteReader();
+        long produced = 0, max = request.Limit ?? long.MaxValue;
+        var values = cols.Select(_ => new List<object?>()).ToArray();
+        var geoms = new List<NtsGeometry?>();
+        while (r.Read() && produced < max)
+        {
+            NtsGeometry? g = null;
+            if (!r.IsDBNull(0))
+            {
+                var blob = (byte[])r.GetValue(0);
+                if (request.Bbox is { } box && HeaderEnvelope(blob) is { } he && !he.Intersects(box)) continue;
+                g = GeoPackage.DecodeGeometry(blob);
+                if (request.Bbox is { } box2 && (g is null || !g.EnvelopeInternal.Intersects(box2))) continue;
+            }
+            else if (request.Bbox is not null) continue;
+            geoms.Add(g);
+            for (int i = 0; i < cols.Length; i++) values[i].Add(r.IsDBNull(i + 1) ? null : r.GetValue(i + 1));
+            produced++;
+            if (geoms.Count >= request.BatchSize)
+            {
+                yield return Build(cols, values, geoms);
+                values = cols.Select(_ => new List<object?>()).ToArray();
+                geoms = [];
+            }
+        }
+        if (geoms.Count > 0) yield return Build(cols, values, geoms);
+    }
+
+    private GeoDataFrame Build(string[] cols, List<object?>[] values, List<NtsGeometry?> geoms)
+    {
+        var list = new List<Column>();
+        for (int i = 0; i < cols.Length; i++) list.Add(Column.FromObjects(cols[i], values[i]));
+        list.Add(new GeoSeries(GeoDataFrame.DefaultGeometryColumn, geoms.ToArray(), Crs));
+        return new GeoDataFrame(list);
+    }
+
+    /// <summary>Envelope from the GeoPackage binary header without parsing WKB (null when the header has none).</summary>
+    internal static Envelope? HeaderEnvelope(byte[] blob)
+    {
+        if (blob.Length < 8 || blob[0] != 'G' || blob[1] != 'P') return null;
+        int ind = (blob[3] >> 1) & 0x07;
+        if (ind == 0 || blob.Length < 40) return null;
+        bool le = (blob[3] & 1) != 0;
+        double D(int o) => le ? BinaryPrimitives.ReadDoubleLittleEndian(blob.AsSpan(o)) : BinaryPrimitives.ReadDoubleBigEndian(blob.AsSpan(o));
+        return new Envelope(D(8), D(16), D(24), D(32));
     }
 }

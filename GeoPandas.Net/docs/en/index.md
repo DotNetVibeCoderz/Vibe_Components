@@ -6,6 +6,7 @@
 |---|---|
 | [Getting started](getting-started.md) | Install, first GeoDataFrame, reading/writing files, first map |
 | [Vector data, CRS & IO](vector.md) | `DataFrame`/`GeoSeries`/`GeoDataFrame`, spatial joins, overlay, dissolve, CRS engine, file formats, plotting |
+| [Formats, databases, lazy & versioning](data.md) | FlatGeobuf, GeoParquet, Arrow, NetCDF, LAS/LAZ, PostGIS/SQL Server/DuckDB/Oracle/BigQuery, `LazyGeoDataFrame`, `DatasetRepository` |
 | [Analysis](analysis.md) | Spatial statistics, clustering, interpolation, networks & routing, raster & terrain, hydrology, remote sensing |
 | [CAD & AI integrations](integrations.md) | DXF ⇄ GIS, georeferencing, GeoLLM assistant |
 | [Tools](tools.md) | `gpd` CLI, gallery apps, `dotnet new` templates, benchmarks |
@@ -34,3 +35,10 @@
 | `gdf.plot(column="c", cmap="viridis")` | `gdf.Plot(new LayerStyle { Column = "c", ColorMap = ColorMaps.Viridis })` |
 | `df.groupby("k").agg(...)` | `df.GroupBy("k").Agg(("col", AggFunc.Sum, "out"))` |
 | `df.merge(other, on="k", how="left")` | `df.Merge(other, "k", JoinHow.Left)` |
+| `gpd.read_file(p, bbox=b)` | `FlatGeobuf.Read(p, bbox)` / `Gpd.Scan(p).FilterBbox(b).Collect()` |
+| `gpd.read_parquet(p)` / `gdf.to_parquet(p)` | `GeoParquet.Read(p)` / `GeoParquet.Write(gdf, p)` |
+| `gpd.read_feather(p)` / `gdf.to_arrow()` | `ArrowInterop.ReadGeoArrowFile(p)` / `gdf.ToRecordBatch()` |
+| `gpd.read_postgis(sql, con)` / `gdf.to_postgis(name, con)` | `SpatialSql.ReadSql(con, sql)` / `gdf.ToSql(con, name)` |
+| `dask_geopandas.read_parquet(...)` (lazy) | `Gpd.Scan(p)…Collect()` |
+| `xarray.open_dataset("x.nc")` | `NetCdfDataset.Open("x.nc").ToRaster(var, t)` |
+| `laspy.read("x.laz")` | `Las.Read("x.laz")` |

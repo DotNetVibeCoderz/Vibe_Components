@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.Sql.BigQuery</RootNamespace>
+    <Description>GeoPandas.Net for Google BigQuery GIS: run GEOGRAPHY queries into GeoDataFrames and load GeoDataFrames into BigQuery tables (Google.Cloud.BigQuery.V2).</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Sql\GeoPandas.Net.Sql.csproj" />
+    <PackageReference Include="Google.Cloud.BigQuery.V2" />
+  </ItemGroup>
+</Project>

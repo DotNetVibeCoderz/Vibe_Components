@@ -21,7 +21,11 @@ dotnet tool install -g GeoPandas.Net.Cli        # or: dotnet run --project tools
 | `gpd transform <from> <to> <x> <y>` | Transform one coordinate |
 | `gpd route <lines> --from x,y --to x,y [--cost col] [--oneway col] [--out f]` | Shortest path (A*) |
 | `gpd raster info\|slope\|aspect\|hillshade\|fill\|flowacc\|contours\|ndvi\|plot …` | Raster tools |
-| `gpd sample <districts\|roads\|pois\|water\|cities\|siteplan\|dem\|multispectral> <out>` | Export sample data |
+| `gpd scan <file> [--bbox x0,y0,x1,y1] [--where "c>=v and d=x"] [--select a,b] [--limit n] [--to-crs C] [--explain] [--out f]` | Lazy query with pushdown (FlatGeobuf, GeoParquet, GeoPackage) |
+| `gpd las info\|dsm\|dtm\|ndsm\|convert <file> … [--cell 1] [--class 2,6] [--step n] [--format 6]` | LAS/LAZ point clouds |
+| `gpd netcdf info <file.nc>` / `gpd netcdf raster <file.nc> <var> <out.tif> [--index t,level]` | NetCDF summary and grid export |
+| `gpd repo init\|commit\|log\|diff\|checkout\|tag <dir> …` | Dataset versioning (`--key`, `--m`, `--out changes.geojson`) |
+| `gpd sample <districts\|roads\|pois\|water\|cities\|siteplan\|dem\|multispectral\|lidar\|climate> <out>` | Export sample data |
 | `gpd ask <file> "question" [--out f]` | GeoLLM question (needs the `GEOPANDAS_LLM_*` environment variables) |
 | `gpd about` | Version, kernel backend, drivers |
 

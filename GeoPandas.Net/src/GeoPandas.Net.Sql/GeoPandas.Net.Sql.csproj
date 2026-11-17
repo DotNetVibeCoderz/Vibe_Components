@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.Sql</RootNamespace>
+    <Description>GeoPandas.Net spatial databases over plain ADO.NET: read_postgis-style ReadSql / ToSql for PostGIS, SQL Server Spatial, DuckDB Spatial, Oracle Spatial (SDO_GEOMETRY) and SQLite/SpatiaLite-free WKB tables. Bring your own DbConnection (Npgsql, Microsoft.Data.SqlClient, DuckDB.NET, Oracle.ManagedDataAccess).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Core\GeoPandas.Net.Core.csproj" />
+  </ItemGroup>
+</Project>

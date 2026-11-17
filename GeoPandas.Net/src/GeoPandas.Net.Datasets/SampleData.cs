@@ -14,7 +14,7 @@ namespace GeoPandas.Net.Datasets;
 /// Reproducible sample data around a fictional city "Kota Nusantara" (UTM zone 48S, EPSG:32748, near Jakarta).
 /// All generators are deterministic for a given seed.
 /// </summary>
-public static class SampleData
+public static partial class SampleData
 {
     /// <summary>CRS of all synthetic layers (WGS 84 / UTM zone 48S).</summary>
     public static CoordinateReferenceSystem Crs => CoordinateReferenceSystem.FromEpsg(32748);

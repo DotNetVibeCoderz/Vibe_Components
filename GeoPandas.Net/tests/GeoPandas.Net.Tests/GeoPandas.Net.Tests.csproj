@@ -13,6 +13,12 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\GeoPandas.Net\GeoPandas.Net.csproj" />
+    <ProjectReference Include="..\..\src\GeoPandas.Net.Sql.BigQuery\GeoPandas.Net.Sql.BigQuery.csproj" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="DuckDB.NET.Data.Full" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="data\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

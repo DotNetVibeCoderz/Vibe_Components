@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>GeoPandas.Net.Data</RootNamespace>
-    <Description>GeoPandas.Net IO: GeoJSON, ESRI Shapefile (.shp/.shx/.dbf/.prj/.cpg), OGC GeoPackage, CSV (WKT / XY) readers and writers with a pluggable driver registry.</Description>
+    <Description>GeoPandas.Net IO: GeoJSON, ESRI Shapefile (.shp/.shx/.dbf/.prj/.cpg), OGC GeoPackage, FlatGeobuf (packed Hilbert R-tree, memory-mapped), CSV (WKT / XY) readers and writers with a pluggable driver registry, lazy scan sources, and git-like dataset versioning (DatasetRepository).</Description>
     <IsAotCompatible>false</IsAotCompatible>
   </PropertyGroup>
   <ItemGroup>

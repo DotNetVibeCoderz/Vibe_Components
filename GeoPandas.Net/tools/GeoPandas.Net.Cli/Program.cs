@@ -3,7 +3,11 @@ using System.Globalization;
 using GeoPandas.Net;
 using GeoPandas.Net.AI;
 using GeoPandas.Net.Data;
+using GeoPandas.Net.Data.Versioning;
 using GeoPandas.Net.Datasets;
+using GeoPandas.Net.Lazy;
+using GeoPandas.Net.PointCloud;
+using NetTopologySuite.Geometries;
 using GeoPandas.Net.Geometry;
 using GeoPandas.Net.Geometry.Crs;
 using GeoPandas.Net.Network;
@@ -32,7 +36,7 @@ internal sealed class Cli(string[] args)
     private readonly List<string> _pos = args.Where((a, i) => !a.StartsWith("--") && (i == 0 || !args[i - 1].StartsWith("--") || IsFlag(args[i - 1]))).ToList();
     private readonly Dictionary<string, string> _opt = ParseOptions(args);
 
-    private static readonly HashSet<string> Flags = ["--help", "--version", "--indented", "--geodesic", "--directed", "--no-legend"];
+    private static readonly HashSet<string> Flags = ["--help", "--version", "--indented", "--geodesic", "--directed", "--no-legend", "--explain", "--classes"];
     private static bool IsFlag(string a) => Flags.Contains(a);
 
     private static Dictionary<string, string> ParseOptions(string[] a)
@@ -77,6 +81,10 @@ internal sealed class Cli(string[] args)
             case "raster": RasterCmd(); break;
             case "sample": Sample(); break;
             case "ask": await AskAsync(); break;
+            case "scan": Scan(); break;
+            case "las" or "laz" or "lidar": LasCmd(); break;
+            case "netcdf" or "nc": NetCdfCmd(); break;
+            case "repo": RepoCmd(); break;
             case "layers": foreach (var l in GeoPackage.ListLayers(Pos(1, "gpkg"))) Console.WriteLine(l); break;
             default: throw new ArgumentException($"Unknown command '{_pos[0]}'. Run 'gpd help'.");
         }
@@ -102,6 +110,10 @@ internal sealed class Cli(string[] args)
           gpd sjoin <left> <right> <out> [--predicate intersects|within|contains|...] [--how inner|left|right]
           gpd clip <in> <mask> <out>
           gpd plot <in> <out.svg> [--column C] [--cmap viridis] [--scheme quantiles|equal|jenks|continuous] [--title T]
+          gpd scan <file> [--bbox x0,y0,x1,y1] [--where "col>=v and col2=x"] [--select a,b] [--limit n]
+                   [--to-crs C] [--explain] [--out f]       lazy query, pushed into FlatGeobuf / GeoParquet / GeoPackage
+
+          Formats: GeoJSON, Shapefile, GeoPackage, FlatGeobuf (.fgb), GeoParquet (.parquet), Arrow/Feather (.arrow, .feather), CSV, DXF
 
         CRS
           gpd crs <definition>                              show PROJ / WKT for EPSG, PROJ or WKT input
@@ -116,9 +128,24 @@ internal sealed class Cli(string[] args)
           gpd raster contours <dem.tif> <out.geojson> --interval 25
           gpd raster ndvi <nir.tif> <red.tif> <out.tif>
           gpd raster plot <file.tif> <out.svg> [--cmap terrain]
+          gpd netcdf info <file.nc>                         ncdump -h style summary and CF time axis
+          gpd netcdf raster <file.nc> <variable> <out.tif> [--index t,level]
+
+        Point clouds (LAS 1.0–1.4, LAZ point formats 0–5)
+          gpd las info <file.las|laz> [--classes]
+          gpd las dsm|dtm|ndsm <file> <out.tif> [--cell 1] [--class 2,6] [--bbox x0,y0,x1,y1]
+          gpd las convert <in> <out.las|laz|gpkg|fgb|parquet> [--class 2] [--step 10] [--format 6]
+
+        Dataset versioning
+          gpd repo init <dir> [--key id]
+          gpd repo commit <dir> <file> --m "message"
+          gpd repo log <dir>
+          gpd repo diff <dir> [from=HEAD~1] [to=HEAD] [--out changes.geojson]
+          gpd repo checkout <dir> <ref> <out>
+          gpd repo tag <dir> <name> [ref]
 
         Data & AI
-          gpd sample <districts|roads|pois|water|cities|siteplan|dem|multispectral> <out>
+          gpd sample <districts|roads|pois|water|cities|siteplan|dem|multispectral|lidar|climate> <out>
           gpd ask <file> "question"                         GeoLLM (env: GEOPANDAS_LLM_PROVIDER/ENDPOINT/API_KEY/MODEL)
           gpd about
         """);
@@ -326,6 +353,14 @@ internal sealed class Cli(string[] args)
             case "dem": GeoTiff.Write(SampleData.Dem(), output); break;
             case "multispectral": GeoTiff.Write(SampleData.Multispectral(), output); break;
             case "siteplan": File.WriteAllText(output, SampleData.SitePlanDxf()); break;
+            case "lidar": Las.Write(SampleData.LidarTile(), output); break;
+            case "climate":
+            {
+                var (grid, times) = SampleData.ClimateGrid(8);
+                if (output.EndsWith(".nc", StringComparison.OrdinalIgnoreCase)) NetCdf.WriteClassic(grid, output, "t2m", times, "K", "2 m air temperature");
+                else GeoTiff.Write(grid, output);
+                break;
+            }
             default:
                 var gdf = name switch
                 {
@@ -340,6 +375,164 @@ internal sealed class Cli(string[] args)
                 break;
         }
         Ok($"sample '{name}' → {output}");
+    }
+
+    // ================================================================== Phase 2: lazy scans, point clouds, NetCDF, versioning
+
+    private static Envelope ParseBbox(string s)
+    {
+        var p = s.Split(',').Select(v => double.Parse(v, CultureInfo.InvariantCulture)).ToArray();
+        if (p.Length != 4) throw new ArgumentException("--bbox expects minx,miny,maxx,maxy");
+        return new Envelope(p[0], p[2], p[1], p[3]);
+    }
+
+    private static AttributePredicate ParseWhere(string s)
+    {
+        foreach (var (sym, op) in new[] { (">=", CompareOp.Ge), ("<=", CompareOp.Le), ("!=", CompareOp.Ne), ("<>", CompareOp.Ne), ("==", CompareOp.Eq), ("=", CompareOp.Eq), (">", CompareOp.Gt), ("<", CompareOp.Lt) })
+        {
+            int i = s.IndexOf(sym, StringComparison.Ordinal);
+            if (i <= 0) continue;
+            var col = s[..i].Trim();
+            var raw = s[(i + sym.Length)..].Trim().Trim('\'', '"');
+            object val = double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : bool.TryParse(raw, out var b) ? b : raw;
+            return new AttributePredicate(col, op, val);
+        }
+        throw new ArgumentException($"Cannot parse --where '{s}'. Use e.g. \"population>=50000\" or \"highway=primary\".");
+    }
+
+    private void Scan()
+    {
+        var plan = Gpd.Scan(Pos(1, "file"), Opt("layer"));
+        if (Opt("bbox") is { } bb) plan = plan.FilterBbox(ParseBbox(bb));
+        if (Opt("where") is { } w)
+            foreach (var part in w.Split(" and ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var p = ParseWhere(part);
+                plan = plan.Where(p.Column, p.Op, p.Value);
+            }
+        if (Opt("select") is { } sel) plan = plan.Select(sel.Split(',', StringSplitOptions.TrimEntries));
+        if (Opt("to-crs") is { } crs) plan = plan.ToCrs(CoordinateReferenceSystem.Parse(crs));
+        if (Opt("limit") is { } lim) plan = plan.Limit(long.Parse(lim, CultureInfo.InvariantCulture));
+        if (Opt("explain") is not null) { Console.Write(plan.Explain()); if (Opt("out") is null) return; }
+        var res = plan.Collect();
+        if (Opt("out") is { } outPath) { Gpd.ToFile(res, outPath); Ok($"{res.RowCount} rows → {outPath}"); }
+        else Console.WriteLine(res.ToString(int.Parse(Opt("n") ?? "20", CultureInfo.InvariantCulture)));
+    }
+
+    private void LasCmd()
+    {
+        var sub = Pos(1, "las command").ToLowerInvariant();
+        var input = Pos(2, "input");
+        LasReadOptions Opts() => new()
+        {
+            Classes = Opt("class") is { } c ? c.Split(',').Select(byte.Parse).ToArray() : null,
+            Step = Opt("step") is { } s ? int.Parse(s, CultureInfo.InvariantCulture) : 1,
+            Bbox = Opt("bbox") is { } b ? ParseBbox(b) : null,
+        };
+        double cell = double.Parse(Opt("cell") ?? "1", CultureInfo.InvariantCulture);
+        switch (sub)
+        {
+            case "info":
+            {
+                var info = Las.ReadInfo(input);
+                Title(Path.GetFileName(input));
+                Console.WriteLine($"  {info}");
+                Console.WriteLine($"  Software: {info.GeneratingSoftware} · System: {info.SystemIdentifier} · Created: {info.CreationDate?.ToString("yyyy-MM-dd") ?? "-"}");
+                foreach (var v in info.Vlrs) Console.WriteLine($"  VLR {v.UserId}/{v.RecordId}: {v.Description} ({v.Length} B)");
+                if (Opt("classes") is not null)
+                    foreach (var (code, name, count) in Las.Read(input).ClassCounts()) Console.WriteLine($"  class {code,3} {name,-20} {count,12:N0}");
+                break;
+            }
+            case "dsm" or "dtm" or "ndsm":
+            {
+                var pc = Las.Read(input, Opts());
+                var dsm = pc.Dsm(cell);
+                var res = sub == "dsm" ? dsm : sub == "dtm" ? pc.Dtm(cell)
+                    : GeoPandas.Net.Raster.Raster.Combine(dsm, pc.Dtm(cell), (s, t) => float.IsNaN(s) || float.IsNaN(t) ? float.NaN : Math.Max(0, s - t));
+                GeoTiff.Write(res, Pos(3, "output.tif"));
+                Ok($"{sub.ToUpperInvariant()} {res.Width}×{res.Height} @ {cell} m from {pc.Count:N0} points → {Pos(3, "output")}");
+                break;
+            }
+            case "convert":
+            {
+                var pc = Las.Read(input, Opts());
+                var output = Pos(3, "output");
+                if (output.EndsWith(".las", StringComparison.OrdinalIgnoreCase) || output.EndsWith(".laz", StringComparison.OrdinalIgnoreCase))
+                    Las.Write(pc, output, Opt("format") is { } f ? int.Parse(f, CultureInfo.InvariantCulture) : null);
+                else Gpd.ToFile(pc.ToGeoDataFrame(), output);
+                Ok($"{pc.Count:N0} points → {output}");
+                break;
+            }
+            default: throw new ArgumentException($"Unknown las command '{sub}' (info, dsm, dtm, ndsm, convert).");
+        }
+    }
+
+    private void NetCdfCmd()
+    {
+        var sub = Pos(1, "netcdf command").ToLowerInvariant();
+        using var nc = NetCdfDataset.Open(Pos(2, "file"));
+        switch (sub)
+        {
+            case "info":
+                Console.Write(nc.Describe());
+                if (nc.Times() is { Length: > 0 } t) Console.WriteLine($"time: {t[0]:yyyy-MM-dd HH:mm} → {t[^1]:yyyy-MM-dd HH:mm} UTC ({t.Length} steps)");
+                break;
+            case "raster":
+            {
+                var variable = Pos(3, "variable");
+                int[] idx = Opt("index") is { } s ? s.Split(',').Select(v => int.Parse(v, CultureInfo.InvariantCulture)).ToArray() : [];
+                var r = nc.ToRaster(variable, idx);
+                GeoTiff.Write(r, Pos(4, "output.tif"));
+                Ok($"{variable} → {Pos(4, "output")} ({r.Width}×{r.Height}×{r.BandCount}, {r.Crs?.ToString() ?? "no CRS"})");
+                break;
+            }
+            default: throw new ArgumentException($"Unknown netcdf command '{sub}' (info, raster).");
+        }
+    }
+
+    private void RepoCmd()
+    {
+        var sub = Pos(1, "repo command").ToLowerInvariant();
+        var repo = DatasetRepository.Open(Pos(2, "repository directory"), Opt("key"));
+        switch (sub)
+        {
+            case "init": Ok($"repository at {repo.RootDirectory} (key: {repo.Key ?? "none"})"); break;
+            case "commit":
+            {
+                var gdf = Gpd.ReadFile(Pos(3, "file"), Opt("layer"));
+                var before = repo.Head?.Id;
+                var c = repo.Commit(gdf, Opt("m") ?? Opt("message") ?? $"commit {Path.GetFileName(Pos(3, "file"))}", Opt("author") ?? Environment.UserName);
+                Ok(c.Id == before ? $"unchanged — HEAD stays at {c.ShortId}" : $"{c.ShortId} {c.Message} ({c.Rows} rows{(c.Summary is null ? "" : "; " + c.Summary)})");
+                break;
+            }
+            case "log":
+                foreach (var c in repo.Log())
+                {
+                    var tags = repo.Tags.Where(t => t.Value == c.Id).Select(t => t.Key).ToArray();
+                    Console.WriteLine($"{c.ShortId}  {c.Timestamp:yyyy-MM-dd HH:mm}  {c.Author,-12} {c.Message}{(tags.Length > 0 ? $"  [{string.Join(", ", tags)}]" : "")}{(c.Summary is null ? "" : $"  ({c.Summary})")}");
+                }
+                break;
+            case "diff":
+            {
+                var diff = repo.Diff(_pos.Count > 3 ? _pos[3] : "HEAD~1", _pos.Count > 4 ? _pos[4] : "HEAD");
+                Console.WriteLine(diff.Summary);
+                foreach (var m in diff.Modified.Take(50)) Console.WriteLine($"  ~ {diff.Key} {m.Key}: {string.Join(", ", m.ChangedColumns)}");
+                if (Opt("out") is { } o && diff.ToChangeFrame() is GeoDataFrame g) { Gpd.ToFile(g, o); Ok($"change map → {o}"); }
+                break;
+            }
+            case "checkout":
+            {
+                var gdf = repo.Checkout(Pos(3, "reference"));
+                Gpd.ToFile(gdf, Pos(4, "output"));
+                Ok($"{Pos(3, "reference")} → {Pos(4, "output")} ({gdf.RowCount} rows)");
+                break;
+            }
+            case "tag":
+                repo.Tag(Pos(3, "name"), _pos.Count > 4 ? _pos[4] : "HEAD");
+                Ok($"tag {Pos(3, "name")} → {repo.Resolve(Pos(3, "name")).ShortId}");
+                break;
+            default: throw new ArgumentException($"Unknown repo command '{sub}' (init, commit, log, diff, checkout, tag).");
+        }
     }
 
     private async Task AskAsync()

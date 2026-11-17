@@ -7,7 +7,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>gpd</ToolCommandName>
     <PackageId>GeoPandas.Net.Cli</PackageId>
-    <Description>gpd — the GeoPandas.Net command-line tool: inspect, convert and reproject vector files (GeoJSON, Shapefile, GeoPackage, CSV, DXF), spatial joins, buffers, dissolve, SVG maps, raster terrain analysis, routing and GeoLLM questions.</Description>
+    <Description>gpd — the GeoPandas.Net command-line tool: inspect, convert and reproject vector files (GeoJSON, Shapefile, GeoPackage, FlatGeobuf, GeoParquet, Arrow, CSV, DXF), lazy pushdown queries, spatial joins, buffers, dissolve, SVG maps, raster terrain analysis, NetCDF, LAS/LAZ point clouds, dataset versioning, routing and GeoLLM questions.</Description>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\GeoPandas.Net\GeoPandas.Net.csproj" />

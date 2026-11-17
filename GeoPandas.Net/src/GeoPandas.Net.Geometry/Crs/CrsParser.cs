@@ -13,6 +13,7 @@ public static class CrsParser
         var s = definition.Trim();
 
         if (TryParseAuthorityCode(s, out int code)) return CrsRegistry.Get(code);
+        if (s.StartsWith('{')) return ProjJson.Parse(s);
         if (s.StartsWith('+') || s.Contains("+proj=", StringComparison.OrdinalIgnoreCase)) return FromProj4(s);
         if (s.Contains('[')) return FromWkt(s);
 

@@ -6,6 +6,7 @@
 |---|---|
 | [Memulai](getting-started.md) | Instalasi, GeoDataFrame pertama, baca/tulis file, peta pertama |
 | [Data vektor, CRS & IO](vector.md) | `DataFrame`/`GeoSeries`/`GeoDataFrame`, spatial join, overlay, dissolve, engine CRS, format file, peta |
+| [Format, basis data, lazy & versi](data.md) | FlatGeobuf, GeoParquet, Arrow, NetCDF, LAS/LAZ, PostGIS/SQL Server/DuckDB/Oracle/BigQuery, `LazyGeoDataFrame`, `DatasetRepository` |
 | [Analisis](analysis.md) | Statistik spasial, klasterisasi, interpolasi, jaringan & routing, raster & terrain, hidrologi, penginderaan jauh |
 | [Integrasi CAD & AI](integrations.md) | DXF ⇄ GIS, georeferensi, asisten GeoLLM |
 | [Tools](tools.md) | CLI `gpd`, aplikasi galeri, template `dotnet new`, benchmark |
@@ -27,3 +28,8 @@
 | `gpd.clip(gdf, mask)` | `gdf.Clip(mask)` |
 | `gdf.plot(column="c")` | `gdf.Plot(new LayerStyle { Column = "c" })` |
 | `df.groupby("k").agg(...)` | `df.GroupBy("k").Agg(("kolom", AggFunc.Sum, "hasil"))` |
+| `gpd.read_parquet(p)` / `gdf.to_parquet(p)` | `GeoParquet.Read(p)` / `GeoParquet.Write(gdf, p)` |
+| `gpd.read_postgis(sql, con)` / `gdf.to_postgis(nama, con)` | `SpatialSql.ReadSql(con, sql)` / `gdf.ToSql(con, nama)` |
+| `gpd.read_file(p, bbox=b)` | `Gpd.Scan(p).FilterBbox(b).Collect()` |
+| `xarray.open_dataset("x.nc")` | `NetCdfDataset.Open("x.nc").ToRaster(var, t)` |
+| `laspy.read("x.laz")` | `Las.Read("x.laz")` |

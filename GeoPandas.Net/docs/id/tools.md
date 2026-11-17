@@ -15,6 +15,14 @@ gpd raster contours dem.tif kontur.geojson --interval 50
 gpd crs EPSG:23834
 gpd sample dem dem.tif
 gpd ask kecamatan.gpkg "Berapa total penduduk per wilayah?"
+gpd convert kecamatan.gpkg kecamatan.parquet            # GeoParquet, .fgb, .feather juga bisa
+gpd scan jalan.parquet --bbox 700000,9308000,704000,9312000 --where "highway=primary" --select name --explain
+gpd las info tile.laz --classes
+gpd las ndsm tile.las tinggi.tif --cell 1
+gpd netcdf info era5.nc
+gpd repo init persil.repo --key id_persil
+gpd repo commit persil.repo persil.gpkg --m "impor awal"
+gpd repo diff persil.repo --out perubahan.geojson
 ```
 
 Jalankan `gpd help` untuk melihat semua perintah. Catatan: nama kolom pada Shapefile dibatasi 10 karakter (batasan format DBF), misalnya `travel_time_s` menjadi `travel_tim`.

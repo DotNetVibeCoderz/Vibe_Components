@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-GeoPandas.Net: a GeoPandas-style geospatial platform for .NET 10 (brief: `GeoPandas.Net.txt`, full scope: `solution-design.md`). Phase 1 is implemented. Remaining scope is tracked in `PLAN.md` (roadmap) and `Progress.md` (status, benchmarks, verification log). **Keep both updated when you add features.**
+GeoPandas.Net: a GeoPandas-style geospatial platform for .NET 10 (brief: `GeoPandas.Net.txt`, full scope: `solution-design.md`). Phases 1–2 are implemented (v0.2: formats, databases, lazy queries, versioning). Remaining scope is tracked in `PLAN.md` (roadmap) and `Progress.md` (status, benchmarks, verification log). **Keep both updated when you add features.**
 
 ## Commands
 
 ```bash
 dotnet build GeoPandas.Net.slnx                                   # whole solution (slnx format)
-dotnet test tests/GeoPandas.Net.Tests                             # 92 xUnit tests
+dotnet test tests/GeoPandas.Net.Tests                             # 128 xUnit tests (SQL Server LocalDB / DuckDB tests run live when available, else log "skipped")
 dotnet test tests/GeoPandas.Net.Tests --filter "FullyQualifiedName~CrsTests.RoundTrip_IsAccurate"   # single test
 GEOPANDAS_NET_DISABLE_NATIVE=1 dotnet test tests/GeoPandas.Net.Tests   # force managed SIMD kernels
 cargo build --release --manifest-path native/geopandas_native/Cargo.toml   # optional Rust kernels (auto-copied to output if present)
@@ -30,12 +30,20 @@ Package versions are centralised in `Directory.Packages.props`. Common metadata 
 
 - `src/GeoPandas.Net.Geometry`: `Geo` factory over **NetTopologySuite** (the geometry kernel, like Shapely/GEOS for GeoPandas); own **CRS engine** in `Crs/` (Snyder projections, Helmert datum shift, `CrsRegistry` EPSG subset, `CrsParser` for PROJ4/WKT1/ESRI/WKT2); `Index/` (flat-array STR-tree with exact k-NN, KD-tree, QuadTree, Octree, GeoHash); `GeometryOps` (OverlayNG robust overlay); `Native/NativeKernels` (P/Invoke to Rust `geopandas_native` with `Vector<T>` fallback).
 - `src/GeoPandas.Net.Core` (namespace `GeoPandas.Net`): immutable column store (`Column<T>` with validity bitmap → `DataFrame` → `GeoSeries`/`GeoDataFrame`). `DataFrame.CreateLike` is the hook that keeps derived frames typed; `GeoDataFrame` re-declares typed wrappers with `new`. Spatial ops are in `GeoDataFrame.Spatial.cs` (`FindPairs` is the shared parallel join kernel). `Plotting/` holds `MapScene`, which renders to a display list (`RenderedMap` of `Shape` records) consumed by `SvgWriter` **and** the Avalonia `MapView`. Change the renderer once and both galleries follow.
-- Domain packages on top of Core: `Data` (GeoJSON, Shapefile, GeoPackage, CSV, `GeoIO` driver registry), `Analytics`, `Network` (CSR graph and Contraction Hierarchies), `Raster` (own GeoTIFF codec, terrain, hydrology, indices), `CAD` (DXF; registers into `GeoIO` via `Dxf.Register()`), `AI` (GeoLLM: the LLM returns a JSON plan of whitelisted ops, executed by `GeoAssistant.Execute`; never execute model-generated code), `Datasets` (deterministic synthetic city around EPSG:32748).
+- `Core/Lazy`: `LazyGeoDataFrame` (plan nodes → optimiser → streaming executor) over `IGeoScanSource`. Sources declare `ScanPushdown` flags; the engine re-checks every filter, so sources may return supersets, and `Limit` is pushed only when all earlier filters are exact. `Core/Versioning/FrameDiff` (row hashing, keyed/multiset diffs), `Core/IO/MappedFile` (mmap spans, `OpenStream()` with exact length).
+- Domain packages on top of Core: `Data` (GeoJSON, Shapefile, GeoPackage, FlatGeobuf with own FlatBuffers codec + packed Hilbert R-tree, CSV, `GeoIO` driver registry + `GeoIO.Scan`, `DatasetRepository`), `Arrow` (GeoParquet via Parquet.Net, Arrow IPC via Apache.Arrow; registers itself into GeoIO), `PointCloud` (LAS codec, LAZ via laszip.net), `Sql` (ADO.NET `SpatialDialect`s: PostGIS, SQL Server, DuckDB, Oracle, MySQL), `Sql.BigQuery`, `Analytics`, `Network` (CSR graph and Contraction Hierarchies), `Raster` (own GeoTIFF codec, NetCDF classic parser + NetCDF-4 via PureHDF, terrain, hydrology, indices), `CAD` (DXF; registers into `GeoIO` via `Dxf.Register()`), `AI` (GeoLLM: the LLM returns a JSON plan of whitelisted ops, executed by `GeoAssistant.Execute`; never execute model-generated code), `Datasets` (deterministic synthetic city around EPSG:32748).
 - `src/GeoPandas.Net`: meta-package plus the `Gpd` facade (`Gpd.ReadFile`, which also registers DXF).
 - `gallery/`: `Gallery.Shared/GalleryCatalog.cs` defines all samples (bilingual `L10n`, code snippet, `Build` func). Blazor and Avalonia are thin shells over it. Design tokens: paper `#EDF1EA`, ink `#1B2A33`, contour `#9A6B3F`, water `#2F6F9F`, magenta `#B0306A`.
 - `templates/GeoPandas.Net.Templates/content/*`: `dotnet new` templates. They reference the `GeoPandas.Net` package by version, so bump them when the version changes. `gpd-avalonia` contains a copy of `MapView.cs`.
 
 ## Conventions and gotchas
+
+- `GeoIO`'s static constructor probes for optional driver assemblies (`GeoPandas.Net.Arrow`, `GeoPandas.Net.CAD`) by reflection, so `.parquet`/`.arrow`/`.dxf` work without calling `Register()`. New optional format packages should be added there.
+- Parquet.Net is async-only: sync wrappers must go through `Arrow.Sync` (runs on the thread pool). `GetAwaiter().GetResult()` / `ToBlockingEnumerable()` on a UI thread deadlocks (this happened in the Avalonia gallery).
+- Parquet.Net 6 reports string/binary columns as `ReadOnlyMemory<char>`/`ReadOnlyMemory<byte>` (`GeoParquet.ClrOf`).
+- FlatGeobuf with a spatial index stores rows in Hilbert order (like GDAL). DateTimes are written as UTC ISO strings, because GDAL rejects numeric offsets.
+- LAZ via laszip.net supports point formats 0–5 only (LASzip 2.x port, LGPL). DuckDB `GEOMETRY` has no SRID, so pass `crs:`. SQL Server tables get an identity `fid` PK when a spatial index is created.
+- Interop fixtures in `tests/GeoPandas.Net.Tests/data` were written by the Python reference stack (see its README). To re-verify, use a venv with geopandas, pyogrio, pyarrow, laspy[lazrs], netCDF4 and pyproj.
 
 - Inside the `GeoPandas.Net.Geometry` namespace, `Geometry` is ambiguous (namespace vs NTS type). Use the alias `using NtsGeometry = NetTopologySuite.Geometries.Geometry;`.
 - `CoordinateReferenceSystem.WebMercator` is a static property, so pattern-match the projection type with its fully qualified name.

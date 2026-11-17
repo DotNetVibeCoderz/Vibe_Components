@@ -9,7 +9,7 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
 
     <!-- Package metadata -->
-    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionPrefix>0.2.0</VersionPrefix>
     <Authors>Gravicode Studios (Kang Fadhil)</Authors>
     <Company>Gravicode Studios</Company>
     <Product>GeoPandas.Net</Product>
@@ -20,7 +20,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageTags>gis;geospatial;geopandas;dataframe;crs;spatial-index;raster;geotiff;shapefile;geojson;geopackage;network-analysis;dxf;cad;bim;digital-twin</PackageTags>
+    <PackageTags>gis;geospatial;geopandas;dataframe;crs;spatial-index;raster;geotiff;shapefile;geojson;geopackage;flatgeobuf;geoparquet;arrow;netcdf;lidar;las;laz;postgis;duckdb;network-analysis;dxf;cad;bim;digital-twin</PackageTags>
     <IsPackable>false</IsPackable>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>

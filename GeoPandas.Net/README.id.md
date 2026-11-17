@@ -2,7 +2,7 @@
 
 <h1 align="center">GeoPandas.Net</h1>
 <p align="center"><b>Platform analitik geospasial generasi berikutnya untuk .NET 10</b><br>
-GeoDataFrame · engine CRS · indeks spasial · GeoJSON / Shapefile / GeoPackage / DXF · statistik spasial · routing · raster · GeoLLM</p>
+GeoDataFrame · engine CRS · indeks spasial · GeoParquet / FlatGeobuf / GeoPackage / Shapefile / NetCDF / LAS · PostGIS · kueri lazy · statistik spasial · routing · raster · GeoLLM</p>
 <p align="center"><a href="README.md">🇬🇧 Read in English</a> · <a href="docs/id/index.md">Dokumentasi</a> · <a href="PLAN.md">Roadmap</a> · <a href="Progress.md">Progres</a></p>
 
 > **Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil.**
@@ -20,7 +20,10 @@ GeoPandas.Net adalah reimplementasi dan perluasan konsep [GeoPandas](https://geo
 | **Spatial join** | `SJoin` (intersects / within / contains / touches / crosses / overlaps / covers…), `SJoinNearest` (branch-and-bound eksak), `Overlay`, `Dissolve`, `Clip`, `Explode`, `Cx` |
 | **Engine CRS** | Registri EPSG (WGS 84, Web/World Mercator, 120 zona UTM, NAD83 UTM, **DGN95 / TM-3 Indonesia**, Lambert-93, Albers, British National Grid…), parsing PROJ.4, WKT1, ESRI .prj dan WKT2, datum shift Helmert 7 parameter |
 | **Indeks spasial** | STR-tree, KD-tree, quadtree dinamis, octree (3-D / point cloud), GeoHash |
-| **IO** | GeoJSON, ESRI Shapefile (Z), GeoPackage, CSV (WKT / lon-lat), DXF; semuanya diimplementasikan sendiri, dengan registri driver `GeoIO` |
+| **IO** | GeoJSON, ESRI Shapefile (Z), GeoPackage, **FlatGeobuf** (Hilbert R-tree), **GeoParquet 1.1**, **Arrow IPC/Feather** (GeoArrow, PROJJSON), CSV, DXF dalam satu registri `GeoIO`; diuji dua arah terhadap GDAL / geopandas / pyarrow |
+| **Data ilmiah** | **NetCDF** CDF-1/2/5 + NetCDF-4/HDF5 dengan konvensi CF → raster dan sumbu waktu; point cloud **LAS 1.0–1.4 / LAZ** dengan Octree, DSM/DTM/nDSM |
+| **Basis data** | `ReadSql` / `ReadTable` / `ToSql` (setara `read_postgis`/`to_postgis`) untuk **PostGIS, SQL Server, DuckDB Spatial, Oracle Spatial, MySQL** lewat ADO.NET, plus **BigQuery GIS** |
+| **Lazy & versi** | `LazyGeoDataFrame`: pushdown bbox/kolom/atribut/limit ke file dan SQL, batch streaming, `Explain()`; `DatasetRepository`: snapshot berbasis konten, commit, tag, diff per kunci |
 | **Analitik** | Bobot queen/rook/KNN/distance band, Moran's I, Geary's C, LISA, hot spot Getis-Ord Gi*, DBSCAN, K-Means, IDW, ordinary kriging |
 | **Jaringan** | Graf dari garis (biaya, satu arah), Dijkstra, A*, Dijkstra dua arah, **Contraction Hierarchies**, area layanan / isokron, penelusuran jaringan utilitas |
 | **Raster** | Pembaca GeoTIFF / BigTIFF / COG, penulis GeoTIFF, slope, aspect, hillshade, viewshed, pengisian sink, arah aliran D8, akumulasi, DAS, NDVI/NDWI/NDBI/SAVI, deteksi perubahan Otsu, statistik zonal, rasterize, kontur |
@@ -52,11 +55,11 @@ Console.WriteLine(utm.Area().Sum() / 1e6 + " km²");
 utm.ToFile("kecamatan_utm.shp");
 ```
 
-Panduan lengkap: [Memulai](docs/id/getting-started.md) · [GeoDataFrame & IO](docs/id/vector.md) · [Analisis](docs/id/analysis.md) · [CAD & AI](docs/id/integrations.md) · [Tools](docs/id/tools.md).
+Panduan lengkap: [Memulai](docs/id/getting-started.md) · [GeoDataFrame & IO](docs/id/vector.md) · [Format, basis data, lazy & versi](docs/id/data.md) · [Analisis](docs/id/analysis.md) · [CAD & AI](docs/id/integrations.md) · [Tools](docs/id/tools.md).
 
 ## Galeri (web Blazor + desktop Avalonia)
 
-18 contoh interaktif (GIS, statistik spasial, jaringan, raster, teknik sipil, penginderaan jauh, CAD, AI), dwibahasa EN/ID.
+23 contoh interaktif (GIS, data & format, statistik spasial, jaringan, raster, teknik sipil, penginderaan jauh, CAD, AI), dwibahasa EN/ID.
 
 ```bash
 dotnet run --project gallery/GeoPandas.Net.Gallery.Blazor     # http://localhost:5280
@@ -67,7 +70,11 @@ dotnet run --project gallery/GeoPandas.Net.Gallery.Avalonia
 |---|---|
 | ![koroplet](docs/screenshots/blazor-choropleth.png) | ![GeoLLM](docs/screenshots/blazor-geollm.png) |
 
-![Galeri Avalonia](docs/screenshots/avalonia-hillshade.png)
+| | |
+|---|---|
+| ![FlatGeobuf Hilbert R-tree](docs/screenshots/avalonia-flatgeobuf.png) | ![GeoParquet lazy](docs/screenshots/avalonia-lazy.png) |
+| ![nDSM LiDAR](docs/screenshots/avalonia-lidar.png) | ![Grid iklim NetCDF](docs/screenshots/avalonia-netcdf.png) |
+| ![Versi dataset](docs/screenshots/avalonia-versioning.png) | ![Hillshade](docs/screenshots/avalonia-hillshade.png) |
 
 ## CLI `gpd`
 
@@ -75,6 +82,10 @@ dotnet run --project gallery/GeoPandas.Net.Gallery.Avalonia
 dotnet tool install -g GeoPandas.Net.Cli
 gpd sample districts kecamatan.gpkg
 gpd convert kecamatan.gpkg kecamatan.geojson --to-crs EPSG:4326
+gpd convert kecamatan.gpkg kecamatan.parquet                 # GeoParquet / .fgb / .feather
+gpd scan jalan.parquet --bbox 700000,9308000,704000,9312000 --where "highway=primary" --explain
+gpd las ndsm tile.laz tinggi.tif --cell 1
+gpd repo commit persil.repo persil.gpkg --m "sinkronisasi mingguan"
 gpd ask kecamatan.gpkg "Tampilkan 5 distrik terpadat di wilayah Selatan beserta luasnya"
 ```
 

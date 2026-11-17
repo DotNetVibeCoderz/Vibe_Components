@@ -10,3 +10,5 @@ native/**/target/
 BenchmarkDotNet.Artifacts/
 .DS_Store
 src/GeoPandas.Net.Geometry/runtimes/
+templates/**/bin/
+templates/**/obj/

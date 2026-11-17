@@ -7,16 +7,23 @@
 
 Core GeoDataFrame, geometry engine, CRS engine (EPSG/PROJ4/WKT/ESRI), spatial indexes (STR-tree, R-tree via STR, QuadTree, KD-tree, Octree, GeoHash), geoprocessing (intersection, union, difference, symmetric difference, buffer, dissolve, clip, merge), spatial joins (all predicates plus nearest), network analysis (Dijkstra, A*, Contraction Hierarchies, transport and utility networks), raster analytics (GeoTIFF/COG, DEM, slope, aspect, hillshade, viewshed), remote sensing (NDVI, NDBI, NDWI, change detection), spatial statistics (Moran's I, Geary's C, Getis-Ord Gi*, DBSCAN, KMeans, kriging), civil engineering (watershed analysis), CAD (DXF ⇄ GIS), Spatial AI (GeoLLM), vector formats (Shapefile, GeoJSON, GeoPackage, CSV), HPC (SIMD, Span, ArrayPool, Rust kernels, AOT-ready core), CLI, templates, Blazor and Avalonia gallery, and bilingual docs.
 
-## Phase 2 — Formats & databases (v0.2) / Format & basis data
+## Phase 2 — Formats & databases (v0.2) ✅ / Format & basis data
 
-- [ ] FlatGeobuf reader/writer (with packed Hilbert R-tree)
-- [ ] GeoParquet (Apache Arrow / Parquet) and Arrow IPC export of `DataFrame`
-- [ ] NetCDF raster reader
-- [ ] LAS/LAZ point cloud reader on the `Octree`
-- [ ] PostGIS, SQL Server Spatial and DuckDB Spatial readers/writers (`read_postgis` equivalent)
-- [ ] Oracle Spatial, BigQuery GIS
-- [ ] Memory-mapped datasets and lazy evaluation (`LazyGeoDataFrame` query plan)
-- [ ] Dataset versioning (snapshot and diff of immutable frames)
+- [x] FlatGeobuf reader/writer with packed Hilbert R-tree (own FlatBuffers codec, memory-mapped bbox reads; GDAL-verified both ways)
+- [x] GeoParquet 1.1 (WKB, PROJJSON, bbox covering, row-group pruning) and Arrow IPC / Feather (GeoArrow WKB, LZ4/ZSTD) ⇄ `DataFrame`
+- [x] NetCDF raster reader: CDF-1/2/5 (own parser) and NetCDF-4/HDF5 (PureHDF), CF conventions; classic CF writer
+- [x] LAS 1.0–1.4 reader/writer (formats 0–10) and LAZ (formats 0–5, laszip.net) on the `Octree`; DSM/DTM/nDSM
+- [x] PostGIS, SQL Server Spatial, DuckDB Spatial, MySQL readers/writers over ADO.NET (`ReadSql`/`ReadTable`/`ToSql`, `read_postgis` equivalent)
+- [x] Oracle Spatial (SDO_GEOMETRY via WKB) and BigQuery GIS (`GeoPandas.Net.Sql.BigQuery`)
+- [x] Memory-mapped datasets (`MappedFile`) and lazy evaluation (`LazyGeoDataFrame` query plan with bbox/column/attribute/limit pushdown)
+- [x] Dataset versioning: content-addressed snapshots, commits, tags, keyed and multiset diffs (`DatasetRepository`, `FrameDiff`)
+
+Follow-ups (later releases) / Lanjutan:
+- [ ] LAZ for LAS 1.4 point formats 6–10 (layered compression), COPC
+- [ ] GeoParquet native GeoArrow encodings (point/linestring/polygon) and Parquet `GEOMETRY` logical type
+- [ ] NetCDF chunked partial reads for NetCDF-4 (hyperslab selections), curvilinear grids
+- [ ] Live PostGIS / Oracle CI services (currently SQL-level tests; SQL Server LocalDB and DuckDB run live)
+- [ ] Sentinel-2 / Landsat / MODIS product readers (SAFE, MTL, HDF-EOS)
 
 ## Phase 3 — Projections & geodesy (v0.3) / Proyeksi & geodesi
 
@@ -46,6 +53,6 @@ Core GeoDataFrame, geometry engine, CRS engine (EPSG/PROJ4/WKT/ESRI), spatial in
 
 ## Release & distribution / Rilis & distribusi
 
-- [ ] Publish the NuGet packages (needs owner approval and the API key from `PackageCredentials.txt`)
-- [ ] CI (GitHub Actions): build, test, cargo cross-compile for linux-x64, osx-arm64 and win-arm64 native kernels
+- [x] Publish the NuGet packages (v0.1.0 released via the `geopandas-net-v*` tag workflow)
+- [x] CI (GitHub Actions): build, test (both kernel backends), cargo cross-compile for win-x64, linux-x64, linux-arm64, osx-arm64, osx-x64
 - [ ] Documentation site (DocFX), API reference
