@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net</RootNamespace>
+    <AssemblyName>GeoPandas.Net</AssemblyName>
+    <Description>GeoPandas.Net — next-generation geospatial analytics for .NET 10. Meta-package bundling Core (GeoDataFrame), Geometry (CRS, spatial index), Data (GeoJSON, Shapefile, GeoPackage, CSV), Analytics, Network, Raster, CAD, AI and Datasets, plus the `Gpd` facade. Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil.</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Core\GeoPandas.Net.Core.csproj" />
+    <ProjectReference Include="..\GeoPandas.Net.Data\GeoPandas.Net.Data.csproj" />
+    <ProjectReference Include="..\GeoPandas.Net.Analytics\GeoPandas.Net.Analytics.csproj" />
+    <ProjectReference Include="..\GeoPandas.Net.Network\GeoPandas.Net.Network.csproj" />
+    <ProjectReference Include="..\GeoPandas.Net.Raster\GeoPandas.Net.Raster.csproj" />
+    <ProjectReference Include="..\GeoPandas.Net.CAD\GeoPandas.Net.CAD.csproj" />
+    <ProjectReference Include="..\GeoPandas.Net.AI\GeoPandas.Net.AI.csproj" />
+    <ProjectReference Include="..\GeoPandas.Net.Datasets\GeoPandas.Net.Datasets.csproj" />
+  </ItemGroup>
+</Project>

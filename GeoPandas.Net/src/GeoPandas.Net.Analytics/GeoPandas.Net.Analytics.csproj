@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.Analytics</RootNamespace>
+    <Description>GeoPandas.Net spatial statistics: spatial weights (queen, rook, KNN, distance band), Moran's I, Geary's C, local Moran (LISA), Getis-Ord Gi*, DBSCAN, K-Means, IDW and ordinary Kriging.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Core\GeoPandas.Net.Core.csproj" />
+  </ItemGroup>
+</Project>

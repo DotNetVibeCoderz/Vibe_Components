@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <title>GpdBlazorApp</title>
+    <style>
+        body { margin: 0; font-family: "Segoe UI", sans-serif; background: #edf1ea; color: #1b2a33; }
+        main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+        h1 { margin: 0 0 12px; }
+        .map svg { width: 100%; height: auto; border: 1px solid #cbd5cc; border-radius: 4px; background: #f7f9f5; }
+        select { padding: 6px 10px; font-size: 1rem; }
+        footer { margin-top: 16px; font-size: .85rem; color: #4a5a63; }
+    </style>
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+<body>
+    <Routes @rendermode="InteractiveServer" />
+    <script src="_framework/blazor.web.js"></script>
+</body>
+</html>

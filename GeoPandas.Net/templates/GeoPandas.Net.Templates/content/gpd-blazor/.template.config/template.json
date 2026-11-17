@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": ["GIS", "Geospatial", "Web", "Blazor", "GeoPandas.Net"],
+  "identity": "GeoPandas.Net.Templates.Blazor",
+  "name": "GeoPandas.Net Blazor Map App",
+  "shortName": "gpd-blazor",
+  "description": "An interactive Blazor Server app that renders GeoPandas.Net maps as SVG with a column picker.",
+  "sourceName": "GpdBlazorApp",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" }
+}

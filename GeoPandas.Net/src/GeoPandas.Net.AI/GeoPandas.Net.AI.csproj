@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.AI</RootNamespace>
+    <Description>GeoPandas.Net Spatial AI: GeoLLM assistant that turns natural-language questions into safe, whitelisted GeoDataFrame query plans (OpenAI, Azure OpenAI, DeepSeek or any OpenAI-compatible endpoint), dataset summaries and schema descriptions for LLM grounding.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Core\GeoPandas.Net.Core.csproj" />
+  </ItemGroup>
+</Project>

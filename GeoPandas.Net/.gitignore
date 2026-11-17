@@ -1,0 +1,12 @@
+bin/
+obj/
+.vs/
+*.user
+TestResults/
+artifacts/
+native/**/target/
+*.nupkg
+!templates/**
+BenchmarkDotNet.Artifacts/
+.DS_Store
+src/GeoPandas.Net.Geometry/runtimes/

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.Data</RootNamespace>
+    <Description>GeoPandas.Net IO: GeoJSON, ESRI Shapefile (.shp/.shx/.dbf/.prj/.cpg), OGC GeoPackage, CSV (WKT / XY) readers and writers with a pluggable driver registry.</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Core\GeoPandas.Net.Core.csproj" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+  </ItemGroup>
+</Project>

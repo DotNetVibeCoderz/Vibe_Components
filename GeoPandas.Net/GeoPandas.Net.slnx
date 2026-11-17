@@ -1,0 +1,31 @@
+<Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/GeoPandas.Net.Benchmarks/GeoPandas.Net.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/gallery/">
+    <Project Path="gallery/GeoPandas.Net.Gallery.Avalonia/GeoPandas.Net.Gallery.Avalonia.csproj" />
+    <Project Path="gallery/GeoPandas.Net.Gallery.Blazor/GeoPandas.Net.Gallery.Blazor.csproj" />
+    <Project Path="gallery/GeoPandas.Net.Gallery.Shared/GeoPandas.Net.Gallery.Shared.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/GeoPandas.Net.AI/GeoPandas.Net.AI.csproj" />
+    <Project Path="src/GeoPandas.Net.Analytics/GeoPandas.Net.Analytics.csproj" />
+    <Project Path="src/GeoPandas.Net.CAD/GeoPandas.Net.CAD.csproj" />
+    <Project Path="src/GeoPandas.Net.Core/GeoPandas.Net.Core.csproj" />
+    <Project Path="src/GeoPandas.Net.Data/GeoPandas.Net.Data.csproj" />
+    <Project Path="src/GeoPandas.Net.Datasets/GeoPandas.Net.Datasets.csproj" />
+    <Project Path="src/GeoPandas.Net.Geometry/GeoPandas.Net.Geometry.csproj" />
+    <Project Path="src/GeoPandas.Net.Network/GeoPandas.Net.Network.csproj" />
+    <Project Path="src/GeoPandas.Net.Raster/GeoPandas.Net.Raster.csproj" />
+    <Project Path="src/GeoPandas.Net/GeoPandas.Net.csproj" />
+  </Folder>
+  <Folder Name="/templates/">
+    <Project Path="templates/GeoPandas.Net.Templates/GeoPandas.Net.Templates.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/GeoPandas.Net.Tests/GeoPandas.Net.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/GeoPandas.Net.Cli/GeoPandas.Net.Cli.csproj" />
+  </Folder>
+</Solution>

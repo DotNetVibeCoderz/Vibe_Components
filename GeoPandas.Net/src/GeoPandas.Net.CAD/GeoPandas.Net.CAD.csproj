@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.CAD</RootNamespace>
+    <Description>GeoPandas.Net CAD integration: AutoCAD DXF (ASCII) reader and writer (POINT, LINE, LWPOLYLINE, POLYLINE, CIRCLE, ARC, ELLIPSE, SPLINE, TEXT, MTEXT, INSERT, 3DFACE) with layers and colours, CAD ⇄ GIS georeferencing.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Data\GeoPandas.Net.Data.csproj" />
+  </ItemGroup>
+</Project>

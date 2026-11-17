@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": ["GIS", "Geospatial", "Console", "GeoPandas.Net"],
+  "identity": "GeoPandas.Net.Templates.Console",
+  "name": "GeoPandas.Net Console Analysis",
+  "shortName": "gpd-console",
+  "description": "A console app that loads sample data, runs a spatial join and exports a map, GeoJSON and GeoPackage.",
+  "sourceName": "GpdConsoleApp",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" }
+}

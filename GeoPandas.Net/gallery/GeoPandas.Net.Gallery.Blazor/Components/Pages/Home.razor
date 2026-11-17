@@ -1,0 +1,148 @@
+@page "/"
+@page "/sample/{SampleId}"
+@inject NavigationManager Nav
+
+<PageTitle>@($"{Current.Title[_lang]} · GeoPandas.Net Gallery")</PageTitle>
+
+<div class="shell">
+    <aside class="index" aria-label="@T("Samples", "Contoh")">
+        <header class="brand">
+            <svg class="brand-contours" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                <path d="@s_contours" />
+            </svg>
+            <a class="wordmark" href="/">GeoPandas<span>.Net</span></a>
+            <p class="brand-sub">@T("Gallery of use cases", "Galeri studi kasus") · v@(Gpd.Version)</p>
+        </header>
+
+        <label class="search">
+            <span class="visually-hidden">@T("Filter samples", "Saring contoh")</span>
+            <input type="search" placeholder="@T("Filter samples…", "Saring contoh…")" @bind="_query" @bind:event="oninput" />
+        </label>
+
+        <nav class="toc">
+            @foreach (var cat in GalleryCatalog.Categories)
+            {
+                var items = Filtered.Where(s => s.Category == cat.Key).ToList();
+                if (items.Count == 0) continue;
+                <section class="toc-group">
+                    <h2><span class="glyph" aria-hidden="true">@cat.Glyph</span>@cat.Name[_lang]</h2>
+                    <ul>
+                        @foreach (var s in items)
+                        {
+                            <li>
+                                <a href="@($"sample/{s.Id}")" class="@(s.Id == Current.Id ? "active" : null)" aria-current="@(s.Id == Current.Id ? "page" : null)">@s.Title[_lang]</a>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            }
+            @if (!Filtered.Any())
+            {
+                <p class="empty">@T("No sample matches that filter. Try “route”, “raster” or “DXF”.", "Tidak ada contoh yang cocok. Coba “route”, “raster” atau “DXF”.")</p>
+            }
+        </nav>
+    </aside>
+
+    <main class="sheet">
+        <header class="collar">
+            <div>
+                <p class="eyebrow"><span aria-hidden="true">@Category.Glyph</span> @Category.Name[_lang]</p>
+                <h1>@Current.Title[_lang]</h1>
+            </div>
+            <div class="lang" role="group" aria-label="Language / Bahasa">
+                <button class="@(_lang == Lang.En ? "on" : null)" aria-pressed="@(_lang == Lang.En)" @onclick="() => _lang = Lang.En">EN</button>
+                <button class="@(_lang == Lang.Id ? "on" : null)" aria-pressed="@(_lang == Lang.Id)" @onclick="() => _lang = Lang.Id">ID</button>
+            </div>
+            <p class="summary">@Current.Summary[_lang]</p>
+        </header>
+
+        <section class="stage">
+            <figure class="map">
+                @((MarkupString)_svg)
+                <figcaption>
+                    <span>@(_result.Scene.Layers.Count) @T("layers", "layer")</span>
+                    <span>@T("rendered in", "dirender dalam") @_result.Elapsed.TotalMilliseconds.ToString("0") ms</span>
+                    <a href="@_svgDataUri" download="@($"{Current.Id}.svg")">@T("Download SVG", "Unduh SVG")</a>
+                </figcaption>
+            </figure>
+
+            <aside class="readout" aria-label="@T("Key figures", "Angka kunci")">
+                <h2>@T("Readout", "Hasil")</h2>
+                <dl>
+                    @foreach (var (label, value) in _result.Figures)
+                    {
+                        <div><dt>@label[_lang]</dt><dd>@value</dd></div>
+                    }
+                </dl>
+            </aside>
+        </section>
+
+        <section class="detail">
+            <div class="tabs" role="tablist">
+                <button role="tab" aria-selected="@(_tab == 0)" class="@(_tab == 0 ? "on" : null)" @onclick="() => _tab = 0">@T("Code", "Kode")</button>
+                @if (_result.Table is not null)
+                {
+                    <button role="tab" aria-selected="@(_tab == 1)" class="@(_tab == 1 ? "on" : null)" @onclick="() => _tab = 1">@T("Data", "Data") <small>@_result.Table.RowCount × @_result.Table.ColumnCount</small></button>
+                }
+            </div>
+
+            @if (_tab == 0 || _result.Table is null)
+            {
+                <pre class="code"><code>@foreach (var (kind, text) in CodeHighlighter.Tokenize(Current.Code)){<span class="@($"t-{kind.ToString().ToLowerInvariant()}")">@text</span>}</code></pre>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr>@foreach (var c in _result.Table.Columns) { <th class="@(c.IsNumeric ? "num" : null)">@c.Name</th> }</tr></thead>
+                        <tbody>
+                            @for (int r = 0; r < Math.Min(_result.Table.RowCount, 25); r++)
+                            {
+                                var row = r;
+                                <tr>@foreach (var c in _result.Table.Columns) { <td class="@(c.IsNumeric ? "num" : null)">@c.Format(row)</td> }</tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <footer class="credit">
+            <span>@(_lang == Lang.Id ? GalleryCatalog.Credit : GalleryCatalog.CreditEn)</span>
+            <span class="mono">GeoPandas.Net @Gpd.Version · .NET 10 · @GeoPandas.Net.Geometry.Native.NativeKernels.Backend</span>
+        </footer>
+    </main>
+</div>
+
+@code {
+    private static readonly string s_contours = GalleryArt.ContourPathData(320, 180);
+
+    [Parameter] public string? SampleId { get; set; }
+    [SupplyParameterFromQuery(Name = "lang")] public string? LangQuery { get; set; }
+
+    private Lang _lang = Lang.En;
+    private int _tab;
+    private string _query = "";
+    private string _svg = "";
+    private string _svgDataUri = "";
+    private SampleResult _result = default!;
+
+    private GallerySample Current => GalleryCatalog.Samples.FirstOrDefault(s => s.Id == SampleId) ?? GalleryCatalog.Samples[0];
+    private GalleryCategory Category => GalleryCatalog.Categories.First(c => c.Key == Current.Category);
+
+    private IEnumerable<GallerySample> Filtered => string.IsNullOrWhiteSpace(_query)
+        ? GalleryCatalog.Samples
+        : GalleryCatalog.Samples.Where(s => s.Title.En.Contains(_query, StringComparison.OrdinalIgnoreCase) || s.Title.Id.Contains(_query, StringComparison.OrdinalIgnoreCase)
+                                         || s.Summary[_lang].Contains(_query, StringComparison.OrdinalIgnoreCase) || s.Code.Contains(_query, StringComparison.OrdinalIgnoreCase));
+
+    private string T(string en, string id) => _lang == Lang.Id ? id : en;
+
+    protected override void OnParametersSet()
+    {
+        if (LangQuery is "id") _lang = Lang.Id;
+        _result = Current.Run();
+        _svg = _result.Scene.ToSvg(960, 640);
+        _svgDataUri = "data:image/svg+xml;base64," + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(_svg));
+        if (_result.Table is null) _tab = 0;
+    }
+}

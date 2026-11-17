@@ -1,0 +1,12 @@
+C:\experiment\VibeCoding\Vibe_Components\GeoPandas.Net\templates\GeoPandas.Net.Templates\bin\Release\net10.0\GeoPandas.Net.Templates.deps.json
+C:\experiment\VibeCoding\Vibe_Components\GeoPandas.Net\templates\GeoPandas.Net.Templates\bin\Release\net10.0\GeoPandas.Net.Templates.dll
+C:\experiment\VibeCoding\Vibe_Components\GeoPandas.Net\templates\GeoPandas.Net.Templates\bin\Release\net10.0\GeoPandas.Net.Templates.pdb
+C:\experiment\VibeCoding\Vibe_Components\GeoPandas.Net\templates\GeoPandas.Net.Templates\obj\Release\net10.0\GeoPandas.Net.Templates.GeneratedMSBuildEditorConfig.editorconfig
+C:\experiment\VibeCoding\Vibe_Components\GeoPandas.Net\templates\GeoPandas.Net.Templates\obj\Release\net10.0\GeoPandas.Net.Templates.AssemblyInfoInputs.cache
+C:\experiment\VibeCoding\Vibe_Components\GeoPandas.Net\templates\GeoPandas.Net.Templates\obj\Release\net10.0\GeoPandas.Net.Templates.AssemblyInfo.cs
+C:\experiment\VibeCoding\Vibe_Components\GeoPandas.Net\templates\GeoPandas.Net.Templates\obj\Release\net10.0\GeoPandas.Net.Templates.csproj.CoreCompileInputs.cache
+C:\experiment\VibeCoding\Vibe_Components\GeoPandas.Net\templates\GeoPandas.Net.Templates\obj\Release\net10.0\GeoPandas.Net.Templates.sourcelink.json
+C:\experiment\VibeCoding\Vibe_Components\GeoPandas.Net\templates\GeoPandas.Net.Templates\obj\Release\net10.0\GeoPandas.Net.Templates.dll
+C:\experiment\VibeCoding\Vibe_Components\GeoPandas.Net\templates\GeoPandas.Net.Templates\obj\Release\net10.0\refint\GeoPandas.Net.Templates.dll
+C:\experiment\VibeCoding\Vibe_Components\GeoPandas.Net\templates\GeoPandas.Net.Templates\obj\Release\net10.0\GeoPandas.Net.Templates.pdb
+C:\experiment\VibeCoding\Vibe_Components\GeoPandas.Net\templates\GeoPandas.Net.Templates\obj\Release\net10.0\ref\GeoPandas.Net.Templates.dll

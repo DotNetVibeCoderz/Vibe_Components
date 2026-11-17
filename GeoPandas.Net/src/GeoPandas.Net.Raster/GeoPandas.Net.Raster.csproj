@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.Raster</RootNamespace>
+    <Description>GeoPandas.Net raster analytics: GeoTIFF / Cloud-Optimized GeoTIFF IO (strips, tiles, Deflate, LZW, predictor), DEM slope/aspect/hillshade/viewshed, hydrology (fill, D8 flow, accumulation, watersheds), NDVI/NDWI/NDBI, change detection, zonal statistics, rasterize and contours.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Core\GeoPandas.Net.Core.csproj" />
+  </ItemGroup>
+</Project>

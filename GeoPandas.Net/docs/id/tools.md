@@ -1,0 +1,44 @@
+# Tools: CLI, galeri, template, benchmark
+
+## CLI `gpd`
+
+```bash
+dotnet tool install -g GeoPandas.Net.Cli
+gpd info kecamatan.gpkg
+gpd convert kecamatan.gpkg kecamatan.geojson --to-crs EPSG:4326
+gpd sjoin poi.geojson kecamatan.gpkg hasil.gpkg --predicate within
+gpd dissolve kecamatan.gpkg wilayah.shp --by region --agg sum
+gpd plot kecamatan.gpkg peta.svg --column population --cmap YlOrRd --scheme jenks
+gpd route jalan.shp --from 700000,9310000 --to 705000,9315000 --cost travel_tim --out rute.geojson
+gpd raster hillshade dem.tif hillshade.tif
+gpd raster contours dem.tif kontur.geojson --interval 50
+gpd crs EPSG:23834
+gpd sample dem dem.tif
+gpd ask kecamatan.gpkg "Berapa total penduduk per wilayah?"
+```
+
+Jalankan `gpd help` untuk melihat semua perintah. Catatan: nama kolom pada Shapefile dibatasi 10 karakter (batasan format DBF), misalnya `travel_time_s` menjadi `travel_tim`.
+
+## Aplikasi galeri
+
+- **Blazor**: `dotnet run --project gallery/GeoPandas.Net.Gallery.Blazor`, lalu buka `http://localhost:5280` (contoh tautan: `/sample/route?lang=id`).
+- **Avalonia**: `dotnet run --project gallery/GeoPandas.Net.Gallery.Avalonia -- --lang id`. Tambahkan `--screenshot hasil.png` untuk mengekspor tangkapan layar.
+
+Kedua galeri merender dari `GalleryCatalog` yang sama. Untuk menambah contoh, tambahkan `GallerySample` beserta judul/ringkasan dwibahasa, potongan kode dan fungsi `Build`.
+
+## Template
+
+```bash
+dotnet new install GeoPandas.Net.Templates
+dotnet new gpd-console  -n Analisis
+dotnet new gpd-blazor   -n PetaWeb
+dotnet new gpd-avalonia -n PetaDesktop
+```
+
+## Benchmark
+
+```bash
+dotnet run -c Release --project benchmarks/GeoPandas.Net.Benchmarks -- --filter "*"
+```
+
+Hasil pengukuran terbaru ada di [Progress.md](../../Progress.md).

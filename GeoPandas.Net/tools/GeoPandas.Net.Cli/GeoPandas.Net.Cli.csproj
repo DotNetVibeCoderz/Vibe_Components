@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>gpd</AssemblyName>
+    <RootNamespace>GeoPandas.Net.Cli</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>gpd</ToolCommandName>
+    <PackageId>GeoPandas.Net.Cli</PackageId>
+    <Description>gpd — the GeoPandas.Net command-line tool: inspect, convert and reproject vector files (GeoJSON, Shapefile, GeoPackage, CSV, DXF), spatial joins, buffers, dissolve, SVG maps, raster terrain analysis, routing and GeoLLM questions.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\GeoPandas.Net\GeoPandas.Net.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)..\..\README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+</Project>

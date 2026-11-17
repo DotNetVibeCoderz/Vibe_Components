@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.Datasets</RootNamespace>
+    <Description>GeoPandas.Net sample datasets (geodatasets equivalent): reproducible synthetic city districts, road networks, POIs, utility networks, DEMs, multispectral imagery, a CAD site plan and real-world city points — for demos, tests and teaching.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Raster\GeoPandas.Net.Raster.csproj" />
+  </ItemGroup>
+</Project>

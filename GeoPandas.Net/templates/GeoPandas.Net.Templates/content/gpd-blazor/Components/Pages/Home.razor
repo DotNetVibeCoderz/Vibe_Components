@@ -1,0 +1,32 @@
+@page "/"
+
+<main>
+    <h1>District explorer</h1>
+    <label>Colour by
+        <select @bind="_column">
+            @foreach (var c in s_districts.Columns.Where(c => c.IsNumeric))
+            {
+                <option value="@c.Name">@c.Name</option>
+            }
+        </select>
+    </label>
+    <div class="map">@((MarkupString)Svg)</div>
+    <footer>Built with GeoPandas.Net @Gpd.Version · @Gpd.Credits</footer>
+</main>
+
+@code {
+    // Replace with Gpd.ReadFile("data/your-layer.gpkg")
+    private static readonly GeoDataFrame s_districts = SampleData.Districts();
+    private string _column = "population";
+
+    private string Svg
+    {
+        get
+        {
+            var scene = s_districts.Plot(new LayerStyle { Column = _column, ColorMap = ColorMaps.Viridis, LegendTitle = _column, Stroke = "#ffffff" });
+            scene.ShowFrame = true;
+            scene.Padding = 44;
+            return scene.ToSvg(1000, 680);
+        }
+    }
+}

@@ -1,0 +1,36 @@
+# GeoPandas.Net documentation
+
+> Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil · Made by Gravicode Studios, led by Kang Fadhil · [🇮🇩 Bahasa Indonesia](../id/index.md)
+
+| Guide | Covers |
+|---|---|
+| [Getting started](getting-started.md) | Install, first GeoDataFrame, reading/writing files, first map |
+| [Vector data, CRS & IO](vector.md) | `DataFrame`/`GeoSeries`/`GeoDataFrame`, spatial joins, overlay, dissolve, CRS engine, file formats, plotting |
+| [Analysis](analysis.md) | Spatial statistics, clustering, interpolation, networks & routing, raster & terrain, hydrology, remote sensing |
+| [CAD & AI integrations](integrations.md) | DXF ⇄ GIS, georeferencing, GeoLLM assistant |
+| [Tools](tools.md) | `gpd` CLI, gallery apps, `dotnet new` templates, benchmarks |
+| [Architecture](architecture.md) | Package layering, design decisions, performance, native kernels |
+
+## Mapping from Python GeoPandas
+
+| GeoPandas (Python) | GeoPandas.Net (C#) |
+|---|---|
+| `gpd.read_file(p)` | `Gpd.ReadFile(p)` / `GeoIO.Read(p)` |
+| `gdf.to_file(p)` | `gdf.ToFile(p)` |
+| `gpd.points_from_xy(x, y, crs)` | `GeoSeries.PointsFromXY(x, y, crs)` / `GeoDataFrame.FromXY(df, "x", "y", crs)` |
+| `gdf.set_crs(4326)` / `gdf.to_crs(3857)` | `gdf.SetCrs(4326)` / `gdf.ToCrs(3857)` |
+| `gdf.estimate_utm_crs()` | `gdf.EstimateUtmCrs()` |
+| `gdf.area`, `gdf.length` | `gdf.Area()`, `gdf.GeomLength()` |
+| `gdf.buffer(d)`, `gdf.centroid` | `gdf.Buffer(d)`, `gdf.Centroid()` |
+| `gdf.total_bounds`, `gdf.sindex` | `gdf.TotalBounds`, `gdf.SIndex` |
+| `gdf.cx[x0:x1, y0:y1]` | `gdf.Cx(x0, y0, x1, y1)` |
+| `gpd.sjoin(a, b, predicate="within")` | `a.SJoin(b, SpatialPredicate.Within)` |
+| `gpd.sjoin_nearest(a, b, distance_col="d")` | `a.SJoinNearest(b, distanceColumn: "d")` |
+| `gpd.overlay(a, b, how="union")` | `a.Overlay(b, OverlayHow.Union)` |
+| `gdf.dissolve(by="r", aggfunc="sum")` | `gdf.Dissolve("r", AggFunc.Sum)` |
+| `gpd.clip(gdf, mask)` | `gdf.Clip(mask)` |
+| `gdf.explode()` | `gdf.Explode()` |
+| `gdf.union_all()` | `gdf.UnionAll()` |
+| `gdf.plot(column="c", cmap="viridis")` | `gdf.Plot(new LayerStyle { Column = "c", ColorMap = ColorMaps.Viridis })` |
+| `df.groupby("k").agg(...)` | `df.GroupBy("k").Agg(("col", AggFunc.Sum, "out"))` |
+| `df.merge(other, on="k", how="left")` | `df.Merge(other, "k", JoinHow.Left)` |

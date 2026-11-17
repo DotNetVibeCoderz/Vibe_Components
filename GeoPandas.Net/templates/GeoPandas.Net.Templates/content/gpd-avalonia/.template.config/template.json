@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gravicode Studios (Kang Fadhil)",
+  "classifications": ["GIS", "Geospatial", "Desktop", "Avalonia", "GeoPandas.Net"],
+  "identity": "GeoPandas.Net.Templates.Avalonia",
+  "name": "GeoPandas.Net Avalonia Map App",
+  "shortName": "gpd-avalonia",
+  "description": "A cross-platform Avalonia desktop app with a native GeoPandas.Net MapView control.",
+  "sourceName": "GpdAvaloniaApp",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" }
+}

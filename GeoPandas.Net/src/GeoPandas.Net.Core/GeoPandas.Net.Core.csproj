@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net</RootNamespace>
+    <Description>GeoPandas.Net core: column-store DataFrame, GeoSeries and GeoDataFrame with CRS, spatial index, spatial joins (sjoin, sjoin_nearest), overlay, dissolve, clip, explode, and map rendering (SVG / renderer-agnostic scenes).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Geometry\GeoPandas.Net.Geometry.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="GeoPandas.Net.Tests" />
+  </ItemGroup>
+</Project>

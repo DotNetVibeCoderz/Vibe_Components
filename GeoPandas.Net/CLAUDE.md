@@ -1,0 +1,60 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+GeoPandas.Net: a GeoPandas-style geospatial platform for .NET 10 (brief: `GeoPandas.Net.txt`, full scope: `solution-design.md`). Phase 1 is implemented. Remaining scope is tracked in `PLAN.md` (roadmap) and `Progress.md` (status, benchmarks, verification log). **Keep both updated when you add features.**
+
+## Commands
+
+```bash
+dotnet build GeoPandas.Net.slnx                                   # whole solution (slnx format)
+dotnet test tests/GeoPandas.Net.Tests                             # 92 xUnit tests
+dotnet test tests/GeoPandas.Net.Tests --filter "FullyQualifiedName~CrsTests.RoundTrip_IsAccurate"   # single test
+GEOPANDAS_NET_DISABLE_NATIVE=1 dotnet test tests/GeoPandas.Net.Tests   # force managed SIMD kernels
+cargo build --release --manifest-path native/geopandas_native/Cargo.toml   # optional Rust kernels (auto-copied to output if present)
+cargo test --release --manifest-path native/geopandas_native/Cargo.toml
+dotnet run --project tools/GeoPandas.Net.Cli -- help             # `gpd` CLI
+dotnet run --project gallery/GeoPandas.Net.Gallery.Blazor         # http://localhost:5280, /sample/<id>?lang=id
+dotnet run --project gallery/GeoPandas.Net.Gallery.Avalonia -- --sample route --screenshot out.png
+dotnet run -c Release --project benchmarks/GeoPandas.Net.Benchmarks -- --filter "*" --job short
+dotnet pack GeoPandas.Net.slnx -c Release -o artifacts/nupkg      # local packages (do NOT push without the owner's OK)
+```
+
+CI/release: `.github/workflows/geopandas-net.yml` at the Vibe_Components repo root builds Rust kernels for 5 RIDs (placed in `src/GeoPandas.Net.Geometry/runtimes/<rid>/native`), tests both kernel backends and packs. Pushing a tag `geopandas-net-vX.Y.Z` publishes to NuGet (`NUGET_API_KEY` secret) and creates a GitHub release. The base version is `VersionPrefix` in `Directory.Build.props`; bump the template `PackageReference` versions with it.
+
+Package versions are centralised in `Directory.Packages.props`. Common metadata (version, icon, authors, credit line) lives in `Directory.Build.props`. Projects under `src/` are automatically packable and AOT-flagged.
+
+## Architecture (layering; lower layers never reference upper ones)
+
+- `src/GeoPandas.Net.Geometry`: `Geo` factory over **NetTopologySuite** (the geometry kernel, like Shapely/GEOS for GeoPandas); own **CRS engine** in `Crs/` (Snyder projections, Helmert datum shift, `CrsRegistry` EPSG subset, `CrsParser` for PROJ4/WKT1/ESRI/WKT2); `Index/` (flat-array STR-tree with exact k-NN, KD-tree, QuadTree, Octree, GeoHash); `GeometryOps` (OverlayNG robust overlay); `Native/NativeKernels` (P/Invoke to Rust `geopandas_native` with `Vector<T>` fallback).
+- `src/GeoPandas.Net.Core` (namespace `GeoPandas.Net`): immutable column store (`Column<T>` with validity bitmap → `DataFrame` → `GeoSeries`/`GeoDataFrame`). `DataFrame.CreateLike` is the hook that keeps derived frames typed; `GeoDataFrame` re-declares typed wrappers with `new`. Spatial ops are in `GeoDataFrame.Spatial.cs` (`FindPairs` is the shared parallel join kernel). `Plotting/` holds `MapScene`, which renders to a display list (`RenderedMap` of `Shape` records) consumed by `SvgWriter` **and** the Avalonia `MapView`. Change the renderer once and both galleries follow.
+- Domain packages on top of Core: `Data` (GeoJSON, Shapefile, GeoPackage, CSV, `GeoIO` driver registry), `Analytics`, `Network` (CSR graph and Contraction Hierarchies), `Raster` (own GeoTIFF codec, terrain, hydrology, indices), `CAD` (DXF; registers into `GeoIO` via `Dxf.Register()`), `AI` (GeoLLM: the LLM returns a JSON plan of whitelisted ops, executed by `GeoAssistant.Execute`; never execute model-generated code), `Datasets` (deterministic synthetic city around EPSG:32748).
+- `src/GeoPandas.Net`: meta-package plus the `Gpd` facade (`Gpd.ReadFile`, which also registers DXF).
+- `gallery/`: `Gallery.Shared/GalleryCatalog.cs` defines all samples (bilingual `L10n`, code snippet, `Build` func). Blazor and Avalonia are thin shells over it. Design tokens: paper `#EDF1EA`, ink `#1B2A33`, contour `#9A6B3F`, water `#2F6F9F`, magenta `#B0306A`.
+- `templates/GeoPandas.Net.Templates/content/*`: `dotnet new` templates. They reference the `GeoPandas.Net` package by version, so bump them when the version changes. `gpd-avalonia` contains a copy of `MapView.cs`.
+
+## Conventions and gotchas
+
+- Inside the `GeoPandas.Net.Geometry` namespace, `Geometry` is ambiguous (namespace vs NTS type). Use the alias `using NtsGeometry = NetTopologySuite.Geometries.Geometry;`.
+- `CoordinateReferenceSystem.WebMercator` is a static property, so pattern-match the projection type with its fully qualified name.
+- Don't add LINQ-like instance methods named `Where`/`Select` to columns (they shadow LINQ). The mask helper is `Column<T>.Mask`.
+- Planar `Area()`/`GeomLength()` on geographic CRSs return degrees. Reproject (`EstimateUtmCrs`) or use `Geodesic*`.
+- Validate geodesy against independent references (see the Krüger check in `CrsTests`), not against values from memory.
+- Shapefile DBF field names are truncated to 10 characters (format limit).
+
+## Requirements from the brief
+
+- Docs are bilingual (EN in `docs/en` and `README.md`, ID in `docs/id` and `README.id.md`), with screenshots in `docs/screenshots` (Edge headless for Blazor, `--screenshot` for Avalonia).
+- Every doc and app must carry the credit "Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil" (`Gpd.Credits`, `GalleryCatalog.Credit`).
+- Use the `frontend-design` skill (`.claude/skills/`) for gallery or UI work. The Blender and Rodin MCP servers in `.mcp.json` are available for 3D/2D art.
+
+## Secrets (outside the repo; never copy or commit them)
+
+- NuGet API key: `C:\Users\mifma\Documents\CodeSandbox\PackageCredentials.txt`. Publishing is an outward action, so ask before pushing.
+- LLM keys: `C:\Users\mifma\Documents\CodeSandbox\testkey.txt` (Azure OpenAI, DeepSeek, Anthropic), HF token in `HFToken.txt`. Pass them to `gpd ask` through the environment variables `GEOPANDAS_LLM_PROVIDER/ENDPOINT/API_KEY/MODEL`.
+
+## Supporting libraries (for later phases)
+
+DotNetVibeCoderz repos listed in `GeoPandas.Net.txt` (RLNet, Visual.Net, ThreeNet, GravicodeScience, HF.Net, MediaPipeNet, IoTComNet, GDAL.Net, OpenSceneGraph.Net, Cesium.Net), plus TorchSharp, OpenCvSharp and ML.NET.
