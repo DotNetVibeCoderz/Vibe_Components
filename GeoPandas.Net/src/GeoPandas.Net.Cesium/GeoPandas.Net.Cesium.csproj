@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.Cesium</RootNamespace>
+    <Description>GeoPandas.Net ⇄ Cesium.Net: GeoDataFrames as GeoJSON data sources, GPU point collections, 3D Tiles from GeoPandas.Net.Scene, property-driven tileset styles and camera framing on a CesiumJS globe in Blazor or Avalonia.</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Data\GeoPandas.Net.Data.csproj" />
+    <ProjectReference Include="..\GeoPandas.Net.Scene\GeoPandas.Net.Scene.csproj" />
+    <PackageReference Include="Cesium.Net" />
+  </ItemGroup>
+</Project>

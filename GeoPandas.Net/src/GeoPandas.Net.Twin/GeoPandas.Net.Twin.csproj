@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.Twin</RootNamespace>
+    <Description>GeoPandas.Net digital twins: thread-safe live layers for IoT streams on a dynamic quadtree, geofence enter/exit events, threshold rules with hysteresis, stale-sensor detection, windowed zone statistics, trajectories, JSON message ingestion and building / city / infrastructure twins with per-asset roll-ups.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Core\GeoPandas.Net.Core.csproj" />
+  </ItemGroup>
+</Project>

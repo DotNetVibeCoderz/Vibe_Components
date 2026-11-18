@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.Cloud</RootNamespace>
+    <Description>GeoPandas.Net cloud location services without SDK dependencies: Azure Maps (geocoding, reverse geocoding, routes, isochrones), AWS Location Service (places, routes, trackers, geofences; SigV4 or API key) and Azure Digital Twins (queries to GeoDataFrames, property patches, telemetry, live-layer sync), all returning GeoDataFrames.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Core\GeoPandas.Net.Core.csproj" />
+    <ProjectReference Include="..\GeoPandas.Net.Twin\GeoPandas.Net.Twin.csproj" />
+  </ItemGroup>
+</Project>

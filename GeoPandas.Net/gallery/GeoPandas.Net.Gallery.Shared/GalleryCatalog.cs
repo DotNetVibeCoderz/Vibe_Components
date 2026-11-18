@@ -17,6 +17,8 @@ using GeoPandas.Net.Network;
 using GeoPandas.Net.Plotting;
 using GeoPandas.Net.Raster;
 using GeoPandas.Net.Survey;
+using GeoPandas.Net.Scene;
+using GeoPandas.Net.Twin;
 using NetTopologySuite.Geometries;
 using GeoPandas.Net.Geometry.Crs;
 using RasterGrid = GeoPandas.Net.Raster.Raster;
@@ -72,6 +74,7 @@ public static class GalleryCatalog
         new("rs", new("Remote sensing", "Penginderaan jauh"), "◎"),
         new("cad", new("CAD & BIM", "CAD & BIM"), "⌗"),
         new("survey", new("Surveying & geodesy", "Survei & geodesi"), "⌖"),
+        new("twin", new("Digital twins & 3D", "Kembaran digital & 3D"), "⬡"),
         new("ai", new("Spatial AI", "AI spasial"), "✶"),
     ];
 
@@ -971,6 +974,210 @@ public static class GalleryCatalog
                 var steps = new DataFrame(Column.Create("step", plan.Steps.Select((s, i) => (long)i + 1).ToArray()), Column.Create("operation", plan.Steps.Select(s => s.Op).ToArray()),
                     Column.Create("arguments", plan.Steps.Select(s => string.Join(", ", s.Args.Select(a => $"{a.Key}={a.Value.GetRawText()}"))).ToArray()));
                 return new(scene, steps, [F("Model", "Model", "gpt-5-mini (recorded)"), F("Rows returned", "Baris hasil", res.RowCount.ToString())], default);
+            }),
+
+        // ---------------------------------------------------------------- Phase 5: scale, 3D, twins, ML
+        new("h3", "gis", new("H3 hexagon binning", "Binning heksagon H3"),
+            new("Bin 2,000 facilities into Uber H3 hexagons (resolution 8, ~0.74 km²) and sum their capacity — the same cell ids h3-py returns, so the result joins with any H3 dataset.",
+                "Kelompokkan 2.000 fasilitas ke heksagon Uber H3 (resolusi 8, ~0,74 km²) dan jumlahkan kapasitasnya — id sel sama dengan h3-py, sehingga hasilnya bisa digabung dengan dataset H3 mana pun."),
+            """
+            var hex = H3Frame.Bin(pois, res: 8, valueColumn: "capacity");   // WGS 84 hexagons
+            var ring = H3.GridDisk(H3.LatLngToCell(-6.2, 106.8, 8), k: 1);  // a cell and its 6 neighbours
+            hex.ToCrs(pois.Crs!).Plot(new LayerStyle { Column = "capacity_sum" });
+            """,
+            () =>
+            {
+                var pois = SampleData.PointsOfInterest(2000, 11);
+                var hex = H3Frame.Bin(pois, 8, "capacity").ToCrs(pois.Crs!);
+                var scene = Scene().AddLayer(Districts, Base)
+                    .AddLayer(hex, new LayerStyle { Column = "capacity_sum", ColorMap = ColorMaps.YlGnBu, Scheme = ClassificationScheme.Quantiles, Classes = 5, LegendTitle = "Capacity per hexagon", Stroke = "#ffffff", StrokeWidth = 0.4, FillOpacity = 0.9 });
+                var top = hex.SortBy("capacity_sum", false).Head(8).Select("h3", "count", "capacity_sum", "area_km2").Attributes();
+                return new(scene, top, [F("Hexagons", "Heksagon", hex.RowCount.ToString()), F("Mean cell area", "Luas sel rata-rata", $"{hex["area_km2"].Mean():F3} km²"),
+                    F("Busiest cell", "Sel terpadat", $"{hex["count"].Max():N0} facilities")], default);
+            }),
+
+        new("partitioned", "data", new("Partitioned processing & GeoParquet datasets", "Pemrosesan terpartisi & dataset GeoParquet"),
+            new("Split 20,000 points into balanced k-d tree partitions, join them to districts partition by partition in parallel (identical to a plain sjoin), and write a partitioned GeoParquet dataset whose bounding-box reads open only the files they need.",
+                "Pecah 20.000 titik menjadi partisi k-d tree seimbang, gabungkan ke distrik per partisi secara paralel (hasil identik dengan sjoin biasa), lalu tulis dataset GeoParquet terpartisi yang pembacaan bbox-nya hanya membuka file yang diperlukan."),
+            """
+            var parts = PartitionedGeoDataFrame.Create(points, PartitionScheme.KdTree, size: 1500);
+            var joined = parts.SJoin(districts, SpatialPredicate.Within).Collect();   // == points.SJoin(districts)
+            GeoParquetDataset.Write(parts, "points_dataset/");
+            var window = GeoParquetDataset.ReadPartitioned("points_dataset/", bbox);    // reads only overlapping partitions
+            """,
+            () =>
+            {
+                var pts = SampleData.PointsOfInterest(20000, 5);
+                var parts = PartitionedGeoDataFrame.Create(pts, PartitionScheme.KdTree, 1500);
+                var joined = parts.SJoin(Districts, SpatialPredicate.Within);
+                var dir = TempDir("partitioned");
+                GeoParquetDataset.Write(parts, dir);
+                var tb = pts.TotalBounds;
+                var box = new Envelope(tb.MinX + tb.Width * 0.55, tb.MinX + tb.Width * 0.8, tb.MinY + tb.Height * 0.5, tb.MinY + tb.Height * 0.8);
+                var window = GeoParquetDataset.ReadPartitioned(dir, box);
+                var key = new string[pts.RowCount];
+                foreach (var p in parts.Partitions) foreach (var id in p.RowIds) key[id] = p.Key;
+                var scene = Scene().AddLayer(Districts, Base)
+                    .AddLayer(pts.WithColumn(Column.Create("partition", key)), new LayerStyle { Column = "partition", Categorical = true, PointRadius = 0.9, StrokeWidth = 0, ShowInLegend = false, FillOpacity = 0.8 })
+                    .AddLayer(parts.BoundsFrame(), new LayerStyle { Fill = null, Stroke = "#1b2a33", StrokeWidth = 0.8, ShowInLegend = false })
+                    .AddLayer(GeoDataFrame.FromGeometries([Geo.Box(box.MinX, box.MinY, box.MaxX, box.MaxY)], pts.Crs), new LayerStyle { Fill = "#b0306a", FillOpacity = 0.12, Stroke = "#b0306a", StrokeWidth = 2, LegendTitle = "Query window" }, "Query window");
+                return new(scene, parts.Summary().Head(10), [F("Partitions", "Partisi", parts.PartitionCount.ToString()), F("Joined rows", "Baris tergabung", $"{joined.RowCount:N0}"),
+                    F("Files read for the window", "File dibaca untuk jendela", $"{window.PartitionCount} / {parts.PartitionCount}")], default);
+            }),
+
+        new("tiles3d", "twin", new("3D city: buildings as OGC 3D Tiles", "Kota 3D: bangunan sebagai OGC 3D Tiles"),
+            new("Extrude building footprints by height into glTF and package them as a 3D Tiles 1.1 tileset (quadtree, ECEF-georeferenced, attributes as EXT_structural_metadata). The output passes the official validators and opens in CesiumJS or Cesium.Net.",
+                "Ekstrusi footprint bangunan sesuai tinggi menjadi glTF dan kemas sebagai tileset 3D Tiles 1.1 (quadtree, tergeoreferensi ECEF, atribut sebagai EXT_structural_metadata). Hasilnya lolos validator resmi dan terbuka di CesiumJS atau Cesium.Net."),
+            """
+            var tileset = Tiles3D.WriteBuildings(buildings, "city_tiles/", heightColumn: "height",
+                options: new TilesetOptions { MaxFeaturesPerTile = 150 }, heightColors: ColorMaps.Viridis);
+            var terrain = Tiles3D.WriteTerrain(dem, "terrain_tiles/");
+            // Cesium.Net: await viewer.AddTilesetAsync(tileset);
+            """,
+            () =>
+            {
+                var rng = new Random(21);
+                var geoms = new List<NtsGeometry?>(); var heights = new List<double>(); var uses = new List<string>();
+                for (int gx = -12; gx < 12; gx++)
+                    for (int gy = -9; gy < 9; gy++)
+                    {
+                        if (rng.NextDouble() < 0.25) continue;
+                        double x = SampleData.CenterX + gx * 120 + rng.NextDouble() * 20, y = SampleData.CenterY + gy * 120 + rng.NextDouble() * 20;
+                        double w = 40 + rng.NextDouble() * 50, h = 30 + rng.NextDouble() * 50;
+                        double dist = Math.Sqrt(gx * gx + gy * gy);
+                        geoms.Add(Geo.Box(x, y, x + w, y + h));
+                        heights.Add(Math.Round(Math.Max(6, 140 * Math.Exp(-dist / 4) + rng.NextDouble() * 18), 1));
+                        uses.Add(dist < 4 ? "office" : rng.NextDouble() < 0.7 ? "residential" : "retail");
+                    }
+                var buildings = GeoDataFrame.FromGeometries(geoms, SampleData.Crs, Column.Create("height", heights.ToArray()), Column.Create("use", uses.ToArray()));
+                var dir = TempDir("tiles3d");
+                Tiles3D.WriteBuildings(buildings, dir, options: new TilesetOptions { MaxFeaturesPerTile = 150 }, heightColors: ColorMaps.Viridis);
+                int tiles = Directory.GetFiles(dir, "*.glb", SearchOption.AllDirectories).Length;
+                long bytes = Directory.GetFiles(dir, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length);
+                var view = buildings.TotalBounds;
+                var scene = Scene().AddLayer(Roads.Cx(view.MinX - 300, view.MinY - 300, view.MaxX + 300, view.MaxY + 300), RoadStyle)
+                    .AddLayer(buildings, new LayerStyle { Column = "height", ColorMap = ColorMaps.Viridis, LegendTitle = "Height (m)", Stroke = "#ffffff", StrokeWidth = 0.3, FillOpacity = 1 });
+                var table = buildings.SortBy("height", false).Head(8).Attributes();
+                return new(scene, table, [F("Buildings", "Bangunan", buildings.RowCount.ToString()), F("GLB tiles", "Tile GLB", tiles.ToString()),
+                    F("Tileset size", "Ukuran tileset", $"{bytes / 1024.0:F0} KB"), F("Tallest", "Tertinggi", $"{buildings["height"].Max():F0} m")], default);
+            }),
+
+        new("twin", "twin", new("Live digital twin: fleet geofencing", "Kembaran digital langsung: geofencing armada"),
+            new("Stream GPS + sensor readings from 40 vehicles into a live layer on a dynamic quadtree. Zone enter/exit and over-speed events fire as readings arrive; the snapshot can be pushed to Azure Digital Twins or an AWS Location tracker.",
+                "Alirkan pembacaan GPS + sensor dari 40 kendaraan ke live layer di atas quadtree dinamis. Event masuk/keluar zona dan kelebihan kecepatan muncul saat data tiba; snapshot dapat dikirim ke Azure Digital Twins atau tracker AWS Location."),
+            """
+            var layer = new LiveLayer("fleet", districts.TotalBounds, districts.Crs)
+                .AddZones(districts, "name")
+                .AddRule(new ThresholdRule("speeding", "speed_kmh", Above: 60, Hysteresis: 5));
+            layer.EventRaised += e => Console.WriteLine(e);
+            await layer.IngestAsync(mqttReadings);                 // IAsyncEnumerable<SensorReading>
+            await new AzureDigitalTwinsClient(http, adtUrl, token).SyncAsync(layer);
+            """,
+            () =>
+            {
+                var layer = new LiveLayer("fleet", Districts.TotalBounds, Districts.Crs).AddZones(Districts, "name")
+                    .AddRule(new ThresholdRule("speeding", "speed_kmh", Above: 60, Hysteresis: 5));
+                var events = new List<TwinEvent>();
+                layer.EventRaised += events.Add;
+                var rng = new Random(4);
+                var t0 = new DateTimeOffset(2026, 11, 18, 7, 0, 0, TimeSpan.Zero);
+                var start = Pois.Head(40);
+                var ext = Districts.TotalBounds;
+                for (int v = 0; v < 40; v++)
+                {
+                    var p = (Point)start.Geometry[v]!;
+                    double x = p.X, y = p.Y, heading = rng.NextDouble() * 2 * Math.PI;
+                    for (int s = 0; s < 60; s++)
+                    {
+                        double speed = 25 + rng.NextDouble() * 50;                    // km/h
+                        heading += (rng.NextDouble() - 0.5) * 0.6;
+                        double nx = x + Math.Cos(heading) * speed / 3.6 * 30, ny = y + Math.Sin(heading) * speed / 3.6 * 30;   // 30 s steps
+                        if (!ext.Contains(nx, ny)) { heading += Math.PI; continue; }
+                        (x, y) = (nx, ny);
+                        layer.Ingest(new SensorReading($"v{v:00}", t0.AddSeconds(30 * s), x, y, new Dictionary<string, double> { ["speed_kmh"] = Math.Round(speed, 1) }));
+                    }
+                }
+                var snap = layer.Snapshot();
+                var trails = GeoDataFrame.FromGeometries(Enumerable.Range(0, 40).Select(v => (NtsGeometry?)layer.Trajectory($"v{v:00}")), Districts.Crs);
+                var scene = Scene().AddLayer(Districts, Base)
+                    .AddLayer(trails, new LayerStyle { Fill = null, Stroke = "#5b7a8c", StrokeWidth = 0.7, ShowInLegend = false })
+                    .AddLayer(snap, new LayerStyle { Column = "speed_kmh", ColorMap = ColorMaps.YlOrRd, PointRadius = 3.2, Stroke = "#1b2a33", StrokeWidth = 0.6, LegendTitle = "Speed now (km/h)", FillOpacity = 1 });
+                var counts = events.GroupBy(e => e.Kind.ToString()).OrderByDescending(g => g.Count()).ToList();
+                var table = new DataFrame(Column.Create("event", counts.Select(g => g.Key).ToArray()), Column.Create("count", counts.Select(g => (long)g.Count()).ToArray()));
+                int inZone = Enumerable.Range(0, snap.RowCount).Count(i => !string.IsNullOrEmpty((string?)snap["zones"].GetValue(i)));
+                return new(scene, table, [F("Readings", "Pembacaan", $"{layer.ReadingCount:N0}"), F("Events", "Event", $"{events.Count:N0}"),
+                    F("Vehicles in a zone now", "Kendaraan di zona", inZone.ToString())], default);
+            }),
+
+        new("landcover", "rs", new("Land-cover classification (ML.NET)", "Klasifikasi tutupan lahan (ML.NET)"),
+            new("Train a random forest on 600 labelled points over a 4-band image, classify every pixel and assess accuracy on 400 independent points (confusion matrix, kappa). Deep models run the same way through OnnxSegmenter.",
+                "Latih random forest dari 600 titik berlabel pada citra 4 band, klasifikasikan setiap piksel dan uji akurasi pada 400 titik independen (matriks konfusi, kappa). Model deep learning berjalan dengan cara sama lewat OnnxSegmenter."),
+            """
+            var clf = LandCoverClassifier.Train(image, trainingPoints, "class", algorithm: LandCoverAlgorithm.RandomForest);
+            var map = clf.Predict(image);                       // class index per pixel
+            var report = clf.Evaluate(LandCoverClassifier.SamplePixels(image, testPoints, "class", [0, 1, 2, 3]));
+            // deep learning: new OnnxSegmenter("unet.onnx") { TileSize = 256 }.Predict(image)
+            """,
+            () =>
+            {
+                var img = SampleData.Multispectral(160, 125);
+                var ndvi = Enumerable.Range(0, img.Width * img.Height).Select(i => (img.Bands[2][i] - img.Bands[1][i]) / (double)(img.Bands[2][i] + img.Bands[1][i])).ToArray();
+                var sorted = ndvi.Order().ToArray();
+                double t1 = sorted[sorted.Length / 3], t2 = sorted[2 * sorted.Length / 3];
+                string Truth(int i) => ndvi[i] < t1 ? "urban" : ndvi[i] < t2 ? "grass" : "forest";
+                var rng = new Random(3);
+                GeoDataFrame Samples(int n)
+                {
+                    var g = new List<NtsGeometry?>(); var l = new List<string>();
+                    for (int k = 0; k < n; k++)
+                    {
+                        int r = rng.Next(img.Height), c = rng.Next(img.Width);
+                        var (px, py) = img.Transform.PixelToWorld(c + 0.5, r + 0.5);
+                        g.Add(Geo.Point(px, py)); l.Add(Truth(r * img.Width + c));
+                    }
+                    return GeoDataFrame.FromGeometries(g, img.Crs, Column.Create("class", l.ToArray()));
+                }
+                var train = Samples(600);
+                var clf = GeoPandas.Net.ML.LandCoverClassifier.Train(img, train, "class");
+                var map = clf.Predict(img);
+                var report = clf.Evaluate(GeoPandas.Net.ML.LandCoverClassifier.SamplePixels(img, Samples(400), "class", [0, 1, 2, 3]));
+                var palette = new Dictionary<string, Rgba> { ["forest"] = Rgba.Parse("#1f6b3a"), ["grass"] = Rgba.Parse("#b8d98a"), ["urban"] = Rgba.Parse("#b0306a") };
+                var rgba = new byte[map.Width * map.Height * 4];
+                for (int i = 0; i < map.Bands[0].Length; i++)
+                {
+                    if (float.IsNaN(map.Bands[0][i])) continue;
+                    var c = palette[clf.Labels[(int)map.Bands[0][i]]];
+                    (rgba[4 * i], rgba[4 * i + 1], rgba[4 * i + 2], rgba[4 * i + 3]) = (c.R, c.G, c.B, 255);
+                }
+                var scene = Scene().AddImage(rgba, map.Width, map.Height, map.Bounds, legend: clf.Labels.Select(l => new LegendEntry(l, palette[l])).ToArray(), name: "Land cover")
+                    .AddLayer(train, new LayerStyle { Fill = "#ffffff", PointRadius = 1.4, Stroke = "#1b2a33", StrokeWidth = 0.4, LegendTitle = "Training points" }, "Training points");
+                return new(scene, report.ToFrame(), [F("Overall accuracy", "Akurasi keseluruhan", report.OverallAccuracy.ToString("P1")), F("Kappa", "Kappa", report.Kappa.ToString("F3")),
+                    F("Classes", "Kelas", string.Join(", ", clf.Labels))], default);
+            }),
+
+        new("gpu", "raster", new("GPU terrain (ILGPU)", "Terrain GPU (ILGPU)"),
+            new("Run hillshade and slope as ILGPU kernels — on CUDA or OpenCL when present, otherwise on the multi-threaded CPU accelerator — and compare with the managed implementation.",
+                "Jalankan hillshade dan slope sebagai kernel ILGPU — di CUDA atau OpenCL bila ada, selain itu di akselerator CPU multi-thread — lalu bandingkan dengan implementasi managed."),
+            """
+            using var gpu = GpuContext.Create();               // CUDA → OpenCL → CPU
+            var shade = GpuRaster.Hillshade(gpu, dem, 315, 40);
+            var slope = GpuRaster.Slope(gpu, dem);
+            var idw   = GpuRaster.Idw(gpu, xs, ys, zs, dem.Transform, dem.Width, dem.Height, power: 2);
+            """,
+            () =>
+            {
+                using var gpu = GeoPandas.Net.Gpu.GpuContext.Create();
+                var sw = Stopwatch.StartNew();
+                var shade = GeoPandas.Net.Gpu.GpuRaster.Hillshade(gpu, Dem, 315, 40);
+                var slope = GeoPandas.Net.Gpu.GpuRaster.Slope(gpu, Dem);
+                double tKernel = sw.Elapsed.TotalMilliseconds;
+                var managed = Terrain.Slope(Dem);
+                double maxDiff = 0;
+                for (int i = 0; i < slope.Bands[0].Length; i++)
+                    if (!float.IsNaN(slope.Bands[0][i]) && !float.IsNaN(managed.Bands[0][i])) maxDiff = Math.Max(maxDiff, Math.Abs(slope.Bands[0][i] - managed.Bands[0][i]));
+                var scene = Scene().AddRaster(slope, ColorMaps.Magma, legendTitle: "Slope (°)").AddHillshade(shade, 0.55);
+                return new(scene, null, [F("Device", "Perangkat", $"{gpu.Name} ({gpu.Type})"), F("Kernel time", "Waktu kernel", $"{tKernel:F0} ms"),
+                    F("Max |GPU − managed| slope", "Selisih maks slope", $"{maxDiff:G2}°")], default);
             }),
     ];
 

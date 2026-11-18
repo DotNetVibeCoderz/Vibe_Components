@@ -1,0 +1,35 @@
+@namespace GeoPandas.Net.Blazor
+@using GeoPandas.Net.Data
+
+@* An interactive map of one or more GeoDataFrames (MapLibre GL JS), isolated in a sandboxed iframe so its scripts and styles
+   never touch the host page. Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil. *@
+<iframe class="gpd-explore @Class" style="border:0;width:@Width;height:@Height;@Style" sandbox="allow-scripts allow-popups"
+        title="@(Map?.Title ?? "Map")" srcdoc="@_html" loading="lazy"></iframe>
+
+@code {
+    /// <summary>The map to show (from <c>gdf.Explore(...)</c> or <c>new ExploreMap().Add(...)</c>).</summary>
+    [Parameter, EditorRequired] public ExploreMap? Map { get; set; }
+    [Parameter] public string Width { get; set; } = "100%";
+    [Parameter] public string Height { get; set; } = "480px";
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Style { get; set; }
+
+    private string _html = "";
+    private ExploreMap? _rendered;
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(Map, _rendered))
+        {
+            _html = Map?.ToHtml() ?? "";
+            _rendered = Map;
+        }
+    }
+
+    /// <summary>Re-renders after the map's layers or styles changed.</summary>
+    public void Refresh()
+    {
+        _html = Map?.ToHtml() ?? "";
+        StateHasChanged();
+    }
+}

@@ -36,6 +36,13 @@ gpd water solve jaringan.inp --close P-17 --out-nodes tekanan.gpkg
 gpd topology pipa.gpkg --snap 0.5 --out masalah.geojson
 gpd ifc elements gedung.ifc --out elemen.gpkg            # IFC → GIS dalam koordinat peta
 gpd convert tapak.dwg tapak.gpkg                          # DWG dan DGN v7 lewat driver GeoIO
+gpd h3 bin poi.gpkg 8 --value kapasitas --out heksagon.gpkg   # binning heksagon H3
+gpd s2cell -6.2 106.8 --level 20
+gpd partition titik.parquet titik_ds --scheme kd --size 100000
+gpd dataset read titik_ds --bbox 700000,9310000,705000,9315000 --out jendela.gpkg
+gpd tiles3d buildings bangunan.gpkg tiles --height tinggi    # OGC 3D Tiles 1.1
+gpd explore kecamatan.gpkg --column population --out peta.html
+gpd geocode "Monas, Jakarta" --provider azure                # butuh AZURE_MAPS_KEY
 ```
 
 Jalankan `gpd help` untuk melihat semua perintah. Catatan: nama kolom pada Shapefile dibatasi 10 karakter (batasan format DBF), misalnya `travel_time_s` menjadi `travel_tim`.

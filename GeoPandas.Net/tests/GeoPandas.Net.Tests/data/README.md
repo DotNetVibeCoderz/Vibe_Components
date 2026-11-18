@@ -25,5 +25,9 @@ so the tests check GeoPandas.Net against independent implementations without nee
 | `epanet_net1_si_dw.inp`, `epanet_reference.json` | WNTR 1.5 + EPANET 2.2 engine | SI / Darcy-Weisbach variant with a check valve and a TCV; heads, flows, demands and status at t = 0 |
 | `bim_house_ifc4.ifc`, `bim_site_ifc2x3.ifc`, `bim_reference.json` | IfcOpenShell 0.9 API (files are ours) | IFC4 in mm with IfcMapConversion, walls, slabs, mapped column type, triangulated face set, Psets/Qtos; IFC2x3 with site lat/lon; reference geometry from IfcOpenShell's OpenCascade kernel |
 | `gdal_shapes.dgn` | GDAL 3.12 DGN driver | DGN v7 line strings, shape and point written by GDAL (0.01 m resolution seed) |
+| `h3_reference.json` | h3-py 4.5 (Uber H3, Apache-2.0) | cells, centres, boundaries and areas at random points and resolutions 0–15 (pentagons included), grid disks, parents/children, polygon fills |
+| `s2_reference.json` | s2sphere 0.2.5 | cell ids and tokens at levels 0–30, centres, vertices, exact areas, edge neighbours, children |
+| `aws_sigv4_reference.json` | botocore 1.44.5 `SigV4Auth` (fixed clock) | Authorization headers for POST/GET requests, encoded query strings and a session token |
+| `seg_tiny.onnx`, `seg_input_4x48x64.f32`, `seg_probs_3x48x64.f32` | onnx 1.23 + onnxruntime 1.32 (model is ours, random weights) | 4-band → 3-class softmax segmentation network, its input and onnxruntime's output probabilities |
 
 Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil.

@@ -92,7 +92,7 @@ public sealed partial class GeoDataFrame
         return all;
     }
 
-    private GeoDataFrame JoinResult(GeoDataFrame right, int[] li, int[] ri, string leftSuffix, string rightSuffix, Column? extra = null)
+    internal GeoDataFrame JoinResult(GeoDataFrame right, int[] li, int[] ri, string leftSuffix, string rightSuffix, Column? extra = null)
     {
         var rightAttrs = right.Columns.Where(c => c.Name != right.GeometryColumnName).ToList();
         var rightNames = new HashSet<string>(rightAttrs.Select(c => c.Name)) { "index_right" };

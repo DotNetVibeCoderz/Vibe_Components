@@ -14,6 +14,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\GeoPandas.Net\GeoPandas.Net.csproj" />
     <ProjectReference Include="..\..\src\GeoPandas.Net.Sql.BigQuery\GeoPandas.Net.Sql.BigQuery.csproj" />
+    <ProjectReference Include="..\..\src\GeoPandas.Net.Cesium\GeoPandas.Net.Cesium.csproj" />
+    <ProjectReference Include="..\..\src\GeoPandas.Net.Gpu\GeoPandas.Net.Gpu.csproj" />
+    <ProjectReference Include="..\..\src\GeoPandas.Net.ML\GeoPandas.Net.ML.csproj" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="DuckDB.NET.Data.Full" />
     <PackageReference Include="Npgsql" />

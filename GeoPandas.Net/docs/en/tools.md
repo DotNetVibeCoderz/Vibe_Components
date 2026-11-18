@@ -39,6 +39,13 @@ dotnet tool install -g GeoPandas.Net.Cli        # or: dotnet run --project tools
 | `gpd s2\|landsat info\|ndvi <product> [out.tif]` / `gpd stac info\|get <item.json> …` | Satellite products |
 | `gpd sample <districts\|roads\|pois\|water\|cities\|siteplan\|dem\|multispectral\|lidar\|climate> <out>` | Export sample data |
 | `gpd ask <file> "question" [--out f]` | GeoLLM question (needs the `GEOPANDAS_LLM_*` environment variables) |
+| `gpd h3 bin <points> <res> [--value col] [--out f]` / `gpd h3 cell <lat> <lon> <res>` / `gpd h3 disk <cell> <k>` / `gpd h3 info <cell>` | H3 hexagon binning and cell lookups |
+| `gpd s2cell <lat> <lon> [--level 30]` | S2 cell ids, tokens and areas from a level down to level 5 |
+| `gpd partition <file> <out_dir> [--scheme kd\|grid\|h3\|column] [--size n] [--column c]` | Write a partitioned GeoParquet dataset |
+| `gpd dataset info <dir>` / `gpd dataset read <dir> [--bbox x0,y0,x1,y1] [--out f]` | Inspect a partitioned dataset or read it with partition pruning |
+| `gpd tiles3d buildings <file> <out_dir> [--height h] [--max-features 500]` / `gpd tiles3d terrain <dem.tif> <out_dir> [--chunk 128]` | OGC 3D Tiles 1.1 tilesets |
+| `gpd explore <file> [--column c] [--out map.html] [--basemap osm\|none]` | Interactive MapLibre map (opens in the browser without `--out`) |
+| `gpd geocode "<text>" [--provider azure\|aws] [--index name] [--top 5] [--out f]` | Geocoding with Azure Maps (`AZURE_MAPS_KEY`) or AWS Location (`AWS_REGION` plus SigV4 credentials or `AWS_LOCATION_API_KEY`) |
 | `gpd about` | Version, kernel backend, drivers |
 
 ## Gallery apps

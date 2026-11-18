@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.Gpu</RootNamespace>
+    <Description>GeoPandas.Net GPU computing with ILGPU: terrain (slope, aspect, hillshade), normalised-difference indices, 2-D convolution and IDW interpolation kernels on CUDA / OpenCL GPUs, with the multi-threaded CPU accelerator as a fallback.</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Raster\GeoPandas.Net.Raster.csproj" />
+    <PackageReference Include="ILGPU" />
+    <PackageReference Include="ILGPU.Algorithms" />
+  </ItemGroup>
+</Project>

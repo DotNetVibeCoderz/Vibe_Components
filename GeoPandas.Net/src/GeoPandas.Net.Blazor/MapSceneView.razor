@@ -1,0 +1,14 @@
+@namespace GeoPandas.Net.Blazor
+@using GeoPandas.Net.Plotting
+
+@* A static map (MapScene → SVG), the same renderer as gdf.Plot(). *@
+<div class="gpd-scene @Class" style="width:@Width;@Style">@((MarkupString)(Scene?.ToSvg(PixelWidth, PixelHeight) ?? ""))</div>
+
+@code {
+    [Parameter, EditorRequired] public MapScene? Scene { get; set; }
+    [Parameter] public int PixelWidth { get; set; } = 900;
+    [Parameter] public int PixelHeight { get; set; } = 600;
+    [Parameter] public string Width { get; set; } = "100%";
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Style { get; set; }
+}

@@ -170,6 +170,31 @@ public class AiTests
     }
 
     [Fact]
+    public void Plan_H3Bin_WithinDistance_Simplify_Unique()
+    {
+        var gdf = SampleData.PointsOfInterest(300);
+        var bins = GeoAssistant.Execute(gdf, GeoQueryPlan.Parse("""{"steps":[{"op":"h3_bin","res":7,"value":"capacity"}]}"""));
+        Assert.Equal(300, bins["count"].Sum());
+        Assert.Equal(gdf["capacity"].Sum(), bins["capacity_sum"].Sum(), 6);
+
+        var within = GeoAssistant.Execute(gdf, GeoQueryPlan.Parse($$"""{"steps":[{"op":"within_distance","x":{{SampleData.CenterX}},"y":{{SampleData.CenterY}},"distance":2000}]}"""));
+        var c = Geo.Point(SampleData.CenterX, SampleData.CenterY);
+        int expected = Enumerable.Range(0, gdf.RowCount).Count(i => gdf.Geometry[i]!.Distance(c) <= 2000);
+        Assert.Equal(expected, within.RowCount);
+        var d = within["distance"].ToDoubleArray();
+        Assert.Equal(d.Order(), d);
+
+        var districts = SampleData.Districts();
+        var simple = GeoAssistant.Execute(districts, GeoQueryPlan.Parse("""{"steps":[{"op":"simplify","tolerance":200}]}"""));
+        Assert.Equal(districts.RowCount, simple.RowCount);
+        Assert.True(Enumerable.Range(0, districts.RowCount).Sum(i => ((GeoDataFrame)simple).Geometry[i]!.NumPoints) <= Enumerable.Range(0, districts.RowCount).Sum(i => districts.Geometry[i]!.NumPoints));
+
+        var uniq = GeoAssistant.Execute(gdf, GeoQueryPlan.Parse("""{"steps":[{"op":"unique","column":"category"}]}"""));
+        Assert.Equal(300, uniq["count"].Sum());
+        Assert.Equal(Enumerable.Range(0, gdf.RowCount).Select(i => gdf["category"].GetValue(i)).Distinct().Count(), uniq.RowCount);
+    }
+
+    [Fact]
     public void DescribeSchema_ContainsColumnsAndCrs()
     {
         var s = GeoAssistant.DescribeSchema(SampleData.Districts());

@@ -2,7 +2,7 @@
 
 > Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil. Roadmap: [PLAN.md](PLAN.md)
 
-Last updated / Terakhir diperbarui: **2026-11-18** · Version **0.4.0** (Phase 4 complete / Fase 4 selesai)
+Last updated / Terakhir diperbarui: **2026-11-18** · Version **0.5.0** (Phase 5 complete / Fase 5 selesai)
 
 ## Status by module / Status per modul
 
@@ -13,7 +13,7 @@ Last updated / Terakhir diperbarui: **2026-11-18** · Version **0.4.0** (Phase 4
 | CRS engine (§5) | ✅ | Full EPSG dataset (5 804 CRSs), 20 projection methods matching PROJ, PROJ4/WKT1/ESRI/WKT2/PROJJSON, Helmert + NTv2, geoids · NADCON → later |
 | Geoprocessing (§6) | ✅ | intersection, union, difference, sym. difference, buffer, dissolve, clip, merge/concat |
 | Spatial join (§7) | ✅ | all predicates plus nearest (exact) |
-| Spatial index (§8) | 🟡 | STR-tree, QuadTree, KD-tree, Octree, GeoHash ✅ · H3/S2 → Phase 5 |
+| Spatial index (§8) | ✅ | STR-tree, QuadTree, KD-tree, Octree, GeoHash, H3, S2 ✅ |
 | Network analysis (§9) | ✅ | Dijkstra, A*, bidirectional, Contraction Hierarchies, isochrones, utility tracing |
 | Raster analytics (§10) | ✅ | GeoTIFF/COG, NetCDF (CDF-1/2/5 + NetCDF-4, CF) ✅, DEM/slope/aspect/hillshade/viewshed ✅ |
 | Remote sensing (§11) | ✅ | NDVI/NDWI/NDBI/SAVI, change detection, Landsat C2, Sentinel-2 SAFE, STAC, MODIS/VIIRS HDF-EOS5 ✅ |
@@ -23,21 +23,34 @@ Last updated / Terakhir diperbarui: **2026-11-18** · Version **0.4.0** (Phase 4
 | BIM (§15) | ✅ | IFC2x3/IFC4/IFC4x3 reader, IFC → GIS in map coordinates, LOD1 footprints, GIS → IFC4 ✅ · openings/NURBS, CityGML → later |
 | CAD (§16) | ✅ | DXF, DWG (R14–2018), DGN v7 read/write and georeferencing ✅ · DGN v8 → later |
 | Utility network (§17) | ✅ | tracing, topology rules, EPANET-compatible hydraulics, valve-isolation segments ✅ · PRVs and extended-period simulation → later |
-| Digital twin (§18) | ⏳ | dynamic QuadTree ready; IoT twin → Phase 5 |
-| AI & ML (§19) | 🟡 | GeoLLM (OpenAI/Azure/DeepSeek) ✅ · ONNX/ML.NET/TorchSharp → Phase 5 |
-| 3D GIS (§20) | 🟡 | Octree, LAS/LAZ (formats 0–10) and COPC point clouds, DSM/DTM/nDSM ✅ · Scene/Cesium → Phase 5 |
-| Distributed (§21) / Cloud (§22) | ⏳ | Phase 5 |
+| Digital twin (§18) | ✅ | `LiveLayer` (geofence/threshold/stale events, trajectories, zone stats), `DigitalTwin` roll-ups, ADT and AWS tracker sync ✅ · IoTComNet transport → later |
+| AI & ML (§19) | ✅ | GeoLLM (OpenAI/Azure/DeepSeek, 4 new ops) ✅, ONNX segmentation ✅, ML.NET land cover ✅ · TorchSharp, HF.Net embeddings → later |
+| 3D GIS (§20) | ✅ | Octree, LAS/LAZ/COPC, DSM/DTM/nDSM, glTF, 3D Tiles 1.1, Cesium.Net, `Explore()` ✅ · native point-cloud viewer → later |
+| Distributed (§21) / Cloud (§22) | 🟡 | `PartitionedGeoDataFrame`, partitioned GeoParquet datasets, Azure Maps, AWS Location, Azure Digital Twins ✅ · Orleans/Akka/Spark adapters → later |
 | File formats (§23) | 🟡 | Shapefile, GeoJSON, GeoPackage, FlatGeobuf, GeoParquet (WKB + native GeoArrow), Arrow IPC/Feather, CSV, GeoTIFF, COG, NetCDF, LAS/LAZ/COPC, RINEX, JPEG 2000 (Sentinel-2), DXF ✅ · IFC, DWG/DGN → Phase 4 |
 | Enterprise DBs (§24) | ✅ | GeoPackage, PostGIS, SQL Server, DuckDB Spatial, Oracle Spatial, MySQL (ADO.NET), BigQuery GIS ✅ |
-| HPC (§25) | 🟡 | SIMD, Span, ArrayPool, parallel, Rust kernels, AOT-compatible core ✅ · GPU → Phase 5 |
-| NuGet ecosystem (§26) | 🟡 | Core, Data, Geometry, Analytics, Network, Raster, CAD, AI, Datasets, Arrow, PointCloud, Sql, Sql.BigQuery, Survey, RemoteSensing, Civil, BIM, meta, CLI, Templates ✅ · 0.1.0, 0.2.0 and 0.3.0 published · BIM/Scene/Cloud → later |
-| Gallery (Blazor + Avalonia) | ✅ | 30 samples (new in 0.4: GWR, water pressure simulation, road corridor, BIM ⇄ GIS), EN/ID, shared renderer |
+| HPC (§25) | ✅ | SIMD, Span, ArrayPool, parallel, Rust kernels, AOT-compatible core, ILGPU raster kernels ✅ |
+| NuGet ecosystem (§26) | 🟡 | Core, Data, Geometry, Analytics, Network, Raster, CAD, AI, Datasets, Arrow, PointCloud, Sql, Sql.BigQuery, Survey, RemoteSensing, Civil, BIM, Scene, Twin, Cloud, Cesium, Blazor, ML, Gpu, meta, CLI, Templates ✅ · 0.1.0–0.4.0 published |
+| Gallery (Blazor + Avalonia) | ✅ | 36 samples (new in 0.5: H3 binning, partitioned processing, 3D Tiles city, live fleet twin, ML.NET land cover, GPU terrain), EN/ID, shared renderer |
 | Lazy evaluation & versioning (Phase 2) | ✅ | `LazyGeoDataFrame` with bbox/column/attribute/limit pushdown, memory-mapped readers, `DatasetRepository` + `FrameDiff` |
-| CLI `gpd` | ✅ | 32 commands incl. regress, water, topology, ifc, crs search/at, geoid, survey, gnss, copc, s2, landsat, stac, scan, las, netcdf, repo; DWG/DGN via convert |
+| CLI `gpd` | ✅ | 39 commands incl. h3, s2cell, partition, dataset, tiles3d, explore, geocode, regress, water, topology, ifc, crs search/at, geoid, survey, gnss, copc, s2, landsat, stac, scan, las, netcdf, repo; DWG/DGN via convert |
 | Templates | ✅ | gpd-console, gpd-blazor, gpd-avalonia |
 | Docs EN/ID | ✅ | README, README.id, docs/en, docs/id, screenshots |
 
 ## Verification log / Log verifikasi
+
+- **v0.5** `dotnet test`: **282/282 passing** on both kernel backends.
+- Phase 5 checks against independent implementations:
+  - **H3:** h3-py 4.5 on 300 random points over resolutions 0–15, 60 pentagon cases, grid disks, hierarchy, areas, polygon fill and compaction: identical cell ids and sets; centres and boundaries within 1e-10°; areas within 1e-12 relative. Vertex counts needed C's `FLT_EPSILON`, not .NET `float.Epsilon`; areas needed H3 4.5's Cagnoli formula with Kahan summation.
+  - **S2:** s2sphere 0.2.5 at levels 0–30: identical ids, tokens, edge neighbours and children; centres and vertices within 1e-10°; exact areas within 1e-6 relative (s2sphere's own accuracy).
+  - **glTF / 3D Tiles:** Khronos glTF-Validator and CesiumGS 3d-tiles-validator report 0 errors and 0 warnings for buildings and terrain tilesets; vertex georeferencing within 0.06 mm of pyproj.
+  - **AWS SigV4:** Authorization headers identical to botocore 1.44.5 (POST/JSON, GET with encoded query, session token); the AWS client's own requests carry the same signature.
+  - **ONNX:** segmentation probabilities within 1e-6 of onnxruntime-python 1.32, with one tile and with overlapping tiles; identical arg-max classes.
+  - **ML.NET land cover:** > 85 % overall accuracy and kappa > 0.7 on independent test pixels (random forest and maximum entropy); the gallery sample reaches 94 %.
+  - **GPU:** slope, aspect, hillshade, NDVI, convolution and IDW match the managed implementations on the CPU accelerator in tests; the gallery sample also runs on an Intel UHD 620 through OpenCL with a 0° slope difference.
+  - **Partitioned processing:** partition-aware spatial join (inner and left) equals `GeoDataFrame.SJoin` row for row for every partition scheme; bbox queries equal brute force; a partitioned dataset read opens only intersecting partitions.
+- CLI smoke test (v0.5): `h3 cell/disk/bin`, `s2cell`, `partition` + `dataset info/read --bbox`, `explore --out`, `tiles3d terrain`, `geocode` (missing-key error path).
+- Build hygiene: the Scene package's trim/AOT warnings (generic `JsonArray.Add<T>`) were removed; the Cloud package serialises JSON with `Utf8JsonWriter`, not reflection.
 
 - **v0.4** `dotnet test`: **250/250 passing** on both kernel backends.
 - Phase 4 checks against independent implementations:
@@ -104,6 +117,16 @@ Phase 2 IO benchmarks (`FormatBench`: FlatGeobuf/GeoParquet bbox vs full read, l
 
 ## Changelog
 
+- **0.5.0** (2026-11-18): Phase 5 (scale, 3D, digital twins, cloud, ML, GPU).
+  - H3 and S2 cell indexes; `H3Frame` (indexing, hexagon frames, binning).
+  - `PartitionedGeoDataFrame` (k-d tree / grid / H3 / column partitions, parallel map/reduce, partition-aware spatial join) and `GeoParquetDataset` (partitioned datasets with partition pruning).
+  - New package `GeoPandas.Net.Scene`: local frames, meshes, glTF/GLB with feature metadata, 3D Tiles 1.1.
+  - New package `GeoPandas.Net.Twin`: live IoT layers, events, trajectories, zone statistics, digital twins.
+  - New package `GeoPandas.Net.Cloud`: Azure Maps, AWS Location Service (SigV4 or API key), Azure Digital Twins.
+  - New separate packages: `GeoPandas.Net.Cesium` (Cesium.Net), `GeoPandas.Net.Blazor` (`ExploreView`, `MapSceneView`), `GeoPandas.Net.ML` (ONNX segmentation, ML.NET land cover), `GeoPandas.Net.Gpu` (ILGPU raster kernels).
+  - `Explore()`: interactive MapLibre maps from GeoDataFrames.
+  - GeoLLM: new operations `h3_bin`, `within_distance`, `simplify`, `unique`.
+  - Gallery: H3 binning, partitioned processing, 3D Tiles city, live fleet twin, land-cover classification, GPU terrain; CLI: `h3`, `s2cell`, `partition`, `dataset`, `tiles3d`, `explore`, `geocode`.
 - **0.4.0** (2026-11-18): Phase 4 (engineering & BIM).
   - Spatial regression: OLS with LM diagnostics, ML spatial lag and error models, GWR with AICc bandwidth selection, universal kriging.
   - Utility networks: EPANET `.inp` read/write, EPANET-compatible steady-state hydraulics, topology rules, isolation-valve segments.

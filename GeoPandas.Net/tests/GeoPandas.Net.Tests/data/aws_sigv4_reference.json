@@ -1,0 +1,35 @@
+[
+ {
+  "name": "places_text",
+  "method": "POST",
+  "url": "https://places.geo.ap-southeast-1.amazonaws.com/places/v0/indexes/my-index/search/text",
+  "body": "{\"Text\":\"Jalan Sudirman, Jakarta\",\"MaxResults\":5}",
+  "region": "ap-southeast-1",
+  "token": null,
+  "authorization": "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20261118/ap-southeast-1/geo/aws4_request, SignedHeaders=content-type;host;x-amz-date, Signature=36e360fb3d37b16006cdf6114090495ecd2bb78438931fb5560ccd4a748862f6",
+  "amzdate": "20261118T093015Z",
+  "token_header": null
+ },
+ {
+  "name": "get_query",
+  "method": "GET",
+  "url": "https://geo.us-east-1.amazonaws.com/geofencing/v0/collections/zones/geofences?MaxResults=10&NextToken=a%2Fb%2Bc&Alpha=x%20y",
+  "body": "",
+  "region": "us-east-1",
+  "token": null,
+  "authorization": "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20261118/us-east-1/geo/aws4_request, SignedHeaders=host;x-amz-date, Signature=9a227ef90ca9d5ecbe7190e67adc1a26b2dc5a30f5774838229a05329cb46c5a",
+  "amzdate": "20261118T093015Z",
+  "token_header": null
+ },
+ {
+  "name": "tracking_token",
+  "method": "POST",
+  "url": "https://tracking.geo.eu-west-1.amazonaws.com/tracking/v0/trackers/fleet/positions",
+  "body": "{\"Updates\":[{\"DeviceId\":\"truck-1\",\"Position\":[106.8,-6.2],\"SampleTime\":\"2026-11-18T09:30:00Z\"}]}",
+  "region": "eu-west-1",
+  "token": "FwoGZXIvYXdzEXAMPLETOKEN//+==",
+  "authorization": "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20261118/eu-west-1/geo/aws4_request, SignedHeaders=content-type;host;x-amz-date;x-amz-security-token, Signature=1a2abd4eff307c6b2397f4a7703ce473c41237cbae07689c41b6a140a2061695",
+  "amzdate": "20261118T093015Z",
+  "token_header": "FwoGZXIvYXdzEXAMPLETOKEN//+=="
+ }
+]

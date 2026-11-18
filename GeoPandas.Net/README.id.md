@@ -20,7 +20,7 @@ GeoPandas.Net adalah reimplementasi dan perluasan konsep [GeoPandas](https://geo
 | **Spatial join** | `SJoin` (intersects / within / contains / touches / crosses / overlaps / covers…), `SJoinNearest` (branch-and-bound eksak), `Overlay`, `Dissolve`, `Clip`, `Explode`, `Cx` |
 | **Engine CRS** | **Dataset EPSG lengkap** (5 800+ CRS beserta wilayah penggunaannya), 20 metode proyeksi (TM, LCC, Albers, LAEA, stereografik kutub & miring, Hotine/RSO, Cassini, Equal Earth, Robinson, Mollweide…) yang cocok dengan PROJ hingga nanometer, PROJ.4 / WKT1 / ESRI / WKT2 / PROJJSON, datum shift Helmert dan **NTv2**, **geoid** (GTX, ISG, GeoTIFF) |
 | **Survei & GNSS** | Poligon (Bowditch/Transit), COGO, perataan jaring dan sipat datar kuadrat terkecil dengan elips kesalahan, uji χ² dan data snooping, RINEX 2/3 serta penentuan posisi absolut GPS |
-| **Indeks spasial** | STR-tree, KD-tree, quadtree dinamis, octree (3-D / point cloud), GeoHash |
+| **Indeks spasial** | STR-tree, KD-tree, quadtree dinamis, octree (3-D / point cloud), GeoHash; indeks sel **H3** dan **S2** (persis sama dengan h3-py dan s2sphere) |
 | **IO** | GeoJSON, ESRI Shapefile (Z), GeoPackage, **FlatGeobuf** (Hilbert R-tree), **GeoParquet 1.1**, **Arrow IPC/Feather** (GeoArrow, PROJJSON), CSV, DXF dalam satu registri `GeoIO`; diuji dua arah terhadap GDAL / geopandas / pyarrow |
 | **Data ilmiah** | **NetCDF** CDF-1/2/5 + NetCDF-4/HDF5 dengan konvensi CF, jendela hyperslab dan grid kurvilinier; point cloud **LAS 1.0–1.4 / LAZ (format 0–10) / COPC** dengan Octree, DSM/DTM/nDSM; pembaca produk **Landsat C2, Sentinel-2 SAFE, STAC, MODIS/VIIRS** |
 | **Basis data** | `ReadSql` / `ReadTable` / `ToSql` (setara `read_postgis`/`to_postgis`) untuk **PostGIS, SQL Server, DuckDB Spatial, Oracle Spatial, MySQL** lewat ADO.NET, plus **BigQuery GIS** |
@@ -31,6 +31,9 @@ GeoPandas.Net adalah reimplementasi dan perluasan konsep [GeoPandas](https://geo
 | **Raster** | Pembaca GeoTIFF / BigTIFF / COG, penulis GeoTIFF, slope, aspect, hillshade, viewshed, pengisian sink, arah aliran D8, akumulasi, DAS, NDVI/NDWI/NDBI/SAVI, deteksi perubahan Otsu, statistik zonal, rasterize, kontur |
 | **CAD** | Pembaca DXF (termasuk bulge LWPOLYLINE, ARC, ELLIPSE, SPLINE, TEXT, MTEXT, INSERT) dan penulis R12, baca/tulis **DWG** (R14–2018) dan **MicroStation DGN v7**, georeferensi dua titik CAD → GIS |
 | **AI spasial** | `GeoAssistant` (GeoLLM): pertanyaan bahasa alami → rencana kueri ter-whitelist yang dijalankan secara deterministik. Mendukung OpenAI, Azure OpenAI, DeepSeek atau endpoint yang kompatibel dengan OpenAI |
+| **Skala besar** | `PartitionedGeoDataFrame` (partisi k-d tree, grid, H3 atau atribut; map/reduce paralel; spatial join sadar-partisi yang identik dengan `SJoin`) dan dataset GeoParquet terpartisi dengan pemangkasan partisi berdasarkan bounding box |
+| **3D & kembaran digital** | glTF/GLB dan **OGC 3D Tiles 1.1** (bangunan ekstrusi, terrain; lolos validator, tergeoreferensi ECEF), integrasi Cesium.Net, peta interaktif `Explore()` (MapLibre, komponen Blazor), live layer IoT dengan event geofence dan ambang |
+| **Cloud, ML & GPU** | Klien Azure Maps, AWS Location (SigV4) dan Azure Digital Twins yang menghasilkan GeoDataFrame; segmentasi ONNX dan klasifikasi tutupan lahan ML.NET; kernel raster ILGPU (CUDA / OpenCL / CPU) |
 | **Peta** | `gdf.Plot()` menghasilkan `MapScene` (koroplet, kategorikal, simbol proporsional, label, legenda, skala, panah utara, bingkai lembar peta) → SVG, Blazor, Avalonia |
 | **Performa** | Kernel native Rust (Rayon) dengan fallback SIMD `Vector<T>`, graf CSR, `Span<T>`/`ArrayPool<T>`, paket inti kompatibel AOT |
 
@@ -57,11 +60,11 @@ Console.WriteLine(utm.Area().Sum() / 1e6 + " km²");
 utm.ToFile("kecamatan_utm.shp");
 ```
 
-Panduan lengkap: [Memulai](docs/id/getting-started.md) · [GeoDataFrame & IO](docs/id/vector.md) · [Format, basis data, lazy & versi](docs/id/data.md) · [Analisis](docs/id/analysis.md) · [CAD & AI](docs/id/integrations.md) · [Tools](docs/id/tools.md).
+Panduan lengkap: [Memulai](docs/id/getting-started.md) · [GeoDataFrame & IO](docs/id/vector.md) · [Format, basis data, lazy & versi](docs/id/data.md) · [Analisis](docs/id/analysis.md) · [CAD & AI](docs/id/integrations.md) · [Teknik & BIM](docs/id/engineering.md) · [Skala besar, 3D, kembaran digital & cloud](docs/id/scale-3d-twins.md) · [Tools](docs/id/tools.md).
 
 ## Galeri (web Blazor + desktop Avalonia)
 
-30 contoh interaktif (GIS, data & format, statistik spasial, jaringan, raster, teknik sipil, penginderaan jauh, survei & geodesi, CAD & BIM, AI), dwibahasa EN/ID.
+36 contoh interaktif (GIS, data & format, statistik spasial, jaringan, raster, teknik sipil, penginderaan jauh, survei & geodesi, CAD & BIM, kembaran digital & 3D, AI), dwibahasa EN/ID.
 
 ```bash
 dotnet run --project gallery/GeoPandas.Net.Gallery.Blazor     # http://localhost:5280

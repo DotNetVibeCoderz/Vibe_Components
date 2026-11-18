@@ -20,7 +20,7 @@ GeoPandas.Net re-implements and extends the ideas of Python's [GeoPandas](https:
 | **Spatial joins** | `SJoin` (intersects / within / contains / touches / crosses / overlaps / covers…), `SJoinNearest` (exact branch-and-bound), `Overlay` (intersection, union, difference, symmetric difference, identity), `Dissolve`, `Clip`, `Explode`, `Cx` |
 | **CRS engine** | The **full EPSG dataset** (5 800+ CRSs with areas of use), 20 projection methods (TM, LCC, Albers, LAEA, polar & oblique stereographic, Hotine/RSO, Cassini, Equal Earth, Robinson, Mollweide…) matching PROJ to the nanometre, PROJ.4 / WKT1 / ESRI / WKT2 / PROJJSON, Helmert and **NTv2** datum shifts, **geoids** (GTX, ISG, GeoTIFF), `EstimateUtmCrs` |
 | **Surveying & GNSS** | Traverses (Bowditch/Transit), COGO, least-squares network and leveling adjustment with error ellipses, χ² test and data snooping, RINEX 2/3 and GPS single point positioning |
-| **Spatial index** | STR-tree (bulk-loaded, flat arrays, k-NN), KD-tree, dynamic quadtree, octree (3-D / point clouds), GeoHash |
+| **Spatial index** | STR-tree (bulk-loaded, flat arrays, k-NN), KD-tree, dynamic quadtree, octree (3-D / point clouds), GeoHash; **H3** and **S2** cell indexes (exact against h3-py and s2sphere) |
 | **IO** | GeoJSON, ESRI Shapefile (.shp/.shx/.dbf/.prj/.cpg, Z), GeoPackage, **FlatGeobuf** (Hilbert R-tree), **GeoParquet 1.1** and **Arrow IPC/Feather** (GeoArrow, PROJJSON), CSV, DXF behind one `GeoIO` driver registry; all checked against GDAL / geopandas / pyarrow in both directions |
 | **Scientific data** | **NetCDF** CDF-1/2/5 + NetCDF-4/HDF5 with CF conventions, hyperslab windows and curvilinear grids; **LAS 1.0–1.4 / LAZ (formats 0–10) / COPC** point clouds with Octree, DSM/DTM/nDSM; **Landsat C2, Sentinel-2 SAFE, STAC, MODIS/VIIRS** product readers |
 | **Databases** | `ReadSql` / `ReadTable` / `ToSql` (GeoPandas `read_postgis`/`to_postgis`) for **PostGIS, SQL Server, DuckDB Spatial, Oracle Spatial, MySQL** over plain ADO.NET, plus **BigQuery GIS** |
@@ -31,6 +31,9 @@ GeoPandas.Net re-implements and extends the ideas of Python's [GeoPandas](https:
 | **Raster** | GeoTIFF / BigTIFF / COG reader (strips, tiles, Deflate, LZW, PackBits, predictor), GeoTIFF writer, slope, aspect, hillshade, ruggedness, viewshed, sink filling, D8 flow, accumulation, watersheds, NDVI/NDWI/NDBI/SAVI, Otsu change detection, zonal stats, rasterize, contours |
 | **CAD** | DXF reader (LINE, LWPOLYLINE with bulges, POLYLINE, CIRCLE, ARC, ELLIPSE, SPLINE, TEXT, MTEXT, INSERT, 3DFACE) and R12 writer, **DWG** read/write (R14–2018), **MicroStation DGN v7** read/write, two-point CAD → GIS georeferencing |
 | **Spatial AI** | `GeoAssistant` (GeoLLM): natural language → whitelisted query plan, executed deterministically. Works with OpenAI, Azure OpenAI, DeepSeek or any OpenAI-compatible endpoint |
+| **Scale** | `PartitionedGeoDataFrame` (k-d tree, grid, H3 or attribute partitions; parallel map/reduce; partition-aware spatial join identical to `SJoin`) and partitioned GeoParquet datasets with bounding-box partition pruning |
+| **3D & twins** | glTF/GLB and **OGC 3D Tiles 1.1** (extruded buildings, terrain; validator-clean, ECEF-georeferenced), Cesium.Net integration, interactive `Explore()` maps (MapLibre, Blazor component), live IoT layers with geofence and threshold events |
+| **Cloud, ML & GPU** | Azure Maps, AWS Location (SigV4) and Azure Digital Twins clients returning GeoDataFrames; ONNX segmentation and ML.NET land-cover classification; ILGPU raster kernels (CUDA / OpenCL / CPU) |
 | **Maps** | `gdf.Plot()` returns a renderer-agnostic `MapScene` (choropleth, categorical, proportional symbols, labels, legends, scale bar, north arrow, map-sheet frame) that can be drawn as SVG, in Blazor, or natively in Avalonia |
 | **Performance** | Rust native kernels (Rayon) with a `Vector<T>` SIMD managed fallback, CSR graphs, `Span<T>`/`ArrayPool<T>`, AOT-compatible core packages |
 
@@ -67,7 +70,7 @@ utm.WithColumn(area.Rename("area_m2"))
 utm.ToFile("districts_utm.shp");
 ```
 
-More examples: [Getting started](docs/en/getting-started.md) · [GeoDataFrame & IO](docs/en/vector.md) · [Formats, databases, lazy & versioning](docs/en/data.md) · [Analysis](docs/en/analysis.md) · [CAD & AI](docs/en/integrations.md).
+More examples: [Getting started](docs/en/getting-started.md) · [GeoDataFrame & IO](docs/en/vector.md) · [Formats, databases, lazy & versioning](docs/en/data.md) · [Analysis](docs/en/analysis.md) · [CAD & AI](docs/en/integrations.md) · [Engineering & BIM](docs/en/engineering.md) · [Scale, 3D, twins & cloud](docs/en/scale-3d-twins.md).
 
 ## Packages
 
@@ -90,13 +93,20 @@ More examples: [Getting started](docs/en/getting-started.md) · [GeoDataFrame & 
 | `GeoPandas.Net.Raster` | GeoTIFF/COG IO, NetCDF (classic + NetCDF-4), terrain, hydrology, spectral indices, zonal statistics |
 | `GeoPandas.Net.CAD` | DXF, DWG and DGN v7 read/write, CAD ⇄ GIS georeferencing |
 | `GeoPandas.Net.AI` | GeoLLM assistant, OpenAI / Azure OpenAI client |
+| `GeoPandas.Net.Scene` | Local ENU frames, meshes (terrain, extrusions, points, lines), glTF/GLB with feature metadata, 3D Tiles 1.1 |
+| `GeoPandas.Net.Twin` | Live layers for IoT streams, geofence/threshold/stale events, zone statistics, digital twins |
+| `GeoPandas.Net.Cloud` | Azure Maps, AWS Location Service, Azure Digital Twins (no SDK dependencies) |
+| `GeoPandas.Net.Cesium` | Cesium.Net helpers: GeoDataFrames, point clouds and tilesets in a CesiumJS viewer (separate package) |
+| `GeoPandas.Net.Blazor` | `ExploreView` (interactive MapLibre map) and `MapSceneView` components (separate package) |
+| `GeoPandas.Net.ML` | ONNX Runtime segmentation, ML.NET land-cover classification, accuracy assessment (separate package) |
+| `GeoPandas.Net.Gpu` | ILGPU raster kernels: slope, aspect, hillshade, normalized difference, convolution, IDW (separate package) |
 | `GeoPandas.Net.Datasets` | Reproducible sample data (city, roads, POIs, DEM, imagery, CAD plan, LiDAR tile, climate grid, world cities) |
 | `GeoPandas.Net.Cli` | `gpd` command-line tool (`dotnet tool install -g GeoPandas.Net.Cli`) |
 | `GeoPandas.Net.Templates` | `dotnet new gpd-console`, `gpd-blazor`, `gpd-avalonia` |
 
 ## Gallery (Blazor web + Avalonia desktop)
 
-30 live samples across GIS, data & formats, spatial statistics, networks, raster, civil engineering, remote sensing, surveying & geodesy, CAD & BIM and AI. The web and desktop galleries render from the same scene display list, so their maps are identical. The UI is bilingual (EN/ID).
+36 live samples across GIS, data & formats, spatial statistics, networks, raster, civil engineering, remote sensing, surveying & geodesy, CAD & BIM, digital twins & 3D and AI. The web and desktop galleries render from the same scene display list, so their maps are identical. The UI is bilingual (EN/ID).
 
 ```bash
 dotnet run --project gallery/GeoPandas.Net.Gallery.Blazor     # http://localhost:5280

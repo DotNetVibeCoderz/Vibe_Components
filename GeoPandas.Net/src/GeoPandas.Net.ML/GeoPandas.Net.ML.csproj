@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.ML</RootNamespace>
+    <Description>GeoPandas.Net machine learning for imagery: ONNX Runtime semantic segmentation of rasters (tiling with overlap, normalisation, class probabilities) and ML.NET land-cover classification from labelled points or polygons (random forest, boosted trees, maximum entropy) with confusion matrices and kappa.</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Raster\GeoPandas.Net.Raster.csproj" />
+    <PackageReference Include="Microsoft.ML" />
+    <PackageReference Include="Microsoft.ML.FastTree" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+  </ItemGroup>
+</Project>

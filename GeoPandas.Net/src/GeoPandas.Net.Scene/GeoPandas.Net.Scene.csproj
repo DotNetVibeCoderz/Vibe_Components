@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.Scene</RootNamespace>
+    <Description>GeoPandas.Net 3D scenes: exact local ENU frames, terrain meshes from DEMs, extruded LOD1 buildings, point clouds and 3-D lines, glTF 2.0 (GLB) export with EXT_mesh_features / EXT_structural_metadata, and OGC 3D Tiles 1.1 tilesets (feature quadtrees, terrain pyramids) for CesiumJS / Cesium.Net.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Raster\GeoPandas.Net.Raster.csproj" />
+  </ItemGroup>
+</Project>

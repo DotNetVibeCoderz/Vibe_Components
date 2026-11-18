@@ -15,6 +15,10 @@ using GeoPandas.Net.Plotting;
 using GeoPandas.Net.Raster;
 using GeoPandas.Net.RemoteSensing;
 using GeoPandas.Net.Survey;
+using GeoPandas.Net.Arrow;
+using GeoPandas.Net.Cloud;
+using GeoPandas.Net.Geometry.Index;
+using GeoPandas.Net.Scene;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
@@ -98,6 +102,13 @@ internal sealed class Cli(string[] args)
             case "water": WaterCmd(); break;
             case "topology": TopologyCmd(); break;
             case "ifc" or "bim": IfcCmd(); break;
+            case "h3": H3Cmd(); break;
+            case "s2cell": S2Cmd(); break;
+            case "partition": PartitionCmd(); break;
+            case "dataset": DatasetCmd(); break;
+            case "tiles3d" or "3dtiles": Tiles3DCmd(); break;
+            case "explore": ExploreCmd(); break;
+            case "geocode": await GeocodeAsync(); break;
             case "layers": foreach (var l in GeoPackage.ListLayers(Pos(1, "gpkg"))) Console.WriteLine(l); break;
             default: throw new ArgumentException($"Unknown command '{_pos[0]}'. Run 'gpd help'.");
         }
@@ -188,6 +199,18 @@ internal sealed class Cli(string[] args)
           gpd repo diff <dir> [from=HEAD~1] [to=HEAD] [--out changes.geojson]
           gpd repo checkout <dir> <ref> <out>
           gpd repo tag <dir> <name> [ref]
+
+        Scale, 3D & cloud
+          gpd h3 bin <points> <res> [--value col] [--out hex.gpkg]    H3 hexagon binning (WGS 84)
+          gpd h3 cell <lat> <lon> <res> | h3 disk <cell> <k> | h3 info <cell>
+          gpd s2cell <lat> <lon> [--level 30]                S2 cell id, token and area per level
+          gpd partition <file> <out_dir> [--scheme kd|grid|h3|column] [--size n] [--column c]
+          gpd dataset info <dir> | dataset read <dir> [--bbox x0,y0,x1,y1] [--out f]   partitioned GeoParquet
+          gpd tiles3d buildings <file> <out_dir> [--height height] [--max-features 500]   OGC 3D Tiles 1.1
+          gpd tiles3d terrain <dem.tif> <out_dir> [--chunk 128]
+          gpd explore <file> [--column c] [--out map.html] [--basemap osm|none]   interactive MapLibre map
+          gpd geocode "<text>" [--provider azure|aws] [--index name] [--top 5] [--out f]
+                   env: AZURE_MAPS_KEY | AWS_REGION + AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or AWS_LOCATION_API_KEY
 
         Data & AI
           gpd sample <districts|roads|pois|water|cities|siteplan|dem|multispectral|lidar|climate> <out>
@@ -841,6 +864,152 @@ internal sealed class Cli(string[] args)
         Title($"{v.RowCount} topology issue(s) in {lines.RowCount} lines");
         Console.WriteLine(v.Attributes().GroupBy("rule").Agg(("line", AggFunc.Count, "count")).ToString(50));
         if (Opt("out") is { } o) { v.ToFile(o); Ok($"issues → {o}"); }
+    }
+
+    // ================================================================== Phase 5: H3/S2, partitions, 3D Tiles, explore, cloud
+
+    private void H3Cmd()
+    {
+        var sub = Pos(1, "bin|cell|disk|info");
+        switch (sub)
+        {
+            case "bin":
+            {
+                var pts = Load(2, "points");
+                var hex = H3Frame.Bin(pts, int.Parse(Pos(3, "res"), CultureInfo.InvariantCulture), Opt("value"));
+                Console.WriteLine(hex.SortBy("count", false).Head(int.Parse(Opt("n") ?? "10", CultureInfo.InvariantCulture)).Attributes().ToString(50));
+                if (Opt("out") is { } o) { hex.ToFile(o); Ok($"{hex.RowCount} hexagons → {o}"); }
+                break;
+            }
+            case "cell":
+                PrintH3(H3.LatLngToCell(double.Parse(Pos(2, "lat"), CultureInfo.InvariantCulture), double.Parse(Pos(3, "lon"), CultureInfo.InvariantCulture),
+                    int.Parse(Pos(4, "res"), CultureInfo.InvariantCulture)));
+                break;
+            case "disk":
+                foreach (var n in H3.GridDisk(H3.Parse(Pos(2, "cell")), int.Parse(Pos(3, "k"), CultureInfo.InvariantCulture))) Console.WriteLine(H3.ToString(n));
+                break;
+            case "info": PrintH3(H3.Parse(Pos(2, "cell"))); break;
+            default: throw new ArgumentException("h3: bin | cell | disk | info");
+        }
+    }
+
+    private static void PrintH3(ulong c)
+    {
+        var (lat, lng) = H3.CellToLatLng(c);
+        Title(H3.ToString(c));
+        Console.WriteLine($"  resolution {H3.GetResolution(c)}{(H3.IsPentagon(c) ? " (pentagon)" : "")}");
+        Console.WriteLine($"  centre     {lat:F8}, {lng:F8}");
+        Console.WriteLine($"  area       {H3.CellAreaKm2(c):G8} km²");
+        Console.WriteLine($"  boundary   {H3.CellToPolygon(c).AsText()}");
+    }
+
+    private void S2Cmd()
+    {
+        double lat = double.Parse(Pos(1, "lat"), CultureInfo.InvariantCulture), lon = double.Parse(Pos(2, "lon"), CultureInfo.InvariantCulture);
+        int level = int.Parse(Opt("level") ?? "30", CultureInfo.InvariantCulture);
+        var leaf = S2.FromLatLng(lat, lon);
+        foreach (var l in new[] { level, 20, 15, 10, 5 }.Where(l => l <= level).Distinct())
+        {
+            var c = S2.Parent(leaf, l);
+            Console.WriteLine($"  level {l,2}  id {c,20}  token {S2.ToToken(c),-16}  area {S2.AreaKm2(c):G6} km²");
+        }
+    }
+
+    private void PartitionCmd()
+    {
+        var gdf = Load(1, "file");
+        var outDir = Pos(2, "out_dir");
+        var scheme = (Opt("scheme") ?? "kd").ToLowerInvariant() switch
+        {
+            "kd" or "kdtree" => PartitionScheme.KdTree,
+            "grid" => PartitionScheme.Grid,
+            "h3" => PartitionScheme.H3,
+            "column" => PartitionScheme.Column,
+            var x => throw new ArgumentException($"Unknown scheme '{x}' (kd, grid, h3, column).")
+        };
+        int size = int.Parse(Opt("size") ?? (scheme switch { PartitionScheme.KdTree => "100000", PartitionScheme.Grid => "4", _ => "5" }), CultureInfo.InvariantCulture);
+        var parts = PartitionedGeoDataFrame.Create(gdf, scheme, size, Opt("column"));
+        GeoParquetDataset.Write(parts, outDir);
+        Console.WriteLine(parts.Summary().ToString(50));
+        Ok($"{gdf.RowCount} rows → {parts.PartitionCount} partitions in {outDir}");
+    }
+
+    private void DatasetCmd()
+    {
+        var sub = Pos(1, "info|read");
+        var dir = Pos(2, "dir");
+        if (sub == "info")
+        {
+            var parts = GeoParquetDataset.Partitions(dir);
+            Title($"{parts.Count} partitions, {parts.Sum(p => p.Rows):N0} rows");
+            foreach (var p in parts) Console.WriteLine($"  {p.Key,-24} {p.Rows,10:N0}  [{p.Bounds.MinX:F3}, {p.Bounds.MinY:F3}, {p.Bounds.MaxX:F3}, {p.Bounds.MaxY:F3}]  {p.Path}");
+            return;
+        }
+        if (sub != "read") throw new ArgumentException("dataset: info | read");
+        var bbox = Opt("bbox") is { } b ? ParseBbox(b) : null;
+        var read = GeoParquetDataset.ReadPartitioned(dir, bbox);
+        Title($"read {read.PartitionCount} of {GeoParquetDataset.Partitions(dir).Count} partitions, {read.RowCount:N0} rows");
+        if (read.PartitionCount == 0) return;
+        var all = GeoDataFrame.Concat(read.Partitions.Select(x => x.Frame).ToArray());
+        Console.WriteLine(all.Head(10).ToString(50));
+        if (Opt("out") is { } o) { all.ToFile(o); Ok($"{all.RowCount} rows → {o}"); }
+    }
+
+    private void Tiles3DCmd()
+    {
+        switch (Pos(1, "buildings|terrain"))
+        {
+            case "buildings":
+            {
+                var b = Load(2, "file");
+                var opts = new TilesetOptions { MaxFeaturesPerTile = int.Parse(Opt("max-features") ?? "500", CultureInfo.InvariantCulture) };
+                var path = Tiles3D.WriteBuildings(b, Pos(3, "out_dir"), Opt("height") ?? "height", Opt("base"), opts, ColorMaps.Viridis);
+                Ok($"{b.RowCount} buildings → {path}");
+                break;
+            }
+            case "terrain":
+            {
+                var dem = GeoTiff.Read(Pos(2, "dem.tif"));
+                var path = Tiles3D.WriteTerrain(dem, Pos(3, "out_dir"), int.Parse(Opt("chunk") ?? "128", CultureInfo.InvariantCulture), colors: ColorMaps.Terrain);
+                Ok($"{dem.Width}×{dem.Height} DEM → {path}");
+                break;
+            }
+            default: throw new ArgumentException("tiles3d: buildings | terrain");
+        }
+    }
+
+    private void ExploreCmd()
+    {
+        var gdf = Load(1, "file");
+        var map = gdf.Explore(Opt("column"), basemap: Opt("basemap") ?? "osm", title: Path.GetFileName(Pos(1, "file")));
+        if (Opt("out") is { } o) { map.Save(o); Ok($"interactive map → {o}"); }
+        else Ok($"opened {map.Open()}");
+    }
+
+    private async Task GeocodeAsync()
+    {
+        var text = Pos(1, "text");
+        int top = int.Parse(Opt("top") ?? "5", CultureInfo.InvariantCulture);
+        using var http = new HttpClient();
+        var provider = Opt("provider") ?? (Environment.GetEnvironmentVariable("AZURE_MAPS_KEY") is { Length: > 0 } ? "azure" : "aws");
+        GeoDataFrame result;
+        if (provider == "azure")
+        {
+            var key = Environment.GetEnvironmentVariable("AZURE_MAPS_KEY") is { Length: > 0 } k ? k : throw new ArgumentException("Set AZURE_MAPS_KEY.");
+            result = await new AzureMapsClient(http, key).GeocodeAsync(text, top);
+        }
+        else if (provider == "aws")
+        {
+            var region = Environment.GetEnvironmentVariable("AWS_REGION") ?? Environment.GetEnvironmentVariable("AWS_DEFAULT_REGION") ?? throw new ArgumentException("Set AWS_REGION.");
+            var index = Opt("index") ?? throw new ArgumentException("--index <place index name> is required for AWS.");
+            var client = Environment.GetEnvironmentVariable("AWS_LOCATION_API_KEY") is { Length: > 0 } apiKey
+                ? new AwsLocationClient(http, region, apiKey)
+                : new AwsLocationClient(http, region, AwsCredentials.FromEnvironment() ?? throw new ArgumentException("Set AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY or AWS_LOCATION_API_KEY."));
+            result = await client.GeocodeAsync(index, text, top);
+        }
+        else throw new ArgumentException("--provider azure | aws");
+        Console.WriteLine(result.ToString(60));
+        if (Opt("out") is { } o) { result.ToFile(o); Ok($"{result.RowCount} results → {o}"); }
     }
 
     private void IfcCmd()

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.Blazor</RootNamespace>
+    <Description>GeoPandas.Net Blazor components: ExploreView (interactive MapLibre maps of GeoDataFrames, the gdf.Explore() page hosted in an isolated iframe) and MapSceneView (static SVG maps from MapScene).</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\GeoPandas.Net.Data\GeoPandas.Net.Data.csproj" />
+  </ItemGroup>
+</Project>

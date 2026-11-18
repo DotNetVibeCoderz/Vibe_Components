@@ -10,6 +10,7 @@
 | [Analysis](analysis.md) | Spatial statistics, clustering, interpolation, networks & routing, raster & terrain, hydrology, remote sensing |
 | [Projections, geodesy, surveying & satellites](geodesy.md) | 20 projections, the EPSG dataset, NTv2, geoids, traverse & least-squares adjustment, RINEX/GNSS, Landsat / Sentinel-2 / STAC / MODIS |
 | [Engineering, BIM & spatial econometrics](engineering.md) | Spatial lag/error regression, GWR, universal kriging, EPANET-compatible hydraulics, topology rules, valve isolation, road alignments & corridors, earthwork, subdivision, IFC ⇄ GIS, DWG, DGN |
+| [Scale, 3D, digital twins & cloud](scale-3d-twins.md) | H3 and S2 indexes, partitioned frames and GeoParquet datasets, glTF and 3D Tiles, Cesium.Net, `Explore()` with MapLibre and Blazor, live IoT layers, Azure Maps, AWS Location, Azure Digital Twins, ONNX and ML.NET, ILGPU |
 | [CAD & AI integrations](integrations.md) | DXF ⇄ GIS, georeferencing, GeoLLM assistant |
 | [Tools](tools.md) | `gpd` CLI, gallery apps, `dotnet new` templates, benchmarks |
 | [Architecture](architecture.md) | Package layering, design decisions, performance, native kernels |

@@ -41,7 +41,7 @@ public sealed record GeoAnswer(string Question, GeoQueryPlan Plan, DataFrame Res
 
 /// <summary>
 /// GeoLLM assistant: grounds an LLM on a GeoDataFrame schema, asks it for a JSON plan composed only of
-/// whitelisted operations (filter, sort, head, select, groupby, buffer, area, length, centroid, to_crs,
+/// whitelisted operations (filter, sort, head, select, groupby, buffer, area, length, centroid, to_crs, h3_bin, within_distance, simplify, unique,
 /// dissolve, bbox, nearest_to, count) and executes that plan deterministically.
 /// </summary>
 public sealed class GeoAssistant(ILlmClient llm)
@@ -65,6 +65,10 @@ public sealed class GeoAssistant(ILlmClient llm)
         - {"op":"dissolve","by":C}
         - {"op":"groupby","by":C,"agg":[{"column":C2,"func":"sum|mean|min|max|count|median"}]}
         - {"op":"count"}
+        - {"op":"h3_bin","res":0-15,"value":C?}   (H3 hexagon binning: count, and sum/mean of C per hexagon; WGS 84 output)
+        - {"op":"within_distance","x":X,"y":Y,"distance":D}   (features within D of a point, dataset CRS units, with a distance column)
+        - {"op":"simplify","tolerance":T}         (Douglas-Peucker, dataset CRS units)
+        - {"op":"unique","column":C}               (distinct values of C with their counts)
         Use only column names from the schema. Never invent columns. Prefer few steps.
         """;
 
@@ -136,6 +140,10 @@ public sealed class GeoAssistant(ILlmClient llm)
                 "groupby" => current.GroupBy(S("by")).Agg(a["agg"].EnumerateArray().Select(x =>
                     (x.GetProperty("column").GetString()!, ParseAgg(x.GetProperty("func").GetString()!), $"{x.GetProperty("column").GetString()}_{x.GetProperty("func").GetString()}")).ToArray()),
                 "count" => new DataFrame(Column.Create("count", new[] { (long)current.RowCount })),
+                "h3_bin" => H3Frame.Bin(G(), (int)D("res"), a.TryGetValue("value", out var hv) ? hv.GetString() : null),
+                "within_distance" => WithinDistance(G(), D("x"), D("y"), D("distance")),
+                "simplify" => Metric2(G(), g => g.Simplify(D("tolerance"))),
+                "unique" => Unique(current, S("column")),
                 _ => throw new InvalidOperationException($"Operation '{step.Op}' is not allowed.")
             };
         }
@@ -195,6 +203,21 @@ public sealed class GeoAssistant(ILlmClient llm)
         if (!gdf.IsGeographic) return f(gdf);
         var crs = gdf.Crs!;
         return f(gdf.ToCrs(gdf.EstimateUtmCrs())).ToCrs(crs);
+    }
+
+    private static GeoDataFrame WithinDistance(GeoDataFrame gdf, double x, double y, double distance)
+    {
+        var p = Geometry.Geo.Point(x, y);
+        var rows = Enumerable.Range(0, gdf.RowCount).Select(i => (i, d: gdf.Geometry[i]?.Distance(p) ?? double.PositiveInfinity))
+            .Where(t => t.d <= distance).OrderBy(t => t.d).ToList();
+        return gdf.Take(rows.Select(t => t.i).ToArray()).WithColumn(Column.Create("distance", rows.Select(t => t.d).ToArray()));
+    }
+
+    private static DataFrame Unique(DataFrame df, string column)
+    {
+        var groups = Enumerable.Range(0, df.RowCount).GroupBy(i => Convert.ToString(df[column].GetValue(i), System.Globalization.CultureInfo.InvariantCulture) ?? "")
+            .OrderByDescending(g => g.Count()).ToList();
+        return new DataFrame(Column.Create(column, groups.Select(g => g.Key).ToArray()), Column.Create("count", groups.Select(g => (long)g.Count()).ToArray()));
     }
 
     private static GeoDataFrame Nearest(GeoDataFrame gdf, double x, double y, int k)

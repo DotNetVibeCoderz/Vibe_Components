@@ -49,14 +49,18 @@ Follow-ups (v0.3) / Lanjutan:
 
 ## Phase 5 — 3D, digital twin, AI, cloud / 3D, digital twin, AI, cloud
 
-- [ ] `GeoPandas.Net.Scene`: terrain mesh, 3D Tiles export, Cesium.Net integration, point-cloud rendering (ThreeNet / OpenSceneGraph.Net)
-- [ ] Digital twin: IoT streams (IoTComNet) on a live `QuadTree`, building, city and infrastructure twins
-- [ ] AI: ONNX Runtime / ML.NET / TorchSharp land-cover segmentation, HF.Net embeddings, GeoLLM tool-calling over more operations
-- [ ] H3 and S2 hexagonal and spherical indexes
-- [ ] Distributed: Orleans grains for partitioned GeoDataFrames, Akka.NET pipelines, Spark connector
-- [ ] Cloud: Azure Maps, Azure Digital Twins, AWS Location Service
-- [ ] GPU computing (ILGPU / CUDA) for raster and kernel operations
-- [ ] Interactive web map (`Explore()`) with MapLibre in Blazor
+- [x] `GeoPandas.Net.Scene`: local ENU frames, terrain/extrusion/point/line meshes, glTF with EXT_mesh_features + EXT_structural_metadata, 3D Tiles 1.1 (buildings quadtree, terrain pyramid; validator-clean); `GeoPandas.Net.Cesium` for Cesium.Net
+- [ ] Native point-cloud rendering (ThreeNet / OpenSceneGraph.Net); point clouds go to glTF / Cesium for now
+- [x] Digital twin: `LiveLayer` (IoT streams on a dynamic quadtree, geofence and threshold events with hysteresis, stale sensors, trajectories, zone statistics), `DigitalTwin` roll-ups; Azure Digital Twins and AWS Location tracker sync
+- [ ] IoTComNet transport adapters (package not on NuGet); readings arrive through `IAsyncEnumerable` / channels / `TwinJson`
+- [x] AI: ONNX Runtime segmentation (tiled, onnxruntime-verified), ML.NET land-cover classification with accuracy assessment, GeoLLM ops `h3_bin`, `within_distance`, `simplify`, `unique`
+- [ ] TorchSharp training and HF.Net embeddings (HF.Net not on NuGet)
+- [x] H3 (port of Uber H3 v4, exact against h3-py 4.5) and S2 (exact against s2sphere) indexes, `H3Frame` binning
+- [x] Distributed core: `PartitionedGeoDataFrame` (k-d tree / grid / H3 / column partitions, parallel map/reduce, partition-aware sjoin) and partitioned GeoParquet datasets with partition pruning
+- [ ] Orleans, Akka.NET and Spark adapters over the partition model
+- [x] Cloud: Azure Maps, Azure Digital Twins, AWS Location Service (`GeoPandas.Net.Cloud`, SigV4 botocore-verified)
+- [x] GPU computing (ILGPU: CUDA → OpenCL → CPU) for slope, aspect, hillshade, normalized difference, convolution, IDW
+- [x] Interactive web map (`Explore()`) with MapLibre, `ExploreView` / `MapSceneView` Blazor components
 
 ## Release & distribution / Rilis & distribusi
 
