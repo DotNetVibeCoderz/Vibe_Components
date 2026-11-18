@@ -143,14 +143,14 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
       oracle:
-        image: gvenzl/oracle-free:23-slim-faststart
+        image: gvenzl/oracle-free:23-faststart   # full image: the slim variant has no Oracle Spatial (SDO_GEOMETRY)
         env:
           ORACLE_PASSWORD: gpd
           APP_USER: gpd
           APP_USER_PASSWORD: gpd
         ports: ["1521:1521"]
         options: >-
-          --health-cmd healthcheck.sh --health-interval 10s --health-timeout 5s --health-retries 30
+          --health-cmd healthcheck.sh --health-interval 10s --health-timeout 5s --health-retries 60
     defaults:
       run:
         working-directory: GeoPandas.Net
