@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>GeoPandas.Net.Geometry</RootNamespace>
-    <Description>GeoPandas.Net geometry engine: geometry factory (NetTopologySuite backend), CRS/projection engine (EPSG, PROJ4, WKT, ESRI PRJ), spatial indexes (STRtree, QuadTree, KDTree, Octree, GeoHash), geodesy and SIMD/Rust native kernels.</Description>
+    <Description>GeoPandas.Net geometry engine: geometry factory (NetTopologySuite backend), CRS/projection engine (full EPSG dataset, 20 projection methods, PROJ4, WKT1/WKT2, ESRI PRJ, PROJJSON, NTv2 grid shifts, geoid models), spatial indexes (STRtree, QuadTree, KDTree, Octree, GeoHash), geodesy and SIMD/Rust native kernels.</Description>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="NetTopologySuite" />
@@ -19,5 +19,9 @@
   <ItemGroup Condition="!Exists('$(MSBuildThisFileDirectory)runtimes\win-x64\native\geopandas_native.dll') And Exists('$(MSBuildThisFileDirectory)..\..\native\geopandas_native\target\release\geopandas_native.dll')">
     <None Include="$(MSBuildThisFileDirectory)..\..\native\geopandas_native\target\release\geopandas_native.dll"
           Pack="true" PackagePath="runtimes\win-x64\native\" CopyToOutputDirectory="PreserveNewest" Link="geopandas_native.dll" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Crs\Data\epsg.tsv.gz" LogicalName="GeoPandas.Net.Geometry.epsg.tsv.gz" />
+    <EmbeddedResource Include="Crs\Data\egm96-1deg-int16.gz" LogicalName="GeoPandas.Net.Geometry.egm96-1deg-int16.gz" WithCulture="false" />
   </ItemGroup>
 </Project>

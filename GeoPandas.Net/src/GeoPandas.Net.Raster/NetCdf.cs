@@ -351,9 +351,10 @@ public sealed class NetCdfDataset : IDisposable
         return res;
     }
 
-    private double[] ReadH5(NetCdfVariable v)
+    private double[] ReadH5(NetCdfVariable v, PureHDF.Selections.Selection? selection = null)
     {
         var d = _h5Datasets[v.Name];
+        if (selection is not null) return ReadH5Selection(d, v, selection);
         return v.Type switch
         {
             NetCdfType.Float => d.Read<float[]>().Select(x => (double)x).ToArray(),
@@ -368,6 +369,76 @@ public sealed class NetCdfDataset : IDisposable
             NetCdfType.UInt64 => d.Read<ulong[]>().Select(x => (double)x).ToArray(),
             _ => throw new NotSupportedException($"Variable '{v.Name}' of type {v.Type} cannot be read as numbers.")
         };
+    }
+
+    private static double[] ReadH5Selection(PureHDF.IH5Dataset d, NetCdfVariable v, PureHDF.Selections.Selection sel) => v.Type switch
+    {
+        NetCdfType.Float => d.Read<float[]>(sel).Select(x => (double)x).ToArray(),
+        NetCdfType.Double => d.Read<double[]>(sel),
+        NetCdfType.Byte => d.Read<sbyte[]>(sel).Select(x => (double)x).ToArray(),
+        NetCdfType.UByte => d.Read<byte[]>(sel).Select(x => (double)x).ToArray(),
+        NetCdfType.Short => d.Read<short[]>(sel).Select(x => (double)x).ToArray(),
+        NetCdfType.UShort => d.Read<ushort[]>(sel).Select(x => (double)x).ToArray(),
+        NetCdfType.Int => d.Read<int[]>(sel).Select(x => (double)x).ToArray(),
+        NetCdfType.UInt => d.Read<uint[]>(sel).Select(x => (double)x).ToArray(),
+        NetCdfType.Int64 => d.Read<long[]>(sel).Select(x => (double)x).ToArray(),
+        NetCdfType.UInt64 => d.Read<ulong[]>(sel).Select(x => (double)x).ToArray(),
+        _ => throw new NotSupportedException($"Variable '{v.Name}' of type {v.Type} cannot be read as numbers.")
+    };
+
+    /// <summary>
+    /// Reads an N-dimensional window (start/count per dimension) with CF unpacking. NetCDF-4 uses an HDF5 hyperslab (only the needed chunks
+    /// are decompressed); classic files read contiguous runs from the memory map.
+    /// </summary>
+    public double[] ReadWindow(string name, int[] start, int[] count)
+    {
+        var v = Variable(name);
+        int nd = v.Shape.Count;
+        if (start.Length != nd || count.Length != nd) throw new ArgumentException($"'{name}' has {nd} dimensions.");
+        for (int i = 0; i < nd; i++)
+            if (start[i] < 0 || count[i] < 0 || start[i] + count[i] > v.Shape[i]) throw new ArgumentOutOfRangeException(nameof(start), $"Window exceeds dimension '{v.Dimensions[i]}' (length {v.Shape[i]}).");
+        long total = count.Aggregate(1L, (a, b) => a * b);
+        double[] res;
+        if (_h5 is not null)
+        {
+            var sel = new PureHDF.Selections.HyperslabSelection(nd, start.Select(x => (ulong)x).ToArray(), count.Select(x => (ulong)x).ToArray());
+            res = ReadH5(v, sel);
+        }
+        else
+        {
+            res = new double[total];
+            int es = ElemSize(v.Type);
+            // strides in elements (record dimension handled through the record size)
+            var stride = new long[nd];
+            long acc = 1;
+            for (int i = nd - 1; i >= 0; i--) { stride[i] = acc; acc *= v.Shape[i]; }
+            int last = nd - 1;
+            int run = nd == 0 ? 1 : count[last];
+            var idx = new int[nd];
+            long k = 0;
+            while (k < total)
+            {
+                long elem = 0, byteBase = v.Begin;
+                for (int i = 0; i < nd; i++)
+                {
+                    int pos = start[i] + idx[i];
+                    if (i == 0 && v.IsRecord) byteBase += pos * _recSize;
+                    else elem += pos * (v.IsRecord ? stride[i] : stride[i]);
+                }
+                if (nd > 0 && !v.IsRecord) elem -= 0;
+                var span = _file!.Span(byteBase + elem * es, run * es);
+                for (int j = 0; j < run; j++) res[k + j] = Decode(span, j, v.Type);
+                k += run;
+                // advance the multi-index (excluding the last dimension)
+                for (int i = nd - 2; i >= 0; i--)
+                {
+                    if (++idx[i] < count[i]) break;
+                    idx[i] = 0;
+                }
+            }
+        }
+        ApplyCf(v, res);
+        return res;
     }
 
     /// <summary>Values with CF conventions applied (fill/missing/valid range → NaN, then scale_factor and add_offset).</summary>
@@ -396,10 +467,9 @@ public sealed class NetCdfDataset : IDisposable
         double[] res;
         if (_h5 is not null)
         {
-            var all = ReadH5(v);
-            long off = 0, stride = slab;
-            for (int i = leading.Length - 1; i >= 0; i--) { off += leading[i] * stride; stride *= v.Shape[i]; }
-            res = all.AsSpan((int)off, (int)slab).ToArray();
+            var starts = leading.Select(x => (ulong)x).Concat([0UL, 0UL]).ToArray();
+            var blocks = Enumerable.Repeat(1UL, leading.Length).Concat([(ulong)ny, (ulong)nx]).ToArray();
+            res = ReadH5(v, new PureHDF.Selections.HyperslabSelection(nd, starts, blocks));
         }
         else
         {
@@ -538,6 +608,76 @@ public sealed class NetCdfDataset : IDisposable
         bool IsLon(string d) => d.StartsWith("lon", StringComparison.OrdinalIgnoreCase) || Coordinate(d)?.Units is "degrees_east" or "degree_east" or "degrees_E";
         bool IsLat(string d) => d.StartsWith("lat", StringComparison.OrdinalIgnoreCase) || Coordinate(d)?.Units is "degrees_north" or "degree_north" or "degrees_N";
         return IsLon(xDim) && IsLat(yDim) ? CoordinateReferenceSystem.Wgs84 : null;
+    }
+
+    /// <summary>2-D latitude/longitude coordinate variables of a curvilinear variable (CF <c>coordinates</c> attribute), or null.</summary>
+    public (NetCdfVariable Lon, NetCdfVariable Lat)? CurvilinearCoordinates(string variable)
+    {
+        var v = Variable(variable);
+        var names = v.Attributes.TryGetValue("coordinates", out var c) && c is string cs ? cs.Split(' ', StringSplitOptions.RemoveEmptyEntries) : [];
+        var candidates = names.Select(n => _vars.FirstOrDefault(x => x.Name == n)).Where(x => x is { Dimensions.Count: 2 }).ToList();
+        candidates.AddRange(_vars.Where(x => x.Dimensions.Count == 2 && (x.Name is "lat" or "lon" or "latitude" or "longitude" or "nav_lat" or "nav_lon" or "XLAT" or "XLONG")));
+        bool IsLat(NetCdfVariable x) => x.Units is "degrees_north" or "degree_north" || x.Name.Contains("lat", StringComparison.OrdinalIgnoreCase);
+        bool IsLon(NetCdfVariable x) => x.Units is "degrees_east" or "degree_east" || x.Name.Contains("lon", StringComparison.OrdinalIgnoreCase);
+        var lat = candidates.FirstOrDefault(x => x is not null && IsLat(x));
+        var lon = candidates.FirstOrDefault(x => x is not null && IsLon(x));
+        return lat is not null && lon is not null ? (lon, lat) : null;
+    }
+
+    /// <summary>
+    /// Cell values as points (lon/lat from 1-D or curvilinear 2-D coordinates), one row per cell, with the value in a column named after
+    /// the variable. NaN cells are dropped.
+    /// </summary>
+    public GeoDataFrame ToPoints(string variable, params int[] leading)
+    {
+        var v = Variable(variable);
+        int nd = v.Shape.Count;
+        int ny = (int)v.Shape[nd - 2], nx = (int)v.Shape[nd - 1];
+        var data = ReadSlice(variable, leading);
+        double[] lons, lats;
+        if (CurvilinearCoordinates(variable) is { } cc && cc.Lon.Size == (long)nx * ny)
+        {
+            lons = ReadRaw(cc.Lon.Name); lats = ReadRaw(cc.Lat.Name);
+        }
+        else
+        {
+            var xs = Coordinate(v.Dimensions[nd - 1]) is { } xc ? ReadRaw(xc.Name) : Enumerable.Range(0, nx).Select(i => (double)i).ToArray();
+            var ys = Coordinate(v.Dimensions[nd - 2]) is { } yc ? ReadRaw(yc.Name) : Enumerable.Range(0, ny).Select(i => (double)i).ToArray();
+            lons = new double[nx * ny]; lats = new double[nx * ny];
+            for (int r = 0; r < ny; r++) for (int c = 0; c < nx; c++) { lons[r * nx + c] = xs[c]; lats[r * nx + c] = ys[r]; }
+        }
+        var keep = Enumerable.Range(0, data.Length).Where(i => !double.IsNaN(data[i])).ToArray();
+        var geoms = keep.Select(i => (NetTopologySuite.Geometries.Geometry?)GeoPandas.Net.Geometry.Geo.Point(lons[i] > 180 ? lons[i] - 360 : lons[i], lats[i])).ToArray();
+        return GeoDataFrame.FromGeometries(geoms, CoordinateReferenceSystem.Wgs84,
+            Column.Create("row", keep.Select(i => (long)(i / nx)).ToArray()), Column.Create("col", keep.Select(i => (long)(i % nx)).ToArray()),
+            Column.Create(variable, keep.Select(i => data[i]).ToArray()));
+    }
+
+    /// <summary>
+    /// Resamples a curvilinear (or any) variable onto a regular WGS 84 grid by nearest neighbour (KD-tree), leaving cells farther than
+    /// <paramref name="maxDistanceDeg"/> from any source cell empty.
+    /// </summary>
+    public Raster Regrid(string variable, double cellSizeDeg, double? maxDistanceDeg = null, params int[] leading)
+    {
+        var pts = ToPoints(variable, leading);
+        if (pts.RowCount == 0) throw new InvalidOperationException($"'{variable}' has no valid cells.");
+        var xs = pts.Geometry.Select(g => g!.Coordinate.X).ToArray(); var ys = pts.Geometry.Select(g => g!.Coordinate.Y).ToArray();
+        var vals = pts[variable].ToDoubleArray();
+        var tree = new GeoPandas.Net.Geometry.Index.KdTree(xs, ys);
+        double west = Math.Floor(xs.Min() / cellSizeDeg) * cellSizeDeg, north = Math.Ceiling(ys.Max() / cellSizeDeg) * cellSizeDeg;
+        int w = Math.Max(1, (int)Math.Ceiling((xs.Max() - west) / cellSizeDeg) + 1), h = Math.Max(1, (int)Math.Ceiling((north - ys.Min()) / cellSizeDeg) + 1);
+        double maxD = maxDistanceDeg ?? cellSizeDeg * 1.5;
+        var band = new float[w * h];
+        Parallel.For(0, h, r =>
+        {
+            for (int c = 0; c < w; c++)
+            {
+                double x = west + (c + 0.5) * cellSizeDeg, y = north - (r + 0.5) * cellSizeDeg;
+                var nn = tree.Nearest(x, y, 1);
+                band[r * w + c] = nn.Length > 0 && nn[0].Distance <= maxD ? (float)vals[nn[0].Index] : float.NaN;
+            }
+        });
+        return new Raster(w, h, [band], GeoTransform.NorthUp(west, north, cellSizeDeg), CoordinateReferenceSystem.Wgs84, float.NaN) { BandNames = [variable] };
     }
 
     /// <summary>ncdump -h style summary.</summary>

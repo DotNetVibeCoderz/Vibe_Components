@@ -18,10 +18,11 @@ GeoPandas.Net adalah reimplementasi dan perluasan konsep [GeoPandas](https://geo
 | **GeoDataFrame** | Column-store immutable dengan kolom bertipe dan bitmap null; `Filter`, `SortBy`, `GroupBy().Agg`, `Merge`, `Concat`, `Describe`, `ValueCounts` |
 | **Operasi geometri** | `Area`, `GeomLength`, `Buffer`, `Simplify`, `Centroid`, `ConvexHull`, `MakeValid`, transformasi affine, predikat tervektorisasi, otomatis paralel untuk data besar |
 | **Spatial join** | `SJoin` (intersects / within / contains / touches / crosses / overlaps / covers…), `SJoinNearest` (branch-and-bound eksak), `Overlay`, `Dissolve`, `Clip`, `Explode`, `Cx` |
-| **Engine CRS** | Registri EPSG (WGS 84, Web/World Mercator, 120 zona UTM, NAD83 UTM, **DGN95 / TM-3 Indonesia**, Lambert-93, Albers, British National Grid…), parsing PROJ.4, WKT1, ESRI .prj dan WKT2, datum shift Helmert 7 parameter |
+| **Engine CRS** | **Dataset EPSG lengkap** (5 800+ CRS beserta wilayah penggunaannya), 20 metode proyeksi (TM, LCC, Albers, LAEA, stereografik kutub & miring, Hotine/RSO, Cassini, Equal Earth, Robinson, Mollweide…) yang cocok dengan PROJ hingga nanometer, PROJ.4 / WKT1 / ESRI / WKT2 / PROJJSON, datum shift Helmert dan **NTv2**, **geoid** (GTX, ISG, GeoTIFF) |
+| **Survei & GNSS** | Poligon (Bowditch/Transit), COGO, perataan jaring dan sipat datar kuadrat terkecil dengan elips kesalahan, uji χ² dan data snooping, RINEX 2/3 serta penentuan posisi absolut GPS |
 | **Indeks spasial** | STR-tree, KD-tree, quadtree dinamis, octree (3-D / point cloud), GeoHash |
 | **IO** | GeoJSON, ESRI Shapefile (Z), GeoPackage, **FlatGeobuf** (Hilbert R-tree), **GeoParquet 1.1**, **Arrow IPC/Feather** (GeoArrow, PROJJSON), CSV, DXF dalam satu registri `GeoIO`; diuji dua arah terhadap GDAL / geopandas / pyarrow |
-| **Data ilmiah** | **NetCDF** CDF-1/2/5 + NetCDF-4/HDF5 dengan konvensi CF → raster dan sumbu waktu; point cloud **LAS 1.0–1.4 / LAZ** dengan Octree, DSM/DTM/nDSM |
+| **Data ilmiah** | **NetCDF** CDF-1/2/5 + NetCDF-4/HDF5 dengan konvensi CF, jendela hyperslab dan grid kurvilinier; point cloud **LAS 1.0–1.4 / LAZ (format 0–10) / COPC** dengan Octree, DSM/DTM/nDSM; pembaca produk **Landsat C2, Sentinel-2 SAFE, STAC, MODIS/VIIRS** |
 | **Basis data** | `ReadSql` / `ReadTable` / `ToSql` (setara `read_postgis`/`to_postgis`) untuk **PostGIS, SQL Server, DuckDB Spatial, Oracle Spatial, MySQL** lewat ADO.NET, plus **BigQuery GIS** |
 | **Lazy & versi** | `LazyGeoDataFrame`: pushdown bbox/kolom/atribut/limit ke file dan SQL, batch streaming, `Explain()`; `DatasetRepository`: snapshot berbasis konten, commit, tag, diff per kunci |
 | **Analitik** | Bobot queen/rook/KNN/distance band, Moran's I, Geary's C, LISA, hot spot Getis-Ord Gi*, DBSCAN, K-Means, IDW, ordinary kriging |
@@ -59,7 +60,7 @@ Panduan lengkap: [Memulai](docs/id/getting-started.md) · [GeoDataFrame & IO](do
 
 ## Galeri (web Blazor + desktop Avalonia)
 
-23 contoh interaktif (GIS, data & format, statistik spasial, jaringan, raster, teknik sipil, penginderaan jauh, CAD, AI), dwibahasa EN/ID.
+26 contoh interaktif (GIS, data & format, statistik spasial, jaringan, raster, teknik sipil, penginderaan jauh, survei & geodesi, CAD, AI), dwibahasa EN/ID.
 
 ```bash
 dotnet run --project gallery/GeoPandas.Net.Gallery.Blazor     # http://localhost:5280

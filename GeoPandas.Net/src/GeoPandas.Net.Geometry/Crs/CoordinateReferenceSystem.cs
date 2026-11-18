@@ -41,6 +41,20 @@ public sealed class CoordinateReferenceSystem : IEquatable<CoordinateReferenceSy
     public bool IsGeographic => Kind == CrsKind.Geographic;
     public bool IsProjected => Kind == CrsKind.Projected;
 
+    /// <summary>Geographic area of use (west, south, east, north in degrees) from the EPSG dataset, when known.</summary>
+    public (double West, double South, double East, double North)? AreaOfUse { get; internal set; }
+
+    /// <summary>Vertical reference: heights of this CRS are orthometric above this geoid (PROJ <c>+geoidgrids</c>); null = ellipsoidal heights.</summary>
+    public GeoidModel? Geoid { get; internal set; }
+
+    /// <summary>Copy of this CRS whose heights are orthometric relative to <paramref name="geoid"/> (a compound horizontal + vertical CRS).</summary>
+    public CoordinateReferenceSystem WithGeoid(GeoidModel? geoid)
+    {
+        var c = new CoordinateReferenceSystem(Name, Kind, Datum, Projection, geoid is null ? Epsg : null, ToMeter, UnitName) { AreaOfUse = AreaOfUse };
+        c.Geoid = geoid;
+        return c;
+    }
+
     /// <summary>Authority string such as "EPSG:4326", or null.</summary>
     public string? Authority => Epsg is { } c ? $"EPSG:{c}" : null;
 
@@ -73,7 +87,9 @@ public sealed class CoordinateReferenceSystem : IEquatable<CoordinateReferenceSy
         else
         {
             var p = Projection.Parameters;
-            if (Projection is TransverseMercator && p.UtmZone is { } z)
+            if (Projection.Proj4Body is { } body)
+                sb.Append(body);
+            else if (Projection is TransverseMercator && p.UtmZone is { } z)
                 sb.Append($"+proj=utm +zone={z}").Append(p.UtmSouth ? " +south" : "");
             else if (Projection is global::GeoPandas.Net.Geometry.Crs.WebMercator)
                 sb.Append(Inv, $"+proj=merc +a={Ellipsoid.A} +b={Ellipsoid.A} +lat_ts=0 +lon_0={p.Lon0} +x_0={p.FalseEasting} +y_0={p.FalseNorthing} +k=1 +nadgrids=@null +wktext");
@@ -100,6 +116,7 @@ public sealed class CoordinateReferenceSystem : IEquatable<CoordinateReferenceSy
             }
         }
         if (IsProjected) sb.Append(ToMeter == 1 ? " +units=m" : string.Create(Inv, $" +to_meter={ToMeter}"));
+        if (Geoid is not null) sb.Append(" +geoidgrids=").Append(Geoid.Name.Replace(' ', '_'));
         sb.Append(" +no_defs");
         return sb.ToString();
     }
@@ -120,6 +137,15 @@ public sealed class CoordinateReferenceSystem : IEquatable<CoordinateReferenceSy
         var sb = new StringBuilder();
         sb.Append($"PROJCS[\"{Name}\",").Append(geog).Append($",PROJECTION[\"{Projection.WktName}\"]");
         void Param(string n, double v) => sb.Append(Inv, $",PARAMETER[\"{n}\",{v}]");
+        if (Projection.Method is { } method)
+        {
+            foreach (var (n, v) in method.Wkt1Parameters) Param(n, v);
+            Param("false_easting", p.FalseEasting);
+            Param("false_northing", p.FalseNorthing);
+            sb.Append(Inv, $",UNIT[\"{(ToMeter == 1 ? "metre" : UnitName)}\",{ToMeter}]");
+            sb.Append(auth(Epsg)).Append(']');
+            return sb.ToString();
+        }
         switch (Projection)
         {
             case LambertConformalConic or AlbersEqualArea:

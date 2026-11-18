@@ -131,8 +131,45 @@ jobs:
           name: geopandas-net-packages
           path: GeoPandas.Net/artifacts/*
 
+  sql-services:
+    name: SQL integration (PostGIS, Oracle)
+    runs-on: ubuntu-latest
+    services:
+      postgis:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_PASSWORD: gpd
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+      oracle:
+        image: gvenzl/oracle-free:23-slim-faststart
+        env:
+          ORACLE_PASSWORD: gpd
+          APP_USER: gpd
+          APP_USER_PASSWORD: gpd
+        ports: ["1521:1521"]
+        options: >-
+          --health-cmd healthcheck.sh --health-interval 10s --health-timeout 5s --health-retries 30
+    defaults:
+      run:
+        working-directory: GeoPandas.Net
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: GeoPandas.Net/global.json
+
+      - name: Live SQL tests
+        env:
+          GPD_POSTGIS_CS: "Host=localhost;Username=postgres;Password=gpd;Database=postgres"
+          GPD_ORACLE_CS: "User Id=gpd;Password=gpd;Data Source=localhost:1521/FREEPDB1"
+          GEOPANDAS_NET_DISABLE_NATIVE: "1"
+        run: dotnet test tests/GeoPandas.Net.Tests/GeoPandas.Net.Tests.csproj -c Release --filter "FullyQualifiedName~SqlTests" --logger "console;verbosity=detailed"
+
   publish:
-    needs: build
+    needs: [build, sql-services]
     if: startsWith(github.ref, 'refs/tags/geopandas-net-v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
     runs-on: ubuntu-latest
     permissions:

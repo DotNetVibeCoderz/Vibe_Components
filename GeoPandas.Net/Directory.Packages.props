@@ -13,10 +13,13 @@
     <PackageVersion Include="Apache.Arrow.Compression" Version="23.0.0" />
     <PackageVersion Include="Parquet.Net" Version="6.1.0" />
     <PackageVersion Include="PureHDF" Version="2.2.0" />
+    <PackageVersion Include="CoreJ2K" Version="2.4.2.112" />
     <PackageVersion Include="laszip.net" Version="2.2.1" />
     <PackageVersion Include="Google.Cloud.BigQuery.V2" Version="3.12.0" />
     <PackageVersion Include="DuckDB.NET.Data.Full" Version="1.5.6.1" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.2" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="Oracle.ManagedDataAccess.Core" Version="23.26.401" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />

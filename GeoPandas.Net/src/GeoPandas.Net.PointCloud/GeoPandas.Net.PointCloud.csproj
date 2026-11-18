@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>GeoPandas.Net.PointCloud</RootNamespace>
-    <Description>GeoPandas.Net point clouds: ASPRS LAS 1.0–1.4 reader/writer (point formats 0–10, memory-mapped, chunked), LAZ decoding (laszip.net, LGPL), Octree indexing, classification filters, ground/DSM rasterisation and GeoDataFrame conversion.</Description>
+    <Description>GeoPandas.Net point clouds: ASPRS LAS 1.0–1.4 reader/writer (point formats 0–10, memory-mapped, chunked), LAZ decoding for point formats 0–10 (native laz codec, laszip.net fallback for 0–5), COPC octree queries, Octree indexing, classification filters, ground/DSM rasterisation and GeoDataFrame conversion.</Description>
     <IsAotCompatible>false</IsAotCompatible>
   </PropertyGroup>
   <ItemGroup>

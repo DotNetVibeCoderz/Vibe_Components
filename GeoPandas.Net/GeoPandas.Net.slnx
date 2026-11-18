@@ -19,8 +19,10 @@
     <Project Path="src/GeoPandas.Net.Network/GeoPandas.Net.Network.csproj" />
     <Project Path="src/GeoPandas.Net.PointCloud/GeoPandas.Net.PointCloud.csproj" />
     <Project Path="src/GeoPandas.Net.Raster/GeoPandas.Net.Raster.csproj" />
+    <Project Path="src/GeoPandas.Net.RemoteSensing/GeoPandas.Net.RemoteSensing.csproj" />
     <Project Path="src/GeoPandas.Net.Sql.BigQuery/GeoPandas.Net.Sql.BigQuery.csproj" />
     <Project Path="src/GeoPandas.Net.Sql/GeoPandas.Net.Sql.csproj" />
+    <Project Path="src/GeoPandas.Net.Survey/GeoPandas.Net.Survey.csproj" />
     <Project Path="src/GeoPandas.Net/GeoPandas.Net.csproj" />
   </Folder>
   <Folder Name="/templates/">

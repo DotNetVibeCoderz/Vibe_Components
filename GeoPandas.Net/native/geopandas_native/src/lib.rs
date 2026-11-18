@@ -8,12 +8,14 @@
 use rayon::prelude::*;
 use std::slice;
 
+pub mod lazcodec;
+
 const PAR_THRESHOLD: usize = 16_384;
 
 /// ABI version; the managed side checks it is > 0.
 #[no_mangle]
 pub extern "C" fn gpn_version() -> i32 {
-    1
+    2
 }
 
 #[inline(always)]

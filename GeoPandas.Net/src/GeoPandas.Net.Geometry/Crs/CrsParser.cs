@@ -79,11 +79,13 @@ public static class CrsParser
         }
         else if (ellipsoid == Ellipsoid.Wgs84) datumName = "WGS_1984";
         var datum = new Datum(datumName, ellipsoid, towgs);
+        if (p.TryGetValue("nadgrids", out var ng) && ng is not null && GridCatalog.Resolve(ng) is { } grid)
+            datum = new Datum(datumName == "Unknown" ? grid.FromDatum ?? "Unknown" : datumName, ellipsoid, null) { GridShift = grid };
 
         if (proj is "longlat" or "latlong" or "lonlat" or "latlon")
         {
             var code = datum.Ellipsoid == Ellipsoid.Wgs84 && datum.IsWgs84Compatible ? 4326 : (int?)null;
-            return code is { } c ? CrsRegistry.Get(c) : CrsRegistry.Geographic("Custom geographic", datum, null);
+            return WithGeoidGrid(code is { } c ? CrsRegistry.Get(c) : CrsRegistry.Geographic("Custom geographic", datum, null), p);
         }
 
         double toMeter = p.TryGetValue("to_meter", out var tm) && tm is not null ? double.Parse(tm, Inv) : UnitToMeter(p.GetValueOrDefault("units"));
@@ -92,9 +94,9 @@ public static class CrsParser
         {
             int zone = (int)D("zone");
             bool south = p.ContainsKey("south");
-            if (ellipsoid == Ellipsoid.Wgs84 && datum.IsWgs84Compatible) return CrsRegistry.Get((south ? 32700 : 32600) + zone);
-            return CrsRegistry.Projected($"UTM zone {zone}{(south ? 'S' : 'N')}", datum,
-                new TransverseMercator(ellipsoid, ProjectionParameters.Utm(zone, south)), null, toMeter);
+            if (ellipsoid == Ellipsoid.Wgs84 && datum.IsWgs84Compatible) return WithGeoidGrid(CrsRegistry.Get((south ? 32700 : 32600) + zone), p);
+            return WithGeoidGrid(CrsRegistry.Projected($"UTM zone {zone}{(south ? 'S' : 'N')}", datum,
+                new TransverseMercator(ellipsoid, ProjectionParameters.Utm(zone, south)), null, toMeter), p);
         }
 
         bool sphere = ellipsoid.IsSphere || (p.ContainsKey("nadgrids") && proj == "merc" && ellipsoid.A == 6378137 && ellipsoid.IsSphere);
@@ -104,16 +106,35 @@ public static class CrsParser
         var pp = new ProjectionParameters
         {
             Lat0 = D("lat_0"),
-            Lon0 = D("lon_0"),
+            Lon0 = p.ContainsKey("lonc") ? D("lonc") : D("lon_0"),
             K0 = p.ContainsKey("k_0") ? D("k_0", 1) : D("k", 1),
+            Azimuth = D("alpha", double.NaN),
+            RectifiedGridAngle = D("gamma", double.NaN),
+            NoUOffset = p.ContainsKey("no_uoff") || p.ContainsKey("no_off"),
             FalseEasting = D("x_0") * toMeter,
             FalseNorthing = D("y_0") * toMeter,
             Lat1 = D("lat_1", double.NaN),
             Lat2 = D("lat_2", double.NaN),
             LatTs = D("lat_ts", double.NaN)
         };
+        if (proj == "ups") pp = pp with { Lat0 = p.ContainsKey("south") ? -90 : 90, K0 = 0.994, FalseEasting = 2_000_000, FalseNorthing = 2_000_000 };
+        if (proj == "stere" && Math.Abs(Math.Abs(pp.Lat0) - 90) > 1e-9)
+            throw new NotSupportedException("Only polar +proj=stere (lat_0=±90) is supported; use +proj=sterea for the oblique (EPSG 9809) form.");
         var projection = Projection.Create(proj, ellipsoid, pp);
-        return CrsRegistry.Projected($"Custom {proj}", datum, projection, null, toMeter);
+        return WithGeoidGrid(CrsRegistry.Projected($"Custom {proj}", datum, projection, null, toMeter), p);
+    }
+
+    private static CoordinateReferenceSystem WithGeoidGrid(CoordinateReferenceSystem crs, Dictionary<string, string?> p)
+    {
+        if (!p.TryGetValue("geoidgrids", out var g) || g is null) return crs;
+        foreach (var raw in g.Split(','))
+        {
+            var name = raw.TrimStart('@');
+            if (name.Equals("egm96_coarse", StringComparison.OrdinalIgnoreCase)) return crs.WithGeoid(GeoidModel.Egm96Coarse);
+            if (GridCatalog.Locate(name) is { } path) return crs.WithGeoid(GeoidModel.Load(path));
+            if (!raw.StartsWith('@')) throw new FileNotFoundException($"Geoid grid '{name}' not found (set GEOPANDAS_NET_GRIDS or PROJ_DATA).");
+        }
+        return crs;
     }
 
     private static Ellipsoid ParseProj4Ellipsoid(Dictionary<string, string?> p)
@@ -200,7 +221,15 @@ public static class CrsParser
             FalseNorthing = Get(0, "falsenorthing", "northingatfalseorigin") * toMeter,
             Lat1 = Get(double.NaN, "standardparallel1", "latitudeof1ststandardparallel"),
             Lat2 = Get(double.NaN, "standardparallel2", "latitudeof2ndstandardparallel"),
+            Azimuth = Get(double.NaN, "azimuth", "azimuthofinitialline", "azimuthatprojectioncentre"),
+            RectifiedGridAngle = Get(double.NaN, "rectifiedgridangle", "anglefromrectifiedtoskewgrid"),
         };
+        if (!prms.ContainsKey("scalefactor") && !prms.ContainsKey("scalefactoratnaturalorigin"))
+            pp = pp with { K0 = Get(1, "scalefactoroninitialline", "scalefactoratprojectioncentre") };
+        if (prms.ContainsKey("latitudeofprojectioncentre") || prms.ContainsKey("longitudeofprojectioncentre"))
+            pp = pp with { Lat0 = Get(pp.Lat0, "latitudeofprojectioncentre"), Lon0 = Get(pp.Lon0, "longitudeofprojectioncentre") };
+        if (prms.ContainsKey("eastingatprojectioncentre"))
+            pp = pp with { FalseEasting = Get(0, "eastingatprojectioncentre") * toMeter, FalseNorthing = Get(0, "northingatprojectioncentre") * toMeter };
 
         Projection projection;
         if (m.Contains("auxiliarysphere") || m.Contains("pseudomercator") || m.Contains("popularvisualisation"))
@@ -215,6 +244,39 @@ public static class CrsParser
         }
         else if (m.Contains("albers"))
             projection = new AlbersEqualArea(datum.Ellipsoid, pp);
+        else if (m.Contains("lambertazimuthalequalarea"))
+            projection = new LambertAzimuthalEqualArea(datum.Ellipsoid, pp);
+        else if (m.Contains("polarstereographic") || m.Contains("stereographicnorthpole") || m.Contains("stereographicsouthpole"))
+        {
+            double latOrigin = Get(double.NaN, "latitudeoforigin", "latitudeofnaturalorigin");
+            double sp = Get(double.NaN, "latitudeofstandardparallel", "standardparallel1");
+            bool south = m.Contains("southpole") || (!double.IsNaN(sp) ? sp < 0 : latOrigin < 0);
+            if (!double.IsNaN(sp) || (!double.IsNaN(latOrigin) && Math.Abs(Math.Abs(latOrigin) - 90) > 1e-9) || m.Contains("variantb"))
+                pp = pp with { Lat0 = south ? -90 : 90, LatTs = double.IsNaN(sp) ? latOrigin : sp, Lon0 = Get(pp.Lon0, "longitudeoforigin", "centralmeridian", "straightverticallongitudefrompole") };
+            else pp = pp with { Lat0 = south ? -90 : 90 };
+            projection = new PolarStereographic(datum.Ellipsoid, pp);
+        }
+        else if (m.Contains("obliquestereographic") || m.Contains("doublestereographic"))
+            projection = new ObliqueStereographic(datum.Ellipsoid, pp);
+        else if (m.Contains("hotine") || m.Contains("obliquemercator") || m.Contains("rectifiedskeworthomorphic"))
+        {
+            bool variantB = m.Contains("azimuthcenter") || m.Contains("variantb") || prms.ContainsKey("eastingatprojectioncentre") || m == "obliquemercator";
+            projection = new HotineObliqueMercator(datum.Ellipsoid, pp, variantB);
+        }
+        else if (m.Contains("cassini"))
+            projection = new CassiniSoldner(datum.Ellipsoid, pp);
+        else if (m.Contains("equirectangular") || m.Contains("equidistantcylindrical") || m.Contains("platecarree"))
+            projection = new EquidistantCylindrical(datum.Ellipsoid, pp with { LatTs = double.IsNaN(pp.Lat1) ? 0 : pp.Lat1 });
+        else if (m.Contains("cylindricalequalarea"))
+            projection = new CylindricalEqualArea(datum.Ellipsoid, pp with { LatTs = double.IsNaN(pp.Lat1) ? 0 : pp.Lat1 });
+        else if (m.Contains("sinusoidal"))
+            projection = new Sinusoidal(datum.Ellipsoid, pp);
+        else if (m.Contains("mollweide"))
+            projection = new Mollweide(datum.Ellipsoid, pp);
+        else if (m.Contains("robinson"))
+            projection = new Robinson(datum.Ellipsoid, pp);
+        else if (m.Contains("equalearth"))
+            projection = new EqualEarth(datum.Ellipsoid, pp);
         else if (m.Contains("mercator"))
         {
             if (!double.IsNaN(pp.Lat1)) pp = pp with { LatTs = pp.Lat1, Lat1 = double.NaN };

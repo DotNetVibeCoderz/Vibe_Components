@@ -48,7 +48,7 @@ public static class SpatialSql
         select.Append(dialect.ToWkb(g)).Append(' ').Append(WkbAlias);
         if (dialect.Srid(g) is { } srid) select.Append(", ").Append(srid).Append(' ').Append(SridAlias);
         select.Append($" FROM ({sql}) gpd_q");
-        return Execute(connection, select.ToString(), attrs, crs, geomName, parameters, dialect, null).Single();
+        return Execute(connection, select.ToString(), attrs.Select(dialect.NormalizeName).ToArray(), crs, geomName, parameters, dialect, null).Single();
     }
 
     /// <summary>Reads a table with optional column selection, bbox (envelope) filter, SQL WHERE and limit.</summary>
@@ -77,7 +77,7 @@ public static class SpatialSql
         cmd.CommandText = dialect.GeometryColumnsQuery;
         using var r = cmd.ExecuteReader();
         var res = new List<(string, string)>();
-        while (r.Read()) res.Add((r.GetString(0), r.GetString(1)));
+        while (r.Read()) res.Add((dialect.NormalizeName(r.GetString(0)), dialect.NormalizeName(r.GetString(1))));
         return res;
     }
 
@@ -87,6 +87,7 @@ public static class SpatialSql
     /// Writes a GeoDataFrame to a table (GeoPandas <c>to_postgis</c>): creates it with typed columns and a geometry column,
     /// inserts in one transaction with a prepared command, then builds a spatial index.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Optional OracleDbType property of the Oracle provider's parameter; absent members are simply skipped.")]
     public static void ToSql(this GeoDataFrame gdf, DbConnection connection, string table, IfExists ifExists = IfExists.Fail,
         string geometryColumn = "geom", bool spatialIndex = true, int? srid = null, SpatialDialect? dialect = null)
     {
@@ -119,7 +120,13 @@ public static class SpatialSql
                 ps[i] = cmd.CreateParameter();
                 ps[i].ParameterName = dialect.ParameterName(i);
                 // DateTime is left to the provider (Npgsql picks timestamptz for UTC values; forcing DateTime2 would map to timestamp)
-                if (i == attrs.Length) ps[i].DbType = DbType.Binary;
+                if (i == attrs.Length)
+                {
+                    ps[i].DbType = DbType.Binary;
+                    // Oracle maps DbType.Binary to RAW (≤ 2000 bytes); WKB of real polygons needs a BLOB
+                    if (dialect is OracleDialect && ps[i].GetType().GetProperty("OracleDbType") is { } odt)
+                        odt.SetValue(ps[i], Enum.Parse(odt.PropertyType, "Blob"));
+                }
                 else if (DbTypeOf(attrs[i].DataType, dialect) is { } dbt) ps[i].DbType = dbt;
                 cmd.Parameters.Add(ps[i]);
             }
@@ -292,7 +299,8 @@ public sealed class SqlScanSource : IGeoScanSource
     private readonly string _table;
     private readonly string _geom;
     private readonly SpatialDialect _d;
-    private readonly string[] _attrs;
+    private readonly string[] _attrs;      // database names
+    private readonly string[] _names;      // names exposed to .NET (normalised)
     private CoordinateReferenceSystem? _crs;
     private readonly bool _crsGiven;
 
@@ -309,13 +317,14 @@ public sealed class SqlScanSource : IGeoScanSource
               ?? throw new ArgumentException($"Cannot find the geometry column of '{table}'; pass geometryColumn.");
         _geom = names.First(n => n.Equals(_geom, StringComparison.OrdinalIgnoreCase));
         _attrs = names.Where(n => n != _geom).ToArray();
+        _names = _attrs.Select(_d.NormalizeName).ToArray();
         _crs = crs; _crsGiven = crs is not null;
         if (!_crsGiven && _d.Srid(_d.Quote(_geom)) is { } sridExpr)
         {
             try
             {
                 using var cmd = connection.CreateCommand();
-                cmd.CommandText = _d.Limit($"SELECT {sridExpr} FROM {_d.Quote(table)} WHERE {_d.Quote(_geom)} IS NOT NULL", 1);
+                cmd.CommandText = _d.Limit($"SELECT {_d.Srid("t." + _d.Quote(_geom))} FROM {_d.Quote(table)} t WHERE t.{_d.Quote(_geom)} IS NOT NULL", 1);
                 var v = cmd.ExecuteScalar();
                 if (v is not null and not DBNull) _crs = SpatialSql.CrsFromSrid(Convert.ToInt32(v, CultureInfo.InvariantCulture));
             }
@@ -325,7 +334,7 @@ public sealed class SqlScanSource : IGeoScanSource
 
     public string Name => $"{_d.Name} table {_table}.{_geom}";
     public CoordinateReferenceSystem? Crs => _crs;
-    public IReadOnlyList<string> ColumnNames => _attrs;
+    public IReadOnlyList<string> ColumnNames => _names;
     public long? RowCountHint => null;
     public ScanPushdown Pushdown =>
         ScanPushdown.Bbox | ScanPushdown.Columns | ScanPushdown.Limit | ScanPushdown.Attributes | ScanPushdown.ExactAttributes
@@ -335,32 +344,33 @@ public sealed class SqlScanSource : IGeoScanSource
 
     internal IEnumerable<GeoDataFrame> Scan(ScanRequest request, string? where)
     {
-        var cols = (request.Columns ?? _attrs).Where(_attrs.Contains).ToArray();
+        string? Db(string name) { int i = Array.FindIndex(_names, n => n.Equals(name, StringComparison.OrdinalIgnoreCase)); return i < 0 ? null : _attrs[i]; }
+        var cols = (request.Columns ?? _names).Select(Db).Where(c => c is not null).Select(c => c!).Distinct().ToArray();
         int srid = _crs?.Epsg ?? 0;
-        var g = _d.Quote(_geom);
+        var g = "t." + _d.Quote(_geom);
         var sql = new StringBuilder("SELECT ");
-        foreach (var c in cols) sql.Append(_d.Quote(c)).Append(", ");
+        foreach (var c in cols) sql.Append("t.").Append(_d.Quote(c)).Append(", ");
         sql.Append(_d.ToWkb(g)).Append(" gpd_wkb");
         if (!_crsGiven && _d.Srid(g) is { } se) sql.Append(", ").Append(se).Append(" gpd_srid");
-        sql.Append(" FROM ").Append(_d.Quote(_table));
+        sql.Append(" FROM ").Append(_d.Quote(_table)).Append(" t");
         var conds = new List<string>();
         var pars = new List<object?>();
         if (request.Bbox is { } b) conds.Add(_d.BboxPredicate(g, b, srid));
         foreach (var p in request.Predicates)
         {
-            if (!_attrs.Contains(p.Column)) continue;
-            conds.Add($"{_d.Quote(p.Column)} {p.Symbol} {_d.Placeholder(pars.Count)}");
+            if (Db(p.Column) is not { } dbCol) continue;
+            conds.Add($"t.{_d.Quote(dbCol)} {p.Symbol} {_d.Placeholder(pars.Count)}");
             pars.Add(p.Value is bool bv && _d is OracleDialect ? (bv ? 1 : 0) : p.Value);
         }
         if (where is not null) conds.Add($"({where})");
         if (conds.Count > 0) sql.Append(" WHERE ").Append(string.Join(" AND ", conds));
         var text = request.Limit is { } lim ? _d.Limit(sql.ToString(), lim) : sql.ToString();
-        return SpatialSql.Execute(_con, text, cols, _crs, _geom, pars, _d, request.BatchSize);
+        return SpatialSql.Execute(_con, text, cols.Select(_d.NormalizeName).ToArray(), _crs, _geom, pars, _d, request.BatchSize);
     }
 
     internal GeoDataFrame Empty(IReadOnlyList<string>? columns)
     {
-        var cols = (columns ?? _attrs).Select(n => (Column)new Column<string?>(n, [])).ToList();
+        var cols = (columns ?? _names).Select(n => (Column)new Column<string?>(n, [])).ToList();
         cols.Add(new GeoSeries(GeoDataFrame.DefaultGeometryColumn, [], _crs));
         return new GeoDataFrame(cols);
     }

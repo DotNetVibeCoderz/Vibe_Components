@@ -7,12 +7,13 @@ Fase 2 (v0.2) menambahkan format cloud-native dan ilmiah, basis data spasial, me
 | Format / sumber | Baca | Tulis | Pushdown lazy | Paket |
 |---|---|---|---|---|
 | FlatGeobuf `.fgb` | ✅ memory-mapped | ✅ packed Hilbert R-tree | bbox (R-tree), kolom, limit | `GeoPandas.Net.Data` |
-| GeoParquet 1.1 `.parquet` | ✅ | ✅ WKB, PROJJSON, bbox covering | bbox (statistik row group), kolom, `Where`, limit | `GeoPandas.Net.Arrow` |
+| GeoParquet 1.1 `.parquet` | ✅ | ✅ WKB atau GeoArrow native, PROJJSON, bbox covering | bbox (statistik row group), kolom, `Where`, limit | `GeoPandas.Net.Arrow` |
 | Arrow IPC / Feather v2 | ✅ (LZ4/ZSTD) | ✅ GeoArrow WKB | – | `GeoPandas.Net.Arrow` |
 | GeoPackage `.gpkg` | ✅ | ✅ | bbox (`rtree_*`), kolom, limit | `GeoPandas.Net.Data` |
 | NetCDF CDF-1/2/5, NetCDF-4 (HDF5) | ✅ konvensi CF | ✅ klasik CF-1.8 | – | `GeoPandas.Net.Raster` |
 | LAS 1.0–1.4 (format 0–10) | ✅ memory-mapped | ✅ format 0–3, 6–8 | bbox, kelas, step | `GeoPandas.Net.PointCloud` |
-| LAZ (format 0–5) | ✅ | ✅ | bbox, kelas, step | `GeoPandas.Net.PointCloud` |
+| LAZ (format 0–10) | ✅ (6–10 lewat codec native) | ✅ format 0–5 | bbox, kelas, step | `GeoPandas.Net.PointCloud` |
+| COPC `.copc.laz` | ✅ hierarki octree | – | bbox, kedalaman | `GeoPandas.Net.PointCloud` |
 | PostGIS, SQL Server, DuckDB, Oracle, MySQL | ✅ `ReadSql` / `ReadTable` | ✅ `ToSql` | bbox, kolom, `Where`, limit → SQL | `GeoPandas.Net.Sql` |
 | BigQuery GIS | ✅ `ReadQuery` | ✅ `ToBigQuery` | – | `GeoPandas.Net.Sql.BigQuery` |
 
@@ -62,7 +63,7 @@ var tinggi = awan.HeightAboveGround(dtm);                 // tinggi di atas tana
 var pohon = awan.ByClass(LasClass.HighVegetation).Thin(0.5).ToGeoDataFrame();
 ```
 
-LAS dibaca oleh codec memory-mapped milik sendiri. LAZ memakai laszip.net (port LASzip 2.x, LGPL-2.1) yang mendukung format titik 0–5. Untuk LAZ LAS 1.4 (format 6–10), dekompresi dulu dengan `pdal translate`.
+LAS dibaca oleh codec memory-mapped milik sendiri. LAZ didekode oleh kernel native (crate Rust `laz`) untuk semua format titik 0–10, termasuk kompresi berlapis LAS 1.4. Tanpa kernel native, laszip.net (LGPL-2.1) menangani format 0–5. Berkas COPC dikueri per node octree: `Copc.Read(path, bbox, maxDepth)` hanya mendekompresi chunk yang beririsan dengan kotak.
 
 ## Basis data spasial (`read_postgis` / `to_postgis`)
 

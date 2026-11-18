@@ -58,7 +58,7 @@ public sealed class SqlTests(ITestOutputHelper output)
         Assert.Equal(3, tb.RowCount);
         Assert.Null(tb.Geometry[1]);
         Assert.Equal(new DateTime(2024, 1, 2, 3, 4, 5), DateTime.SpecifyKind((DateTime)tb["when"].GetValue(0)!, DateTimeKind.Unspecified));
-        Assert.Equal(false, System.Convert.ToBoolean(tb["flag"].GetValue(1)));
+        Assert.False(System.Convert.ToBoolean(tb["flag"].GetValue(1)));
         Assert.True(tb["v"].IsNull(1));
         Assert.True(tb["s"].IsNull(1));
         Assert.Equal("ü", tb["s"].GetValue(2));
@@ -88,6 +88,35 @@ public sealed class SqlTests(ITestOutputHelper output)
         try { con.Open(); }
         catch (Exception e) when (e is DbException or InvalidOperationException) { output.WriteLine($"SQL Server LocalDB unavailable ({e.Message}); skipped."); con.Dispose(); return; }
         using (con) RoundTrip(con, "SQL Server", expectCrs: true);
+    }
+
+    /// <summary>PostGIS (CI service container): set GPD_POSTGIS_CS, e.g. "Host=localhost;Username=postgres;Password=gpd;Database=postgres".</summary>
+    [Fact]
+    public void PostGis_Live()
+    {
+        var cs = Environment.GetEnvironmentVariable("GPD_POSTGIS_CS");
+        if (string.IsNullOrEmpty(cs)) { output.WriteLine("GPD_POSTGIS_CS not set; skipped."); return; }
+        using var con = new Npgsql.NpgsqlConnection(cs);
+        con.Open();
+        using (var c = con.CreateCommand()) { c.CommandText = "CREATE EXTENSION IF NOT EXISTS postgis"; c.ExecuteNonQuery(); }
+        RoundTrip(con, "PostGIS", expectCrs: true);
+    }
+
+    /// <summary>Oracle Spatial (CI service container): set GPD_ORACLE_CS, e.g. "User Id=gpd;Password=gpd;Data Source=localhost:1521/FREEPDB1".</summary>
+    [Fact]
+    public void Oracle_Live()
+    {
+        var cs = Environment.GetEnvironmentVariable("GPD_ORACLE_CS");
+        if (string.IsNullOrEmpty(cs)) { output.WriteLine("GPD_ORACLE_CS not set; skipped."); return; }
+        using var con = new Oracle.ManagedDataAccess.Client.OracleConnection(cs);
+        con.Open();
+        foreach (var t in new[] { "GPD_DISTRICTS", "GPD_TYPES" })
+        {
+            using var c = con.CreateCommand();
+            c.CommandText = $"BEGIN EXECUTE IMMEDIATE 'DROP TABLE \"{t}\" PURGE'; EXCEPTION WHEN OTHERS THEN NULL; END;";
+            c.ExecuteNonQuery();
+        }
+        RoundTrip(con, "Oracle", expectCrs: true);
     }
 
     [Fact]

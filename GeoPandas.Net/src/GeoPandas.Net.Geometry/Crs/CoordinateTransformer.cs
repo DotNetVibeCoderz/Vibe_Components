@@ -20,7 +20,7 @@ public sealed class CoordinateTransformer
     {
         Source = source;
         Target = target;
-        _identity = source.Equals(target);
+        _identity = source.Equals(target) && ReferenceEquals(source.Geoid, target.Geoid);
         _datumShift = !_identity && !SameDatum(source.Datum, target.Datum);
     }
 
@@ -47,16 +47,33 @@ public sealed class CoordinateTransformer
         if (Source.Projection is { } sp) sp.Inverse(x * Source.ToMeter, y * Source.ToMeter, out lon, out lat);
         else { lon = x * Deg; lat = y * Deg; }
 
+        // 1b. orthometric → ellipsoidal height (source geoid)
+        if (Source.Geoid is { } sgd && !double.IsNaN(z)) z += sgd.Undulation(lon / Deg, lat / Deg);
+
         // 2. datum shift
         if (_datumShift)
         {
             double h = double.IsNaN(z) ? 0 : z;
-            GeodeticToGeocentric(Source.Ellipsoid, lon, lat, h, out double gx, out double gy, out double gz);
-            if (Source.Datum.ToWgs84 is { } t1) Helmert(t1, false, ref gx, ref gy, ref gz);
-            if (Target.Datum.ToWgs84 is { } t2) Helmert(t2, true, ref gx, ref gy, ref gz);
-            GeocentricToGeodetic(Target.Ellipsoid, gx, gy, gz, out lon, out lat, out h);
+            var sEll = Source.Ellipsoid; var sTw = Source.Datum.ToWgs84;
+            var tEll = Target.Ellipsoid; var tTw = Target.Datum.ToWgs84;
+            // grid shifts work on geodetic coordinates and replace the Helmert of their side
+            if (Source.Datum.GridShift is { } sg) { sg.Forward(ref lon, ref lat); sEll = Ellipsoid.Wgs84; sTw = null; }
+            var tg = Target.Datum.GridShift;
+            if (tg is not null) { tEll = Ellipsoid.Wgs84; tTw = null; }
+            bool sOk = sTw is null || sTw.All(v => v == 0), tOk = tTw is null || tTw.All(v => v == 0);
+            if (!(sOk && tOk && Math.Abs(sEll.A - tEll.A) < 1e-6 && Math.Abs(sEll.F - tEll.F) < 1e-12))
+            {
+                GeodeticToGeocentric(sEll, lon, lat, h, out double gx, out double gy, out double gz);
+                if (sTw is not null) Helmert(sTw, false, ref gx, ref gy, ref gz);
+                if (tTw is not null) Helmert(tTw, true, ref gx, ref gy, ref gz);
+                GeocentricToGeodetic(tEll, gx, gy, gz, out lon, out lat, out h);
+            }
+            tg?.Inverse(ref lon, ref lat);
             if (!double.IsNaN(z)) z = h;
         }
+
+        // 2b. ellipsoidal → orthometric height (target geoid)
+        if (Target.Geoid is { } tgd && !double.IsNaN(z)) z -= tgd.Undulation(lon / Deg, lat / Deg);
 
         // 3. geodetic → target
         if (Target.Projection is { } tp)

@@ -17,6 +17,8 @@ public sealed record GeoParquetWriteOptions
     /// <summary>Add the GeoParquet 1.1 <c>bbox</c> covering struct column (xmin, ymin, xmax, ymax) used for spatial row-group pruning.</summary>
     public bool BboxCovering { get; init; } = true;
     public CompressionMethod Compression { get; init; } = CompressionMethod.Snappy;
+    /// <summary>WKB (default, any geometry) or native GeoArrow (one geometry family; faster, columnar coordinates).</summary>
+    public GeoParquetEncoding Encoding { get; init; } = GeoParquetEncoding.Wkb;
 }
 
 /// <summary>
@@ -47,13 +49,19 @@ public static class GeoParquet
         var fields = new List<Field>();
         var attrFields = attrs.Select(FieldFor).ToArray();
         fields.AddRange(attrFields);
+        bool native = options.Encoding == GeoParquetEncoding.Native;
+        string nativeEnc = native ? GeoArrowNative.EncodingFor(gdf.Geometry) : "WKB";
+        bool hasZ = gdf.Geometry.Any(g => g is not null && Geo.HasZ(g));
+        DataField[] nativeLeaves = [];
         var geomField = new DataField<byte[]>(geomName);
-        fields.Add(geomField);
+        if (native) fields.Add(GeoArrowNative.SchemaField(geomName, nativeEnc, hasZ, out nativeLeaves));
+        else fields.Add(geomField);
         DataField<double?>[] bboxFields = [new("xmin"), new("ymin"), new("xmax"), new("ymax")];
         if (covering) fields.Add(new StructField("bbox", bboxFields));
         var schema = new ParquetSchema(fields);
 
         var geo = GeoMetadata.Build(gdf.Geometry, geomName, covering);
+        if (native) geo["columns"]![geomName]!["encoding"] = nativeEnc;
         var popts = new ParquetOptions { CompressionMethod = options.Compression };
         await using var writer = await ParquetWriter.CreateAsync(schema, output, popts, false, ct).ConfigureAwait(false);
         writer.CustomMetadata = new Dictionary<string, string> { ["geo"] = geo.ToJsonString() };
@@ -79,7 +87,9 @@ public static class GeoParquet
                     env[0][i] = e.MinX; env[1][i] = e.MinY; env[2][i] = e.MaxX; env[3][i] = e.MaxY;
                 }
             }
-            await rg.WriteAsync(geomField, wkb).ConfigureAwait(false);
+            if (native)
+                await GeoArrowNative.WriteAsync(rg, nativeLeaves, nativeEnc, Enumerable.Range(start, len).Select(i => gdf.Geometry[i]).ToArray(), nativeLeaves[0].MaxDefinitionLevel).ConfigureAwait(false);
+            else await rg.WriteAsync(geomField, wkb).ConfigureAwait(false);
             if (covering)
                 for (int k = 0; k < 4; k++)
                     await rg.WriteAsync<double>(bboxFields[k], env[k].AsMemory()).ConfigureAwait(false);
@@ -194,12 +204,22 @@ public static class GeoParquet
         reader.CustomMetadata.TryGetValue("geo", out var geoJson);
         var (primary, geoCols) = geoJson is null ? (GuessGeometryColumn(reader.Schema), new Dictionary<string, GeoMetadata.ColumnInfo>()) : GeoMetadata.Parse(geoJson);
         geoCols.TryGetValue(primary, out var gi);
-        if (gi is not null && !gi.Encoding.Equals("WKB", StringComparison.OrdinalIgnoreCase))
-            throw new NotSupportedException($"GeoParquet geometry encoding '{gi.Encoding}' is not supported yet (only WKB).");
+        string enc = (gi?.Encoding ?? "WKB").ToLowerInvariant();
+        bool nativeGeom = GeoArrowNative.Encodings.Contains(enc);
+        if (!nativeGeom && enc != "wkb")
+            throw new NotSupportedException($"GeoParquet geometry encoding '{gi!.Encoding}' is not supported (WKB and the native GeoArrow encodings are).");
         var crs = gi?.Crs;
 
         var top = reader.Schema.Fields;
-        var geomField = top.OfType<DataField>().FirstOrDefault(f => f.Name == primary) ?? throw new InvalidDataException($"Geometry column '{primary}' not found.");
+        var geomField = top.OfType<DataField>().FirstOrDefault(f => f.Name == primary);
+        DataField? nx = null, ny = null, nz = null;
+        if (nativeGeom)
+        {
+            var leaves = reader.Schema.GetDataFields().Where(f => f.Path.ToString().StartsWith(primary + "/", StringComparison.Ordinal) || f.Path.ToString().StartsWith(primary + ".", StringComparison.Ordinal) || f.Path.ToString().StartsWith(primary + ParquetSchema.PathSeparator, StringComparison.Ordinal)).ToArray();
+            nx = leaves.FirstOrDefault(f => f.Name == "x"); ny = leaves.FirstOrDefault(f => f.Name == "y"); nz = leaves.FirstOrDefault(f => f.Name == "z");
+            if (nx is null || ny is null) throw new InvalidDataException($"Native geometry column '{primary}' has no x/y leaves.");
+        }
+        else if (geomField is null) throw new InvalidDataException($"Geometry column '{primary}' not found.");
         DataField?[] cov = [null, null, null, null];
         if (gi?.CoveringBbox is { } covName && top.OfType<StructField>().FirstOrDefault(s => s.Name == covName) is { } sf)
         {
@@ -250,13 +270,19 @@ public static class GeoParquet
                     for (int i = 0; i < n; i++) if (mask[i] && !p.Matches(pc.GetValue(i))) mask[i] = false;
             if (!mask.Any(m => m)) continue;
 
-            var wkb = new byte[]?[n];
-            await rg.ReadAsync(geomField, wkb.AsMemory()).ConfigureAwait(false);
-            var geoms = new NtsGeometry?[n];
+            NtsGeometry?[] geoms;
+            byte[]?[]? wkb = null;
+            if (nativeGeom) geoms = await GeoArrowNative.ReadAsync(rg, enc, nx!, ny!, nz, n).ConfigureAwait(false);
+            else
+            {
+                wkb = new byte[]?[n];
+                await rg.ReadAsync(geomField!, wkb.AsMemory()).ConfigureAwait(false);
+                geoms = new NtsGeometry?[n];
+            }
             for (int i = 0; i < n; i++)
             {
-                if (!mask[i]) continue;
-                geoms[i] = wkb[i] is { Length: > 0 } w ? Geo.FromWkb(w) : null;
+                if (!mask[i]) { geoms[i] = null; continue; }
+                if (!nativeGeom) geoms[i] = wkb![i] is { Length: > 0 } w ? Geo.FromWkb(w) : null;
                 if (bbox is not null && !hasCov && (geoms[i] is not { } gg || !gg.EnvelopeInternal.Intersects(bbox))) mask[i] = false;
             }
             var rows = Enumerable.Range(0, n).Where(i => mask[i]).ToArray();

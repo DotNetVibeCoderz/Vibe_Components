@@ -18,10 +18,11 @@ GeoPandas.Net re-implements and extends the ideas of Python's [GeoPandas](https:
 | **GeoDataFrame** | Immutable column store with typed columns and null bitmaps; `Filter`, `SortBy`, `GroupBy().Agg`, `Merge`, `Concat`, `Describe`, `ValueCounts`; geometry-aware `Head`/`Select`/`WithColumn` |
 | **Geometry ops** | `Area`, `GeomLength`, `Buffer`, `Simplify`, `Centroid`, `ConvexHull`, `MakeValid`, affine ops, vectorised predicates, all parallel for large inputs |
 | **Spatial joins** | `SJoin` (intersects / within / contains / touches / crosses / overlaps / covers…), `SJoinNearest` (exact branch-and-bound), `Overlay` (intersection, union, difference, symmetric difference, identity), `Dissolve`, `Clip`, `Explode`, `Cx` |
-| **CRS engine** | EPSG registry (WGS 84, Web/World Mercator, 120 UTM zones, NAD83 UTM, **DGN95 / Indonesia TM-3**, Lambert-93, CONUS Albers, British National Grid…), PROJ.4, OGC WKT1, ESRI .prj and WKT2 parsing, 7-parameter Helmert datum shifts, `EstimateUtmCrs` |
+| **CRS engine** | The **full EPSG dataset** (5 800+ CRSs with areas of use), 20 projection methods (TM, LCC, Albers, LAEA, polar & oblique stereographic, Hotine/RSO, Cassini, Equal Earth, Robinson, Mollweide…) matching PROJ to the nanometre, PROJ.4 / WKT1 / ESRI / WKT2 / PROJJSON, Helmert and **NTv2** datum shifts, **geoids** (GTX, ISG, GeoTIFF), `EstimateUtmCrs` |
+| **Surveying & GNSS** | Traverses (Bowditch/Transit), COGO, least-squares network and leveling adjustment with error ellipses, χ² test and data snooping, RINEX 2/3 and GPS single point positioning |
 | **Spatial index** | STR-tree (bulk-loaded, flat arrays, k-NN), KD-tree, dynamic quadtree, octree (3-D / point clouds), GeoHash |
 | **IO** | GeoJSON, ESRI Shapefile (.shp/.shx/.dbf/.prj/.cpg, Z), GeoPackage, **FlatGeobuf** (Hilbert R-tree), **GeoParquet 1.1** and **Arrow IPC/Feather** (GeoArrow, PROJJSON), CSV, DXF behind one `GeoIO` driver registry; all checked against GDAL / geopandas / pyarrow in both directions |
-| **Scientific data** | **NetCDF** CDF-1/2/5 + NetCDF-4/HDF5 with CF conventions → rasters and time axes; **LAS 1.0–1.4 / LAZ** point clouds with Octree, DSM/DTM/nDSM |
+| **Scientific data** | **NetCDF** CDF-1/2/5 + NetCDF-4/HDF5 with CF conventions, hyperslab windows and curvilinear grids; **LAS 1.0–1.4 / LAZ (formats 0–10) / COPC** point clouds with Octree, DSM/DTM/nDSM; **Landsat C2, Sentinel-2 SAFE, STAC, MODIS/VIIRS** product readers |
 | **Databases** | `ReadSql` / `ReadTable` / `ToSql` (GeoPandas `read_postgis`/`to_postgis`) for **PostGIS, SQL Server, DuckDB Spatial, Oracle Spatial, MySQL** over plain ADO.NET, plus **BigQuery GIS** |
 | **Lazy & versioned** | `LazyGeoDataFrame`: bbox/column/attribute/limit pushdown into files and SQL, streaming batches, `Explain()`; `DatasetRepository`: content-addressed snapshots, commits, tags, keyed diffs |
 | **Analytics** | Queen/rook/KNN/distance-band weights, Moran's I, Geary's C, LISA, Getis-Ord Gi* hot spots, DBSCAN, K-Means, IDW, ordinary kriging with variogram fitting |
@@ -76,7 +77,9 @@ More examples: [Getting started](docs/en/getting-started.md) · [GeoDataFrame & 
 | `GeoPandas.Net.Core` | `DataFrame`, `GeoSeries`, `GeoDataFrame`, spatial joins/overlay, `MapScene` plotting |
 | `GeoPandas.Net.Data` | GeoJSON, Shapefile, GeoPackage, FlatGeobuf, CSV, `GeoIO` registry and `GeoIO.Scan`, dataset versioning |
 | `GeoPandas.Net.Arrow` | GeoParquet 1.1 reader/writer, Arrow IPC / Feather, `DataFrame` ⇄ `RecordBatch` |
-| `GeoPandas.Net.PointCloud` | LAS/LAZ, `PointCloud` (Octree, classes, DSM/DTM, GeoDataFrame interop) |
+| `GeoPandas.Net.PointCloud` | LAS/LAZ/COPC, `PointCloud` (Octree, classes, DSM/DTM, GeoDataFrame interop) |
+| `GeoPandas.Net.Survey` | Traverses, COGO, least-squares adjustment, RINEX, GNSS single point positioning |
+| `GeoPandas.Net.RemoteSensing` | Landsat C2, Sentinel-2 SAFE (JPEG 2000), STAC items, MODIS/VIIRS grids and HDF-EOS5 |
 | `GeoPandas.Net.Sql` | PostGIS / SQL Server / DuckDB / Oracle / MySQL dialects, `ReadSql`, `ToSql`, SQL scan source |
 | `GeoPandas.Net.Sql.BigQuery` | BigQuery GIS read / load (separate, brings Google.Cloud.BigQuery.V2) |
 | `GeoPandas.Net.Analytics` | Spatial weights, autocorrelation, hot spots, clustering, interpolation |
@@ -90,7 +93,7 @@ More examples: [Getting started](docs/en/getting-started.md) · [GeoDataFrame & 
 
 ## Gallery (Blazor web + Avalonia desktop)
 
-23 live samples across GIS, data & formats, spatial statistics, networks, raster, civil engineering, remote sensing, CAD and AI. The web and desktop galleries render from the same scene display list, so their maps are identical. The UI is bilingual (EN/ID).
+26 live samples across GIS, data & formats, spatial statistics, networks, raster, civil engineering, remote sensing, surveying & geodesy, CAD and AI. The web and desktop galleries render from the same scene display list, so their maps are identical. The UI is bilingual (EN/ID).
 
 ```bash
 dotnet run --project gallery/GeoPandas.Net.Gallery.Blazor     # http://localhost:5280

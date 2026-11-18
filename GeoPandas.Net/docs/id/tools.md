@@ -23,6 +23,14 @@ gpd netcdf info era5.nc
 gpd repo init persil.repo --key id_persil
 gpd repo commit persil.repo persil.gpkg --m "impor awal"
 gpd repo diff persil.repo --out perubahan.geojson
+gpd crs search "TM-3 zone 48"                           # cari dataset EPSG
+gpd crs at 106.8 -6.2                                   # CRS yang berlaku di Jakarta
+gpd geoid 106.8 -6.2 --model InaGeoid2020.isg --h 58.4  # undulasi N dan tinggi ortometrik
+gpd survey traverse kaki.csv --start 1000,1000 --backsight 270 --close-on 1000,1000
+gpd survey adjust jaring.txt --out elips.geojson        # perataan kuadrat terkecil
+gpd gnss spp site0010.24o brdc0010.24n --out lintasan.geojson
+gpd copc info awan.copc.laz
+gpd s2 ndvi S2B_MSIL2A_….SAFE ndvi.tif
 ```
 
 Jalankan `gpd help` untuk melihat semua perintah. Catatan: nama kolom pada Shapefile dibatasi 10 karakter (batasan format DBF), misalnya `travel_time_s` menjadi `travel_tim`.

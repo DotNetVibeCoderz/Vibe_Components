@@ -3,9 +3,9 @@ using System.Collections.Concurrent;
 namespace GeoPandas.Net.Geometry.Crs;
 
 /// <summary>
-/// Built-in EPSG registry. Covers the CRSs most used in practice: WGS 84, Web Mercator, World Mercator,
-/// all WGS 84 UTM zones, NAD83 UTM, DGN95 / Indonesia TM-3, ETRS89/NAD83/NAD27/ED50 geographic, Lambert-93,
-/// CONUS Albers, British National Grid. Custom CRSs can be registered with <see cref="Register"/>.
+/// EPSG registry: hand-verified definitions for the most used CRSs (WGS 84, Web/World Mercator, UTM, DGN95 / Indonesia TM-3,
+/// Lambert-93, CONUS Albers, British National Grid…) backed by the full embedded EPSG dataset (<see cref="EpsgDatabase"/>, ~5 800 CRSs).
+/// Custom CRSs can be registered with <see cref="Register"/>.
 /// </summary>
 public static class CrsRegistry
 {
@@ -109,8 +109,15 @@ public static class CrsRegistry
             }), code);
         }
 
-        return null;
+        // everything else: the embedded EPSG dataset (~5 800 CRSs)
+        return EpsgDatabase.Build(code);
     }
+
+    /// <summary>Searches the EPSG dataset by name, datum or code words (e.g. "Indonesia TM-3", "GDA2020 MGA").</summary>
+    public static IReadOnlyList<EpsgEntry> Search(string text, int max = 50) => EpsgDatabase.Search(text, max);
+
+    /// <summary>Projected CRSs whose area of use contains a lon/lat point, most local first.</summary>
+    public static IReadOnlyList<EpsgEntry> AtLocation(double lon, double lat, int max = 100) => EpsgDatabase.AtLocation(lon, lat, true, max);
 
     internal static CoordinateReferenceSystem Geographic(string name, Datum datum, int? code) =>
         new(name, CrsKind.Geographic, datum, null, code);

@@ -60,13 +60,34 @@ public abstract class Projection
 
     public static Projection Create(string projName, Ellipsoid e, ProjectionParameters p) => projName switch
     {
-        "tmerc" or "utm" => new TransverseMercator(e, p),
+        "tmerc" or "utm" or "etmerc" => new TransverseMercator(e, p),
         "merc" => e.IsSphere ? new WebMercator(e, p) : new Mercator(e, p),
         "webmerc" => new WebMercator(e, p),
         "lcc" => new LambertConformalConic(e, p),
         "aea" => new AlbersEqualArea(e, p),
-        _ => throw new NotSupportedException($"Projection '{projName}' is not supported yet. Supported: tmerc/utm, merc, webmerc, lcc, aea.")
+        "laea" => new LambertAzimuthalEqualArea(e, p),
+        "stere" or "ups" => new PolarStereographic(e, p),
+        "sterea" => new ObliqueStereographic(e, p),
+        "omerc" => new HotineObliqueMercator(e, p, variantB: !p.NoUOffset),
+        "cass" => new CassiniSoldner(e, p),
+        "eqc" => new EquidistantCylindrical(e, p),
+        "sinu" => new Sinusoidal(e, p),
+        "cea" => new CylindricalEqualArea(e, p),
+        "somerc" => new HotineObliqueMercator(e, p with { Azimuth = 90, RectifiedGridAngle = 90 }, variantB: true),
+        "moll" => new Mollweide(e, p),
+        "robin" => new Robinson(e, p),
+        "eqearth" => new EqualEarth(e, p),
+        _ => throw new NotSupportedException($"Projection '{projName}' is not supported yet. Supported: tmerc/utm, merc, webmerc, lcc, aea, laea, stere, sterea, omerc, somerc, cass, eqc, cea, sinu, moll, robin, eqearth.")
     };
+
+    /// <summary>Method description used for WKT / PROJJSON export (null for the original five projections, which are handled explicitly).</summary>
+    internal virtual ProjectionMethod? Method => null;
+    /// <summary>PROJ string body (+proj=… parameters) for projections that need more than the generic keys.</summary>
+    internal virtual string? Proj4Body => null;
+
+    private protected MethodParam FE() => new("False easting", 8806, Parameters.FalseEasting, ParamUnit.Metre);
+    private protected MethodParam FN() => new("False northing", 8807, Parameters.FalseNorthing, ParamUnit.Metre);
+    protected static string Inv(FormattableString s) => s.ToString(System.Globalization.CultureInfo.InvariantCulture);
 }
 
 /// <summary>Projection parameters in degrees (angles) and metres (offsets).</summary>
@@ -81,6 +102,12 @@ public sealed record ProjectionParameters
     public double Lat2 { get; init; } = double.NaN;
     /// <summary>Latitude of true scale (Mercator <c>lat_ts</c>).</summary>
     public double LatTs { get; init; } = double.NaN;
+    /// <summary>Azimuth of the initial line (Hotine Oblique Mercator), degrees.</summary>
+    public double Azimuth { get; init; } = double.NaN;
+    /// <summary>Angle from the rectified to the skew grid γc (Hotine Oblique Mercator), degrees; defaults to the azimuth.</summary>
+    public double RectifiedGridAngle { get; init; } = double.NaN;
+    /// <summary>Hotine variant A (PROJ <c>+no_uoff</c>): false easting/northing at the natural origin instead of the projection centre.</summary>
+    public bool NoUOffset { get; init; }
     /// <summary>UTM zone (informational, for PROJ string output).</summary>
     public int? UtmZone { get; init; }
     public bool UtmSouth { get; init; }
@@ -96,68 +123,91 @@ public sealed record ProjectionParameters
     };
 }
 
-/// <summary>Transverse Mercator (Snyder, USGS PP-1395) — accurate to millimetres within ±4° of the central meridian; used for UTM and national grids.</summary>
+/// <summary>
+/// Transverse Mercator with Krüger's n-series to order 6 (Karney 2011 / Poder–Engsager, the algorithm behind PROJ's default <c>tmerc</c>):
+/// nanometre accuracy within 3 900 km of the central meridian — used for UTM, TM-3 and national grids.
+/// </summary>
 public sealed class TransverseMercator : Projection
 {
-    private readonly double _a, _e2, _ep2, _k0, _lon0, _m0, _e1;
-    private readonly double _m1, _m2, _m3, _m4;
+    private readonly double _a, _k0, _lon0, _e, _xi0;
+    private readonly double[] _alpha = new double[7], _beta = new double[7];
 
     public TransverseMercator(Ellipsoid e, ProjectionParameters p) : base(e, p)
     {
-        _a = e.A; _e2 = e.E2; _ep2 = _e2 / (1 - _e2); _k0 = p.K0; _lon0 = p.Lon0 * Deg;
-        double e4 = _e2 * _e2, e6 = e4 * _e2;
-        _m1 = 1 - _e2 / 4 - 3 * e4 / 64 - 5 * e6 / 256;
-        _m2 = 3 * _e2 / 8 + 3 * e4 / 32 + 45 * e6 / 1024;
-        _m3 = 15 * e4 / 256 + 45 * e6 / 1024;
-        _m4 = 35 * e6 / 3072;
-        _m0 = Meridian(p.Lat0 * Deg);
-        double s = Math.Sqrt(1 - _e2);
-        _e1 = (1 - s) / (1 + s);
+        double f = e.F, n = f / (2 - f), n2 = n * n, n3 = n2 * n, n4 = n3 * n, n5 = n4 * n, n6 = n5 * n;
+        _a = e.A / (1 + n) * (1 + n2 / 4 + n4 / 64 + n6 / 256);
+        _e = e.E; _k0 = p.K0; _lon0 = p.Lon0 * Deg;
+        _alpha[1] = n / 2 - 2 * n2 / 3 + 5 * n3 / 16 + 41 * n4 / 180 - 127 * n5 / 288 + 7891 * n6 / 37800;
+        _alpha[2] = 13 * n2 / 48 - 3 * n3 / 5 + 557 * n4 / 1440 + 281 * n5 / 630 - 1983433 * n6 / 1935360;
+        _alpha[3] = 61 * n3 / 240 - 103 * n4 / 140 + 15061 * n5 / 26880 + 167603 * n6 / 181440;
+        _alpha[4] = 49561 * n4 / 161280 - 179 * n5 / 168 + 6601661 * n6 / 7257600;
+        _alpha[5] = 34729 * n5 / 80640 - 3418889 * n6 / 1995840;
+        _alpha[6] = 212378941 * n6 / 319334400;
+        _beta[1] = n / 2 - 2 * n2 / 3 + 37 * n3 / 96 - n4 / 360 - 81 * n5 / 512 + 96199 * n6 / 604800;
+        _beta[2] = n2 / 48 + n3 / 15 - 437 * n4 / 1440 + 46 * n5 / 105 - 1118711 * n6 / 3870720;
+        _beta[3] = 17 * n3 / 480 - 37 * n4 / 840 - 209 * n5 / 4480 + 5569 * n6 / 90720;
+        _beta[4] = 4397 * n4 / 161280 - 11 * n5 / 504 - 830251 * n6 / 7257600;
+        _beta[5] = 4583 * n5 / 161280 - 108847 * n6 / 3991680;
+        _beta[6] = 20648693 * n6 / 638668800;
+        // ξ of the latitude of origin on the central meridian
+        double t0 = Conformal(p.Lat0 * Deg);
+        double xi0p = Math.Atan(t0);
+        _xi0 = xi0p;
+        for (int j = 1; j <= 6; j++) _xi0 += _alpha[j] * Math.Sin(2 * j * xi0p);
     }
 
     public override string ProjName => Parameters.UtmZone is not null ? "utm" : "tmerc";
     public override string WktName => "Transverse_Mercator";
 
-    private double Meridian(double phi) =>
-        _a * (_m1 * phi - _m2 * Math.Sin(2 * phi) + _m3 * Math.Sin(4 * phi) - _m4 * Math.Sin(6 * phi));
+    /// <summary>tan of the conformal latitude.</summary>
+    private double Conformal(double phi)
+    {
+        double s = Math.Sin(phi);
+        if (Math.Abs(s) >= 1) return Math.Sign(s) * double.PositiveInfinity;
+        return Math.Sinh(Math.Atanh(s) - _e * Math.Atanh(_e * s));
+    }
 
     public override void Forward(double lon, double lat, out double x, out double y)
     {
-        double sinP = Math.Sin(lat), cosP = Math.Cos(lat), tanP = Math.Tan(lat);
-        double n = _a / Math.Sqrt(1 - _e2 * sinP * sinP);
-        double t = tanP * tanP;
-        double c = _ep2 * cosP * cosP;
-        double a = AdjustLon(lon - _lon0) * cosP;
-        double a2 = a * a, a3 = a2 * a, a4 = a3 * a, a5 = a4 * a, a6 = a5 * a;
-        double m = Meridian(lat);
-
-        x = Parameters.FalseEasting + _k0 * n * (a + (1 - t + c) * a3 / 6 + (5 - 18 * t + t * t + 72 * c - 58 * _ep2) * a5 / 120);
-        y = Parameters.FalseNorthing + _k0 * (m - _m0 + n * tanP * (a2 / 2 + (5 - t + 9 * c + 4 * c * c) * a4 / 24
-                                                                    + (61 - 58 * t + t * t + 600 * c - 330 * _ep2) * a6 / 720));
+        double lam = AdjustLon(lon - _lon0);
+        double t = Conformal(lat);
+        double xip = Math.Atan2(t, Math.Cos(lam));
+        double etap = Math.Atanh(Math.Sin(lam) / Math.Sqrt(1 + t * t));
+        if (double.IsInfinity(t)) { xip = Math.Sign(t) * Math.PI / 2; etap = 0; }
+        double xi = xip, eta = etap;
+        for (int j = 1; j <= 6; j++)
+        {
+            xi += _alpha[j] * Math.Sin(2 * j * xip) * Math.Cosh(2 * j * etap);
+            eta += _alpha[j] * Math.Cos(2 * j * xip) * Math.Sinh(2 * j * etap);
+        }
+        x = Parameters.FalseEasting + _k0 * _a * eta;
+        y = Parameters.FalseNorthing + _k0 * _a * (xi - _xi0);
     }
 
     public override void Inverse(double x, double y, out double lon, out double lat)
     {
-        double m = _m0 + (y - Parameters.FalseNorthing) / _k0;
-        double mu = m / (_a * _m1);
-        double e1 = _e1, e12 = e1 * e1, e13 = e12 * e1, e14 = e13 * e1;
-        double phi1 = mu + (3 * e1 / 2 - 27 * e13 / 32) * Math.Sin(2 * mu)
-                         + (21 * e12 / 16 - 55 * e14 / 32) * Math.Sin(4 * mu)
-                         + (151 * e13 / 96) * Math.Sin(6 * mu)
-                         + (1097 * e14 / 512) * Math.Sin(8 * mu);
-
-        double sin1 = Math.Sin(phi1), cos1 = Math.Cos(phi1), tan1 = Math.Tan(phi1);
-        double c1 = _ep2 * cos1 * cos1;
-        double t1 = tan1 * tan1;
-        double denom = 1 - _e2 * sin1 * sin1;
-        double n1 = _a / Math.Sqrt(denom);
-        double r1 = _a * (1 - _e2) / Math.Pow(denom, 1.5);
-        double d = (x - Parameters.FalseEasting) / (n1 * _k0);
-        double d2 = d * d, d3 = d2 * d, d4 = d3 * d, d5 = d4 * d, d6 = d5 * d;
-
-        lat = phi1 - (n1 * tan1 / r1) * (d2 / 2 - (5 + 3 * t1 + 10 * c1 - 4 * c1 * c1 - 9 * _ep2) * d4 / 24
-                                       + (61 + 90 * t1 + 298 * c1 + 45 * t1 * t1 - 252 * _ep2 - 3 * c1 * c1) * d6 / 720);
-        lon = _lon0 + (d - (1 + 2 * t1 + c1) * d3 / 6 + (5 - 2 * c1 + 28 * t1 - 3 * c1 * c1 + 8 * _ep2 + 24 * t1 * t1) * d5 / 120) / cos1;
+        double xi = (y - Parameters.FalseNorthing) / (_k0 * _a) + _xi0;
+        double eta = (x - Parameters.FalseEasting) / (_k0 * _a);
+        double xip = xi, etap = eta;
+        for (int j = 1; j <= 6; j++)
+        {
+            xip -= _beta[j] * Math.Sin(2 * j * xi) * Math.Cosh(2 * j * eta);
+            etap -= _beta[j] * Math.Cos(2 * j * xi) * Math.Sinh(2 * j * eta);
+        }
+        double sx = Math.Sin(xip), cx = Math.Cos(xip), she = Math.Sinh(etap);
+        double taup = sx / Math.Sqrt(she * she + cx * cx);
+        lon = _lon0 + Math.Atan2(she, cx);
+        // invert τ' → τ (Karney 2011, eq. 19–21), Newton
+        double es = Ellipsoid.E2, tau = taup;
+        for (int i = 0; i < 10; i++)
+        {
+            double sig = Math.Sinh(_e * Math.Atanh(_e * tau / Math.Sqrt(1 + tau * tau)));
+            double taui = tau * Math.Sqrt(1 + sig * sig) - sig * Math.Sqrt(1 + tau * tau);
+            double dtau = (taup - taui) / Math.Sqrt(1 + taui * taui) * (1 + (1 - es) * tau * tau) / ((1 - es) * Math.Sqrt(1 + tau * tau));
+            tau += dtau;
+            if (Math.Abs(dtau) < 1e-15) break;
+        }
+        lat = Math.Atan(tau);
     }
 }
 

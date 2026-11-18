@@ -31,6 +31,41 @@ public static partial class NativeKernels
     }
 
     [LibraryImport(Lib)] private static partial int gpn_version();
+    [LibraryImport(Lib)] private static unsafe partial int gpn_laz_decompress_file(byte* path, nuint pathLen, ulong offsetToPoints, byte* vlr, nuint vlrLen, ulong pointCount, byte* output, nuint outLen);
+    [LibraryImport(Lib)] private static unsafe partial int gpn_laz_decompress_chunk(byte* vlr, nuint vlrLen, byte* chunk, nuint chunkLen, ulong pointCount, byte* output, nuint outLen);
+    [LibraryImport(Lib)] private static unsafe partial nuint gpn_last_error(byte* buffer, nuint length);
+
+    private static readonly Lazy<bool> s_laz = new(() => { try { return IsNativeAvailable && gpn_version() >= 2; } catch (EntryPointNotFoundException) { return false; } });
+
+    /// <summary>True when the native library includes the LAZ codec (laz-rs: all point formats 0–10, layered LAS 1.4 compression, COPC chunks).</summary>
+    public static bool SupportsLaz => s_laz.Value;
+
+    private static unsafe string LastError()
+    {
+        nuint n = gpn_last_error(null, 0);
+        var buf = new byte[(int)n];
+        fixed (byte* p = buf) gpn_last_error(p, n);
+        return System.Text.Encoding.UTF8.GetString(buf);
+    }
+
+    /// <summary>Decompresses all points of a LAZ file into raw LAS records (native laz-rs).</summary>
+    public static unsafe void LazDecompressFile(string path, long offsetToPoints, ReadOnlySpan<byte> laszipVlr, long pointCount, Span<byte> output)
+    {
+        if (!SupportsLaz) throw new NotSupportedException("The native LAZ codec is not available.");
+        var pb = System.Text.Encoding.UTF8.GetBytes(path);
+        fixed (byte* pp = pb, v = laszipVlr, o = output)
+            if (gpn_laz_decompress_file(pp, (nuint)pb.Length, (ulong)offsetToPoints, v, (nuint)laszipVlr.Length, (ulong)pointCount, o, (nuint)output.Length) != 0)
+                throw new InvalidDataException("LAZ: " + LastError());
+    }
+
+    /// <summary>Decompresses one LAZ chunk (e.g. a COPC node) into raw LAS records.</summary>
+    public static unsafe void LazDecompressChunk(ReadOnlySpan<byte> laszipVlr, ReadOnlySpan<byte> chunk, long pointCount, Span<byte> output)
+    {
+        if (!SupportsLaz) throw new NotSupportedException("The native LAZ codec is not available.");
+        fixed (byte* v = laszipVlr, c = chunk, o = output)
+            if (gpn_laz_decompress_chunk(v, (nuint)laszipVlr.Length, c, (nuint)chunk.Length, (ulong)pointCount, o, (nuint)output.Length) != 0)
+                throw new InvalidDataException("LAZ chunk: " + LastError());
+    }
     [LibraryImport(Lib)] private static unsafe partial void gpn_haversine(double* lon1, double* lat1, double* lon2, double* lat2, double* output, nuint n, double radius);
     [LibraryImport(Lib)] private static unsafe partial void gpn_point_in_polygon(double* xs, double* ys, nuint n, double* rx, double* ry, nuint m, byte* output);
     [LibraryImport(Lib)] private static unsafe partial void gpn_bbox_filter(double* xs, double* ys, nuint n, double minx, double miny, double maxx, double maxy, byte* output);

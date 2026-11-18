@@ -10,7 +10,7 @@ public enum TiffCompression { None = 1, Lzw = 5, Deflate = 8 }
 
 /// <summary>
 /// Pure managed GeoTIFF / BigTIFF reader and GeoTIFF writer. Reads strips or tiles (Cloud-Optimized GeoTIFFs),
-/// uncompressed / Deflate / LZW / PackBits, horizontal predictor, chunky or planar layout, 8–64-bit integer and
+/// uncompressed / Deflate / LZW / PackBits, horizontal and floating-point predictors, chunky or planar layout, 8–64-bit integer and
 /// float samples. Georeferencing from ModelPixelScale + ModelTiepoint or ModelTransformation, CRS from GeoKeys.
 /// </summary>
 public static class GeoTiff
@@ -50,7 +50,6 @@ public static class GeoTiff
         int planar = (int)ifd.Get(PlanarConfig, 1);
         int bps = bits / 8;
         if (bits % 8 != 0) throw new NotSupportedException($"{bits}-bit samples are not supported.");
-        if (pred == 3) throw new NotSupportedException("Floating-point predictor (3) is not supported yet.");
 
         var bands = Enumerable.Range(0, spp).Select(_ => new float[width * height]).ToArray();
         bool tiled = ifd.Num.ContainsKey(TileOffsets);
@@ -72,6 +71,7 @@ public static class GeoTiff
             int rowBytes = blockW * samplesInBlock * bps;
             var block = Decompress(raw, comp, rowBytes * blockH);
             if (pred == 2) UndoPredictor(block, blockW, blockH, samplesInBlock, bps, le);
+            else if (pred == 3) UndoFloatPredictor(block, blockW, blockH, samplesInBlock, bps, le);
             for (int r = 0; r < blockH; r++)
             {
                 int y = by * blockH + r;
@@ -268,6 +268,27 @@ public static class GeoTiff
         var res = o.ToArray();
         if (res.Length < expected) Array.Resize(ref res, expected);
         return res;
+    }
+
+    /// <summary>TIFF floating-point predictor (Adobe Technical Note 3): byte-wise horizontal differencing over byte planes (MSB first).</summary>
+    private static void UndoFloatPredictor(byte[] block, int w, int h, int spp, int bps, bool le)
+    {
+        int n = w * spp, rowBytes = n * bps;
+        var tmp = new byte[rowBytes];
+        for (int r = 0; r < h; r++)
+        {
+            int row = r * rowBytes;
+            if (row + rowBytes > block.Length) break;
+            var span = block.AsSpan(row, rowBytes);
+            for (int i = spp; i < rowBytes; i++) span[i] = (byte)(span[i] + span[i - spp]);
+            span.CopyTo(tmp);
+            for (int k = 0; k < n; k++)
+                for (int j = 0; j < bps; j++)
+                {
+                    byte v = tmp[j * n + k];                     // byte j of sample k, most significant first
+                    span[k * bps + (le ? bps - 1 - j : j)] = v;
+                }
+        }
     }
 
     private static void UndoPredictor(byte[] block, int w, int h, int spp, int bps, bool le)

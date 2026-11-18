@@ -13,6 +13,7 @@ using GeoPandas.Net.Geometry;
 using GeoPandas.Net.Network;
 using GeoPandas.Net.Plotting;
 using GeoPandas.Net.Raster;
+using GeoPandas.Net.Survey;
 using NetTopologySuite.Geometries;
 using GeoPandas.Net.Geometry.Crs;
 using RasterGrid = GeoPandas.Net.Raster.Raster;
@@ -67,6 +68,7 @@ public static class GalleryCatalog
         new("civil", new("Civil engineering", "Teknik sipil"), "≋"),
         new("rs", new("Remote sensing", "Penginderaan jauh"), "◎"),
         new("cad", new("CAD integration", "Integrasi CAD"), "⌗"),
+        new("survey", new("Surveying & geodesy", "Survei & geodesi"), "⌖"),
         new("ai", new("Spatial AI", "AI spasial"), "✶"),
     ];
 
@@ -632,6 +634,154 @@ public static class GalleryCatalog
                 var table = new DataFrame(Column.Create("dimension", v.Dimensions.ToArray()), Column.Create("length", v.Shape.ToArray()));
                 var stats = step.Statistics();
                 return new(scene, table, [F("Format", "Format", nc.Format), F("Time steps", "Langkah waktu", $"{t.Length} ({t[0]:dd MMM HH:mm} → {t[^1]:HH:mm})"), F("Range", "Rentang", $"{stats.Min:F1} – {stats.Max:F1} °C")], default);
+            }),
+
+        // ---------------------------------------------------------------- surveying & geodesy
+        new("projections", "survey", new("World map projections", "Proyeksi peta dunia"),
+            new("The same graticule and cities in Equal Earth, Robinson and Mollweide, all computed by the built-in projection engine (checked against PROJ to the nanometre).",
+                "Graticule dan kota yang sama dalam Equal Earth, Robinson dan Mollweide, semuanya dihitung engine proyeksi bawaan (diverifikasi terhadap PROJ hingga nanometer)."),
+            """
+            var cities = SampleData.Cities();
+            var equalEarth = cities.ToCrs("EPSG:8857");                       // from the embedded EPSG dataset
+            var robinson   = cities.ToCrs("+proj=robin +lon_0=0 +datum=WGS84");
+            var mollweide  = cities.ToCrs("+proj=moll +datum=WGS84");
+            CrsRegistry.AtLocation(106.8, -6.2);                              // CRSs valid in Jakarta
+            """,
+            () =>
+            {
+                var cities = SampleData.Cities();
+                var defs = new (string Name, CoordinateReferenceSystem Crs, double Dy)[]
+                {
+                    ("Equal Earth", CoordinateReferenceSystem.FromEpsg(8857), 0),
+                    ("Robinson", CoordinateReferenceSystem.Parse("+proj=robin +lon_0=0 +datum=WGS84 +units=m"), -19_500_000),
+                    ("Mollweide", CoordinateReferenceSystem.Parse("+proj=moll +lon_0=0 +datum=WGS84 +units=m"), -39_000_000),
+                };
+                var graticule = new List<NtsGeometry?>();
+                for (int lon = -180; lon <= 180; lon += 30) graticule.Add(Geo.LineString(Enumerable.Range(-90, 181).Select(lat => new Coordinate(lon, lat))));
+                for (int lat = -90; lat <= 90; lat += 30) graticule.Add(Geo.LineString(Enumerable.Range(-180, 361).Select(lon => new Coordinate(lon, lat))));
+                var grat = new GeoSeries(graticule, CoordinateReferenceSystem.Wgs84);
+                var scene = Scene(subtitle: "Equal Earth (EPSG:8857) · Robinson · Mollweide");
+                var rows = new List<(string, string, double, double)>();
+                foreach (var (name, crs, dy) in defs)
+                {
+                    // project, then stack the three maps vertically in one scene
+                    var g = grat.ToCrs(crs).Translate(0, dy);
+                    var c = cities.ToCrs(crs);
+                    var moved = c.WithGeometry(c.Geometry.Translate(0, dy));
+                    var outline = Geo.LineString(Enumerable.Range(-90, 181).Select(lat => new Coordinate(180, lat)).Concat(Enumerable.Range(-90, 181).Reverse().Select(lat => new Coordinate(-180, lat))).Append(new Coordinate(180, -90)));
+                    var frame = new GeoSeries([outline], CoordinateReferenceSystem.Wgs84).ToCrs(crs).Translate(0, dy);
+                    scene.AddLayer(g, new LayerStyle { Stroke = "#c9d3cc", StrokeWidth = 0.5, ShowInLegend = false })
+                        .AddLayer(frame, new LayerStyle { Stroke = "#53625a", StrokeWidth = 1, ShowInLegend = false })
+                        .AddLayer(moved, new LayerStyle { Fill = "#b0306a", SizeColumn = "pop_mio", MaxPointRadius = 8, FillOpacity = 0.75, Stroke = "#ffffff" }, name);
+                    var label = GeoDataFrame.FromGeometries([Geo.Point(-19_000_000, dy + 7_400_000)], null, Column.Create("name", new[] { name }));
+                    scene.AddLayer(label, new LayerStyle { Fill = null, Stroke = null, PointRadius = 0, LabelColumn = "name", LabelSize = 11, ShowInLegend = false });
+                    var jk = c.Geometry[0]!.Coordinate;
+                    rows.Add((name, crs.Projection!.ProjName, jk.X, jk.Y));
+                }
+                scene.ShowScaleBar = false;
+                var table = new DataFrame(Column.Create("projection", rows.Select(r => r.Item1).ToArray()), Column.Create("proj", rows.Select(r => r.Item2).ToArray()),
+                    Column.Create("jakarta_x", rows.Select(r => Math.Round(r.Item3, 2)).ToArray()), Column.Create("jakarta_y", rows.Select(r => Math.Round(r.Item4, 2)).ToArray()));
+                var here = CrsRegistry.AtLocation(106.8, -6.2);
+                return new(scene, table, [F("EPSG codes", "Kode EPSG", EpsgDatabase.Count.ToString("N0")), F("Valid in Jakarta", "Berlaku di Jakarta", $"{here.Count} projected CRSs")], default);
+            }),
+
+        new("geoid", "survey", new("Geoid undulation: GPS height → elevation", "Undulasi geoid: tinggi GPS → elevasi"),
+            new("Map the geoid height N over the archipelago and turn GNSS ellipsoidal heights into orthometric heights (H = h − N), the step every GPS survey needs.",
+                "Petakan tinggi geoid N di atas kepulauan dan ubah tinggi elipsoid GNSS menjadi tinggi ortometrik (H = h − N), langkah wajib setiap survei GPS."),
+            """
+            var geoid = GeoidModel.Egm96Coarse;              // or GeoidModel.Load("InaGeoid2020.isg" / "egm2008.gtx" / ".tif")
+            double n = geoid.Undulation(106.8456, -6.2088);  // metres above the ellipsoid
+            double H = geoid.OrthometricHeight(106.8456, -6.2088, h: 58.4);
+
+            // or as a compound CRS in a transformation
+            var crs = CoordinateReferenceSystem.FromEpsg(32748).WithGeoid(geoid);
+            """,
+            () =>
+            {
+                var geoid = GeoidModel.Egm96Coarse;
+                double w = 94, e = 142, s = -12, n = 8, cell = 0.25;
+                int cols = (int)((e - w) / cell), rowsN = (int)((n - s) / cell);
+                var band = new float[cols * rowsN];
+                for (int r = 0; r < rowsN; r++) for (int c = 0; c < cols; c++)
+                        band[r * cols + c] = (float)geoid.Undulation(w + (c + 0.5) * cell, n - (r + 0.5) * cell);
+                var ras = new RasterGrid(cols, rowsN, [band], new GeoTransform(w, cell, 0, n, 0, -cell), CoordinateReferenceSystem.Wgs84);
+                var cities = SampleData.Cities().Cx(w, s, e, n);
+                // a GNSS receiver reads ellipsoidal height h; the map needs orthometric H = h - N
+                const double h = 100;
+                var names = new List<string>(); var ns = new List<double>(); var os = new List<double>();
+                for (int i = 0; i < cities.RowCount; i++)
+                {
+                    var p = cities.Geometry[i]!.Coordinate;
+                    double und = geoid.Undulation(p.X, p.Y);
+                    names.Add((string)cities["name"].GetValue(i)!); ns.Add(Math.Round(und, 2)); os.Add(Math.Round(h - und, 2));
+                }
+                var scene = Scene().AddRaster(ras, ColorMaps.Spectral.Reversed(), legendTitle: "Geoid height N (m)")
+                    .AddLayer(cities, new LayerStyle { Fill = "#1b2a33", PointRadius = 3.5, Stroke = "#ffffff", StrokeWidth = 1, LabelColumn = "name", ShowInLegend = false });
+                var table = new DataFrame(Column.Create("city", names.ToArray()), Column.Create("N", ns.ToArray()), Column.Create("H_when_h_100m", os.ToArray()));
+                var st = ras.Statistics();
+                return new(scene, table, [F("Model", "Model", geoid.Name), F("Range", "Rentang", $"{st.Min:F1} … {st.Max:F1} m")], default);
+            }),
+
+        new("adjustment", "survey", new("Traverse & least-squares network", "Poligon & jaring kuadrat terkecil"),
+            new("Adjust a closed traverse with Bowditch, then a control network of distances and azimuths by least squares; 95 % error ellipses (×2000) and the χ² test show the precision.",
+                "Hitung poligon tertutup dengan Bowditch, lalu jaring kontrol jarak dan azimut dengan kuadrat terkecil; elips kesalahan 95 % (×2000) dan uji χ² menunjukkan presisinya."),
+            """
+            var t = Traverse.Compute("BM1", e0, n0, backsightAzimuth: 270, legs, closingAngleRight: 270);
+            Console.WriteLine($"1:{t.PrecisionRatio:F0}");
+
+            var net = new AdjustmentNetwork()
+                .AddFixed("BM1", 1000, 1000).AddFixed("BM2", 1600, 1050)
+                .AddStation("P1", 1290, 1260)                        // approximate
+                .Distance("BM1", "P1", 390.514, sigma: 0.003)
+                .Azimuth("BM1", "P1", 50.19444, sigmaArcSec: 2);
+            var result = net.Adjust2D();                             // σ̂0², χ², error ellipses, data snooping
+            """,
+            () =>
+            {
+                var truth = new Dictionary<string, (double E, double N)>
+                {
+                    ["BM1"] = (1000, 1000), ["BM2"] = (1600, 1050), ["BM3"] = (1550, 1520), ["BM4"] = (980, 1480),
+                    ["P1"] = (1300, 1250), ["P2"] = (1250, 1400), ["P3"] = (1420, 1330),
+                };
+                var rng = new Random(11);
+                double G() => Math.Sqrt(-2 * Math.Log(1 - rng.NextDouble())) * Math.Cos(2 * Math.PI * rng.NextDouble());
+                var net = new AdjustmentNetwork();
+                foreach (var k in new[] { "BM1", "BM2", "BM3", "BM4" }) net.AddFixed(k, truth[k].E, truth[k].N);
+                foreach (var k in new[] { "P1", "P2", "P3" }) net.AddStation(k, truth[k].E + 8, truth[k].N - 6);
+                var pairs = new[] { ("BM1", "P1"), ("BM2", "P1"), ("BM3", "P1"), ("BM4", "P2"), ("BM3", "P2"), ("P1", "P2"), ("BM2", "P3"), ("BM3", "P3"), ("P1", "P3"), ("P2", "P3") };
+                var obsLines = new List<NtsGeometry?>();
+                foreach (var (f, t) in pairs)
+                {
+                    var (az, d) = Angles.Inverse(truth[f].E, truth[f].N, truth[t].E, truth[t].N);
+                    net.Distance(f, t, d + 0.003 * G(), 0.003);
+                    if (f.StartsWith("BM", StringComparison.Ordinal)) net.Azimuth(f, t, az + 2.0 / 3600 * G(), 2);
+                    obsLines.Add(Geo.LineString([new Coordinate(truth[f].E, truth[f].N), new Coordinate(truth[t].E, truth[t].N)]));
+                }
+                var r = net.Adjust2D();
+
+                // a closed traverse around the network
+                var loop = new[] { "BM1", "P1", "P3", "P2", "BM4" };
+                var legs = new List<TraverseLeg>();
+                double back = Angles.Inverse(truth["BM1"].E, truth["BM1"].N, truth["BM4"].E, truth["BM4"].N).Azimuth;
+                for (int i = 0; i < loop.Length; i++)
+                {
+                    var a = truth[loop[i]]; var b = truth[loop[(i + 1) % loop.Length]];
+                    var prev = truth[loop[(i - 1 + loop.Length) % loop.Length]];
+                    var (azF, dist) = Angles.Inverse(a.E, a.N, b.E, b.N);
+                    double azB = Angles.Inverse(a.E, a.N, prev.E, prev.N).Azimuth;
+                    legs.Add(new TraverseLeg(loop[(i + 1) % loop.Length], dist + 0.004 * G(), AngleRight: Angles.Normalize(azF - azB) + 3.0 / 3600 * G()));
+                }
+                var tr = Traverse.Compute("BM1", truth["BM1"].E, truth["BM1"].N, back, legs, closeOn: truth["BM1"]);
+
+                var scene = Scene(subtitle: "dashed: observations · solid: traverse · pink: 95 % error ellipses ×2000");
+                scene.AddLayer(obsLines.OfType<NtsGeometry>(), new LayerStyle { Stroke = "#9aa79a", StrokeWidth = 0.8, DashArray = [4, 3] }, "Observations / Pengukuran")
+                    .AddLayer(tr.LegLines(), new LayerStyle { Stroke = "#2f6f8f", StrokeWidth = 1.6 }, "Traverse / Poligon")
+                    .AddLayer(r.ErrorEllipses(2000), new LayerStyle { Fill = "#b0306a", FillOpacity = 0.25, Stroke = "#b0306a", StrokeWidth = 1 }, "95 % ellipses ×2000")
+                    .AddLayer(r.StationPoints(), new LayerStyle { Fill = "#1b2a33", PointRadius = 4, Stroke = "#ffffff", StrokeWidth = 1, LabelColumn = "id", ShowInLegend = false });
+                return new(scene, r.Stations, [
+                    F("σ̂0²", "σ̂0²", r.VarianceFactor.ToString("F3")),
+                    F("χ² test", "Uji χ²", r.GlobalTestPassed ? "passed / lulus" : "failed / gagal"),
+                    F("Traverse", "Poligon", $"1:{tr.PrecisionRatio:F0} ({tr.LinearMisclosure * 1000:F1} mm)")], default);
             }),
 
         // ---------------------------------------------------------------- AI

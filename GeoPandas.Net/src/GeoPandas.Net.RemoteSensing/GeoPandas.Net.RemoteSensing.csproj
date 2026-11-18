@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.RemoteSensing</RootNamespace>
+    <Description>GeoPandas.Net satellite product readers: Landsat Collection 2 (MTL, scaled reflectance, surface temperature, QA_PIXEL masks), Sentinel-2 L1C/L2A SAFE (JPEG 2000 via CoreJ2K, baseline offsets, SCL masks), STAC items and assets, the MODIS/VIIRS sinusoidal tile grid and HDF-EOS5 grids.</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Raster\GeoPandas.Net.Raster.csproj" />
+    <ProjectReference Include="..\GeoPandas.Net.Data\GeoPandas.Net.Data.csproj" />
+    <PackageReference Include="CoreJ2K" />
+  </ItemGroup>
+</Project>

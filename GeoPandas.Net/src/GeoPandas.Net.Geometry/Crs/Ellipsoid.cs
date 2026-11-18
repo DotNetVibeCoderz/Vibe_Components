@@ -62,11 +62,14 @@ public sealed record Datum(string Name, Ellipsoid Ellipsoid, double[]? ToWgs84 =
 {
     public static Datum Wgs84 { get; } = new("WGS_1984", Ellipsoid.Wgs84);
 
+    /// <summary>Grid shift to WGS 84 / the grid's target datum (NTv2), used instead of <see cref="ToWgs84"/> when set (PROJ <c>+nadgrids</c>).</summary>
+    public HorizontalGridShift? GridShift { get; init; }
+
     /// <summary>True when no datum shift is needed relative to WGS 84.</summary>
-    public bool IsWgs84Compatible => ToWgs84 is null || ToWgs84.All(v => v == 0);
+    public bool IsWgs84Compatible => GridShift is null && (ToWgs84 is null || ToWgs84.All(v => v == 0));
 
     public bool Equals(Datum? other) =>
-        other is not null && Ellipsoid == other.Ellipsoid &&
+        other is not null && Ellipsoid == other.Ellipsoid && ReferenceEquals(GridShift, other.GridShift) &&
         (ToWgs84 ?? new double[7]).Take(7).SequenceEqual((other.ToWgs84 ?? new double[7]).Take(7));
 
     public override int GetHashCode() => HashCode.Combine(Ellipsoid, ToWgs84 is null ? 0 : ToWgs84.Sum());

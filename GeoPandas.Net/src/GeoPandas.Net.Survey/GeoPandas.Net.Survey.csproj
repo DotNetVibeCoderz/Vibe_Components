@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.Survey</RootNamespace>
+    <Description>GeoPandas.Net surveying and GNSS: traverse computation and Bowditch/Transit adjustment, least-squares network adjustment (distances, directions, angles, azimuths, GNSS baselines, levelling) with error ellipses, data snooping and the χ² test, COGO (intersections, resection), RINEX 2/3 observation and navigation readers, GPS broadcast orbits and single-point positioning.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Core\GeoPandas.Net.Core.csproj" />
+  </ItemGroup>
+</Project>

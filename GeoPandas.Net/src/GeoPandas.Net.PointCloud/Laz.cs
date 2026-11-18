@@ -8,8 +8,18 @@ internal static class Laz
 {
     public static PointCloud Read(string path, LasInfo info, LasReadOptions opt)
     {
+        if (GeoPandas.Net.Geometry.Native.NativeKernels.SupportsLaz && info.LaszipVlr is { } vlr)
+        {
+            // native laz-rs: every point format including the LAS 1.4 layered compressor; decoded in one pass
+            int rec = Las.CheckFormat(info);
+            var raw = new byte[checked(info.PointCount * rec)];
+            GeoPandas.Net.Geometry.Native.NativeKernels.LazDecompressFile(path, info.OffsetToPoints, vlr, info.PointCount, raw);
+            var b0 = new Las.Builder(info.PointFormat, (int)Math.Min(info.PointCount, opt.MaxPoints ?? info.PointCount));
+            Las.DecodeRecords(raw, (int)info.PointCount, 0, info, opt, b0);
+            return b0.Build(info);
+        }
         if (info.PointFormat > 5)
-            throw new NotSupportedException($"LAZ point format {info.PointFormat} (LAS 1.4 layered compression) is not supported by laszip.net; decompress with `pdal translate in.laz out.las` or LAStools `laszip`, then read the .las.");
+            throw new NotSupportedException($"LAZ point format {info.PointFormat} (LAS 1.4 layered compression) needs the native kernels (geopandas_native with laz-rs); the managed laszip.net fallback supports formats 0–5.");
         var lz = laszip_dll.laszip_create();
         bool compressed = true;
         Check(lz, lz.laszip_open_reader(path, ref compressed));

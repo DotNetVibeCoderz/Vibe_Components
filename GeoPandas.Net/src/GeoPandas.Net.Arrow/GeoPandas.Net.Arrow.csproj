@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>GeoPandas.Net.Arrow</RootNamespace>
-    <Description>GeoPandas.Net columnar interchange: GeoParquet 1.1 reader/writer (WKB + bbox covering columns, row-group pruning) and Apache Arrow IPC (file / stream, memory-mapped) export and import of DataFrame and GeoDataFrame.</Description>
+    <Description>GeoPandas.Net columnar interchange: GeoParquet 1.1 reader/writer (WKB or native GeoArrow encodings, bbox covering columns, row-group pruning) and Apache Arrow IPC (file / stream, memory-mapped) export and import of DataFrame and GeoDataFrame.</Description>
     <IsAotCompatible>false</IsAotCompatible>
   </PropertyGroup>
   <ItemGroup>

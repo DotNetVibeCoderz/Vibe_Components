@@ -8,6 +8,7 @@
 | [Vector data, CRS & IO](vector.md) | `DataFrame`/`GeoSeries`/`GeoDataFrame`, spatial joins, overlay, dissolve, CRS engine, file formats, plotting |
 | [Formats, databases, lazy & versioning](data.md) | FlatGeobuf, GeoParquet, Arrow, NetCDF, LAS/LAZ, PostGIS/SQL Server/DuckDB/Oracle/BigQuery, `LazyGeoDataFrame`, `DatasetRepository` |
 | [Analysis](analysis.md) | Spatial statistics, clustering, interpolation, networks & routing, raster & terrain, hydrology, remote sensing |
+| [Projections, geodesy, surveying & satellites](geodesy.md) | 20 projections, the EPSG dataset, NTv2, geoids, traverse & least-squares adjustment, RINEX/GNSS, Landsat / Sentinel-2 / STAC / MODIS |
 | [CAD & AI integrations](integrations.md) | DXF ⇄ GIS, georeferencing, GeoLLM assistant |
 | [Tools](tools.md) | `gpd` CLI, gallery apps, `dotnet new` templates, benchmarks |
 | [Architecture](architecture.md) | Package layering, design decisions, performance, native kernels |

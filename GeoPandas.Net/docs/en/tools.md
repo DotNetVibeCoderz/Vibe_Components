@@ -25,6 +25,14 @@ dotnet tool install -g GeoPandas.Net.Cli        # or: dotnet run --project tools
 | `gpd las info\|dsm\|dtm\|ndsm\|convert <file> … [--cell 1] [--class 2,6] [--step n] [--format 6]` | LAS/LAZ point clouds |
 | `gpd netcdf info <file.nc>` / `gpd netcdf raster <file.nc> <var> <out.tif> [--index t,level]` | NetCDF summary and grid export |
 | `gpd repo init\|commit\|log\|diff\|checkout\|tag <dir> …` | Dataset versioning (`--key`, `--m`, `--out changes.geojson`) |
+| `gpd crs search <text>` / `gpd crs at <lon> <lat>` | Search the EPSG dataset by name or by area of use |
+| `gpd transform <from> <to> <x> <y> [--z h]` | 3-D transform, honouring `+nadgrids` and `+geoidgrids` |
+| `gpd geoid <lon> <lat> [--model f.gtx\|.isg\|.tif] [--h h]` | Geoid undulation and orthometric height |
+| `gpd survey traverse <legs.csv> --start E,N --backsight AZ [--close-angle A\|--close-on E,N]` | Bowditch / Transit traverse |
+| `gpd survey adjust <network.txt> [--out ellipses.geojson]` | Least-squares 2-D and leveling adjustment |
+| `gpd gnss spp <obs> <nav> [--out track.geojson] [--mask 10]` | RINEX single point positioning |
+| `gpd copc info\|read <file.copc.laz> … [--bbox …] [--depth n]` | COPC hierarchy and spatial queries |
+| `gpd s2\|landsat info\|ndvi <product> [out.tif]` / `gpd stac info\|get <item.json> …` | Satellite products |
 | `gpd sample <districts\|roads\|pois\|water\|cities\|siteplan\|dem\|multispectral\|lidar\|climate> <out>` | Export sample data |
 | `gpd ask <file> "question" [--out f]` | GeoLLM question (needs the `GEOPANDAS_LLM_*` environment variables) |
 | `gpd about` | Version, kernel backend, drivers |

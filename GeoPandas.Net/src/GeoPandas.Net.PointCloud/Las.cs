@@ -14,6 +14,14 @@ public sealed record LasInfo(
     CoordinateReferenceSystem? Crs, string SystemIdentifier, string GeneratingSoftware, DateOnly? CreationDate,
     long OffsetToPoints, IReadOnlyList<(string UserId, int RecordId, string Description, int Length)> Vlrs)
 {
+    /// <summary>Payload of the "laszip encoded" (22204) VLR of a LAZ file.</summary>
+    internal byte[]? LaszipVlr { get; init; }
+    /// <summary>Payload of the COPC info VLR ("copc", 1) when the file is a Cloud-Optimized Point Cloud.</summary>
+    internal byte[]? CopcInfoVlr { get; init; }
+    /// <summary>Position of the first extended VLR and their count (LAS 1.4).</summary>
+    internal long EvlrStart { get; init; }
+    internal int EvlrCount { get; init; }
+    public bool IsCopc => CopcInfoVlr is not null;
     public string Version => $"{VersionMajor}.{VersionMinor}";
     public override string ToString() =>
         $"{(Compressed ? "LAZ" : "LAS")} {Version} format {PointFormat} ({PointRecordLength} B/pt), {PointCount:N0} points, crs={Crs?.ToString() ?? "None"}, " +
@@ -68,6 +76,7 @@ public static class Las
 
         var vlrs = new List<(string, int, string, int)>();
         CoordinateReferenceSystem? crs = null;
+        byte[]? laszip = null, copc = null;
         long pos = headerSize;
         for (uint i = 0; i < nvlr && pos + 54 <= f.Length; i++)
         {
@@ -77,6 +86,8 @@ public static class Las
             int len = BinaryPrimitives.ReadUInt16LittleEndian(vh[20..]);
             string desc = Ascii(vh.Slice(22, 32));
             vlrs.Add((user, rid, desc, len));
+            if (user == "laszip encoded" && rid == 22204 && pos + 54 + len <= f.Length) laszip = f.Span(pos + 54, len).ToArray();
+            if (user == "copc" && rid == 1 && pos + 54 + len <= f.Length) copc = f.Span(pos + 54, len).ToArray();
             if (user == "LASF_Projection" && pos + 54 + len <= f.Length)
             {
                 var data = f.Span(pos + 54, len);
@@ -100,10 +111,22 @@ public static class Las
                 evlr += 60 + len;
             }
         }
+        long evlrStart = 0; int evlrCount = 0;
+        if (major == 1 && minor >= 4 && headerSize >= 375)
+        {
+            evlrStart = (long)BinaryPrimitives.ReadUInt64LittleEndian(h[235..]);
+            evlrCount = (int)BinaryPrimitives.ReadUInt32LittleEndian(h[243..]);
+        }
         DateOnly? date = year > 0 && doy > 0 && doy <= 366 ? DateOnly.FromDateTime(new DateTime(year, 1, 1).AddDays(doy - 1)) : null;
         return new LasInfo(path, major, minor, fmt, recLen, count, compressed,
             D(131), D(139), D(147), D(155), D(163), D(171), D(187), D(203), D(219), D(179), D(195), D(211),
-            crs, sys, soft, date, offset, vlrs);
+            crs, sys, soft, date, offset, vlrs) { LaszipVlr = laszip, CopcInfoVlr = copc, EvlrStart = evlrStart, EvlrCount = evlrCount };
+    }
+
+    internal static LasInfo ReadHeader(string path)
+    {
+        using var f = new MappedFile(path);
+        return ReadHeader(f, path);
     }
 
     private static string Ascii(ReadOnlySpan<byte> s)
@@ -144,23 +167,38 @@ public static class Las
 
     private static PointCloud ReadUncompressed(MappedFile f, LasInfo info, LasReadOptions opt)
     {
-        int fmt = info.PointFormat;
-        if (fmt > 10) throw new NotSupportedException($"LAS point format {fmt} is not defined.");
-        int rec = info.PointRecordLength;
-        if (rec < s_baseLength[fmt]) throw new InvalidDataException($"Point record length {rec} is shorter than format {fmt} requires ({s_baseLength[fmt]}).");
+        int rec = CheckFormat(info);
         long n = Math.Min(info.PointCount, (f.Length - info.OffsetToPoints) / rec);
-        var b = new Builder(fmt, (int)Math.Min(n, opt.MaxPoints ?? n));
-        var classes = opt.Classes is null ? null : new bool[256];
-        if (opt.Classes is not null) foreach (var c in opt.Classes) classes![c] = true;
-        bool ext = fmt >= 6;
+        var b = new Builder(info.PointFormat, (int)Math.Min(n, opt.MaxPoints ?? n));
         const int chunk = 1 << 16;
         for (long start = 0; start < n; start += chunk)
         {
             int m = (int)Math.Min(chunk, n - start);
-            var span = f.Span(info.OffsetToPoints + start * rec, m * rec);
+            if (!DecodeRecords(f.Span(info.OffsetToPoints + start * rec, m * rec), m, start, info, opt, b)) break;
+        }
+        return b.Build(info);
+    }
+
+    internal static int CheckFormat(LasInfo info)
+    {
+        int fmt = info.PointFormat;
+        if (fmt > 10) throw new NotSupportedException($"LAS point format {fmt} is not defined.");
+        int rec = info.PointRecordLength;
+        if (rec < s_baseLength[fmt]) throw new InvalidDataException($"Point record length {rec} is shorter than format {fmt} requires ({s_baseLength[fmt]}).");
+        return rec;
+    }
+
+    /// <summary>Decodes raw LAS point records into the builder; returns false once MaxPoints is reached.</summary>
+    internal static bool DecodeRecords(ReadOnlySpan<byte> span, int m, long firstIndex, LasInfo info, LasReadOptions opt, Builder b)
+    {
+        int fmt = info.PointFormat, rec = info.PointRecordLength;
+        bool ext = fmt >= 6;
+        bool[]? classes = null;
+        if (opt.Classes is not null) { classes = new bool[256]; foreach (var c in opt.Classes) classes[c] = true; }
+        {
             for (int i = 0; i < m; i++)
             {
-                if (opt.Step > 1 && (start + i) % opt.Step != 0) continue;
+                if (opt.Step > 1 && (firstIndex + i) % opt.Step != 0) continue;
                 var p = span.Slice(i * rec, rec);
                 double x = BinaryPrimitives.ReadInt32LittleEndian(p) * info.ScaleX + info.OffsetX;
                 double y = BinaryPrimitives.ReadInt32LittleEndian(p[4..]) * info.ScaleY + info.OffsetY;
@@ -190,10 +228,10 @@ public static class Las
                 if (colorAt >= 0) { r = BinaryPrimitives.ReadUInt16LittleEndian(p[colorAt..]); g = BinaryPrimitives.ReadUInt16LittleEndian(p[(colorAt + 2)..]); bl = BinaryPrimitives.ReadUInt16LittleEndian(p[(colorAt + 4)..]); }
                 if (nirAt >= 0) nir = BinaryPrimitives.ReadUInt16LittleEndian(p[nirAt..]);
                 b.Add(x, y, z, intensity, ret, nret, cls, angle, user, src, gps, r, g, bl, nir);
-                if (opt.MaxPoints is { } mx && b.Count >= mx) return b.Build(info);
+                if (opt.MaxPoints is { } mx && b.Count >= mx) return false;
             }
         }
-        return b.Build(info);
+        return true;
     }
 
     /// <summary>Accumulates decoded points into growable columns.</summary>

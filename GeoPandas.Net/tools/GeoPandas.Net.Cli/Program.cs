@@ -13,6 +13,8 @@ using GeoPandas.Net.Geometry.Crs;
 using GeoPandas.Net.Network;
 using GeoPandas.Net.Plotting;
 using GeoPandas.Net.Raster;
+using GeoPandas.Net.RemoteSensing;
+using GeoPandas.Net.Survey;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
@@ -85,6 +87,13 @@ internal sealed class Cli(string[] args)
             case "las" or "laz" or "lidar": LasCmd(); break;
             case "netcdf" or "nc": NetCdfCmd(); break;
             case "repo": RepoCmd(); break;
+            case "geoid": GeoidCmd(); break;
+            case "survey": SurveyCmd(); break;
+            case "gnss": GnssCmd(); break;
+            case "copc": CopcCmd(); break;
+            case "s2" or "sentinel2": Sentinel2Cmd(); break;
+            case "landsat": LandsatCmd(); break;
+            case "stac": StacCmd(); break;
             case "layers": foreach (var l in GeoPackage.ListLayers(Pos(1, "gpkg"))) Console.WriteLine(l); break;
             default: throw new ArgumentException($"Unknown command '{_pos[0]}'. Run 'gpd help'.");
         }
@@ -117,7 +126,18 @@ internal sealed class Cli(string[] args)
 
         CRS
           gpd crs <definition>                              show PROJ / WKT for EPSG, PROJ or WKT input
-          gpd transform <from> <to> <x> <y>                 transform one coordinate
+          gpd crs search <text>                             search the EPSG dataset (5 800+ CRSs) by name
+          gpd crs at <lon> <lat>                            projected CRSs whose area of use contains the point
+          gpd transform <from> <to> <x> <y> [--z h]         transform one coordinate (grids: +nadgrids, +geoidgrids)
+          gpd geoid <lon> <lat> [--model file.gtx|.isg|.tif] [--h ellipsoidal]   geoid undulation N and H = h - N
+
+        Surveying & GNSS
+          gpd survey traverse <legs.csv> --start E,N --backsight AZ [--close-angle A | --close-on E,N]
+                   [--method bowditch|transit] [--out stations.geojson]   legs.csv columns: to,distance,angle|azimuth
+          gpd survey adjust <network.txt> [--out ellipses.geojson]       least squares (2D and leveling)
+                   lines: fixed|station ID E N | benchmark ID H | height ID | dist|az|dir FROM TO VALUE SIGMA
+                          angle FROM AT TO DEG SIGMA | dh FROM TO DH SIGMA
+          gpd gnss spp <obs.o> <nav.n> [--out track.geojson] [--mask 10]   RINEX single point positioning
 
         Network
           gpd route <lines> --from x,y --to x,y [--cost column] [--oneway column] [--out route.geojson]
@@ -131,10 +151,18 @@ internal sealed class Cli(string[] args)
           gpd netcdf info <file.nc>                         ncdump -h style summary and CF time axis
           gpd netcdf raster <file.nc> <variable> <out.tif> [--index t,level]
 
-        Point clouds (LAS 1.0–1.4, LAZ point formats 0–5)
+        Remote sensing
+          gpd s2 info|ndvi <product.SAFE> [out.tif]         Sentinel-2 L1C/L2A metadata, bands, NDVI
+          gpd landsat info|ndvi <scene dir|MTL> [out.tif]   Landsat Collection 2, cloud-masked NDVI
+          gpd stac info <item.json>
+          gpd stac get <item.json> <asset> <out.tif>
+
+        Point clouds (LAS 1.0–1.4, LAZ point formats 0–10, COPC)
           gpd las info <file.las|laz> [--classes]
           gpd las dsm|dtm|ndsm <file> <out.tif> [--cell 1] [--class 2,6] [--bbox x0,y0,x1,y1]
           gpd las convert <in> <out.las|laz|gpkg|fgb|parquet> [--class 2] [--step 10] [--format 6]
+          gpd copc info <file.copc.laz>                     octree hierarchy per depth
+          gpd copc read <file.copc.laz> <out> [--bbox x0,y0,x1,y1] [--depth n]
 
         Dataset versioning
           gpd repo init <dir> [--key id]
@@ -247,19 +275,39 @@ internal sealed class Cli(string[] args)
 
     private void Crs()
     {
+        if (_pos.Count > 1 && _pos[1] is "search" or "at")
+        {
+            var hits = _pos[1] == "search" ? CrsRegistry.Search(Pos(2, "text"), int.Parse(Opt("max") ?? "50", CultureInfo.InvariantCulture))
+                : CrsRegistry.AtLocation(D(Pos(2, "lon")), D(Pos(3, "lat")), int.Parse(Opt("max") ?? "100", CultureInfo.InvariantCulture));
+            Title($"{hits.Count} CRS (EPSG dataset {EpsgDatabase.Version})");
+            foreach (var e in hits)
+                Console.WriteLine($"  EPSG:{e.Code,-6} {e.Name}{(e.AreaOfUse is { } ar ? $"  [{ar.West:F1}, {ar.South:F1}, {ar.East:F1}, {ar.North:F1}]" : "")}");
+            return;
+        }
         var crs = CoordinateReferenceSystem.Parse(Pos(1, "definition"));
         Title(crs.ToString());
         Console.WriteLine($"Kind:  {crs.Kind}");
         Console.WriteLine($"Datum: {crs.Datum.Name} ({crs.Ellipsoid.Name})");
         Console.WriteLine($"PROJ:  {crs.ToProj4()}");
         Console.WriteLine($"WKT:   {crs.ToWkt()}");
+        if (crs.AreaOfUse is { } a) Console.WriteLine($"Area:  [{a.West}, {a.South}, {a.East}, {a.North}]");
     }
 
     private void Transform()
     {
         var t = CoordinateTransformer.Create(CoordinateReferenceSystem.Parse(Pos(1, "from")), CoordinateReferenceSystem.Parse(Pos(2, "to")));
-        var (x, y) = t.Transform(double.Parse(Pos(3, "x"), CultureInfo.InvariantCulture), double.Parse(Pos(4, "y"), CultureInfo.InvariantCulture));
-        Console.WriteLine($"{x:R} {y:R}");
+        double x = D(Pos(3, "x")), y = D(Pos(4, "y"));
+        if (Opt("z") is { } zs)
+        {
+            double z = D(zs);
+            t.Transform(ref x, ref y, ref z);
+            Console.WriteLine($"{x:R} {y:R} {z:R}");
+        }
+        else
+        {
+            (x, y) = t.Transform(x, y);
+            Console.WriteLine($"{x:R} {y:R}");
+        }
     }
 
     private static (double, double) XY(string s)
@@ -548,5 +596,166 @@ internal sealed class Cli(string[] args)
         Console.WriteLine(answer.Explanation);
         Console.WriteLine(answer.Result is GeoDataFrame g ? g.Attributes().ToString(20) : answer.Result.ToString(20));
         if (Opt("out") is { } o && answer.Result is GeoDataFrame rg) { Gpd.ToFile(rg, o); Ok($"result → {o}"); }
+    }
+
+    private static double D(string s) => double.Parse(s, CultureInfo.InvariantCulture);
+
+    private void GeoidCmd()
+    {
+        double lon = D(Pos(1, "lon")), lat = D(Pos(2, "lat"));
+        var model = Opt("model") is { } m ? GeoidModel.Load(m) : GeoidModel.Egm96Coarse;
+        double n = model.Undulation(lon, lat);
+        Title(model.Name);
+        Console.WriteLine($"N = {n:F3} m");
+        if (Opt("h") is { } h) Console.WriteLine($"H = h - N = {D(h) - n:F3} m");
+        if (Opt("model") is null) Console.WriteLine("(embedded 1° EGM96, about 0.5 m RMS; pass --model with an EGM2008 / InaGeoid grid for survey work)");
+    }
+
+    private void SurveyCmd()
+    {
+        switch (Pos(1, "traverse|adjust"))
+        {
+            case "traverse":
+            {
+                var rows = Csv.ReadDataFrame(Pos(2, "legs.csv"));
+                bool hasAngle = rows.Columns.Any(c => c.Name == "angle"), hasAz = rows.Columns.Any(c => c.Name == "azimuth");
+                string Cell(string col, int i) => rows[col].GetValue(i)?.ToString() ?? "";
+                var legs = Enumerable.Range(0, rows.RowCount).Select(i => new TraverseLeg(Cell("to", i), D(Cell("distance", i)),
+                    AngleRight: hasAngle && Cell("angle", i).Length > 0 ? Angles.ParseDms(Cell("angle", i)) : null,
+                    Azimuth: hasAz && Cell("azimuth", i).Length > 0 ? Angles.ParseDms(Cell("azimuth", i)) : null)).ToList();
+                var (e, n) = XY(Opt("start") ?? throw new ArgumentException("--start E,N is required"));
+                var method = (Opt("method") ?? "bowditch").ToLowerInvariant() switch { "transit" => TraverseAdjustment.Transit, "none" => TraverseAdjustment.None, _ => TraverseAdjustment.Bowditch };
+                (double E, double N)? closeOn = Opt("close-on") is { } co ? XY(co) : null;
+                var r = Traverse.Compute(Opt("from") ?? "START", e, n, Angles.ParseDms(Opt("backsight") ?? throw new ArgumentException("--backsight AZ is required")), legs,
+                    closeOn: closeOn, closingAngleRight: Opt("close-angle") is { } ca ? Angles.ParseDms(ca) : null, adjustment: method,
+                    crs: Opt("crs") is { } c ? CoordinateReferenceSystem.Parse(c) : null);
+                Title($"Traverse ({method}), {legs.Count} legs, {r.TotalLength:F3} m");
+                Console.WriteLine($"Angular misclosure {r.AngularMisclosureSeconds:F1}\", linear {r.LinearMisclosure:F4} m (dE {r.MisclosureE:F4}, dN {r.MisclosureN:F4}), precision 1:{r.PrecisionRatio:F0}");
+                Console.WriteLine(r.Stations.ToString(50));
+                if (Opt("out") is { } o) { r.StationPoints().ToFile(o); Ok($"stations → {o}"); }
+                break;
+            }
+            case "adjust":
+            {
+                var net = new AdjustmentNetwork();
+                bool leveling = false, planar = false;
+                foreach (var raw in File.ReadAllLines(Pos(2, "network.txt")))
+                {
+                    var t = raw.Split('#')[0].Split([' ', '\t', ','], StringSplitOptions.RemoveEmptyEntries);
+                    if (t.Length == 0) continue;
+                    switch (t[0].ToLowerInvariant())
+                    {
+                        case "fixed": net.AddFixed(t[1], D(t[2]), D(t[3])); break;
+                        case "station": net.AddStation(t[1], D(t[2]), D(t[3])); break;
+                        case "benchmark": net.AddBenchmark(t[1], D(t[2])); leveling = true; break;
+                        case "height": net.AddHeightPoint(t[1], t.Length > 2 ? D(t[2]) : 0); leveling = true; break;
+                        case "dist": net.Distance(t[1], t[2], D(t[3]), D(t[4])); planar = true; break;
+                        case "az": net.Azimuth(t[1], t[2], Angles.ParseDms(t[3]), D(t[4])); planar = true; break;
+                        case "dir": net.Direction(t[1], t[2], Angles.ParseDms(t[3]), D(t[4])); planar = true; break;
+                        case "angle": net.Angle(t[1], t[2], t[3], Angles.ParseDms(t[4]), D(t[5])); planar = true; break;
+                        case "dh": net.HeightDifference(t[1], t[2], D(t[3]), D(t[4])); leveling = true; break;
+                        default: throw new FormatException($"Unknown observation '{t[0]}' in line: {raw}");
+                    }
+                }
+                if (planar)
+                {
+                    var r = net.Adjust2D();
+                    Title("2D network adjustment"); Console.WriteLine(r); Console.WriteLine(r.Stations.ToString(50));
+                    if (r.Outliers.Count > 0) Console.WriteLine($"Outliers (|w| > 3.29): {string.Join(", ", r.Outliers)}");
+                    if (Opt("out") is { } o) { r.ErrorEllipses().ToFile(o); Ok($"95 % error ellipses → {o}"); }
+                }
+                if (leveling)
+                {
+                    var r = net.AdjustLeveling();
+                    Title("Leveling adjustment"); Console.WriteLine(r); Console.WriteLine(r.Stations.ToString(50));
+                }
+                break;
+            }
+            default: throw new ArgumentException("survey: traverse | adjust");
+        }
+    }
+
+    private void GnssCmd()
+    {
+        if (Pos(1, "spp") != "spp") throw new ArgumentException("gnss: spp");
+        var obs = RinexObservation.Read(Pos(2, "obs"));
+        var nav = RinexNavigation.Read(Pos(3, "nav"));
+        var sol = Gnss.SinglePointPositioning(obs, nav, new SppOptions { ElevationMask = D(Opt("mask") ?? "10") });
+        Title($"SPP: {sol.RowCount}/{obs.Epochs.Count} epochs, {nav.Ephemerides.Count} ephemerides");
+        Console.WriteLine(sol.Head(int.Parse(Opt("n") ?? "10", CultureInfo.InvariantCulture)).ToString(50));
+        if (obs.ApproxPosition is { } ap && sol.RowCount > 0)
+        {
+            var d = Enumerable.Range(0, sol.RowCount).Select(i => Math.Sqrt(Math.Pow(sol["x"].GetDouble(i) - ap.X, 2) + Math.Pow(sol["y"].GetDouble(i) - ap.Y, 2) + Math.Pow(sol["z"].GetDouble(i) - ap.Z, 2))).ToArray();
+            Console.WriteLine($"Distance to the header's approximate position: mean {d.Average():F2} m, max {d.Max():F2} m");
+        }
+        if (Opt("out") is { } o) { sol.ToFile(o); Ok($"track → {o}"); }
+    }
+
+    private void CopcCmd()
+    {
+        var path = Pos(2, "file.copc.laz");
+        switch (Pos(1, "info|read"))
+        {
+            case "info":
+            {
+                var info = Copc.ReadInfo(path);
+                Title($"COPC {Path.GetFileName(path)}: {info.Nodes.Sum(n => (long)n.PointCount):N0} points in {info.Nodes.Count} nodes");
+                Console.WriteLine($"Cube centre ({info.CenterX:F2}, {info.CenterY:F2}, {info.CenterZ:F2}), half size {info.HalfSize:F2}, root spacing {info.Spacing:F3}");
+                foreach (var g in info.Nodes.GroupBy(n => n.Depth).OrderBy(g => g.Key))
+                    Console.WriteLine($"  depth {g.Key}: {g.Count(),5} nodes {g.Sum(n => (long)n.PointCount),12:N0} points");
+                break;
+            }
+            case "read":
+            {
+                Envelope? bbox = null;
+                if (Opt("bbox") is { } b) { var p = b.Split(',').Select(D).ToArray(); bbox = new Envelope(p[0], p[2], p[1], p[3]); }
+                var pc = Copc.Read(path, bbox, Opt("depth") is { } dp ? int.Parse(dp, CultureInfo.InvariantCulture) : null);
+                var o = Pos(3, "out");
+                if (o.EndsWith(".las", StringComparison.OrdinalIgnoreCase) || o.EndsWith(".laz", StringComparison.OrdinalIgnoreCase)) Las.Write(pc, o);
+                else pc.ToGeoDataFrame().ToFile(o);
+                Ok($"{pc.Count:N0} points → {o}");
+                break;
+            }
+            default: throw new ArgumentException("copc: info | read");
+        }
+    }
+
+    private static void WriteTif(GeoPandas.Net.Raster.Raster r, string path) { GeoTiff.Write(r, path); Ok($"{r} → {path}"); }
+
+    private void Sentinel2Cmd()
+    {
+        var s2 = Sentinel2Product.Open(Pos(2, "product.SAFE"));
+        switch (Pos(1, "info|ndvi"))
+        {
+            case "info": Title(s2.ToString()); Console.WriteLine($"CRS: {s2.Crs}"); Console.WriteLine($"Bands: {string.Join(", ", s2.Bands)}"); break;
+            case "ndvi": WriteTif(s2.Ndvi(), Pos(3, "out.tif")); break;
+            default: throw new ArgumentException("s2: info | ndvi");
+        }
+    }
+
+    private void LandsatCmd()
+    {
+        var sc = LandsatScene.Open(Pos(2, "scene"));
+        switch (Pos(1, "info|ndvi"))
+        {
+            case "info": Title(sc.ToString()); Console.WriteLine($"Sun elevation {sc.SunElevation}°, azimuth {sc.SunAzimuth}°"); break;
+            case "ndvi": WriteTif(sc.Ndvi(), Pos(3, "out.tif")); break;
+            default: throw new ArgumentException("landsat: info | ndvi");
+        }
+    }
+
+    private void StacCmd()
+    {
+        var item = StacItem.Load(Pos(2, "item.json"));
+        switch (Pos(1, "info|get"))
+        {
+            case "info":
+                Title(item.ToString());
+                if (item.Footprint is { } f) Console.WriteLine($"Footprint: {f.EnvelopeInternal}");
+                foreach (var a in item.Assets) Console.WriteLine($"  {a.Key,-14} {a.Type ?? "",-40} {a.Href}");
+                break;
+            case "get": WriteTif(item.ReadAsset(Pos(3, "asset")), Pos(4, "out.tif")); break;
+            default: throw new ArgumentException("stac: info | get");
+        }
     }
 }

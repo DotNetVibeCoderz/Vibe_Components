@@ -31,6 +31,8 @@ public abstract class SpatialDialect
     }
 
     public virtual string Quote(string identifier) => "\"" + identifier.Replace("\"", "\"\"") + "\"";
+    /// <summary>Name as exposed in .NET frames (Oracle's upper-case identifiers become lower case, as SQLAlchemy/GeoPandas do).</summary>
+    public virtual string NormalizeName(string databaseName) => databaseName;
 
     /// <summary>Parameter placeholder in SQL text for parameter <paramref name="i"/>.</summary>
     public virtual string Placeholder(int i) => "@p" + i.ToString(CultureInfo.InvariantCulture);
@@ -137,6 +139,9 @@ internal sealed class DuckDbDialect : SpatialDialect
 internal sealed class OracleDialect : SpatialDialect
 {
     public override string Name => "Oracle Spatial";
+    // Oracle folds unquoted identifiers to upper case; quoting upper case keeps tables usable from plain SQL
+    public override string Quote(string id) => "\"" + id.ToUpperInvariant().Replace("\"", "\"\"") + "\"";
+    public override string NormalizeName(string n) => n == n.ToUpperInvariant() ? n.ToLowerInvariant() : n;
     public override string Placeholder(int i) => ":p" + i.ToString(CultureInfo.InvariantCulture);
     public override string ParameterName(int i) => "p" + i.ToString(CultureInfo.InvariantCulture);
     public override string ToWkb(string c) => $"SDO_UTIL.TO_WKBGEOMETRY({c})";
@@ -155,8 +160,8 @@ internal sealed class OracleDialect : SpatialDialect
         string t = table.Replace("'", "''"), c = column.Replace("'", "''");
         return
         [
-            $"DELETE FROM USER_SDO_GEOM_METADATA WHERE TABLE_NAME = '{t}' AND COLUMN_NAME = '{c}'",
-            $"INSERT INTO USER_SDO_GEOM_METADATA (TABLE_NAME, COLUMN_NAME, DIMINFO, SRID) VALUES ('{t}', '{c}', " +
+            $"DELETE FROM USER_SDO_GEOM_METADATA WHERE TABLE_NAME = '{t.ToUpperInvariant()}' AND COLUMN_NAME = '{c.ToUpperInvariant()}'",
+            $"INSERT INTO USER_SDO_GEOM_METADATA (TABLE_NAME, COLUMN_NAME, DIMINFO, SRID) VALUES ('{t.ToUpperInvariant()}', '{c.ToUpperInvariant()}', " +
             $"SDO_DIM_ARRAY(SDO_DIM_ELEMENT('X', {N(e.MinX)}, {N(e.MaxX)}, 0.0005), SDO_DIM_ELEMENT('Y', {N(e.MinY)}, {N(e.MaxY)}, 0.0005)), {srid})",
             $"CREATE INDEX {Quote($"{table}_{column}_sidx")} ON {Quote(table)} ({Quote(column)}) INDEXTYPE IS MDSYS.SPATIAL_INDEX_V2"
         ];

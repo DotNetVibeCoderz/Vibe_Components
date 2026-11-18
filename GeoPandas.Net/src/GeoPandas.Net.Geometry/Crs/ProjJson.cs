@@ -68,6 +68,17 @@ public static class ProjJson
         var p = crs.Projection!.Parameters;
         string method; int methodCode;
         var pars = new JsonArray();
+        if (crs.Projection.Method is { } pm)
+        {
+            foreach (var mp in pm.Parameters)
+                pars.Add((JsonNode)new JsonObject
+                {
+                    ["name"] = mp.Name, ["value"] = mp.Value,
+                    ["unit"] = mp.Unit switch { ParamUnit.Degree => "degree", ParamUnit.Metre => "metre", _ => "unity" },
+                    ["id"] = Id(mp.Code)
+                });
+            return ProjectedNode(crs, pm.Name, pm.EpsgCode, pars);
+        }
         switch (crs.Projection)
         {
             case TransverseMercator:
@@ -116,6 +127,14 @@ public static class ProjJson
             pars.Add((JsonNode)Param("False easting", 8806, p.FalseEasting, false));
             pars.Add((JsonNode)Param("False northing", 8807, p.FalseNorthing, false));
         }
+        return ProjectedNode(crs, method, methodCode, pars);
+    }
+
+    private static JsonObject ProjectedNode(CoordinateReferenceSystem crs, string method, int? methodCode, JsonArray pars)
+    {
+        var p = crs.Projection!.Parameters;
+        var methodNode = new JsonObject { ["name"] = method };
+        if (methodCode is { } mc) methodNode["id"] = Id(mc);
         JsonNode unit = crs.ToMeter == 1 ? "metre" : new JsonObject { ["type"] = "LinearUnit", ["name"] = crs.UnitName, ["conversion_factor"] = crs.ToMeter };
         var o = new JsonObject
         {
@@ -126,7 +145,7 @@ public static class ProjJson
             ["conversion"] = new JsonObject
             {
                 ["name"] = p.UtmZone is { } z ? $"UTM zone {z}{(p.UtmSouth ? 'S' : 'N')}" : crs.Name,
-                ["method"] = new JsonObject { ["name"] = method, ["id"] = Id(methodCode) },
+                ["method"] = methodNode,
                 ["parameters"] = pars
             },
             ["coordinate_system"] = new JsonObject
@@ -210,7 +229,11 @@ public static class ProjJson
         {
             "transverse mercator" => 9807, "popular visualisation pseudo mercator" => 1024, "mercator (variant a)" => 9804,
             "mercator (variant b)" => 9805, "lambert conic conformal (1sp)" => 9801, "lambert conic conformal (2sp)" => 9802,
-            "albers equal area" => 9822, _ => null
+            "albers equal area" => 9822, "lambert azimuthal equal area" => 9820, "lambert azimuthal equal area (spherical)" => 1027,
+            "polar stereographic (variant a)" => 9810, "polar stereographic (variant b)" => 9829, "oblique stereographic" => 9809,
+            "hotine oblique mercator (variant a)" => 9812, "hotine oblique mercator (variant b)" => 9815, "cassini-soldner" => 9806,
+            "equidistant cylindrical" => 1028, "equidistant cylindrical (spherical)" => 1029, "equal earth" => 1078, "lambert cylindrical equal area" => 9835, "lambert cylindrical equal area (spherical)" => 9834,
+            "sinusoidal" => -1, "mollweide" => -2, "robinson" => -3, _ => null
         };
         var e = datum.Ellipsoid;
         Projection proj = mcode switch
@@ -222,6 +245,19 @@ public static class ProjJson
             9801 => new LambertConformalConic(e, new ProjectionParameters { Lat0 = P(8801), Lat1 = P(8801), Lon0 = P(8802), K0 = P(8805, 1), FalseEasting = P(8806), FalseNorthing = P(8807) }),
             9802 => new LambertConformalConic(e, new ProjectionParameters { Lat0 = P(8821), Lon0 = P(8822), Lat1 = P(8823), Lat2 = P(8824), FalseEasting = P(8826), FalseNorthing = P(8827) }),
             9822 => new AlbersEqualArea(e, new ProjectionParameters { Lat0 = P(8821), Lon0 = P(8822), Lat1 = P(8823), Lat2 = P(8824), FalseEasting = P(8826), FalseNorthing = P(8827) }),
+            9820 or 1027 => new LambertAzimuthalEqualArea(e, new ProjectionParameters { Lat0 = P(8801), Lon0 = P(8802), FalseEasting = P(8806), FalseNorthing = P(8807) }),
+            9810 => new PolarStereographic(e, new ProjectionParameters { Lat0 = P(8801), Lon0 = P(8802), K0 = P(8805, 1), FalseEasting = P(8806), FalseNorthing = P(8807) }),
+            9829 => new PolarStereographic(e, new ProjectionParameters { Lat0 = P(8832) < 0 ? -90 : 90, LatTs = P(8832), Lon0 = P(8833), FalseEasting = P(8806), FalseNorthing = P(8807) }),
+            9809 => new ObliqueStereographic(e, new ProjectionParameters { Lat0 = P(8801), Lon0 = P(8802), K0 = P(8805, 1), FalseEasting = P(8806), FalseNorthing = P(8807) }),
+            9812 => new HotineObliqueMercator(e, new ProjectionParameters { Lat0 = P(8811), Lon0 = P(8812), Azimuth = P(8813), RectifiedGridAngle = P(8814, P(8813)), K0 = P(8815, 1), FalseEasting = P(8806), FalseNorthing = P(8807), NoUOffset = true }, false),
+            9815 => new HotineObliqueMercator(e, new ProjectionParameters { Lat0 = P(8811), Lon0 = P(8812), Azimuth = P(8813), RectifiedGridAngle = P(8814, P(8813)), K0 = P(8815, 1), FalseEasting = P(8816), FalseNorthing = P(8817) }, true),
+            9806 => new CassiniSoldner(e, new ProjectionParameters { Lat0 = P(8801), Lon0 = P(8802), FalseEasting = P(8806), FalseNorthing = P(8807) }),
+            1028 or 1029 => new EquidistantCylindrical(e, new ProjectionParameters { LatTs = P(8823), Lon0 = P(8802), FalseEasting = P(8806), FalseNorthing = P(8807) }),
+            9835 or 9834 => new CylindricalEqualArea(e, new ProjectionParameters { LatTs = P(8823), Lon0 = P(8802), FalseEasting = P(8806), FalseNorthing = P(8807) }),
+            1078 => new EqualEarth(e, new ProjectionParameters { Lon0 = P(8802), FalseEasting = P(8806), FalseNorthing = P(8807) }),
+            -1 => new Sinusoidal(e, new ProjectionParameters { Lon0 = P(8802), FalseEasting = P(8806), FalseNorthing = P(8807) }),
+            -2 => new Mollweide(e, new ProjectionParameters { Lon0 = P(8802), FalseEasting = P(8806), FalseNorthing = P(8807) }),
+            -3 => new Robinson(e, new ProjectionParameters { Lon0 = P(8802), FalseEasting = P(8806), FalseNorthing = P(8807) }),
             _ => throw new NotSupportedException($"PROJJSON conversion method '{mname}' is not supported yet.")
         };
         double toMeter = 1;
@@ -236,7 +272,10 @@ public static class ProjJson
         "latitude of natural origin" => 8801, "longitude of natural origin" => 8802, "scale factor at natural origin" => 8805,
         "false easting" => 8806, "false northing" => 8807, "latitude of false origin" => 8821, "longitude of false origin" => 8822,
         "latitude of 1st standard parallel" => 8823, "latitude of 2nd standard parallel" => 8824,
-        "easting at false origin" => 8826, "northing at false origin" => 8827, _ => null
+        "easting at false origin" => 8826, "northing at false origin" => 8827, "latitude of projection centre" => 8811,
+        "longitude of projection centre" => 8812, "azimuth of initial line" => 8813, "angle from rectified to skew grid" => 8814,
+        "scale factor on initial line" => 8815, "scale factor at projection centre" => 8815, "azimuth at projection centre" => 8813, "easting at projection centre" => 8816, "northing at projection centre" => 8817,
+        "latitude of standard parallel" => 8832, "longitude of origin" => 8833, _ => null
     };
 }
 

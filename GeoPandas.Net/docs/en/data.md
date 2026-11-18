@@ -7,12 +7,13 @@ Phase 2 (v0.2) adds cloud-native and scientific formats, spatial databases, a la
 | Format / source | Read | Write | Lazy pushdown | Package |
 |---|---|---|---|---|
 | FlatGeobuf `.fgb` | ✅ memory-mapped | ✅ packed Hilbert R-tree | bbox (R-tree), columns, limit | `GeoPandas.Net.Data` |
-| GeoParquet 1.1 `.parquet` | ✅ | ✅ WKB, PROJJSON, bbox covering | bbox (row-group stats), columns, `Where`, limit | `GeoPandas.Net.Arrow` |
+| GeoParquet 1.1 `.parquet` | ✅ | ✅ WKB or native GeoArrow, PROJJSON, bbox covering | bbox (row-group stats), columns, `Where`, limit | `GeoPandas.Net.Arrow` |
 | Arrow IPC / Feather v2 `.arrow` `.feather` | ✅ (LZ4/ZSTD) | ✅ GeoArrow WKB | – | `GeoPandas.Net.Arrow` |
 | GeoPackage `.gpkg` | ✅ | ✅ | bbox (`rtree_*`), columns, limit | `GeoPandas.Net.Data` |
 | NetCDF CDF-1/2/5, NetCDF-4 (HDF5) | ✅ CF conventions | ✅ classic CF-1.8 | – | `GeoPandas.Net.Raster` |
 | LAS 1.0–1.4 (formats 0–10) | ✅ memory-mapped | ✅ formats 0–3, 6–8 | bbox, class, step | `GeoPandas.Net.PointCloud` |
-| LAZ (formats 0–5) | ✅ | ✅ | bbox, class, step | `GeoPandas.Net.PointCloud` |
+| LAZ (formats 0–10) | ✅ (6–10 via the native codec) | ✅ formats 0–5 | bbox, class, step | `GeoPandas.Net.PointCloud` |
+| COPC `.copc.laz` | ✅ octree hierarchy | – | bbox, depth | `GeoPandas.Net.PointCloud` |
 | PostGIS, SQL Server, DuckDB, Oracle, MySQL | ✅ `ReadSql` / `ReadTable` | ✅ `ToSql` | bbox, columns, `Where`, limit → SQL | `GeoPandas.Net.Sql` |
 | BigQuery GIS | ✅ `ReadQuery` | ✅ `ToBigQuery` | – | `GeoPandas.Net.Sql.BigQuery` |
 
@@ -73,7 +74,7 @@ var trees = cloud.ByClass(LasClass.HighVegetation).Thin(0.5).ToGeoDataFrame();
 Las.Write(cloud, "out.las");                                  // or .laz (formats 0–3)
 ```
 
-LAS is decoded by our own memory-mapped codec. LAZ uses [laszip.net](https://www.nuget.org/packages/laszip.net) (a managed LASzip 2.x port, LGPL-2.1), which supports point formats 0–5. For LAS 1.4 layered LAZ (formats 6–10), decompress first (`pdal translate in.laz out.las`). The CRS comes from the OGC WKT VLR (2112) or the GeoTIFF GeoKeys (34735).
+LAS is decoded by our own memory-mapped codec. LAZ is decoded by the native kernel (the Rust `laz` crate) for every point format 0–10, including LAS 1.4 layered compression. Without the native kernel, [laszip.net](https://www.nuget.org/packages/laszip.net) (LGPL-2.1) covers formats 0–5. COPC files are queried by octree node: `Copc.Read(path, bbox, maxDepth)` decompresses only the chunks that intersect the box. The CRS comes from the OGC WKT VLR (2112) or the GeoTIFF GeoKeys (34735).
 
 ## Spatial databases (`read_postgis` / `to_postgis`)
 

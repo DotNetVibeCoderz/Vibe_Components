@@ -16,6 +16,8 @@
     <ProjectReference Include="..\..\src\GeoPandas.Net.Sql.BigQuery\GeoPandas.Net.Sql.BigQuery.csproj" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="DuckDB.NET.Data.Full" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" />
   </ItemGroup>
   <ItemGroup>
     <None Include="data\**\*" CopyToOutputDirectory="PreserveNewest" />
