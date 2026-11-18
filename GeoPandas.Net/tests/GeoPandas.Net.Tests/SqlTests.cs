@@ -129,8 +129,8 @@ public sealed class SqlTests(ITestOutputHelper output)
         Assert.Equal("ST_GeomFromWKB(@p3, 32748)", SpatialDialect.PostGis.FromWkb("@p3", 32748));
         Assert.Equal("SELECT TOP (5) a FROM t", SpatialDialect.SqlServer.Limit("SELECT a FROM t", 5));
         Assert.Equal("SDO_UTIL.TO_WKBGEOMETRY(g)", SpatialDialect.Oracle.ToWkb("g"));
-        Assert.Equal("SDO_UTIL.FROM_WKBGEOMETRY(:p0)", SpatialDialect.Oracle.FromWkb(":p0", 4326));
-        Assert.Equal("UPDATE \"GPD\" t SET t.\"G\".SDO_SRID = 4326 WHERE t.\"G\" IS NOT NULL", Assert.Single(SpatialDialect.Oracle.AfterInsert("gpd", "g", 4326)));
+        Assert.Equal("(SELECT SDO_GEOMETRY(w.g.SDO_GTYPE, 4326, w.g.SDO_POINT, w.g.SDO_ELEM_INFO, w.g.SDO_ORDINATES) FROM (SELECT SDO_UTIL.FROM_WKBGEOMETRY(:p0) g FROM DUAL) w WHERE w.g IS NOT NULL)",
+            SpatialDialect.Oracle.FromWkb(":p0", 4326));
         Assert.Equal("SELECT a FROM t FETCH FIRST 7 ROWS ONLY", SpatialDialect.Oracle.Limit("SELECT a FROM t", 7));
         Assert.Contains("SPATIAL_INDEX_V2", string.Join(";", SpatialDialect.Oracle.CreateSpatialIndex("T", "G", box, 4326)));
         Assert.Equal("ST_AsWKB(g, 'axis-order=long-lat')", SpatialDialect.MySql.ToWkb("g"));
