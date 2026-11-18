@@ -146,6 +146,7 @@ public static class SpatialSql
                 ps[attrs.Length].Value = g is null ? DBNull.Value : Geo.ToWkb(g);
                 cmd.ExecuteNonQuery();
             }
+            foreach (var stmt in dialect.AfterInsert(table, geometryColumn, s)) Exec(connection, tx, stmt);
             tx.Commit();
         }
         if (spatialIndex && (!exists || ifExists != IfExists.Append))

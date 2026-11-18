@@ -45,6 +45,8 @@ public abstract class SpatialDialect
     public abstract string? Srid(string column);
     /// <summary>Expression building a geometry from a WKB parameter.</summary>
     public abstract string FromWkb(string placeholder, int srid);
+    /// <summary>Statements run after the rows are inserted (inside the transaction), e.g. to stamp the SRID.</summary>
+    public virtual IEnumerable<string> AfterInsert(string table, string geometryColumn, int srid) => [];
     /// <summary>Boolean predicate: geometry envelope intersects the box (index-assisted where possible).</summary>
     public abstract string BboxPredicate(string column, Envelope box, int srid);
     /// <summary>Adds a row limit to a complete SELECT.</summary>
@@ -146,7 +148,11 @@ internal sealed class OracleDialect : SpatialDialect
     public override string ParameterName(int i) => "p" + i.ToString(CultureInfo.InvariantCulture);
     public override string ToWkb(string c) => $"SDO_UTIL.TO_WKBGEOMETRY({c})";
     public override string? Srid(string c) => $"{c}.SDO_SRID";
-    public override string FromWkb(string p, int srid) => $"SDO_GEOMETRY({p}, {srid})";
+    // SDO_UTIL.FROM_WKBGEOMETRY only takes a BLOB. Oracle 23's SDO_GEOMETRY(x, srid) constructor also accepts
+    // WKT/GeoJSON text and resolved a bound BLOB to the text parser (ORA-13198 "initial data not recognized").
+    public override string FromWkb(string p, int srid) => $"SDO_UTIL.FROM_WKBGEOMETRY({p})";
+    public override IEnumerable<string> AfterInsert(string table, string geometryColumn, int srid) =>
+        [$"UPDATE {Quote(table)} t SET t.{Quote(geometryColumn)}.SDO_SRID = {srid.ToString(CultureInfo.InvariantCulture)} WHERE t.{Quote(geometryColumn)} IS NOT NULL"];
     public override string BboxPredicate(string c, Envelope b, int srid) =>
         $"SDO_FILTER({c}, SDO_GEOMETRY(2003, {srid}, NULL, SDO_ELEM_INFO_ARRAY(1, 1003, 3), SDO_ORDINATE_ARRAY({N(b.MinX)}, {N(b.MinY)}, {N(b.MaxX)}, {N(b.MaxY)}))) = 'TRUE'";
     public override string Limit(string select, long n) => $"{select} FETCH FIRST {n.ToString(CultureInfo.InvariantCulture)} ROWS ONLY";
