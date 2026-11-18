@@ -26,8 +26,8 @@ public enum IfExists { Fail, Replace, Append }
 /// </example>
 public static class SpatialSql
 {
-    private const string WkbAlias = "__gpd_wkb";
-    private const string SridAlias = "__gpd_srid";
+    private const string WkbAlias = "gpd_wkb__";   // must start with a letter: Oracle rejects unquoted identifiers beginning with "_"
+    private const string SridAlias = "gpd_srid__";
 
     /// <summary>
     /// Runs a query and returns a GeoDataFrame. <paramref name="geometryColumn"/> names the geometry column in the query result.
