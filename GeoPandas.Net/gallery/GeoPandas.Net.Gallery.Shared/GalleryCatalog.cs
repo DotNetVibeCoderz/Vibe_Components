@@ -1,6 +1,9 @@
 using System.Diagnostics;
 using GeoPandas.Net.AI;
 using GeoPandas.Net.Analytics;
+using GeoPandas.Net.BIM;
+using GeoPandas.Net.Civil;
+using GeoPandas.Net.Network.Utility;
 using GeoPandas.Net.Arrow;
 using GeoPandas.Net.CAD;
 using GeoPandas.Net.Data;
@@ -67,7 +70,7 @@ public static class GalleryCatalog
         new("raster", new("Raster & terrain", "Raster & terrain"), "▦"),
         new("civil", new("Civil engineering", "Teknik sipil"), "≋"),
         new("rs", new("Remote sensing", "Penginderaan jauh"), "◎"),
-        new("cad", new("CAD integration", "Integrasi CAD"), "⌗"),
+        new("cad", new("CAD & BIM", "CAD & BIM"), "⌗"),
         new("survey", new("Surveying & geodesy", "Survei & geodesi"), "⌖"),
         new("ai", new("Spatial AI", "AI spasial"), "✶"),
     ];
@@ -782,6 +785,166 @@ public static class GalleryCatalog
                     F("σ̂0²", "σ̂0²", r.VarianceFactor.ToString("F3")),
                     F("χ² test", "Uji χ²", r.GlobalTestPassed ? "passed / lulus" : "failed / gagal"),
                     F("Traverse", "Poligon", $"1:{tr.PrecisionRatio:F0} ({tr.LinearMisclosure * 1000:F1} mm)")], default);
+            }),
+
+        // ---------------------------------------------------------------- Phase 4: engineering & BIM
+        new("gwr", "stats", new("Geographically weighted regression", "Regresi terboboti geografis (GWR)"),
+            new("How strongly does green space relate to household income, and does that relationship change across the city? GWR fits a local regression at every district; the map shows the local green-space coefficient.",
+                "Seberapa kuat ruang hijau berkaitan dengan pendapatan rumah tangga, dan apakah hubungan itu berubah di seluruh kota? GWR menghitung regresi lokal di setiap distrik; peta menunjukkan koefisien ruang hijau lokal."),
+            """
+            var w   = SpatialWeights.Queen(districts).RowStandardize();
+            var ols = SpatialRegression.Ols(districts, "income_mio_idr", ["green_ratio", "density"], w);   // + LM diagnostics
+            var lag = SpatialRegression.SpatialLag(districts, "income_mio_idr", ["green_ratio", "density"], w);
+            var gwr = Gwr.Fit(districts, "income_mio_idr", ["green_ratio", "density"]);             // AICc bandwidth
+            gwr.AddTo(districts).Plot(new LayerStyle { Column = "b_green_ratio", ColorMap = ColorMaps.RdBu });
+            """,
+            () =>
+            {
+                var d = SampleData.Districts(150, 11).WithColumn<double>("density", r => r.GetDouble("population") / r.GetDouble("area_km2") / 1000);
+                var w = SpatialWeights.Queen(d).RowStandardize();
+                var ols = SpatialRegression.Ols(d, "income_mio_idr", ["green_ratio", "density"], w);
+                var lag = SpatialRegression.SpatialLag(d, "income_mio_idr", ["green_ratio", "density"], w);
+                var gwr = Gwr.Fit(d, "income_mio_idr", ["green_ratio", "density"]);
+                var local = gwr.AddTo(d);
+                var scene = Scene().AddLayer(local, new LayerStyle { Column = "b_green_ratio", ColorMap = ColorMaps.RdBu, Scheme = ClassificationScheme.Quantiles, Classes = 5, LegendTitle = "Local green-space coefficient", Stroke = "#ffffff", StrokeWidth = 0.5 });
+                var table = new DataFrame(
+                    Column.Create("model", new[] { "OLS", "Spatial lag (ML)", "GWR" }),
+                    Column.Create("r2", new[] { ols.R2, lag.R2, gwr.R2 }),
+                    Column.Create("aic", new[] { ols.Aic, lag.Aic, gwr.Aic }),
+                    Column.Create("green_coef", new[] { ols.Betas[1], lag.Betas[1], local["b_green_ratio"].Mean() }));
+                var lmLag = ols.Diagnostics.First(x => x.Name.StartsWith("Lagrange Multiplier (lag)", StringComparison.Ordinal));
+                return new(scene, table, [F("Bandwidth", "Bandwidth", $"{gwr.Bandwidth:F0} neighbours"), F("ρ (lag)", "ρ (lag)", lag.Rho!.Value.ToString("F3")),
+                    F("LM-lag p", "p LM-lag", lmLag.PValue.ToString("G3"))], default);
+            }),
+
+        new("hydraulics", "network", new("Water pressure simulation (EPANET method)", "Simulasi tekanan air (metode EPANET)"),
+            new("Turn GIS pipes into a hydraulic model: elevations from the terrain (flattened to a coastal plain), demands at every junction, the treatment plant as a reservoir. The global gradient solver (validated against EPANET 2.2) gives pressure and velocity everywhere.",
+                "Ubah pipa GIS menjadi model hidraulik: elevasi dari terrain (dilandaikan menjadi dataran pantai), kebutuhan air di setiap junction, instalasi pengolahan sebagai reservoir. Solver gradien global (divalidasi terhadap EPANET 2.2) menghasilkan tekanan dan kecepatan di semua titik."),
+            """
+            var net = WaterNetwork.FromGeoDataFrames(pipes, reservoirs: plant);   // or WaterNetwork.ReadInp("city.inp")
+            foreach (var n in net.Nodes.Where(n => n.Kind == WaterNodeKind.Junction))
+                n.Elevation = dem.SampleBilinear(n.X, n.Y);
+            var result = Hydraulics.Solve(net);
+            result.NodesFrame().Plot(new LayerStyle { Column = "pressure" });
+            """,
+            () =>
+            {
+                var dem = Dem;
+                var pipes = SampleData.WaterNetwork()
+                    .WithColumn<double>("diameter", r => r.GetDouble("diameter_mm") / 1000)
+                    .WithColumn<double>("roughness", r => (string?)r["material"] switch { "steel" => 120, "hdpe" => 145, _ => 130 })
+                    .WithColumn<string>("status", r => (string?)r["valve"] == "closed" ? "closed" : "open");
+                double px = SampleData.CenterX - 6500, py = SampleData.CenterY - 4000;
+                var plant = GeoDataFrame.FromGeometries([Geo.Point(px, py)], pipes.Crs, Column.Create("id", new[] { "Plant" }), Column.Create("head", new[] { 0.0 }));
+                var net = WaterNetwork.FromGeoDataFrames(pipes, reservoirs: plant);
+                double demMin = dem.Statistics().Min;
+                foreach (var n in net.Nodes.Where(n => n.Kind == WaterNodeKind.Junction))
+                {
+                    // one pressure zone cannot span the sample terrain's ~500 m relief: model a coastal plain (relief × 0.08)
+                    n.Elevation = 5 + 0.08 * (dem.SampleBilinear(n.X, n.Y) - demMin);
+                    n.Demands.Add((0.0012, null));     // 1.2 L/s per junction
+                }
+                // the plant pumps to a hydraulic grade 30 m above the highest junction
+                net.Nodes.First(n => n.Kind == WaterNodeKind.Reservoir).Elevation = net.Nodes.Where(n => n.Kind == WaterNodeKind.Junction).Max(n => n.Elevation) + 30;
+                var res = Hydraulics.Solve(net);
+                var nodes = res.NodesFrame().Filter<string>("kind", k => k == "junction");
+                var served = nodes.Filter<bool>("disconnected", x => !x);
+                var cut = nodes.Filter<bool>("disconnected", x => x);
+                var links = res.LinksFrame().WithColumn<double>("velocity_ms", r => r.GetDouble("velocity"));
+                var scene = Scene().AddHillshade(Terrain.Hillshade(dem, 315, 45), 0.25)
+                    .AddLayer(links, new LayerStyle { Stroke = "#5d6f7c", StrokeWidth = 1.6, ShowInLegend = false })
+                    .AddLayer(served, new LayerStyle { Column = "pressure", ColorMap = ColorMaps.Viridis, PointRadius = 4.5, Stroke = "#ffffff", StrokeWidth = 0.6, LegendTitle = "Pressure (m)" })
+                    .AddLayer(cut, new LayerStyle { Fill = "#b0306a", PointRadius = 4, Stroke = "#ffffff", StrokeWidth = 0.6 }, "No supply (closed valve)")
+                    .AddLayer(plant, new LayerStyle { Fill = "#1b2a33", PointRadius = 8, Stroke = "#ffffff", StrokeWidth = 2, ShowInLegend = false });
+                var p = served["pressure"].ToDoubleArray();
+                var table = links.Select(["id", "diameter", "flow", "velocity_ms", "headloss"]).SortBy("velocity_ms", ascending: false).Attributes().Head(8);
+                return new(scene, table, [F("Network", "Jaringan", $"{net.Nodes.Count} nodes, {net.Links.Count} pipes"),
+                    F("Pressure", "Tekanan", $"{p.Min():F1} … {p.Max():F1} m"), F("Iterations", "Iterasi", res.Iterations.ToString())], default);
+            }),
+
+        new("corridor", "civil", new("Road corridor: alignment, earthwork & mass haul", "Koridor jalan: alinyemen, galian-timbunan & mass haul"),
+            new("A spiral–curve–spiral alignment and a vertical profile swept with a two-lane template over the terrain. Daylight lines meet the ground at 1:2 cut and 1:3 fill slopes; the colours show cut (red) and fill (green).",
+                "Alinyemen spiral–lingkaran–spiral dan profil vertikal disapu dengan template dua lajur di atas terrain. Garis daylight bertemu tanah pada lereng galian 1:2 dan timbunan 1:3; warna menunjukkan galian (merah) dan timbunan (hijau)."),
+            """
+            var h = new HorizontalAlignment(pis, radii: [380, 320], spiralLengths: [70, 60]);
+            var v = new VerticalAlignment(pvis);                       // parabolic vertical curves
+            var corridor = new Corridor(h, v, CorridorTemplate.TwoLaneRoad(), dem);
+            var volumes = corridor.Volumes(interval: 20, cutFactor: 0.9);   // average end area + mass haul
+            var cutFill = Earthwork.Volume(dem, corridor.DesignSurface(20)).CutFill;
+            """,
+            () =>
+            {
+                // a 3 × 2 km window of the sample terrain, resampled to 5 m cells
+                const double cell = 5, wx0 = 704_300, wy0 = 9_309_900;
+                int gw = 600, gh = 400;
+                var gband = new float[gw * gh];
+                for (int r = 0; r < gh; r++)
+                    for (int c = 0; c < gw; c++) gband[r * gw + c] = Dem.SampleBilinear(wx0 + (c + 0.5) * cell, wy0 + gh * cell - (r + 0.5) * cell);
+                var dem = new RasterGrid(gw, gh, [gband], new GeoTransform(wx0, cell, 0, wy0 + gh * cell, 0, -cell), Dem.Crs);
+                (double X, double Y)[] pis = [(704_500, 9_310_300), (705_600, 9_311_550), (706_900, 9_310_650), (707_150, 9_311_750)];
+                var h = new HorizontalAlignment(pis, [380, 320], [70, 60], crs: dem.Crs);
+                // profile: ground at 300 m PVIs with 150 m vertical curves, raised 1 m
+                var pvis = new List<Pvi>();
+                for (double s = 0; s < h.Length - 150; s += 300)
+                {
+                    var (x, y, _) = h.PointAt(s);
+                    pvis.Add(new Pvi(s, dem.SampleBilinear(x, y) + 1, s == 0 ? 0 : 150));
+                }
+                var (ex, ey, _) = h.PointAt(h.Length);
+                pvis.Add(new Pvi(h.Length, dem.SampleBilinear(ex, ey) + 1));
+                pvis[^2] = pvis[^2] with { CurveLength = 0 };
+                var v = new VerticalAlignment(pvis);
+                var corridor = new Corridor(h, v, CorridorTemplate.TwoLaneRoad(), dem);
+                var vol = corridor.Volumes(20, cutFactor: 0.9);
+                var ew = Earthwork.Volume(dem, corridor.DesignSurface(20));
+                var scene = Scene().AddHillshade(Terrain.Hillshade(dem, 315, 45), 0.55)
+                    .AddRaster(ew.CutFill, ColorMaps.RdYlGn.Reversed(), opacity: 0.9, legendTitle: "Cut (+) / fill (−) m", min: -8, max: 8)
+                    .AddLayer(new GeoSeries([corridor.Footprint(20)], dem.Crs), new LayerStyle { Fill = null, Stroke = "#1b2a33", StrokeWidth = 0.7, ShowInLegend = false })
+                    .AddLayer(new GeoSeries([h.ToLineString(5)], dem.Crs), new LayerStyle { Stroke = "#b0306a", StrokeWidth = 1.4, ShowInLegend = false })
+                    .AddLayer(h.Stations(500), new LayerStyle { Fill = "#1b2a33", PointRadius = 3, LabelColumn = "label", LabelSize = 8, ShowInLegend = false });
+                int last = vol.RowCount - 1;
+                double end = vol["station"].GetDouble(last);
+                var table = vol.Filter<double>("station", s => s % 500 < 1e-6 || s == end).Select(["label", "design_z", "ground_z", "cut_area", "fill_area", "mass_ordinate"]);
+                return new(scene, table, [F("Length", "Panjang", $"{h.Length / 1000:F2} km"), F("Cut / fill", "Galian / timbunan", $"{vol["cum_cut"].GetDouble(last) / 1e3:F1}k / {vol["cum_fill"].GetDouble(last) / 1e3:F1}k m³"),
+                    F("Mass balance", "Keseimbangan", $"{vol["mass_ordinate"].GetDouble(last) / 1e3:F1}k m³"), F("Curves", "Tikungan", string.Join(", ", h.Curves.Select(c => $"R {c.Radius:F0} m, Ls {c.SpiralLength:F0} m")))], default);
+            }),
+
+        new("bim", "cad", new("BIM ⇄ GIS: buildings to IFC and back", "BIM ⇄ GIS: bangunan ke IFC dan kembali"),
+            new("City building footprints with heights are written as a georeferenced IFC4 model (IfcMapConversion to UTM 48S), then read back like any IFC: elements, properties, heights and LOD1 footprints in map coordinates.",
+                "Footprint bangunan kota beserta tingginya ditulis sebagai model IFC4 tergeoreferensi (IfcMapConversion ke UTM 48S), lalu dibaca kembali seperti IFC lainnya: elemen, properti, tinggi, dan footprint LOD1 dalam koordinat peta."),
+            """
+            IfcWriter.WriteBuildings(buildings, "block.ifc", heightColumn: "height");
+            var model = IfcModel.Read("block.ifc");          // IFC2x3 / IFC4 / IFC4x3
+            var elements = model.ElementsFrame();            // footprints in EPSG:32748, heights, Psets
+            var lod1 = model.BuildingFootprint();            // city-model feature: footprint + height
+            """,
+            () =>
+            {
+                var rng = new Random(5);
+                var foot = new List<NtsGeometry?>(); var heights = new List<double>(); var names = new List<string>(); var uses = new List<string>();
+                double x0 = SampleData.CenterX - 600, y0 = SampleData.CenterY - 450;
+                for (int i = 0; i < 6; i++)
+                    for (int j = 0; j < 5; j++)
+                    {
+                        double w = 60 + rng.NextDouble() * 70, d = 40 + rng.NextDouble() * 60, x = x0 + i * 200, y = y0 + j * 180;
+                        var box = Geo.Box(x, y, x + w, y + d);
+                        foot.Add(rng.NextDouble() < 0.25 ? box.Difference(Geo.Box(x + w * 0.3, y + d * 0.3, x + w * 0.7, y + d * 0.7)) : box);
+                        heights.Add(Math.Round(6 + Math.Pow(rng.NextDouble(), 2) * 90, 1));
+                        names.Add($"Block {(char)('A' + i)}{j + 1}");
+                        uses.Add(heights[^1] > 40 ? "office" : heights[^1] > 15 ? "apartment" : "house");
+                    }
+                var buildings = GeoDataFrame.FromGeometries(foot, SampleData.Crs, Column.Create("name", names.ToArray()), Column.Create("height", heights.ToArray()), Column.Create("use", uses.ToArray()));
+                var ifcText = IfcWriter.BuildingsToIfc(buildings, projectName: "GeoPandas.Net city block");
+                var model = IfcModel.Parse(ifcText);
+                var els = model.ElementsFrame();
+                var scene = Scene().AddLayer(Roads, RoadStyle)
+                    .AddLayer(els, new LayerStyle { Column = "height", ColorMap = ColorMaps.YlOrRd, Scheme = ClassificationScheme.Quantiles, Classes = 5, LegendTitle = "Height (m) read back from IFC", Stroke = "#1b2a33", StrokeWidth = 0.6 });
+                var box2 = els.TotalBounds;
+                box2.ExpandBy(250);
+                scene.Extent = box2;
+                var table = els.Select(["name", "height", "volume", "GPD_Attributes.use", "global_id"]).Attributes().Head(8);
+                return new(scene, table, [F("IFC", "IFC", $"{model.Schema}, {model.Step.Entities.Count} entities, {ifcText.Length / 1024} KB"),
+                    F("Georeference", "Georeferensi", model.Georeference!.Crs!.ToString()), F("Buildings", "Bangunan", els.RowCount.ToString())], default);
             }),
 
         // ---------------------------------------------------------------- AI

@@ -36,13 +36,16 @@ Follow-ups (v0.3) / Lanjutan:
 - [ ] Bundled full-resolution EGM2008 / InaGeoid grids (users load them from BIG / NGA files)
 - [x] Surveying: traverses (Bowditch/Transit), COGO, least-squares 2D and leveling network adjustment (error ellipses, χ² global test, data snooping), RINEX 2/3 and GPS single point positioning (Klobuchar, Saastamoinen, FDE)
 
-## Phase 4 — Engineering & BIM / Teknik & BIM
+## Phase 4 — Engineering & BIM (v0.4) ✅ / Teknik & BIM
 
-- [ ] `GeoPandas.Net.BIM`: IFC (STEP) reader, IFC ↔ GIS conversion, building-to-city twin
-- [ ] DWG and DGN readers
-- [ ] Civil: road alignment (horizontal/vertical curves), corridor modelling, earthwork volumes, parcel subdivision
-- [ ] Utility network: topology rules, flow simulation, isolation-valve analysis
-- [ ] Spatial statistics: Geographically Weighted Regression, spatial lag/error models, universal kriging
+- [x] `GeoPandas.Net.BIM`: STEP (ISO 10303-21) reader/writer, IFC2x3/IFC4/IFC4x3 model (spatial structure, Psets/Qtos, extrusions, B-reps, face sets, mapped items), georeferencing (IfcMapConversion, ePSet_MapConversion, site lat/lon), IFC → GeoDataFrame, LOD1 building footprints for city twins, GIS → georeferenced IFC4; IfcOpenShell-verified
+- [ ] IFC opening/boolean subtraction and NURBS geometry; CityGML/CityJSON export of the LOD1 twin
+- [x] DWG read/write (R14–2018 via ACadSharp, ezdxf-verified) and MicroStation DGN v7 read/write (GDAL-verified both ways)
+- [ ] DGN v8 (OLE container)
+- [x] Civil: horizontal alignments with clothoid spirals, vertical parabolic curves, corridors daylighted to a DEM, cross-sections, average-end-area volumes, mass haul, design surface, grid earthwork, level pads, parcel subdivision
+- [x] Utility network: topology rules, EPANET-compatible steady-state hydraulics (`.inp` read/write; heads within 0.05 mm of EPANET 2.2), isolation-valve segments and unintended isolation
+- [ ] Pressure-regulating valves (PRV/PSV/FCV/PBV) and extended-period simulation
+- [x] Spatial statistics: OLS with LM diagnostics, ML spatial lag/error (spreg-verified), GWR (mgwr-verified), universal kriging (PyKrige-verified)
 
 ## Phase 5 — 3D, digital twin, AI, cloud / 3D, digital twin, AI, cloud
 

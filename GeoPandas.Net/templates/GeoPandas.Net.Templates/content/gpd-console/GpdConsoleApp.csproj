@@ -6,6 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="GeoPandas.Net" Version="0.3.0" />
+    <PackageReference Include="GeoPandas.Net" Version="0.4.0" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.Civil</RootNamespace>
+    <Description>GeoPandas.Net civil engineering: horizontal alignments (tangents, circular curves, clothoid spirals, stationing, station/offset), vertical alignments (parabolic curves, K values), corridors (templates daylighted to a DEM, cross-sections, average-end-area volumes, mass haul, feature lines, design surface), grid earthwork and level pads, and parcel subdivision.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Raster\GeoPandas.Net.Raster.csproj" />
+  </ItemGroup>
+</Project>

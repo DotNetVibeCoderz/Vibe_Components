@@ -2,7 +2,7 @@
 
 > Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil. Roadmap: [PLAN.md](PLAN.md)
 
-Last updated / Terakhir diperbarui: **2026-11-18** · Version **0.3.0** (Phase 3 complete / Fase 3 selesai)
+Last updated / Terakhir diperbarui: **2026-11-18** · Version **0.4.0** (Phase 4 complete / Fase 4 selesai)
 
 ## Status by module / Status per modul
 
@@ -17,12 +17,12 @@ Last updated / Terakhir diperbarui: **2026-11-18** · Version **0.3.0** (Phase 3
 | Network analysis (§9) | ✅ | Dijkstra, A*, bidirectional, Contraction Hierarchies, isochrones, utility tracing |
 | Raster analytics (§10) | ✅ | GeoTIFF/COG, NetCDF (CDF-1/2/5 + NetCDF-4, CF) ✅, DEM/slope/aspect/hillshade/viewshed ✅ |
 | Remote sensing (§11) | ✅ | NDVI/NDWI/NDBI/SAVI, change detection, Landsat C2, Sentinel-2 SAFE, STAC, MODIS/VIIRS HDF-EOS5 ✅ |
-| Spatial statistics (§12) | ✅ | Moran's I, Geary's C, LISA, Gi*, DBSCAN, KMeans, kriging, IDW |
+| Spatial statistics (§12) | ✅ | Moran's I, Geary's C, LISA, Gi*, DBSCAN, KMeans, ordinary/universal kriging, IDW, OLS + LM tests, ML spatial lag/error, GWR |
 | Surveying & geodesy (§13) | ✅ | Vincenty, geodesic area, geoids, traverse, COGO, least-squares 2D/leveling adjustment, RINEX 2/3, GPS SPP ✅ · carrier-phase/RTK → later |
-| Civil engineering (§14) | 🟡 | watershed/streams/fill ✅ · road design/corridor → Phase 4 |
-| BIM (§15) | ⏳ | Phase 4 |
-| CAD (§16) | 🟡 | DXF read/write and georeferencing ✅ · DWG/DGN → Phase 4 |
-| Utility network (§17) | 🟡 | tracing with valves ✅ · flow simulation → Phase 4 |
+| Civil engineering (§14) | ✅ | watershed/streams/fill, alignments with spirals, vertical curves, corridors, earthwork & mass haul, level pads, subdivision ✅ |
+| BIM (§15) | ✅ | IFC2x3/IFC4/IFC4x3 reader, IFC → GIS in map coordinates, LOD1 footprints, GIS → IFC4 ✅ · openings/NURBS, CityGML → later |
+| CAD (§16) | ✅ | DXF, DWG (R14–2018), DGN v7 read/write and georeferencing ✅ · DGN v8 → later |
+| Utility network (§17) | ✅ | tracing, topology rules, EPANET-compatible hydraulics, valve-isolation segments ✅ · PRVs and extended-period simulation → later |
 | Digital twin (§18) | ⏳ | dynamic QuadTree ready; IoT twin → Phase 5 |
 | AI & ML (§19) | 🟡 | GeoLLM (OpenAI/Azure/DeepSeek) ✅ · ONNX/ML.NET/TorchSharp → Phase 5 |
 | 3D GIS (§20) | 🟡 | Octree, LAS/LAZ (formats 0–10) and COPC point clouds, DSM/DTM/nDSM ✅ · Scene/Cesium → Phase 5 |
@@ -30,14 +30,27 @@ Last updated / Terakhir diperbarui: **2026-11-18** · Version **0.3.0** (Phase 3
 | File formats (§23) | 🟡 | Shapefile, GeoJSON, GeoPackage, FlatGeobuf, GeoParquet (WKB + native GeoArrow), Arrow IPC/Feather, CSV, GeoTIFF, COG, NetCDF, LAS/LAZ/COPC, RINEX, JPEG 2000 (Sentinel-2), DXF ✅ · IFC, DWG/DGN → Phase 4 |
 | Enterprise DBs (§24) | ✅ | GeoPackage, PostGIS, SQL Server, DuckDB Spatial, Oracle Spatial, MySQL (ADO.NET), BigQuery GIS ✅ |
 | HPC (§25) | 🟡 | SIMD, Span, ArrayPool, parallel, Rust kernels, AOT-compatible core ✅ · GPU → Phase 5 |
-| NuGet ecosystem (§26) | 🟡 | Core, Data, Geometry, Analytics, Network, Raster, CAD, AI, Datasets, Arrow, PointCloud, Sql, Sql.BigQuery, Survey, RemoteSensing, meta, CLI, Templates ✅ · 0.1.0 and 0.2.0 published · BIM/Scene/Cloud → later |
-| Gallery (Blazor + Avalonia) | ✅ | 26 samples (new in 0.3: world projections, geoid, traverse & network adjustment), EN/ID, shared renderer |
+| NuGet ecosystem (§26) | 🟡 | Core, Data, Geometry, Analytics, Network, Raster, CAD, AI, Datasets, Arrow, PointCloud, Sql, Sql.BigQuery, Survey, RemoteSensing, Civil, BIM, meta, CLI, Templates ✅ · 0.1.0, 0.2.0 and 0.3.0 published · BIM/Scene/Cloud → later |
+| Gallery (Blazor + Avalonia) | ✅ | 30 samples (new in 0.4: GWR, water pressure simulation, road corridor, BIM ⇄ GIS), EN/ID, shared renderer |
 | Lazy evaluation & versioning (Phase 2) | ✅ | `LazyGeoDataFrame` with bbox/column/attribute/limit pushdown, memory-mapped readers, `DatasetRepository` + `FrameDiff` |
-| CLI `gpd` | ✅ | 28 commands incl. crs search/at, geoid, survey, gnss, copc, s2, landsat, stac, scan, las, netcdf, repo |
+| CLI `gpd` | ✅ | 32 commands incl. regress, water, topology, ifc, crs search/at, geoid, survey, gnss, copc, s2, landsat, stac, scan, las, netcdf, repo; DWG/DGN via convert |
 | Templates | ✅ | gpd-console, gpd-blazor, gpd-avalonia |
 | Docs EN/ID | ✅ | README, README.id, docs/en, docs/id, screenshots |
 
 ## Verification log / Log verifikasi
+
+- **v0.4** `dotnet test`: **250/250 passing** on both kernel backends.
+- Phase 4 checks against independent implementations:
+  - **Spatial regression:** OLS coefficients/SE/t/R²/log L/AIC and all five LM tests match spreg 1.9 to 1e-9 (p-values to 1e-32 via upper-tail gamma); ML lag/error β, SE, z, log L, AIC, pseudo R² to 1e-6 (λ optimiser tolerance 1e-7, as spreg).
+  - **GWR:** mgwr 2.2 picks the same adaptive bandwidth (71); local parameters, SEs and local R² agree to 1e-15; the fixed Gaussian bandwidth search lands within 0.01 m of mgwr's.
+  - **Universal kriging:** PyKrige 1.7 `regional_linear` estimates and variances to 1e-12.
+  - **Hydraulics:** EPANET 2.2 (WNTR EpanetSimulator) on Net1 (pump, tank), Net3 (2 pumps, 3 tanks, level controls at t = 0) and an SI Darcy-Weisbach variant (check valve, TCV): heads within 4.6e-5 m, flows within 3e-7 m³/s, identical link status. EPANET's constants matter: RQTOL gradient floor, viscosity 1.1e-5 ft²/s, g = 32.2 ft/s² in the D-W resistance.
+  - **IFC:** IfcOpenShell 0.9 (OpenCascade tessellation) bounding boxes, footprint areas, map coordinates (auto_xyz2enh) and Pset counts identical to ~1e-15 for all 14 elements; our IFC4 writer output passes IfcOpenShell schema validation with 0 issues; compressed GUIDs match `ifcopenshell.guid.compress`.
+  - **DWG:** on ACadSharp's AC1018 sample, our DWG read matches ezdxf reading the same drawing's DXF: identical counts for every comparable entity type, line/circle coordinates to 2e-13, all 29 TEXT strings identical.
+  - **DGN v7:** we read GDAL-written files exactly as GDAL does; GDAL reads our files with the right element types (3/4/6/12/17), levels, colours and text; complex chains within the 0.5 mm grid.
+  - **Civil:** clothoid coordinates vs SciPy Fresnel integrals to 1e-9; spiral–curve–spiral layouts close on the forward tangent to 1e-6 m; analytic trapezoidal prism (39 m² × 500 m) exact by average end area and within 1 % by the grid method.
+- Bugs found while building the Phase 4 gallery: `SampleData.Districts(count)` looped forever when the 1.2 km seed spacing could not fit `count` districts (spacing now scales with the count; default output unchanged).
+- CLI smoke test (v0.4): `regress` (OLS/lag/GWR), `water solve` (Net3 with a closed pipe), `topology`, `ifc info/elements/footprint/from`, DGN → GeoJSON via `convert`.
 
 - **v0.3** `dotnet test`: **213/213 passing** on both kernel backends (Rust native; managed with `GEOPANDAS_NET_DISABLE_NATIVE=1`, where the LAZ 1.4/COPC test no-ops).
 - Phase 3 checks against PROJ 9.8 / pyproj:
@@ -90,6 +103,15 @@ Last updated / Terakhir diperbarui: **2026-11-18** · Version **0.3.0** (Phase 3
 Phase 2 IO benchmarks (`FormatBench`: FlatGeobuf/GeoParquet bbox vs full read, lazy count, LAS read) are written but not measured yet: the run was stopped because the dev machine ran low on memory. Run them with `dotnet run -c Release --project benchmarks/GeoPandas.Net.Benchmarks -- --filter "*FormatBench*" --job short`.
 
 ## Changelog
+
+- **0.4.0** (2026-11-18): Phase 4 (engineering & BIM).
+  - Spatial regression: OLS with LM diagnostics, ML spatial lag and error models, GWR with AICc bandwidth selection, universal kriging.
+  - Utility networks: EPANET `.inp` read/write, EPANET-compatible steady-state hydraulics, topology rules, isolation-valve segments.
+  - New package `GeoPandas.Net.Civil`: alignments with clothoids, vertical curves, corridors, earthwork, mass haul, level pads, subdivision.
+  - New package `GeoPandas.Net.BIM`: STEP reader/writer, IFC → GIS in map coordinates, LOD1 footprints, GIS → georeferenced IFC4.
+  - CAD: DWG read/write (ACadSharp) and MicroStation DGN v7 read/write.
+  - Gallery: GWR, water pressure simulation, road corridor and BIM ⇄ GIS samples; CLI: `regress`, `water`, `topology`, `ifc`.
+  - Fix: `SampleData.Districts` no longer hangs for large counts.
 
 - **0.3.0** (2026-11-18): Phase 3 (projections & geodesy) and the Phase 2 follow-ups.
   - Projections: LAEA, polar & oblique stereographic, Hotine Oblique Mercator A/B, Cassini-Soldner, Equidistant Cylindrical, Cylindrical Equal-Area, Sinusoidal, Mollweide, Robinson, Equal Earth; Krüger-series Transverse Mercator.

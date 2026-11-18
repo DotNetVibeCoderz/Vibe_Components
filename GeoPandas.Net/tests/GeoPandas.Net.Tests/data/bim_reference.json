@@ -1,0 +1,478 @@
+{
+ "bim_house_ifc4": {
+  "schema": "IFC4",
+  "count": 13,
+  "elements": [
+   {
+    "map_min": [
+     700000.5498880527,
+     9300004.598076211,
+     16.0
+    ],
+    "map_max": [
+     700003.3783151775,
+     9300007.426503336,
+     17.5
+    ],
+    "global_id": "1p5wVdJjr2lvPNHROUrsM6",
+    "ifc_class": "IfcBuildingElementProxy",
+    "name": "Roof light",
+    "storey": "First floor",
+    "min": [
+     3.4823619097949585,
+     3.0,
+     6.0
+    ],
+    "max": [
+     5.931851652578136,
+     5.449489742783178,
+     7.5
+    ],
+    "footprint_area": 3.9999999999999996,
+    "psets": {}
+   },
+   {
+    "map_min": [
+     700000.3931724008,
+     9300004.759197805,
+     10.0
+    ],
+    "map_max": [
+     700000.8029800219,
+     9300005.169005426,
+     13.0
+    ],
+    "global_id": "3DI4gtvBD1MhLRMXPIPbJu",
+    "ifc_class": "IfcColumn",
+    "name": "C0",
+    "storey": "Ground floor",
+    "min": [
+     2.85,
+     3.85,
+     0.0
+    ],
+    "max": [
+     3.15,
+     4.15,
+     3.0
+    ],
+    "footprint_area": 0.09000000000000002,
+    "psets": {}
+   },
+   {
+    "map_min": [
+     700003.8572740159,
+     9300006.759197805,
+     10.0
+    ],
+    "map_max": [
+     700004.267081637,
+     9300007.169005426,
+     13.0
+    ],
+    "global_id": "2a0Erv4O17kRpHSBisRWiy",
+    "ifc_class": "IfcColumn",
+    "name": "C1",
+    "storey": "Ground floor",
+    "min": [
+     6.85,
+     3.85,
+     0.0
+    ],
+    "max": [
+     7.15,
+     4.15,
+     3.0
+    ],
+    "footprint_area": 0.09000000000000029,
+    "psets": {}
+   },
+   {
+    "map_min": [
+     699996.0,
+     9300000.0,
+     9.8
+    ],
+    "map_max": [
+     700008.6602540378,
+     9300011.92820323,
+     10.0
+    ],
+    "global_id": "2p6S7wn9D80vq7dPBFu0q_",
+    "ifc_class": "IfcSlab",
+    "name": "S0",
+    "storey": "Ground floor",
+    "min": [
+     0.0,
+     0.0,
+     -0.2
+    ],
+    "max": [
+     10.0,
+     8.0,
+     0.0
+    ],
+    "footprint_area": 80.0,
+    "psets": {}
+   },
+   {
+    "map_min": [
+     699996.0,
+     9300000.0,
+     12.8
+    ],
+    "map_max": [
+     700008.6602540378,
+     9300011.92820323,
+     13.0
+    ],
+    "global_id": "2UNqzkvgf6EB0h3CUN6l3f",
+    "ifc_class": "IfcSlab",
+    "name": "S1",
+    "storey": "First floor",
+    "min": [
+     0.0,
+     0.0,
+     2.8
+    ],
+    "max": [
+     10.0,
+     8.0,
+     3.0
+    ],
+    "footprint_area": 80.0,
+    "psets": {}
+   },
+   {
+    "map_min": [
+     699999.9,
+     9300000.0,
+     10.0
+    ],
+    "map_max": [
+     700008.6602540378,
+     9300005.173205081,
+     13.0
+    ],
+    "global_id": "1CHxOFF1P38BNsblF16ouN",
+    "ifc_class": "IfcWall",
+    "name": "W00",
+    "storey": "Ground floor",
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     10.0,
+     0.2,
+     3.0
+    ],
+    "footprint_area": 2.0,
+    "psets": {
+     "Pset_WallCommon": {
+      "IsExternal": true,
+      "FireRating": "REI60"
+     },
+     "Qto_WallBaseQuantities": {
+      "Length": 10000.0,
+      "Height": 3000.0
+     }
+    }
+   },
+   {
+    "map_min": [
+     700004.487048957,
+     9300004.9,
+     10.0
+    ],
+    "map_max": [
+     700008.6602540378,
+     9300011.92820323,
+     13.0
+    ],
+    "global_id": "3F67B$SaPElh4zj_sdyzfb",
+    "ifc_class": "IfcWall",
+    "name": "W01",
+    "storey": "Ground floor",
+    "min": [
+     9.8,
+     0.0,
+     0.0
+    ],
+    "max": [
+     10.0,
+     8.0,
+     3.0
+    ],
+    "footprint_area": 1.5999999999999943,
+    "psets": {
+     "Pset_WallCommon": {
+      "IsExternal": true,
+      "FireRating": "REI60"
+     },
+     "Qto_WallBaseQuantities": {
+      "Length": 8000.0,
+      "Height": 3000.0
+     }
+    }
+   },
+   {
+    "map_min": [
+     699996.0,
+     9300006.75499815,
+     10.0
+    ],
+    "map_max": [
+     700004.7602540378,
+     9300011.92820323,
+     13.0
+    ],
+    "global_id": "14IL_iiCP80eeKdNCXGU34",
+    "ifc_class": "IfcWall",
+    "name": "W02",
+    "storey": "Ground floor",
+    "min": [
+     0.0,
+     7.8,
+     0.0
+    ],
+    "max": [
+     10.0,
+     8.000000000000002,
+     3.0
+    ],
+    "footprint_area": 2.0000000000000018,
+    "psets": {
+     "Pset_WallCommon": {
+      "IsExternal": true,
+      "FireRating": "REI60"
+     },
+     "Qto_WallBaseQuantities": {
+      "Length": 10000.0,
+      "Height": 3000.0
+     }
+    }
+   },
+   {
+    "map_min": [
+     699996.0,
+     9300000.0,
+     10.0
+    ],
+    "map_max": [
+     700000.1732050808,
+     9300007.02820323,
+     13.0
+    ],
+    "global_id": "0JjlCfy5P7peT9jjiSJX7T",
+    "ifc_class": "IfcWall",
+    "name": "W03",
+    "storey": "Ground floor",
+    "min": [
+     -1.4695761589768238e-15,
+     0.0,
+     0.0
+    ],
+    "max": [
+     0.2,
+     8.0,
+     3.0
+    ],
+    "footprint_area": 1.6,
+    "psets": {
+     "Pset_WallCommon": {
+      "IsExternal": true,
+      "FireRating": "REI60"
+     },
+     "Qto_WallBaseQuantities": {
+      "Length": 8000.0,
+      "Height": 3000.0
+     }
+    }
+   },
+   {
+    "map_min": [
+     699999.9,
+     9300000.0,
+     13.0
+    ],
+    "map_max": [
+     700008.6602540378,
+     9300005.173205081,
+     16.0
+    ],
+    "global_id": "0837rK1y96CuF9hiTWg$Mr",
+    "ifc_class": "IfcWall",
+    "name": "W10",
+    "storey": "First floor",
+    "min": [
+     0.0,
+     0.0,
+     3.0
+    ],
+    "max": [
+     10.0,
+     0.2,
+     6.0
+    ],
+    "footprint_area": 2.0,
+    "psets": {
+     "Pset_WallCommon": {
+      "IsExternal": true,
+      "FireRating": "REI60"
+     },
+     "Qto_WallBaseQuantities": {
+      "Length": 10000.0,
+      "Height": 3000.0
+     }
+    }
+   },
+   {
+    "map_min": [
+     700004.487048957,
+     9300004.9,
+     13.0
+    ],
+    "map_max": [
+     700008.6602540378,
+     9300011.92820323,
+     16.0
+    ],
+    "global_id": "3ywtSt87P4thzEEoaDF8nH",
+    "ifc_class": "IfcWall",
+    "name": "W11",
+    "storey": "First floor",
+    "min": [
+     9.8,
+     0.0,
+     3.0
+    ],
+    "max": [
+     10.0,
+     8.0,
+     6.0
+    ],
+    "footprint_area": 1.5999999999999943,
+    "psets": {
+     "Pset_WallCommon": {
+      "IsExternal": true,
+      "FireRating": "REI60"
+     },
+     "Qto_WallBaseQuantities": {
+      "Length": 8000.0,
+      "Height": 3000.0
+     }
+    }
+   },
+   {
+    "map_min": [
+     699996.0,
+     9300006.75499815,
+     13.0
+    ],
+    "map_max": [
+     700004.7602540378,
+     9300011.92820323,
+     16.0
+    ],
+    "global_id": "2QvRNENRXEOwsHGp$QUNAT",
+    "ifc_class": "IfcWall",
+    "name": "W12",
+    "storey": "First floor",
+    "min": [
+     0.0,
+     7.8,
+     3.0
+    ],
+    "max": [
+     10.0,
+     8.000000000000002,
+     6.0
+    ],
+    "footprint_area": 2.0000000000000018,
+    "psets": {
+     "Pset_WallCommon": {
+      "IsExternal": true,
+      "FireRating": "REI60"
+     },
+     "Qto_WallBaseQuantities": {
+      "Length": 10000.0,
+      "Height": 3000.0
+     }
+    }
+   },
+   {
+    "map_min": [
+     699996.0,
+     9300000.0,
+     13.0
+    ],
+    "map_max": [
+     700000.1732050808,
+     9300007.02820323,
+     16.0
+    ],
+    "global_id": "06NyVOdx1BhOevhxLQZaxd",
+    "ifc_class": "IfcWall",
+    "name": "W13",
+    "storey": "First floor",
+    "min": [
+     -1.4695761589768238e-15,
+     0.0,
+     3.0
+    ],
+    "max": [
+     0.2,
+     8.0,
+     6.0
+    ],
+    "footprint_area": 1.6,
+    "psets": {
+     "Pset_WallCommon": {
+      "IsExternal": true,
+      "FireRating": "REI60"
+     },
+     "Qto_WallBaseQuantities": {
+      "Length": 8000.0,
+      "Height": 3000.0
+     }
+    }
+   }
+  ]
+ },
+ "bim_site_ifc2x3": {
+  "schema": "IFC2X3",
+  "count": 1,
+  "elements": [
+   {
+    "map_min": [
+     4.787867965644036,
+     2.0,
+     0.0
+    ],
+    "map_max": [
+     19.14213562373095,
+     16.354267658086915,
+     6.0
+    ],
+    "global_id": "0co9wfacT9NQFn7P_aJjPy",
+    "ifc_class": "IfcWallStandardCase",
+    "name": "Long wall",
+    "storey": "Level 0",
+    "min": [
+     4.787867965644036,
+     2.0,
+     0.0
+    ],
+    "max": [
+     19.14213562373095,
+     16.354267658086915,
+     6.0
+    ],
+    "footprint_area": 5.999999999999991,
+    "psets": {}
+   }
+  ]
+ }
+}

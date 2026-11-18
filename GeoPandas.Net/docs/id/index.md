@@ -8,6 +8,7 @@
 | [Data vektor, CRS & IO](vector.md) | `DataFrame`/`GeoSeries`/`GeoDataFrame`, spatial join, overlay, dissolve, engine CRS, format file, peta |
 | [Format, basis data, lazy & versi](data.md) | FlatGeobuf, GeoParquet, Arrow, NetCDF, LAS/LAZ, PostGIS/SQL Server/DuckDB/Oracle/BigQuery, `LazyGeoDataFrame`, `DatasetRepository` |
 | [Proyeksi, geodesi, survei & satelit](geodesy.md) | 20 proyeksi, dataset EPSG, NTv2, geoid, poligon & perataan kuadrat terkecil, RINEX/GNSS, Landsat / Sentinel-2 / STAC / MODIS |
+| [Teknik, BIM & ekonometrika spasial](engineering.md) | Regresi lag/error spasial, GWR, kriging universal, hidraulika kompatibel EPANET, aturan topologi, isolasi katup, alinyemen & koridor jalan, galian-timbunan, pemecahan persil, IFC ⇄ GIS, DWG, DGN |
 | [Analisis](analysis.md) | Statistik spasial, klasterisasi, interpolasi, jaringan & routing, raster & terrain, hidrologi, penginderaan jauh |
 | [Integrasi CAD & AI](integrations.md) | DXF ⇄ GIS, georeferensi, asisten GeoLLM |
 | [Tools](tools.md) | CLI `gpd`, aplikasi galeri, template `dotnet new`, benchmark |

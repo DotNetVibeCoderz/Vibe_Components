@@ -53,10 +53,15 @@ public static partial class SampleData
         var boundary = CityBoundary(seed);
         var env = boundary.EnvelopeInternal;
         var sites = new List<Coordinate>();
+        // minimum spacing between district seeds: 1.2 km (the default 32 districts), smaller when more districts are requested,
+        // and relaxed further if placement keeps failing, so any count terminates
+        double spacing = Math.Min(1200, 0.7 * Math.Sqrt(boundary.Area / Math.Max(1, count)));
+        int misses = 0;
         while (sites.Count < count)
         {
             var c = new Coordinate(env.MinX + rng.NextDouble() * env.Width, env.MinY + rng.NextDouble() * env.Height);
-            if (boundary.Contains(Geo.Factory.CreatePoint(c)) && sites.All(s => s.Distance(c) > 1200)) sites.Add(c);
+            if (boundary.Contains(Geo.Factory.CreatePoint(c)) && sites.All(s => s.Distance(c) > spacing)) { sites.Add(c); misses = 0; }
+            else if (++misses > 5000) { spacing *= 0.9; misses = 0; }
         }
         var vb = new VoronoiDiagramBuilder();
         vb.SetSites(sites);

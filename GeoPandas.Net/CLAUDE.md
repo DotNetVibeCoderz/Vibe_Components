@@ -49,6 +49,10 @@ Package versions are centralised in `Directory.Packages.props`. Common metadata 
 - Embedded resource names must not look like culture names: MSBuild treated `egm96_1deg.bin.gz` as culture "bin" and moved it to a satellite assembly. Use `WithCulture="false"` and names without a culture-like segment.
 - Inside `GeoPandas.Net.*` namespaces, `Raster` resolves to the namespace; use `using RasterGrid = GeoPandas.Net.Raster.Raster;`.
 - Hotine Oblique Mercator: compute γ0 with the closed form (`gTan`), not asin, which is ill-conditioned at α = 90° (Swiss/Hungarian grids drifted by 4 cm).
+- Hydraulics must use EPANET's own constants to match it: US-unit coefficients converted to SI (H-W 4.727, minor 0.02517, D-W `L/(2·32.2·d·A²)`), viscosity 1.1e-5 ft²/s and the RQTOL gradient floor. Validate with WNTR's EpanetSimulator (`epanet_reference.json`).
+- `IfcMapConversion.Scale` follows IfcOpenShell: it converts project units to map units (an mm model needs 0.001). `IfcModel` keeps geometry in project units internally and converts with `LengthUnit` at the edges.
+- spreg counts ρ in K for the lag model but not λ for the error model (GeoDa convention); `RegressionResult.K` mirrors that so AIC matches.
+- ACadSharp (MIT) is the DWG engine; DGN v7 is our own codec (VAX D-float and middle-endian int32, see `Dgn.VaxToIeee`). Check DGN against GDAL in both directions.
 - Interop fixtures in `tests/GeoPandas.Net.Tests/data` were written by the Python reference stack (see its README). To re-verify, use a venv with geopandas, pyogrio, pyarrow, laspy[lazrs], netCDF4, pyproj, pillow and h5py. Projection/EPSG/grid expectations (`*_reference.json`) come from PROJ 9.8; compare geodesy against those, not against values from memory.
 
 - Inside the `GeoPandas.Net.Geometry` namespace, `Geometry` is ambiguous (namespace vs NTS type). Use the alias `using NtsGeometry = NetTopologySuite.Geometries.Geometry;`.

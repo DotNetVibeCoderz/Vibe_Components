@@ -1,0 +1,177 @@
+; Filename: Net1.inp (EPANET example network, via WNTR 1.5; SI / Darcy-Weisbach variant)
+; WNTR: 1.5.0
+; Created: 2026-11-18 10:25:05
+[TITLE]
+EPANET Example Network 1
+A simple example of modeling chlorine decay. Both bulk and
+wall reactions are included.
+
+[JUNCTIONS]
+;ID                      Elevation       Demand Pattern                 
+ 10                           216.408               0 1                          ;
+ 11                           216.408      9.46352946 1                          ;
+ 12                            213.36      9.46352946 1                          ;
+ 13                           211.836      6.30901964 1                          ;
+ 21                            213.36      9.46352946 1                          ;
+ 22                           211.836     12.61803928 1                          ;
+ 23                           210.312      9.46352946 1                          ;
+ 31                            213.36      6.30901964 1                          ;
+ 32                           216.408      6.30901964 1                          ;
+
+[RESERVOIRS]
+;ID                                   Head                  Pattern
+ 9                             243.84                            ;
+
+[TANKS]
+;ID                              Elevation           Init Level            Min Level            Max Level             Diameter           Min Volume Volume Curve         Overflow            
+ 2                             259.08          36.576           30.48           45.72         15.3924               0                                             ;
+
+[PIPES]
+;ID                   Node1                Node2                              Length             Diameter            Roughness           Minor Loss               Status
+ 10                   10                   11                          3209.544           457.2            0.26               0                 Open   ;
+ 11                   11                   12                          1609.344           355.6            0.26               0                 Open   ;
+ 12                   12                   13                          1609.344             254            0.26               0                 Open   ;
+ 21                   21                   22                          1609.344             254            0.26               0                 Open   ;
+ 22                   22                   23                          1609.344           304.8            0.26               0                 Open   ;
+ 31                   31                   32                          1609.344           152.4            0.26               0                   CV   ;
+ 110                  2                    12                             60.96           457.2            0.26               0                 Open   ;
+ 111                  11                   21                          1609.344             254            0.26               0                 Open   ;
+ 112                  12                   22                          1609.344           304.8            0.26               0                 Open   ;
+ 113                  13                   23                          1609.344           203.2            0.26               0                 Open   ;
+ 121                  21                   31                          1609.344           203.2            0.26               0                 Open   ;
+
+[PUMPS]
+;ID                   Node1                Node2                Properties          
+ 9                    9                    10                   HEAD     1                      ;
+
+[VALVES]
+;ID                   Node1                Node2                            Diameter Type              Setting           Minor Loss
+ V122                 22                   32                             152.4 TCV               12               0   ;
+
+[TAGS]
+;type      name       tag       
+
+[DEMANDS]
+;ID        Demand     Pattern   
+
+[STATUS]
+;ID        Setting   
+
+[PATTERNS]
+;ID        Multipliers
+
+1 1.000000 1.200000 1.400000 1.600000 1.400000 1.200000
+1 1.000000 0.800000 0.600000 0.400000 0.600000 0.800000
+
+[CURVES]
+;ID         X-Value      Y-Value     
+;PUMP: 1
+ 1             94.635295    76.200000   ;
+
+
+[CONTROLS]
+Pump 9 Open IF Tank 2 below 33.528
+Pump 9 Closed IF Tank 2 above 42.672000000000004
+
+[RULES]
+
+[ENERGY]
+GLOBAL EFFICIENCY      75.0000
+GLOBAL PRICE           0.0000
+DEMAND CHARGE          0.0000
+
+[EMITTERS]
+;ID        Flow coefficient
+
+[QUALITY]
+10         0.5       
+11         0.5       
+12         0.5       
+13         0.5       
+21         0.5       
+22         0.5       
+23         0.5       
+31         0.5       
+32         0.5       
+9          1.0       
+2          1.0       
+
+[SOURCES]
+;Node      Type       Quality    Pattern   
+
+[REACTIONS]
+;Type           Pipe/Tank               Coefficient
+
+ ORDER BULK 1
+ ORDER TANK 1
+ ORDER WALL 1
+ GLOBAL BULK -0.5000   
+ GLOBAL WALL -0.3048   
+ LIMITING POTENTIAL 0.0000    
+ ROUGHNESS CORRELATION 0.0000    
+
+[MIXING]
+;Tank ID             Model Fraction
+
+[TIMES]
+DURATION             24:00:00
+HYDRAULIC TIMESTEP   01:00:00
+QUALITY TIMESTEP     00:05:00
+PATTERN TIMESTEP     02:00:00
+PATTERN START        00:00:00
+REPORT TIMESTEP      01:00:00
+REPORT START         00:00:00
+START CLOCKTIME      00:00:00 AM
+RULE TIMESTEP        00:06:00
+STATISTIC            NONE      
+
+[REPORT]
+STATUS     YES
+SUMMARY    NO
+PAGE       0
+
+[OPTIONS]
+UNITS                LPS                 
+HEADLOSS             D-W                 
+SPECIFIC GRAVITY     1
+VISCOSITY            1
+TRIALS               40
+ACCURACY             0.001
+CHECKFREQ            2
+MAXCHECK             10
+UNBALANCED           CONTINUE 10
+PATTERN              1                   
+DEMAND MULTIPLIER    1
+EMITTER EXPONENT     0.5
+QUALITY              Chlorine mg/L
+DIFFUSIVITY          1
+TOLERANCE            0.01
+
+[COORDINATES]
+;Node      X-Coord    Y-Coord   
+10                 20.000000000         70.000000000
+11                 30.000000000         70.000000000
+12                 50.000000000         70.000000000
+13                 70.000000000         70.000000000
+21                 30.000000000         40.000000000
+22                 50.000000000         40.000000000
+23                 70.000000000         40.000000000
+31                 30.000000000         10.000000000
+32                 50.000000000         10.000000000
+9                  10.000000000         70.000000000
+2                  50.000000000         90.000000000
+
+[VERTICES]
+;Link      X-Coord    Y-Coord   
+
+[LABELS]
+ 6.990             	73.630            	"Source"
+ 13.480            	68.130            	"Pump"
+ 43.850            	91.210            	"Tank"
+
+[BACKDROP]
+DIMENSIONS    7.000    6.000    73.000    94.000
+UNITS    NONE
+OFFSET    0.00    0.00
+
+[END]

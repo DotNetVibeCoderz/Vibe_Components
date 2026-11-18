@@ -2,7 +2,7 @@
   <PropertyGroup>
     <RootNamespace>GeoPandas.Net</RootNamespace>
     <AssemblyName>GeoPandas.Net</AssemblyName>
-    <Description>GeoPandas.Net — next-generation geospatial analytics for .NET 10. Meta-package bundling Core (GeoDataFrame), Geometry (CRS, spatial index), Data (GeoJSON, Shapefile, GeoPackage, CSV, FlatGeobuf, dataset versioning), Arrow (GeoParquet, Arrow IPC), PointCloud (LAS/LAZ), Sql (PostGIS, SQL Server, DuckDB, Oracle), Survey (traverse, least-squares adjustment, RINEX/GNSS), RemoteSensing (Landsat, Sentinel-2, STAC, MODIS/VIIRS), Analytics, Network, Raster, CAD, AI and Datasets, plus the `Gpd` facade. Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil.</Description>
+    <Description>GeoPandas.Net — next-generation geospatial analytics for .NET 10. Meta-package bundling Core (GeoDataFrame), Geometry (CRS, spatial index), Data (GeoJSON, Shapefile, GeoPackage, CSV, FlatGeobuf, dataset versioning), Arrow (GeoParquet, Arrow IPC), PointCloud (LAS/LAZ), Sql (PostGIS, SQL Server, DuckDB, Oracle), Survey (traverse, least-squares adjustment, RINEX/GNSS), RemoteSensing (Landsat, Sentinel-2, STAC, MODIS/VIIRS), Civil (alignments, corridors, earthwork), BIM (IFC ⇄ GIS), Analytics, Network, Raster, CAD, AI and Datasets, plus the `Gpd` facade. Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil.</Description>
     <IsAotCompatible>false</IsAotCompatible>
   </PropertyGroup>
   <ItemGroup>
@@ -19,5 +19,7 @@
     <ProjectReference Include="..\GeoPandas.Net.Sql\GeoPandas.Net.Sql.csproj" />
     <ProjectReference Include="..\GeoPandas.Net.Survey\GeoPandas.Net.Survey.csproj" />
     <ProjectReference Include="..\GeoPandas.Net.RemoteSensing\GeoPandas.Net.RemoteSensing.csproj" />
+    <ProjectReference Include="..\GeoPandas.Net.Civil\GeoPandas.Net.Civil.csproj" />
+    <ProjectReference Include="..\GeoPandas.Net.BIM\GeoPandas.Net.BIM.csproj" />
   </ItemGroup>
 </Project>

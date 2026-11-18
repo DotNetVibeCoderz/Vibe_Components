@@ -25,10 +25,11 @@ GeoPandas.Net adalah reimplementasi dan perluasan konsep [GeoPandas](https://geo
 | **Data ilmiah** | **NetCDF** CDF-1/2/5 + NetCDF-4/HDF5 dengan konvensi CF, jendela hyperslab dan grid kurvilinier; point cloud **LAS 1.0–1.4 / LAZ (format 0–10) / COPC** dengan Octree, DSM/DTM/nDSM; pembaca produk **Landsat C2, Sentinel-2 SAFE, STAC, MODIS/VIIRS** |
 | **Basis data** | `ReadSql` / `ReadTable` / `ToSql` (setara `read_postgis`/`to_postgis`) untuk **PostGIS, SQL Server, DuckDB Spatial, Oracle Spatial, MySQL** lewat ADO.NET, plus **BigQuery GIS** |
 | **Lazy & versi** | `LazyGeoDataFrame`: pushdown bbox/kolom/atribut/limit ke file dan SQL, batch streaming, `Explain()`; `DatasetRepository`: snapshot berbasis konten, commit, tag, diff per kunci |
-| **Analitik** | Bobot queen/rook/KNN/distance band, Moran's I, Geary's C, LISA, hot spot Getis-Ord Gi*, DBSCAN, K-Means, IDW, ordinary kriging |
-| **Jaringan** | Graf dari garis (biaya, satu arah), Dijkstra, A*, Dijkstra dua arah, **Contraction Hierarchies**, area layanan / isokron, penelusuran jaringan utilitas |
+| **Analitik** | Bobot queen/rook/KNN/distance band, Moran's I, Geary's C, LISA, hot spot Getis-Ord Gi*, DBSCAN, K-Means, IDW, ordinary dan **kriging universal**, **OLS dengan diagnostik LM, model lag/error spasial ML, GWR** (sesuai PySAL spreg/mgwr) |
+| **Jaringan** | Graf dari garis (biaya, satu arah), Dijkstra, A*, Dijkstra dua arah, **Contraction Hierarchies**, area layanan / isokron, penelusuran jaringan utilitas; **hidraulika air** (`.inp` EPANET, solver gradien global sesuai EPANET 2.2), aturan topologi, segmen isolasi katup |
+| **Sipil & BIM** | Alinyemen horizontal (klotoid) dan vertikal, koridor yang di-daylight ke DEM, galian-timbunan dan mass haul, pad datar, pemecahan persil; **IFC2x3/IFC4 → GeoDataFrame** dalam koordinat peta, footprint LOD1, GIS → IFC4 tergeoreferensi |
 | **Raster** | Pembaca GeoTIFF / BigTIFF / COG, penulis GeoTIFF, slope, aspect, hillshade, viewshed, pengisian sink, arah aliran D8, akumulasi, DAS, NDVI/NDWI/NDBI/SAVI, deteksi perubahan Otsu, statistik zonal, rasterize, kontur |
-| **CAD** | Pembaca DXF (termasuk bulge LWPOLYLINE, ARC, ELLIPSE, SPLINE, TEXT, MTEXT, INSERT) dan penulis R12, georeferensi dua titik CAD → GIS |
+| **CAD** | Pembaca DXF (termasuk bulge LWPOLYLINE, ARC, ELLIPSE, SPLINE, TEXT, MTEXT, INSERT) dan penulis R12, baca/tulis **DWG** (R14–2018) dan **MicroStation DGN v7**, georeferensi dua titik CAD → GIS |
 | **AI spasial** | `GeoAssistant` (GeoLLM): pertanyaan bahasa alami → rencana kueri ter-whitelist yang dijalankan secara deterministik. Mendukung OpenAI, Azure OpenAI, DeepSeek atau endpoint yang kompatibel dengan OpenAI |
 | **Peta** | `gdf.Plot()` menghasilkan `MapScene` (koroplet, kategorikal, simbol proporsional, label, legenda, skala, panah utara, bingkai lembar peta) → SVG, Blazor, Avalonia |
 | **Performa** | Kernel native Rust (Rayon) dengan fallback SIMD `Vector<T>`, graf CSR, `Span<T>`/`ArrayPool<T>`, paket inti kompatibel AOT |
@@ -60,7 +61,7 @@ Panduan lengkap: [Memulai](docs/id/getting-started.md) · [GeoDataFrame & IO](do
 
 ## Galeri (web Blazor + desktop Avalonia)
 
-26 contoh interaktif (GIS, data & format, statistik spasial, jaringan, raster, teknik sipil, penginderaan jauh, survei & geodesi, CAD, AI), dwibahasa EN/ID.
+30 contoh interaktif (GIS, data & format, statistik spasial, jaringan, raster, teknik sipil, penginderaan jauh, survei & geodesi, CAD & BIM, AI), dwibahasa EN/ID.
 
 ```bash
 dotnet run --project gallery/GeoPandas.Net.Gallery.Blazor     # http://localhost:5280

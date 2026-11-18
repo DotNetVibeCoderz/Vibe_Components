@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>GeoPandas.Net.Network</RootNamespace>
-    <Description>GeoPandas.Net network analysis: graphs from line GeoDataFrames, Dijkstra, A*, Contraction Hierarchies, service areas / isochrones, connected components and utility network tracing (water, gas, telecom, electric).</Description>
+    <Description>GeoPandas.Net network analysis: graphs from line GeoDataFrames, Dijkstra, A*, Contraction Hierarchies, service areas / isochrones, connected components and utility network tracing (water, gas, telecom, electric), EPANET-compatible water hydraulics (.inp read/write, global gradient solver), topology rules and isolation-valve segment analysis.</Description>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\GeoPandas.Net.Core\GeoPandas.Net.Core.csproj" />

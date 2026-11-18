@@ -31,6 +31,11 @@ gpd survey adjust jaring.txt --out elips.geojson        # perataan kuadrat terke
 gpd gnss spp site0010.24o brdc0010.24n --out lintasan.geojson
 gpd copc info awan.copc.laz
 gpd s2 ndvi S2B_MSIL2A_….SAFE ndvi.tif
+gpd regress kecamatan.gpkg pendapatan rasio_hijau,kepadatan --model gwr --out gwr.gpkg
+gpd water solve jaringan.inp --close P-17 --out-nodes tekanan.gpkg
+gpd topology pipa.gpkg --snap 0.5 --out masalah.geojson
+gpd ifc elements gedung.ifc --out elemen.gpkg            # IFC → GIS dalam koordinat peta
+gpd convert tapak.dwg tapak.gpkg                          # DWG dan DGN v7 lewat driver GeoIO
 ```
 
 Jalankan `gpd help` untuk melihat semua perintah. Catatan: nama kolom pada Shapefile dibatasi 10 karakter (batasan format DBF), misalnya `travel_time_s` menjadi `travel_tim`.

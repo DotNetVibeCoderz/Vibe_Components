@@ -4,6 +4,9 @@ namespace GeoPandas.Net.Analytics;
 
 public enum VariogramModel { Spherical, Exponential, Gaussian, Linear }
 
+/// <summary>Trend (drift) of universal kriging in the coordinates.</summary>
+public enum KrigingDrift { Linear, Quadratic }
+
 /// <summary>Fitted (or user-defined) semivariogram γ(h).</summary>
 public sealed record Variogram(VariogramModel Model, double Nugget, double Sill, double Range)
 {
@@ -125,6 +128,78 @@ public static class Interpolation
             vars[i] = s2 + w[k];
         });
         return (vals, vars);
+    }
+
+    /// <summary>
+    /// Universal kriging: kriging with a polynomial trend in the coordinates (<see cref="KrigingDrift.Linear"/> = PyKrige
+    /// <c>regional_linear</c>; <see cref="KrigingDrift.Quadratic"/> adds x², xy, y²). The variogram should describe the detrended
+    /// residuals; when omitted it is fitted to the residuals of an OLS trend surface. <paramref name="neighbors"/> = null uses every sample.
+    /// </summary>
+    public static (double[] Values, double[] Variances) UniversalKriging(ReadOnlySpan<double> sx, ReadOnlySpan<double> sy, ReadOnlySpan<double> sz,
+        ReadOnlySpan<double> qx, ReadOnlySpan<double> qy, Variogram? variogram = null, KrigingDrift drift = KrigingDrift.Linear, int? neighbors = null)
+    {
+        var x = sx.ToArray(); var y = sy.ToArray(); var z = sz.ToArray();
+        var qxa = qx.ToArray(); var qya = qy.ToArray();
+        int n = x.Length;
+        Func<double, double, double[]> f = drift == KrigingDrift.Linear
+            ? (a, b) => [1, a, b]
+            : (a, b) => [1, a, b, a * a, a * b, b * b];
+        int m = f(0, 0).Length;
+        var vg = variogram ?? Variogram.Fit(x, y, TrendResiduals(x, y, z, f));
+        var tree = neighbors is null ? null : new KdTree(x, y);
+        var vals = new double[qxa.Length]; var vars = new double[qxa.Length];
+        Parallel.For(0, vals.Length, i =>
+        {
+            int[] idx; double[] d0;
+            if (tree is null)
+            {
+                idx = Enumerable.Range(0, n).ToArray();
+                d0 = idx.Select(j => Math.Sqrt((x[j] - qxa[i]) * (x[j] - qxa[i]) + (y[j] - qya[i]) * (y[j] - qya[i]))).ToArray();
+            }
+            else
+            {
+                var nb = tree.Nearest(qxa[i], qya[i], Math.Min(neighbors!.Value, n));
+                idx = nb.Select(v => v.Index).ToArray(); d0 = nb.Select(v => v.Distance).ToArray();
+            }
+            int k = idx.Length, size = k + m;
+            var a = new double[size, size + 1];
+            for (int r = 0; r < k; r++)
+            {
+                for (int c = 0; c < k; c++)
+                {
+                    int ir = idx[r], ic = idx[c];
+                    a[r, c] = vg.Gamma(Math.Sqrt((x[ir] - x[ic]) * (x[ir] - x[ic]) + (y[ir] - y[ic]) * (y[ir] - y[ic])));
+                }
+                var fr = f(x[idx[r]], y[idx[r]]);
+                for (int t = 0; t < m; t++) { a[r, k + t] = fr[t]; a[k + t, r] = fr[t]; }
+                a[r, size] = vg.Gamma(d0[r]);
+            }
+            var f0 = f(qxa[i], qya[i]);
+            for (int t = 0; t < m; t++) a[k + t, size] = f0[t];
+            var rhs = new double[size];
+            for (int r = 0; r < size; r++) rhs[r] = a[r, size];
+            var w = Solve(a, size);
+            if (w is null) { vals[i] = double.NaN; vars[i] = double.NaN; return; }
+            double v = 0, s2 = 0;
+            for (int r = 0; r < k; r++) v += w[r] * z[idx[r]];
+            for (int r = 0; r < size; r++) s2 += w[r] * rhs[r];
+            vals[i] = v;
+            vars[i] = s2;
+        });
+        return (vals, vars);
+    }
+
+    /// <summary>Residuals of an OLS trend surface (for fitting the residual variogram).</summary>
+    private static double[] TrendResiduals(double[] x, double[] y, double[] z, Func<double, double, double[]> f)
+    {
+        int n = x.Length, m = f(0, 0).Length;
+        var design = new double[n, m];
+        for (int i = 0; i < n; i++) { var r = f(x[i], y[i]); for (int t = 0; t < m; t++) design[i, t] = r[t]; }
+        var inv = Dense.InverseSpd(Dense.XtX(design));
+        if (inv is null) return z;
+        var b = Dense.Mul(inv, Dense.Xtv(design, z));
+        var fit = Dense.Mul(design, b);
+        return z.Select((v, i) => v - fit[i]).ToArray();
     }
 
     /// <summary>Gaussian elimination with partial pivoting on an n×(n+1) augmented matrix.</summary>

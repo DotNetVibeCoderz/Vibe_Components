@@ -26,6 +26,10 @@ dotnet tool install -g GeoPandas.Net.Cli        # or: dotnet run --project tools
 | `gpd netcdf info <file.nc>` / `gpd netcdf raster <file.nc> <var> <out.tif> [--index t,level]` | NetCDF summary and grid export |
 | `gpd repo init\|commit\|log\|diff\|checkout\|tag <dir> …` | Dataset versioning (`--key`, `--m`, `--out changes.geojson`) |
 | `gpd crs search <text>` / `gpd crs at <lon> <lat>` | Search the EPSG dataset by name or by area of use |
+| `gpd regress <file> <y> <x1,x2> [--model ols\|lag\|error\|gwr] [--weights queen\|rook\|knn:6] [--out f]` | Spatial regression and GWR |
+| `gpd water info\|solve <network.inp> [--close P1,P2] [--out-nodes f] [--out-links f]` | EPANET-compatible hydraulics |
+| `gpd topology <lines> [--tolerance 0.001] [--snap 1] [--sources pts] [--out f]` | Network topology rules |
+| `gpd ifc info\|elements\|footprint <model.ifc> [--out f]` / `gpd ifc from <buildings> <out.ifc> [--height h]` | IFC ⇄ GIS |
 | `gpd transform <from> <to> <x> <y> [--z h]` | 3-D transform, honouring `+nadgrids` and `+geoidgrids` |
 | `gpd geoid <lon> <lat> [--model f.gtx\|.isg\|.tif] [--h h]` | Geoid undulation and orthometric height |
 | `gpd survey traverse <legs.csv> --start E,N --backsight AZ [--close-angle A\|--close-on E,N]` | Bowditch / Transit traverse |

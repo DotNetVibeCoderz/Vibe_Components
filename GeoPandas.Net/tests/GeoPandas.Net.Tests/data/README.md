@@ -20,5 +20,10 @@ so the tests check GeoPandas.Net against independent implementations without nee
 | `14601736.18o`, `14601736.18n` | georinex test data (MIT) | RINEX 2 observation and GPS navigation files for single point positioning |
 | `S2B_MSIL2A_…SAFE/` | Pillow (OpenJPEG) + hand-written XML | synthetic Sentinel-2 L2A product: JPEG 2000 bands, baseline 05.10 offsets, SCL mask |
 | `viirs_hdfeos5_subset.h5` | h5py | synthetic HDF-EOS5 grid (`StructMetadata.0`, sinusoidal projection, scale/fill attributes) |
+| `stats_grid.geojson`, `stats_gwr.geojson`, `stats_reference.json` | numpy + PySAL spreg 1.9 / mgwr 2.2 / PyKrige 1.7 | synthetic spatial-lag process on a 15 × 15 queen grid, spatially varying GWR coefficients, universal kriging; reference OLS/LM/ML lag/ML error/GWR/UK results |
+| `epanet_net1.inp`, `epanet_net3.inp` | EPANET example networks (US EPA, public domain), via WNTR 1.5 | `.inp` parsing, H-W hydraulics with pumps, tanks, controls |
+| `epanet_net1_si_dw.inp`, `epanet_reference.json` | WNTR 1.5 + EPANET 2.2 engine | SI / Darcy-Weisbach variant with a check valve and a TCV; heads, flows, demands and status at t = 0 |
+| `bim_house_ifc4.ifc`, `bim_site_ifc2x3.ifc`, `bim_reference.json` | IfcOpenShell 0.9 API (files are ours) | IFC4 in mm with IfcMapConversion, walls, slabs, mapped column type, triangulated face set, Psets/Qtos; IFC2x3 with site lat/lon; reference geometry from IfcOpenShell's OpenCascade kernel |
+| `gdal_shapes.dgn` | GDAL 3.12 DGN driver | DGN v7 line strings, shape and point written by GDAL (0.01 m resolution seed) |
 
 Dibuat oleh Gravicode Studios dipimpin oleh Kang Fadhil.

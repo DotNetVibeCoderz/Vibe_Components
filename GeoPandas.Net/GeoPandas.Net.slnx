@@ -11,7 +11,9 @@
     <Project Path="src/GeoPandas.Net.AI/GeoPandas.Net.AI.csproj" />
     <Project Path="src/GeoPandas.Net.Analytics/GeoPandas.Net.Analytics.csproj" />
     <Project Path="src/GeoPandas.Net.Arrow/GeoPandas.Net.Arrow.csproj" />
+    <Project Path="src/GeoPandas.Net.BIM/GeoPandas.Net.BIM.csproj" />
     <Project Path="src/GeoPandas.Net.CAD/GeoPandas.Net.CAD.csproj" />
+    <Project Path="src/GeoPandas.Net.Civil/GeoPandas.Net.Civil.csproj" />
     <Project Path="src/GeoPandas.Net.Core/GeoPandas.Net.Core.csproj" />
     <Project Path="src/GeoPandas.Net.Data/GeoPandas.Net.Data.csproj" />
     <Project Path="src/GeoPandas.Net.Datasets/GeoPandas.Net.Datasets.csproj" />

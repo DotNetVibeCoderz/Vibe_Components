@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GeoPandas.Net.BIM</RootNamespace>
+    <Description>GeoPandas.Net BIM: an ISO 10303-21 (STEP) reader/writer and IFC2x3/IFC4/IFC4x3 model with spatial structure, property and quantity sets, element geometry (extrusions, B-reps, tessellations, mapped items) reduced to footprints and heights, georeferencing (IfcMapConversion, ePSet_MapConversion, site lat/lon), IFC to GeoDataFrame and LOD1 building footprints for city models, and GIS footprints to georeferenced IFC4.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GeoPandas.Net.Core\GeoPandas.Net.Core.csproj" />
+  </ItemGroup>
+</Project>

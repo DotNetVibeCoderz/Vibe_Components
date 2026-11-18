@@ -94,6 +94,10 @@ internal sealed class Cli(string[] args)
             case "s2" or "sentinel2": Sentinel2Cmd(); break;
             case "landsat": LandsatCmd(); break;
             case "stac": StacCmd(); break;
+            case "regress": RegressCmd(); break;
+            case "water": WaterCmd(); break;
+            case "topology": TopologyCmd(); break;
+            case "ifc" or "bim": IfcCmd(); break;
             case "layers": foreach (var l in GeoPackage.ListLayers(Pos(1, "gpkg"))) Console.WriteLine(l); break;
             default: throw new ArgumentException($"Unknown command '{_pos[0]}'. Run 'gpd help'.");
         }
@@ -122,7 +126,7 @@ internal sealed class Cli(string[] args)
           gpd scan <file> [--bbox x0,y0,x1,y1] [--where "col>=v and col2=x"] [--select a,b] [--limit n]
                    [--to-crs C] [--explain] [--out f]       lazy query, pushed into FlatGeobuf / GeoParquet / GeoPackage
 
-          Formats: GeoJSON, Shapefile, GeoPackage, FlatGeobuf (.fgb), GeoParquet (.parquet), Arrow/Feather (.arrow, .feather), CSV, DXF
+          Formats: GeoJSON, Shapefile, GeoPackage, FlatGeobuf (.fgb), GeoParquet (.parquet), Arrow/Feather (.arrow, .feather), CSV, DXF, DWG, DGN (v7)
 
         CRS
           gpd crs <definition>                              show PROJ / WKT for EPSG, PROJ or WKT input
@@ -138,6 +142,19 @@ internal sealed class Cli(string[] args)
                    lines: fixed|station ID E N | benchmark ID H | height ID | dist|az|dir FROM TO VALUE SIGMA
                           angle FROM AT TO DEG SIGMA | dh FROM TO DH SIGMA
           gpd gnss spp <obs.o> <nav.n> [--out track.geojson] [--mask 10]   RINEX single point positioning
+
+        Spatial statistics
+          gpd regress <file> <y> <x1,x2> [--model ols|lag|error|gwr] [--weights queen|rook|knn:6]
+                   [--bandwidth n] [--kernel bisquare|gaussian] [--fixed] [--out result.gpkg]
+
+        Utility networks
+          gpd water info|solve <network.inp> [--crs EPSG:x] [--close P1,P2] [--step 0]
+                   [--out-nodes nodes.gpkg] [--out-links links.gpkg]   EPANET-compatible hydraulics
+          gpd topology <lines> [--tolerance 0.001] [--snap 1] [--sources pts] [--out issues.geojson]
+
+        BIM
+          gpd ifc info|elements|footprint <model.ifc> [--out f]   IFC2x3/IFC4 → GIS (map coordinates)
+          gpd ifc from <buildings> <out.ifc> [--height height] [--base z0]   footprints → georeferenced IFC4
 
         Network
           gpd route <lines> --from x,y --to x,y [--cost column] [--oneway column] [--out route.geojson]
@@ -756,6 +773,111 @@ internal sealed class Cli(string[] args)
                 break;
             case "get": WriteTif(item.ReadAsset(Pos(3, "asset")), Pos(4, "out.tif")); break;
             default: throw new ArgumentException("stac: info | get");
+        }
+    }
+
+    private void RegressCmd()
+    {
+        var gdf = Load(1, "file");
+        string y = Pos(2, "dependent");
+        var xs = Pos(3, "x1,x2,…").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string model = (Opt("model") ?? "ols").ToLowerInvariant();
+        GeoPandas.Net.Analytics.SpatialWeights W()
+        {
+            var spec = (Opt("weights") ?? "queen").ToLowerInvariant();
+            var w = spec.StartsWith("knn", StringComparison.Ordinal) ? GeoPandas.Net.Analytics.SpatialWeights.KNearest(gdf, int.Parse(spec.Split(':').ElementAtOrDefault(1) ?? "6", CultureInfo.InvariantCulture))
+                : spec == "rook" ? GeoPandas.Net.Analytics.SpatialWeights.Rook(gdf) : GeoPandas.Net.Analytics.SpatialWeights.Queen(gdf);
+            return w.RowStandardize();
+        }
+        if (model == "gwr")
+        {
+            var r = GeoPandas.Net.Analytics.Gwr.Fit(gdf, y, xs, Opt("bandwidth") is { } bw ? D(bw) : null,
+                (Opt("kernel") ?? "bisquare").ToLowerInvariant() == "gaussian" ? GeoPandas.Net.Analytics.GwrKernel.Gaussian : GeoPandas.Net.Analytics.GwrKernel.Bisquare,
+                Opt("fixed") is not null);
+            Title(r.ToString());
+            if (Opt("out") is { } o) { r.AddTo(gdf).ToFile(o); Ok($"local coefficients → {o}"); }
+            return;
+        }
+        var res = model switch
+        {
+            "lag" => GeoPandas.Net.Analytics.SpatialRegression.SpatialLag(gdf, y, xs, W()),
+            "error" => GeoPandas.Net.Analytics.SpatialRegression.SpatialError(gdf, y, xs, W()),
+            _ => GeoPandas.Net.Analytics.SpatialRegression.Ols(gdf, y, xs, Opt("weights") is null ? null : W())
+        };
+        Console.Write(res);
+        if (Opt("out") is { } out2) { gdf.WithColumn(Column.Create("predicted", res.Predicted)).WithColumn(Column.Create("residual", res.Residuals)).ToFile(out2); Ok($"predictions → {out2}"); }
+    }
+
+    private void WaterCmd()
+    {
+        var sub = Pos(1, "info|solve");
+        var path = Pos(2, "network.inp");
+        var crs = Opt("crs") is { } c ? CoordinateReferenceSystem.Parse(c) : null;
+        var net = GeoPandas.Net.Network.Utility.WaterNetwork.ReadInp(path, crs);
+        Title(net.ToString());
+        if (sub == "info")
+        {
+            Console.WriteLine($"Patterns: {net.Patterns.Count}, curves: {net.Curves.Count}, controls: {net.Controls.Count}");
+            if (Opt("out") is { } o) { net.LinksFrame().ToFile(o); Ok($"links → {o}"); }
+            return;
+        }
+        var closed = Opt("close")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var res = GeoPandas.Net.Network.Utility.Hydraulics.Solve(net, new GeoPandas.Net.Network.Utility.HydraulicOptions
+        {
+            ClosedLinks = closed, PatternStep = int.Parse(Opt("step") ?? "0", CultureInfo.InvariantCulture)
+        });
+        Console.WriteLine(res);
+        var nodes = res.NodesFrame();
+        Console.WriteLine(nodes.Attributes().SortBy("pressure").Head(int.Parse(Opt("n") ?? "10", CultureInfo.InvariantCulture)).ToString(50));
+        if (Opt("out-nodes") is { } on) { nodes.ToFile(on); Ok($"nodes → {on}"); }
+        if (Opt("out-links") is { } ol) { res.LinksFrame().ToFile(ol); Ok($"links → {ol}"); }
+    }
+
+    private void TopologyCmd()
+    {
+        var lines = Load(1, "lines");
+        var sources = Opt("sources") is { } s ? Gpd.ReadFile(s) : null;
+        var v = GeoPandas.Net.Network.Utility.NetworkTopology.Validate(lines, D(Opt("tolerance") ?? "0.001"), D(Opt("snap") ?? "1"), sources: sources);
+        Title($"{v.RowCount} topology issue(s) in {lines.RowCount} lines");
+        Console.WriteLine(v.Attributes().GroupBy("rule").Agg(("line", AggFunc.Count, "count")).ToString(50));
+        if (Opt("out") is { } o) { v.ToFile(o); Ok($"issues → {o}"); }
+    }
+
+    private void IfcCmd()
+    {
+        var sub = Pos(1, "info|elements|footprint|from");
+        if (sub == "from")
+        {
+            var b = Load(2, "buildings");
+            var outPath = Pos(3, "out.ifc");
+            GeoPandas.Net.BIM.IfcWriter.WriteBuildings(b, outPath, Opt("height") ?? "height", Opt("base"), Opt("name") ?? "name");
+            Ok($"{b.RowCount} buildings → {outPath}");
+            return;
+        }
+        var model = GeoPandas.Net.BIM.IfcModel.Read(Pos(2, "model.ifc"));
+        Title(model.ToString());
+        switch (sub)
+        {
+            case "info":
+                foreach (var st in model.Storeys) Console.WriteLine($"  storey {st.Name,-24} elevation {st.Elevation,8:F3} m");
+                foreach (var g in model.Elements.GroupBy(e => e.IfcType).OrderByDescending(g => g.Count())) Console.WriteLine($"  {g.Key,-28} {g.Count(),6}");
+                if (model.Georeference is { } geo) Console.WriteLine($"  georeference: E {geo.Eastings:F3} N {geo.Northings:F3} H {geo.OrthogonalHeight:F3}, rotation {geo.Rotation * 180 / Math.PI:F4}°, {geo.Source}");
+                break;
+            case "elements":
+            {
+                var f = model.ElementsFrame(Opt("no-props") is null);
+                Console.WriteLine(f.Head(int.Parse(Opt("n") ?? "10", CultureInfo.InvariantCulture)).ToString(50));
+                if (Opt("out") is { } o) { f.ToFile(o); Ok($"{f.RowCount} elements → {o}"); }
+                break;
+            }
+            case "footprint":
+            {
+                var f = model.BuildingFootprint();
+                Console.WriteLine(f.Attributes().ToString(50));
+                if (Opt("out") is { } o) { f.ToFile(o); Ok($"LOD1 footprint → {o}"); }
+                break;
+            }
+            default: throw new ArgumentException("ifc: info | elements | footprint | from");
         }
     }
 }
