@@ -28,6 +28,8 @@ Each result was checked against an independent implementation. The reference fil
 | GPU slope, aspect, hillshade, NDVI, convolution, IDW | managed implementations | float rounding |
 | Partitioned spatial join | `GeoDataFrame.SJoin` | identical rows and order |
 
+![H3 hexagon binning in the gallery (Indonesian UI)](../screenshots/blazor-h3.png)
+
 ## H3 and S2
 
 The H3 code is a port of Uber's H3 v4 C library; its lookup tables are generated from the C sources by `tools/h3/h3tables.py` (Apache 2.0). The S2 code follows the reference S2 geometry library (cell ids, Hilbert curve, quadratic projection).
@@ -114,6 +116,8 @@ Tilesets are 3D Tiles 1.1. The root transform is ENU → ECEF and bounding volum
 - **Buildings:** a quadtree with additive refinement.
 - **Terrain:** a coarse tile refined into chunks with replacement refinement.
 
+![Buildings exported as a 3D Tiles tileset (gallery sample)](../screenshots/blazor-tiles3d.png)
+
 With Cesium.Net (`GeoPandas.Net.Cesium`, namespace `CesiumNet`):
 
 ```csharp
@@ -140,6 +144,8 @@ The page contains the following:
 - Choropleth and categorical styling use the same colour maps and classification as `Plot()`.
 - Hovering shows a tooltip, and the legend is built in.
 - Basemaps: OpenStreetMap, none, or any XYZ URL.
+
+![Explore(): districts by population, with a hover tooltip](../screenshots/explore-districts.jpg)
 
 In Blazor, use `<ExploreView Map="@map" Height="520px" />`. It renders inside a sandboxed iframe, so its scripts never touch the page. `<MapSceneView Scene="@scene" />` shows the static SVG renderer instead.
 
@@ -169,6 +175,8 @@ How the layer behaves:
 - Zone membership uses *covers*, so a point on a zone boundary counts as inside.
 - Threshold rules use hysteresis, so a value hovering at the limit does not flood the event stream.
 - Events go to the `EventRaised` callback and to a `Channel` (`layer.Events`).
+
+![Live fleet twin: trajectories and current speeds (gallery sample)](../screenshots/blazor-twin.png)
 
 `DigitalTwin` combines static layers (buildings, pipes) with live layers. Its `RollUp` aggregates live readings per asset.
 
@@ -229,6 +237,8 @@ Console.WriteLine(report);                                 // overall accuracy, 
 - `RandomForest`: one-versus-all FastForest.
 - `GradientBoosting`: one-versus-all FastTree.
 - `MaximumEntropy`: SDCA.
+
+![Random-forest land cover with training points (gallery sample)](../screenshots/blazor-landcover.png)
 
 ```csharp
 using GeoPandas.Net.Gpu;

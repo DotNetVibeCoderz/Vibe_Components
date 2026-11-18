@@ -74,6 +74,12 @@ dotnet run --project gallery/GeoPandas.Net.Gallery.Avalonia
 | | |
 |---|---|
 | ![koroplet](docs/screenshots/blazor-choropleth.png) | ![GeoLLM](docs/screenshots/blazor-geollm.png) |
+| ![Binning heksagon H3](docs/screenshots/blazor-h3.png) | ![Kembaran digital armada](docs/screenshots/blazor-twin.png) |
+| ![Kota 3D Tiles](docs/screenshots/blazor-tiles3d.png) | ![Klasifikasi tutupan lahan](docs/screenshots/blazor-landcover.png) |
+
+`gdf.Explore()` — peta MapLibre interaktif dengan tooltip dan legenda:
+
+![Explore()](docs/screenshots/explore-districts.jpg)
 
 | | |
 |---|---|

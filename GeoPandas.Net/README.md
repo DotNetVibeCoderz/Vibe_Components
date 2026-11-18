@@ -117,6 +117,12 @@ dotnet run --project gallery/GeoPandas.Net.Gallery.Avalonia
 |---|---|
 | ![choropleth](docs/screenshots/blazor-choropleth.png) | ![NDVI](docs/screenshots/blazor-ndvi.png) |
 | ![CAD](docs/screenshots/blazor-cad.png) | ![GeoLLM (ID)](docs/screenshots/blazor-geollm.png) |
+| ![3D Tiles city](docs/screenshots/blazor-tiles3d.png) | ![Live fleet twin](docs/screenshots/blazor-twin.png) |
+| ![H3 hexagon binning (ID)](docs/screenshots/blazor-h3.png) | ![Land-cover classification](docs/screenshots/blazor-landcover.png) |
+
+`gdf.Explore()` — interactive MapLibre map with hover tooltips and legend:
+
+![Explore()](docs/screenshots/explore-districts.jpg)
 
 Avalonia desktop, including the Phase 2 data & format samples:
 

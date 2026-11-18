@@ -28,6 +28,8 @@ Setiap hasil diverifikasi terhadap implementasi independen. Berkas rujukannya ad
 | Slope, aspect, hillshade, NDVI, konvolusi, IDW di GPU | implementasi managed | pembulatan float |
 | Spatial join terpartisi | `GeoDataFrame.SJoin` | baris dan urutan identik |
 
+![Binning heksagon H3 di galeri (antarmuka bahasa Indonesia)](../screenshots/blazor-h3.png)
+
 ## H3 dan S2
 
 Kode H3 adalah port dari pustaka C Uber H3 v4; tabel lookup-nya dibangkitkan dari sumber C oleh `tools/h3/h3tables.py` (Apache 2.0). Kode S2 mengikuti pustaka geometri S2 rujukan (id sel, kurva Hilbert, proyeksi kuadratik).
@@ -114,6 +116,8 @@ Tileset berformat 3D Tiles 1.1. Transformasi root-nya ENU → ECEF dan volume pe
 - **Bangunan:** quadtree dengan penghalusan aditif.
 - **Terrain:** satu tile kasar yang dihaluskan menjadi potongan dengan penghalusan pengganti.
 
+![Bangunan diekspor sebagai tileset 3D Tiles (contoh galeri)](../screenshots/blazor-tiles3d.png)
+
 Dengan Cesium.Net (`GeoPandas.Net.Cesium`, namespace `CesiumNet`):
 
 ```csharp
@@ -140,6 +144,8 @@ Isi halamannya:
 - Gaya koroplet dan kategorikal memakai colormap dan klasifikasi yang sama dengan `Plot()`.
 - Tooltip muncul saat kursor diarahkan, dan legenda sudah tersedia.
 - Basemap: OpenStreetMap, tanpa basemap, atau URL XYZ apa pun.
+
+![Explore(): distrik menurut jumlah penduduk, dengan tooltip](../screenshots/explore-districts.jpg)
 
 Di Blazor, gunakan `<ExploreView Map="@map" Height="520px" />`. Komponen ini dirender di dalam iframe ber-sandbox, sehingga skripnya tidak pernah menyentuh halaman. `<MapSceneView Scene="@scene" />` menampilkan renderer SVG statis.
 
@@ -169,6 +175,8 @@ Perilaku layer:
 - Keanggotaan zona memakai *covers*, sehingga titik di batas zona dihitung berada di dalam.
 - Aturan ambang memakai histeresis, sehingga nilai yang berkisar di sekitar batas tidak membanjiri aliran event.
 - Event dikirim ke callback `EventRaised` dan ke `Channel` (`layer.Events`).
+
+![Kembaran digital armada: lintasan dan kecepatan terkini (contoh galeri)](../screenshots/blazor-twin.png)
 
 `DigitalTwin` menggabungkan layer statis (bangunan, pipa) dengan live layer. Fungsi `RollUp`-nya mengagregasi pembacaan langsung per aset.
 
@@ -229,6 +237,8 @@ Console.WriteLine(laporan);                                // akurasi keseluruha
 - `RandomForest`: FastForest one-versus-all.
 - `GradientBoosting`: FastTree one-versus-all.
 - `MaximumEntropy`: SDCA.
+
+![Tutupan lahan random forest dengan titik latih (contoh galeri)](../screenshots/blazor-landcover.png)
 
 ```csharp
 using GeoPandas.Net.Gpu;
