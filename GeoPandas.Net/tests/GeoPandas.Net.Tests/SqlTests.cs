@@ -33,9 +33,7 @@ public sealed class SqlTests(ITestOutputHelper output)
             int j = byId[d["district_id"].GetDouble(i)];
             // compare normalised geometries: Oracle stores exterior rings counter-clockwise and may change the start vertex
             var (expected, actual) = (d.Geometry[i]!.Normalized(), back.Geometry[j]!.Normalized());
-            Assert.True(expected.EqualsExact(actual, 1e-6), $"{label}: geometry {i} differs
-expected {d.Geometry[i]}
-actual   {back.Geometry[j]}");
+            Assert.True(expected.EqualsExact(actual, 1e-6), $"{label}: geometry {i} differs; expected {d.Geometry[i]}, actual {back.Geometry[j]}");
             Assert.Equal(d["name"].GetValue(i), back["name"].GetValue(j));
             Assert.Equal(d["area_km2"].GetDouble(i), back["area_km2"].GetDouble(j), 9);
         }
